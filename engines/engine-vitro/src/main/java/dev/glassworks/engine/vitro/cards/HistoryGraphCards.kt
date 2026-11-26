@@ -1129,6 +1129,9 @@ object HaTimelineChart {
      */
     private val genericColors = HashMap<String, Int>()
 
+    /** Forgets the generic colors handed out, as a fresh HA page starts its own map (the parity harness, per case). */
+    internal fun resetGenericColors() = synchronized(genericColors) { genericColors.clear() }
+
     /**
      * `computeTimelineColor`: unavailable and unknown; a state-colored domain's active or inactive color; an option of
      * an `input_select`, `select` or enum sensor by its index among the options; any other value a graph color of its
@@ -1138,7 +1141,13 @@ object HaTimelineChart {
         val st = ctx.store[entityId] ?: return Color.TRANSPARENT
         if (state == "unavailable") return Color.TRANSPARENT
         if (state == "unknown") return 0xFF606060.toInt()
-        if (st.domain in STATE_COLORED) {
+        // A person's or tracker's zone (any state but home and not_home): its own `--state-<domain>-<zone>-color` when
+        // the theme sets one, else a graph color of its own, as for any other value.
+        val zoned = (st.domain == "person" || st.domain == "device_tracker") && state != "home" && state != "not_home"
+        if (zoned) {
+            val slug = state.lowercase(java.util.Locale.ROOT).replace(Regex("[^a-z0-9]+"), "_").trim('_')
+            ThemeResolver.parseColor(ctx.theme.vars["state-${st.domain}-$slug-color"])?.let { return it }
+        } else if (st.domain in STATE_COLORED) {
             return if (st.copy(state = state).isActive) ctx.theme.activeColor(st.domain) else ctx.theme.stateInactiveColor
         }
         val enumLike = st.domain == "select" || st.domain == "input_select" || (st.domain == "sensor" && st.deviceClass == "enum")
@@ -1407,7 +1416,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
 }
 
 /** `.entry-container`: a line chart 8 px down, a first timeline 16 px down; later ones under a 2 px divider. */
-internal fun historyEntry(ctx: VitroCardContext, child: View, timeline: Boolean, first: Boolean): View {
+internal fun historyEntry(ctx: VitroCardContext, child: View, timeline: Boolean, first: Boolean, timelineTopMargin: Float = 16f): View {
     val box = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
     if (!first) {
         box.addView(View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) },
@@ -1418,7 +1427,9 @@ internal fun historyEntry(ctx: VitroCardContext, child: View, timeline: Boolean,
         if (!first && !timeline) topMargin = Math.round(8f * ctx.dp)
     })
     val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    lp.topMargin = Math.round((if (first) (if (timeline) 16f else 0f) else if (timeline) 32f else 16f) * ctx.dp)
+    // `.entry-container.timeline:first-child { margin-top: var(--timeline-top-margin) }`: the history graph card sets it
+    // to 16 px; More Info leaves it unset ([timelineTopMargin] 0).
+    lp.topMargin = Math.round((if (first) (if (timeline) timelineTopMargin else 0f) else if (timeline) 32f else 16f) * ctx.dp)
     box.layoutParams = lp
     return box
 }

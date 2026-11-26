@@ -311,6 +311,8 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
     }
 
     private fun renderWithDisplay(case: ParityCase, ref: ParityReference?): VitroRender {
+        // Each reference is a fresh HA page: its timeline's generic state colors start over.
+        dev.glassworks.engine.vitro.cards.HaTimelineChart.resetGenericColors()
         val store = EntityStore()
         ref?.states?.let { if (it.length() > 0) store.applyCompressedEvent(JSONObject().put("a", it)) }
         // A reference's states are every one HA's page held for the case's entities: one it had none for doesn't exist

@@ -442,5 +442,8 @@ test('keepCall keeps the user list only from the fake HA and only for a logbook 
   assert.equal(keepCall(users, true, { type: 'logbook', entities: [] }), true);
   assert.equal(keepCall(users, true, { type: 'tile' }), false);
   assert.equal(keepCall(users, false, { type: 'logbook' }), false);
+  // A More Info case: its dialog's Activity section is a logbook.
+  assert.equal(keepCall(users, true, { type: 'tile' }, 'binary_sensor.door'), true);
+  assert.equal(keepCall(users, false, { type: 'tile' }, 'binary_sensor.door'), false);
   assert.equal(keepCall({ request: { type: 'history/stream' } }, false, { type: 'tile' }), true);
 });

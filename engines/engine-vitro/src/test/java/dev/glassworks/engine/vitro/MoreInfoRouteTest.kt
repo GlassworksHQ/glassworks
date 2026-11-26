@@ -19,7 +19,8 @@ class MoreInfoRouteTest {
 
     @Test
     fun theDefaultDialogAndTheControlsTheSheetHasStayNative() {
-        listOf("sensor.temp", "binary_sensor.door", "device_tracker.phone", "zone.home", "light.desk", "cover.blind",
+        listOf("sensor.temp", "binary_sensor.door", "device_tracker.phone", "zone.home", "number.volume", "input_number.target",
+            "light.desk", "cover.blind",
             "climate.hall", "lock.door", "select.mode", "input_select.mode", "scene.movie", "script.bed", "button.ring",
             "switch.plug", "fan.ceiling", "media_player.tv", "alarm_control_panel.home", "camera.door", "siren.hall",
         ).forEach { native(it) }
@@ -51,8 +52,5 @@ class MoreInfoRouteTest {
         web("light.kitchen", "entity_id" to listOf("light.a", "light.b"))
         // A custom more-info element.
         web("sensor.temp", "custom_ui_more_info" to "my-more-info")
-        // HA's Activity section (the logbook) follows their slider or box.
-        web("number.volume")
-        web("input_number.target")
     }
 }

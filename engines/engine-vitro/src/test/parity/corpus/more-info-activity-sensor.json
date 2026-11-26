@@ -1,0 +1,111 @@
+{
+ "title": "More Info of an enum sensor (a washer's cycle): its timeline, then the Activity section, each dot in its option's graph color, an automation's robot badge on the row it caused",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "sensor.washer_cycle"
+ },
+ "more_info": "sensor.washer_cycle",
+ "expect": {
+  "sensor.washer_cycle": "idle"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "sensor.washer_cycle": {
+    "state": "idle",
+    "last_changed": -12900,
+    "attributes": {
+     "device_class": "enum",
+     "options": [
+      "idle",
+      "washing",
+      "rinsing",
+      "spinning"
+     ],
+     "friendly_name": "Washer Cycle"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.washer_cycle",
+    "pl": "mqtt",
+    "di": "dev-washer",
+    "en": "Cycle",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-washer",
+    "name": "Washer"
+   }
+  ],
+  "history": {
+   "sensor.washer_cycle": {
+    "steps": [
+     [
+      "-30h",
+      "idle"
+     ],
+     [
+      "-5h",
+      "washing"
+     ],
+     [
+      "-4h10m",
+      "rinsing"
+     ],
+     [
+      "-3h50m",
+      "spinning"
+     ],
+     [
+      "-3h35m",
+      "idle"
+     ]
+    ]
+   }
+  },
+  "logbook": [
+   {
+    "entity_id": "sensor.washer_cycle",
+    "state": "washing",
+    "when": "-5h",
+    "context_event_type": "automation_triggered",
+    "context_entity_id": "automation.laundry_start",
+    "context_name": "Laundry start",
+    "context_domain": "automation",
+    "context_source": "time"
+   },
+   {
+    "entity_id": "sensor.washer_cycle",
+    "state": "rinsing",
+    "when": "-4h10m"
+   },
+   {
+    "entity_id": "sensor.washer_cycle",
+    "state": "spinning",
+    "when": "-3h50m"
+   },
+   {
+    "entity_id": "sensor.washer_cycle",
+    "state": "idle",
+    "when": "-3h35m"
+   }
+  ]
+ }
+}

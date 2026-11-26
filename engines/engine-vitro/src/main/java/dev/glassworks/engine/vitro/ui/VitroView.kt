@@ -214,32 +214,17 @@ class VitroView(
     /** Views the user came from, newest last; [goBack] pops it. Capped at [MAX_BACK_STACK]. */
     private val viewBackStack = ArrayDeque<Int>()
 
-    private val bannerText = TextView(context).apply {
-        text = HaText.ui("ui.notification_toast.connection_lost")
-        textSize = 13f
-        setTextColor(0xFFFFFFFF.toInt())
-        typeface = VitroFonts.typeface(context, Inter.MEDIUM, 13f)
-        includeFontPadding = false
+    /**
+     * HA's `notification-manager`: the toasts HA's frontend shows over the page (an update that failed after its dialog
+     * closed, a tap with nothing to do, the connection lost), over the view and any sheet.
+     */
+    private val toasts = HaToastHost(context) { ThemeResolver.resolve(themeCatalog, darkMode, userThemeName) }
+
+    /** HA's `disconnect-toast-mixin`: the connection-lost toast waits a second, so a quick reconnect shows nothing. */
+    private val connectionLostToast = Runnable {
+        toasts.show(HaToast(connectionLostMessage ?: HaText.ui("ui.notification_toast.connection_lost"), durationMs = -1L, id = CONNECTION_LOST_TOAST))
     }
-    private val connectionBanner = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(px(16f), px(10f), px(18f), px(10f))
-        background = GradientDrawable().apply {
-            cornerRadius = 999f * dp
-            setColor(0xEB2B2B2B.toInt())
-        }
-        elevation = 6f * dp
-        visibility = GONE
-        val dot = View(context).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xFFFFB300.toInt())
-            }
-        }
-        addView(dot, LinearLayout.LayoutParams(px(8f), px(8f)).apply { marginEnd = px(10f) })
-        addView(bannerText, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-    }
+    private var connectionLostMessage: String? = null
 
     var dashboard: DashboardConfig? = null
         private set
@@ -486,22 +471,29 @@ class VitroView(
         addView(shell, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         addView(overlayLayer, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         addView(statusLabel, LayoutParams(MATCH_PARENT, MATCH_PARENT))
-        addView(
-            connectionBanner,
-            LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = px(16f) },
-        )
+        addView(toasts, LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
 
-    /** Shows a small floating pill (e.g. "Connection lost. Reconnecting…") while [message] is non-blank; hides it otherwise. */
+    /**
+     * The connection to HA dropped ([message]: HA's "Connection lost. Reconnecting…") or came back (null): HA's toast
+     * for it, shown a second after the drop until the connection is back, as `disconnect-toast-mixin` does.
+     */
     fun setConnectionBanner(message: String?) {
+        removeCallbacks(connectionLostToast)
         if (message.isNullOrBlank()) {
-            connectionBanner.visibility = GONE
+            connectionLostMessage = null
+            toasts.show(HaToast("", durationMs = 0L, id = CONNECTION_LOST_TOAST))
             return
         }
-        bannerText.text = message
-        connectionBanner.visibility = VISIBLE
-        connectionBanner.bringToFront()
+        connectionLostMessage = message
+        postDelayed(connectionLostToast, CONNECTION_LOST_DELAY_MS)
     }
+
+    /** Shows [toast] as HA's frontend shows a toast (`showToast`), over the view and any sheet. Main thread. */
+    fun showToast(toast: HaToast) = toasts.show(toast)
+
+    /** The toasts showing (tests). */
+    internal val toastMessages: List<String> get() = toasts.messages
 
     /**
      * Back navigation for the host's back key: closes the More-Info sheet first, then returns to the view the user
@@ -762,10 +754,11 @@ class VitroView(
     /**
      * Opens More Info for an entity in Home Assistant's own frontend, over the view on screen (its URL's
      * `more-info-entity-id`), with the reason Vitro's sheet can't show it as HA does ([MoreInfoRoute]), or a script
-     * with fields, whose form only HA's dialog has. Null (a view with no page): Vitro's sheet, for every entity, whose
-     * Run then never starts such a script.
+     * with fields, whose form only HA's dialog has. Its last argument is the dialog's view (`more-info-view`:
+     * `history` for an Activity entry on the History tab), or null for its default. Null (a view with no page): Vitro's
+     * sheet, for every entity, whose Run then never starts such a script, and whose Activity entries open nothing.
      */
-    var onMoreInfoInFrontend: ((ViewConfig, String, String) -> Unit)? = null
+    var onMoreInfoInFrontend: ((ViewConfig, String, String, String?) -> Unit)? = null
 
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
@@ -775,7 +768,7 @@ class VitroView(
         if (inFrontend != null && trace == null && view != null) {
             MoreInfoRoute.handOff(entityId, store[entityId])?.let { reason ->
                 closeMoreInfo()
-                inFrontend(view, entityId, "More Info: $reason")
+                inFrontend(view, entityId, "More Info: $reason", null)
                 return
             }
         }
@@ -789,7 +782,7 @@ class VitroView(
                 val shown = dashboard?.views?.getOrNull(currentViewIndex)
                 if (fields == true && shown != null) {
                     closeMoreInfo()
-                    inFrontend(shown, entityId, "More Info of a script with fields")
+                    inFrontend(shown, entityId, "More Info of a script with fields", null)
                 } else {
                     showMoreInfo(entityId, trace)
                 }
@@ -817,6 +810,15 @@ class VitroView(
         }
         sheetRef = sheet
         sheet.trace = trace
+        // What only HA's dialog has (an Activity entry's detail): its dialog, on the same view, over this one.
+        if (onMoreInfoInFrontend != null) sheet.inFrontend = { id, moreInfoView, reason ->
+            val shown = dashboard?.views?.getOrNull(currentViewIndex)
+            val inFrontend = onMoreInfoInFrontend
+            if (shown != null && inFrontend != null && moreInfo === sheet) {
+                closeMoreInfo()
+                inFrontend(shown, id, reason, moreInfoView.takeIf { it != "info" })
+            }
+        }
         // Keys stay in the sheet, as in HA's modal dialog: nothing behind it takes focus while it's open.
         blockDashboardFocus(true)
         sheet.show(entityId)
@@ -2388,6 +2390,10 @@ class VitroView(
     }
 
     companion object {
+        /** HA's `CONNECTION_LOST_TOAST_ID`, and how long a drop lasts before its toast shows. */
+        private const val CONNECTION_LOST_TOAST = "connection-lost"
+        private const val CONNECTION_LOST_DELAY_MS = 1_000L
+
         /** How long a rebuilt view keeps scrolling back to where it was while its islands report their heights. */
         private const val RESTORE_SCROLL_MS = 5_000L
 

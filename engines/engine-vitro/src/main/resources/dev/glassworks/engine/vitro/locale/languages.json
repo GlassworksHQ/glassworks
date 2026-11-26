@@ -1,6 +1,10 @@
 {
  "frontend": "20261028.5",
  "browser": "141.0.7390.37",
+ "node": {
+  "icu": "77.1",
+  "cldr": "47.0"
+ },
  "languages": [
   "af",
   "ar",

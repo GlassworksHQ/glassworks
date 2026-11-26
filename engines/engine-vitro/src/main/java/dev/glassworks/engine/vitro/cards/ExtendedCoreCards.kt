@@ -2088,6 +2088,12 @@ data class LogbookEntry(
     val contextName: String? = null,
     val contextState: String? = null,
     val contextMessage: String? = null,
+    /** Who made the change (`context_user_id`): HA's cause names the user from its users and persons. */
+    val contextUserId: String? = null,
+    /** The entry's own icon (`icon`), for the timeline's glyph. */
+    val icon: String? = null,
+    /** An event entity's `attributes.event_type`: what its row says (`localizeStateMessage`). */
+    val eventType: String? = null,
 )
 
 /**
@@ -2382,8 +2388,8 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
         fun isoMillis(ms: Long): String = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT)
             .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
 
-        /** The stream's rows, newest first. */
-        fun parseEntries(arr: JSONArray?): List<LogbookEntry> {
+        /** The stream's rows in the order HA sent them (oldest first). */
+        fun parseInOrder(arr: JSONArray?): List<LogbookEntry> {
             if (arr == null) return emptyList()
             val out = ArrayList<LogbookEntry>(arr.length())
             for (i in 0 until arr.length()) {
@@ -2395,10 +2401,15 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
                     contextEventType = str("context_event_type"), contextDomain = str("context_domain"),
                     contextEntityId = str("context_entity_id"), contextEntityIdName = str("context_entity_id_name"),
                     contextName = str("context_name"), contextState = str("context_state"), contextMessage = str("context_message"),
+                    contextUserId = str("context_user_id"), icon = str("icon"),
+                    eventType = o.optJSONObject("attributes")?.let { a -> if (a.has("event_type") && !a.isNull("event_type")) a.opt("event_type")?.toString() else null },
                 )
             }
-            return out.sortedByDescending { it.whenSec }
+            return out
         }
+
+        /** The stream's rows, newest first. */
+        fun parseEntries(arr: JSONArray?): List<LogbookEntry> = parseInOrder(arr).sortedByDescending { it.whenSec }
 
         /** `formatTimeWithSeconds`: "12:06:51 AM". */
         fun timeText(ms: Long): String = HaFormat.formatTimeWithSeconds(ms)
@@ -2424,7 +2435,7 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
 }
 
 /** `.node`: the logbook's rail (2 px, the divider color, 9 px clear of the dot) and its 10 px dot. */
-private class LogbookNode(
+internal class LogbookNode(
     context: Context,
     private val color: Int,
     private val rail: Int,

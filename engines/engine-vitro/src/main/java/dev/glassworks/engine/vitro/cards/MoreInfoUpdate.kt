@@ -251,8 +251,19 @@ internal class MoreInfoUpdateView(
         val msg = JSONObject().put("type", "call_service").put("domain", "update").put("service", "install").put("service_data", data)
         ctx.callWs(msg) { ok, _, err ->
             ctx.main.post {
-                if (ok || detached) return@post
-                installErrorText = err?.optString("message")?.takeIf { it.isNotEmpty() } ?: err?.optString("code").orEmpty()
+                if (ok) return@post
+                val message = err?.optString("message")?.takeIf { it.isNotEmpty() } ?: err?.optString("code").orEmpty()
+                if (!shownInSheet()) {
+                    // `_isShown()` is false: the dialog closed, is closing, or shows its History tab. HA tells it in a
+                    // toast over the page, for 10 s. (Its Supervisor logs action is for a Supervisor update, which
+                    // HA's own dialog shows: MoreInfoRoute.)
+                    ctx.showToast(dev.glassworks.engine.vitro.ui.HaToast(
+                        HaText.ui("ui.dialogs.more_info_control.update.install_failed", "error" to message),
+                        durationMs = INSTALL_FAILED_TOAST_MS,
+                    ))
+                    return@post
+                }
+                installErrorText = message
                 ctx.store[entityId]?.let(::bindFooter)
             }
         }
@@ -273,8 +284,22 @@ internal class MoreInfoUpdateView(
         }
     }
 
+    /** HA's `_isShown()`: this view is in the sheet, and the sheet is open (not closing). */
+    private fun shownInSheet(): Boolean {
+        if (detached) return false
+        var p = parent
+        while (p != null) {
+            if (p is MoreInfoSheet) return !p.isDismissed
+            p = p.parent
+        }
+        return true
+    }
+
     companion object {
         private val NOT_FETCHED = Any()
+
+        /** How long HA's install-failed toast stays. */
+        const val INSTALL_FAILED_TOAST_MS = 10_000L
 
         /** `sanitizeHttpUrl`: an http(s) URL, else none. */
         fun releaseUrl(s: EntityState): String? = s.attributes["release_url"]?.toString()?.trim()

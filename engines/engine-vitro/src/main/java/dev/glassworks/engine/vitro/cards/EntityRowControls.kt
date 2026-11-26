@@ -452,10 +452,25 @@ internal object EntityRowControls {
     }
 
     /**
-     * A number row's control: a slider row or a box, by the entity's mode (an entity that changes mode swaps them).
+     * The control of a number's state row in HA's More Info (`state-card-number`, `state-card-input_number`): the
+     * slider and its state, or the box, in the `.flex` that takes the row's width after `state-info`. [flexWidthCss]
+     * is that width (CSS px), [rowWidthCss] the row's (HA hides the state in a row 300 px wide or narrower).
      */
-    private fun numberControl(ctx: VitroCardContext, row: EntityRowConfig, name: () -> String, rowContentWidth: () -> Int): Control {
-        val slider = SliderRow(ctx, row.entity, name, rowContentWidth)
+    fun stateCardNumber(ctx: VitroCardContext, entityId: String, name: () -> String, rowWidthCss: () -> Float, flexWidthCss: () -> Float): Control =
+        numberControl(ctx, EntityRowConfig(entity = entityId), name, { (rowWidthCss() * ctx.dp).roundToInt() }, flexWidthCss)
+
+    /**
+     * A number row's control: a slider row or a box, by the entity's mode (an entity that changes mode swaps them).
+     * [stateCardFlex]: the state card's `.flex` width in More Info, in place of the entities row's flex sharing.
+     */
+    private fun numberControl(
+        ctx: VitroCardContext,
+        row: EntityRowConfig,
+        name: () -> String,
+        rowContentWidth: () -> Int,
+        stateCardFlex: (() -> Float)? = null,
+    ): Control {
+        val slider = SliderRow(ctx, row.entity, name, rowContentWidth, stateCardFlex)
         val box = NumberBox(ctx, row.entity, name)
         val holder = object : android.widget.FrameLayout(ctx.context) {}
         holder.addView(slider, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL or Gravity.END))
@@ -510,6 +525,7 @@ internal object EntityRowControls {
         private val entityId: String,
         private val name: () -> String,
         private val rowContentWidth: () -> Int,
+        private val stateCardFlex: (() -> Float)? = null,
     ) : ViewGroup(ctx.context) {
         val state = text(ctx, 14f, ctx.theme.primaryTextColor).apply { gravity = Gravity.END }
         val slider = HaRowSlider(ctx) { v -> setValue(ctx, entityId, v) }
@@ -524,7 +540,8 @@ internal object EntityRowControls {
             // hui-number-entity-row shows a dash for no value; hui-input-number-entity-row HA's state text.
             state.text = when {
                 s == null -> ""
-                s.domain == "number" && noValue -> "—"
+                // The state card writes HA's state text for every value.
+                s.domain == "number" && noValue && stateCardFlex == null -> "—"
                 else -> s.formattedState()
             }
             slider.bind(s, name())
@@ -543,7 +560,8 @@ internal object EntityRowControls {
             val basis = 100f + 16f + stateW
             val info = 0.3f * w + 24f
             val free = w - 40f - info - basis
-            val flexW = if (free > 0f) basis + free * 2f / 3f else basis
+            // The state card's `.flex` takes what `state-info` leaves; the slider's 100 px minimum still holds.
+            val flexW = stateCardFlex?.invoke()?.coerceAtLeast(basis) ?: if (free > 0f) basis + free * 2f / 3f else basis
             // The state's box is at least 45 px, its text at the end of it (`text-align: end`).
             if (stateW > 0f) state.measure(MeasureSpec.makeMeasureSpec((stateW * ctx.dp).roundToInt(), MeasureSpec.EXACTLY), unspecified)
             slider.measure(
@@ -554,8 +572,11 @@ internal object EntityRowControls {
         }
 
         /** The slider view: the track (flex width less the state and the margins, at most 200 px) and 8 px each side for the thumb. */
-        private fun sliderWidthPx(flexW: Float, stateW: Float): Int =
-            ((min(200f, max(0f, flexW - 16f - stateW)) + 16f) * ctx.dp).roundToInt()
+        private fun sliderWidthPx(flexW: Float, stateW: Float): Int {
+            // The state card's slider has no side margins: its track takes the `.flex` up to the state.
+            val margins = if (stateCardFlex != null) 0f else 16f
+            return ((min(200f, max(0f, flexW - margins - stateW)) + 16f) * ctx.dp).roundToInt()
+        }
 
         override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
             val w = r - l
@@ -569,7 +590,9 @@ internal object EntityRowControls {
             }
             val sw = slider.measuredWidth
             val sTop = (h - slider.measuredHeight) / 2
-            slider.layout(w - stateW - sw, sTop, w - stateW, sTop + slider.measuredHeight)
+            // The view reaches 8 px past the track for the thumb; in the state card the track ends at the state.
+            val shift = if (stateCardFlex != null) ctx.px(8f) else 0
+            slider.layout(w - stateW - sw + shift, sTop, w - stateW + shift, sTop + slider.measuredHeight)
         }
     }
 
