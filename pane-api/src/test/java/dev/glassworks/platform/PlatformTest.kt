@@ -49,6 +49,7 @@ class PlatformTest {
         Triple("hasSystemCameraIndicator", 31) { it.hasSystemCameraIndicator },
         Triple("canInstallWithoutUserAction", 31) { it.canInstallWithoutUserAction },
         Triple("hasApplicationExitInfo", 30) { it.hasApplicationExitInfo },
+        Triple("hasBootCount", 24) { it.hasBootCount },
         Triple("foregroundServiceTypesNeedTheirPermission", 34) { it.foregroundServiceTypesNeedTheirPermission },
         Triple("hasSoftApConfiguration", 30) { it.hasSoftApConfiguration },
         Triple("hasDockPowerSource", 33) { it.hasDockPowerSource },

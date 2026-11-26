@@ -30,6 +30,7 @@ public final class dev/glassworks/hawebrtc/HaError$Companion {
 }
 
 public final class dev/glassworks/hawebrtc/HaWebRtcPlayer {
+	public static final field Companion Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Companion;
 	public fun <init> (Landroid/content/Context;Ldev/glassworks/hawebrtc/HaCommandChannel;Ljava/lang/String;)V
 	public fun <init> (Landroid/content/Context;Ldev/glassworks/hawebrtc/HaCommandChannel;Ljava/lang/String;Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Options;)V
 	public synthetic fun <init> (Landroid/content/Context;Ldev/glassworks/hawebrtc/HaCommandChannel;Ljava/lang/String;Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Options;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -41,10 +42,16 @@ public final class dev/glassworks/hawebrtc/HaWebRtcPlayer {
 	public final fun getVideoHeight ()I
 	public final fun getVideoWidth ()I
 	public final fun getView ()Landroid/view/View;
+	public static final fun prewarm (Landroid/content/Context;)V
 	public final fun setActive (Z)V
 	public final fun setListener (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;)V
+	public final fun setRendering (Z)V
 	public final fun setScaling (Ldev/glassworks/hawebrtc/VideoScaling;)V
 	public final fun start ()V
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcPlayer$Companion {
+	public final fun prewarm (Landroid/content/Context;)V
 }
 
 public abstract interface class dev/glassworks/hawebrtc/HaWebRtcPlayer$Listener {

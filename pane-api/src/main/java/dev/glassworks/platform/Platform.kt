@@ -186,6 +186,9 @@ open class PlatformApi(
     /** `ActivityManager.getHistoricalProcessExitReasons` exists (Android 11). Below it, the reason a process ended is not kept. */
     val hasApplicationExitInfo: Boolean get() = apiLevel >= 30
 
+    /** `Settings.Global.BOOT_COUNT` exists (Android 7): one boot told from the next. Below it, [bootCount] is null. */
+    val hasBootCount: Boolean get() = apiLevel >= 24
+
     /**
      * How an ordinary app opens a Wi-Fi hotspot for setup (#197). From Android 8, the public
      * `WifiManager.startLocalOnlyHotspot`. Below it there is none, and the hidden `setWifiApEnabled`
@@ -278,6 +281,34 @@ open class PlatformApi(
         return am.getHistoricalProcessExitReasons(context.packageName, 0, 0)
             .firstOrNull { it.processName == processName }?.reason
     }
+
+    /** How one of this app's processes ended, as Android kept it ([processExit]). */
+    class ProcessExit(
+        /** An `ApplicationExitInfo.REASON_*` value. */
+        val reason: Int,
+        /** Android's own words for it (the signal, the ANR's subject), if any. */
+        val description: String?,
+        /** When it ended, ms since the epoch. */
+        val atWallMs: Long,
+    )
+
+    /**
+     * How this app's process [pid] ended: null when the platform keeps no reasons ([hasApplicationExitInfo]) or has
+     * none for that process. Never throws.
+     */
+    fun processExit(context: Context, pid: Int): ProcessExit? {
+        if (!hasApplicationExitInfo) return null
+        return runCatching {
+            context.getSystemService(ActivityManager::class.java)
+                ?.getHistoricalProcessExitReasons(context.packageName, pid, 1)?.firstOrNull { it.pid == pid }
+                ?.let { ProcessExit(it.reason, it.description, it.timestamp) }
+        }.getOrNull()
+    }
+
+    /** How many times this device has booted ([hasBootCount]); null below Android 7, or where the device doesn't say. */
+    fun bootCount(context: Context): Int? =
+        if (!hasBootCount) null
+        else runCatching { Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT) }.getOrNull()
 
     /**
      * The Wi-Fi link's details: from the network's capabilities from Android 12, where `getConnectionInfo`

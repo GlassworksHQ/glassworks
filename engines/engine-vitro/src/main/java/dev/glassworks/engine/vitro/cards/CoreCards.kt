@@ -3145,12 +3145,37 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         // attached to a hidden window starts nothing, and one attached to a visible window starts now.
         windowVisible = windowVisibility == VISIBLE
         followShown()
+        if (feed != null) {
+            viewTreeObserver.addOnScrollChangedListener(onScrolled)
+            viewTreeObserver.addOnGlobalLayoutListener(onLaidOut)
+            followOnScreen()
+        }
     }
 
     override fun onDetachedFromWindow() {
+        if (feed != null) {
+            viewTreeObserver.removeOnScrollChangedListener(onScrolled)
+            viewTreeObserver.removeOnGlobalLayoutListener(onLaidOut)
+        }
         // The card went: its players close (it starts afresh if it comes back).
         feed?.stop()
         super.onDetachedFromWindow()
+    }
+
+    private val visibleRect = android.graphics.Rect()
+    private val onScrolled = android.view.ViewTreeObserver.OnScrollChangedListener { followOnScreen() }
+    private val onLaidOut = android.view.ViewTreeObserver.OnGlobalLayoutListener { followOnScreen() }
+
+    /**
+     * Whether any of the card is inside the window (a scrolled view clips the rest): a camera scrolled out of sight
+     * stops drawing, and its slot goes to one on screen ([LiveCameraFeed.setOnScreen]). A hidden card counts as on
+     * screen here: [followShown] pauses it.
+     */
+    private fun followOnScreen() {
+        val f = feed ?: return
+        if (!isAttachedToWindow) return
+        val on = !isShown || width == 0 || height == 0 || getGlobalVisibleRect(visibleRect)
+        guarded("camera") { f.setOnScreen(on) }
     }
 
     /**
