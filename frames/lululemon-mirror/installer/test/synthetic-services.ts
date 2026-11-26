@@ -1,5 +1,5 @@
 // A synthetic stock services.jar for tests: a real DEX 035 built with javac + d8, shaped like stock AOSP 6.0.1's
-// UsbDebuggingManager and DevicePolicyManagerService. Needs an Android SDK (d8); callers skip without one (HAS_D8).
+// UsbDebuggingManager and DevicePolicyManagerService, and stock 1.24.0's MirrorApService. Needs an Android SDK (d8); callers skip without one (HAS_D8).
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -26,14 +26,33 @@ export const HAS_D8 = Boolean(D8);
 export const START_CONFIRMATION_LOG_STRING =
   'unable to start customAdbPublicKeyConfirmation[SecondaryUser]Component ';
 
+/** Which `MirrorApService` the synthetic jar carries (see buildSyntheticStockServicesJar). */
+export type MirrorApVariant = 'stock' | 'none' | 'unexpected';
+
 /**
  * Builds a real DEX 035 + ZIP `services.jar` with `UsbDebuggingManager` (so the startConfirmation
  * patch runs) AND `DevicePolicyManagerService` shaped like stock AOSP 6.0.1 (so both Device Owner
  * fixes run): `<init>` sets `mHasFeature` from `PackageManager.hasSystemFeature(device_admin)`, and
- * `setDeviceOwner` calls `IBackupManager.setBackupServiceActive(0, false)`. Android framework types
- * are provided as local stubs with the exact AOSP descriptors.
+ * `setDeviceOwner` calls `IBackupManager.setBackupServiceActive(0, false)`. With `mirrorAp: 'stock'`
+ * (the default) it also has a `MirrorApService` shaped like stock 1.24.0's: `create(Context)`, and a
+ * package-private `systemReady()` that registers the `ACTION_START_HOST_APD` receiver and starts the
+ * `mapd` connector thread (so the stock-hotspot patch runs); `'none'` leaves the class out, and
+ * `'unexpected'` gives `systemReady()` a body that registers no `ACTION_START_HOST_APD` receiver.
+ * Android framework types are provided as local stubs with the exact AOSP descriptors. Each variant is
+ * built once per run (d8 is slow); callers get their own copy.
  */
-export function buildSyntheticStockServicesJar(): Uint8Array {
+export function buildSyntheticStockServicesJar(opts: { mirrorAp?: MirrorApVariant } = {}): Uint8Array {
+  const mirrorAp = opts.mirrorAp ?? 'stock';
+  const cached = SYNTHETIC_JARS.get(mirrorAp);
+  if (cached) return cached.slice();
+  const jar = buildSyntheticJarUncached(mirrorAp);
+  SYNTHETIC_JARS.set(mirrorAp, jar);
+  return jar.slice();
+}
+
+const SYNTHETIC_JARS = new Map<MirrorApVariant, Uint8Array>();
+
+function buildSyntheticJarUncached(mirrorAp: MirrorApVariant): Uint8Array {
   if (!D8) throw new Error('buildSyntheticStockServicesJar requires d8 (guard call sites with it.skipIf(!HAS_D8))');
   const dir = mkdtempSync(join(tmpdir(), 'gw-stock-dex-'));
   try {
@@ -47,7 +66,19 @@ public class PackageManager { public boolean hasSystemFeature(String name) { ret
 `);
     write('android/content/Context.java', `package android.content;
 import android.content.pm.PackageManager;
-public class Context { public PackageManager getPackageManager() { return null; } }
+public class Context {
+  public PackageManager getPackageManager() { return null; }
+  public Intent registerReceiver(BroadcastReceiver receiver, IntentFilter filter) { return null; }
+}
+`);
+    write('android/content/Intent.java', `package android.content;
+public class Intent {}
+`);
+    write('android/content/BroadcastReceiver.java', `package android.content;
+public class BroadcastReceiver {}
+`);
+    write('android/content/IntentFilter.java', `package android.content;
+public class IntentFilter { public IntentFilter(String action) {} }
 `);
     write('android/app/backup/IBackupManager.java', `package android.app.backup;
 public interface IBackupManager { void setBackupServiceActive(int userHandle, boolean makeActive); }
@@ -87,10 +118,36 @@ public class DevicePolicyManagerService {
   }
 }
 `);
+    if (mirrorAp !== 'none') {
+      const ready = mirrorAp === 'stock'
+        ? `mContext.registerReceiver(mWifiStateBroadcastReceiver, new IntentFilter("android.net.wifi.WIFI_STATE_CHANGED"));
+    mContext.registerReceiver(mStartHostApBroadcastReceiver, new IntentFilter(ACTION_START_HOST_APD));
+    mThread.start();`
+        : 'mThread.start();';
+      write('com/android/server/MirrorApService.java', `package com.android.server;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
+public class MirrorApService {
+  public static final String ACTION_START_HOST_APD = "com.mirror.framework.ACTION_START_HOST_APD";
+  private final Context mContext;
+  private final Thread mThread;
+  private final BroadcastReceiver mStartHostApBroadcastReceiver = new BroadcastReceiver();
+  private final BroadcastReceiver mWifiStateBroadcastReceiver = new BroadcastReceiver();
+  private MirrorApService(Context context) { mContext = context; mThread = new Thread("MapdConnector"); }
+  static MirrorApService create(Context context) { return new MirrorApService(context); }
+  void systemReady() {
+    ${ready}
+  }
+}
+`);
+    }
     const sources = [
-      'android/content/pm/PackageManager.java', 'android/content/Context.java',
+      'android/content/pm/PackageManager.java', 'android/content/Context.java', 'android/content/Intent.java',
+      'android/content/BroadcastReceiver.java', 'android/content/IntentFilter.java',
       'android/app/backup/IBackupManager.java', 'com/android/server/usb/UsbDebuggingManager.java',
       'com/android/server/devicepolicy/DevicePolicyManagerService.java',
+      ...(mirrorAp !== 'none' ? ['com/android/server/MirrorApService.java'] : []),
     ].map((r) => join(dir, 'src', r));
     const clsDir = join(dir, 'classes');
     execFileSync('mkdir', ['-p', clsDir]);

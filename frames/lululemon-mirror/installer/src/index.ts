@@ -23,7 +23,7 @@ export {
   STOCK_BUNDLE_MAGIC, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES, buildSurgicalSparseImage, decodeStockBundle,
   encodeStockBundle, hideStockBloat, padZipToExactLength, patchStockServicesJar, unhideStockBloat,
   type DecodedStockBundle, type DeviceOwnerPatch, type FiemapExtent, type PatchStockServicesJarOptions,
-  type PatchedServicesJar, type StockBloatChange, type StockBundleMeta,
+  type PatchedServicesJar, type StockApPatch, type StockBloatChange, type StockBundleMeta,
 } from './stock';
 export {
   BundleRefused, ORIGINAL_JAR, RESTORE_SPARSE, STOCK_PROBE_BLE, STOCK_PROBE_LAN, bundleExtents, checkNotOdexed, installInPlace, mirrorInPlace,
