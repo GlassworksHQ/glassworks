@@ -1,0 +1,31 @@
+{
+ "title": "Tile: a paused timer, its time left and its state",
+ "expect": {
+  "timer.oven": "paused"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "timer.oven"
+ },
+ "fixture": {
+  "states": {
+   "timer.oven": {
+    "state": "paused",
+    "last_changed": "-4m",
+    "attributes": {
+     "duration": "1:00:00",
+     "remaining": "0:41:07",
+     "editable": true,
+     "friendly_name": "Oven"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "timer.oven",
+    "pl": "timer",
+    "en": "Oven"
+   }
+  ]
+ }
+}

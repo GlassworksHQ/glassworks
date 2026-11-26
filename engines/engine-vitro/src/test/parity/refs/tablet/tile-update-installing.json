@@ -1,0 +1,138 @@
+{
+ "case": "tile-update-installing",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Speaker Firmware",
+   "x": 56,
+   "y": 12.61,
+   "w": 114.77,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Installing (40%)",
+   "x": 56,
+   "y": 32,
+   "w": 88.53,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "update.kitchen_speaker_firmware": {
+   "s": "on",
+   "a": {
+    "auto_update": false,
+    "display_precision": 0,
+    "installed_version": "1.4.2",
+    "in_progress": true,
+    "latest_version": "1.5.0",
+    "release_summary": null,
+    "release_url": null,
+    "skipped_version": null,
+    "title": "Speaker firmware",
+    "update_percentage": 40,
+    "device_class": "firmware",
+    "friendly_name": "Speaker Firmware",
+    "supported_features": 23
+   },
+   "lc": 1794406080,
+   "lu": 1794406080
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "update.kitchen_speaker_firmware",
+    "pl": "zha",
+    "di": "device-1",
+    "en": "Firmware",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Speaker"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "update"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "update": {
+     "_": {
+      "default": "mdi:package-up",
+      "state": {
+       "off": "mdi:package"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.update.entity_component._.state.off": "Up-to-date",
+    "component.update.entity_component._.state.on": "Update available",
+    "component.update.entity_component._.state_attributes.auto_update.name": "Auto update",
+    "component.update.entity_component._.state_attributes.auto_update.state.false": "No",
+    "component.update.entity_component._.state_attributes.auto_update.state.true": "Yes",
+    "component.update.entity_component._.state_attributes.in_progress.name": "In progress",
+    "component.update.entity_component._.state_attributes.in_progress.state.false": "No",
+    "component.update.entity_component._.state_attributes.in_progress.state.true": "Yes",
+    "component.update.entity_component._.state_attributes.installed_version.name": "Installed version",
+    "component.update.entity_component._.state_attributes.latest_version.name": "Latest version",
+    "component.update.entity_component._.state_attributes.release_summary.name": "Release summary",
+    "component.update.entity_component._.state_attributes.release_url.name": "Release URL",
+    "component.update.entity_component._.state_attributes.skipped_version.name": "Skipped version",
+    "component.update.entity_component._.state_attributes.title.name": "Title"
+   },
+   "entity": {}
+  }
+ }
+}

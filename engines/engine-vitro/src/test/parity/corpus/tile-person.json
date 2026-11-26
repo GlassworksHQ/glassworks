@@ -1,0 +1,36 @@
+{
+ "title": "Tile: a person at home, with the zone badge",
+ "expect": {
+  "person.sam": "home"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "person.sam"
+ },
+ "fixture": {
+  "states": {
+   "person.sam": {
+    "state": "home",
+    "last_changed": "-3h12m",
+    "attributes": {
+     "editable": true,
+     "id": "sam",
+     "device_trackers": [
+      "device_tracker.sam_phone"
+     ],
+     "source": "device_tracker.sam_phone",
+     "user_id": "parity-user",
+     "entity_picture": "/local/vitro-harness-fixtures/images/person.png",
+     "friendly_name": "Sam"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "person.sam",
+    "pl": "person",
+    "en": "Sam"
+   }
+  ]
+ }
+}

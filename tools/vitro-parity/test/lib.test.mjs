@@ -180,9 +180,12 @@ test('buildDisplay keeps only what Vitro reads, with synthetic device ids', asyn
   })[category][n];
   const translations = (category, n) => ({
     'component.sensor.entity_component._.state.on': 'On',
+    'component.sensor.entity_component._.state_attributes.mode.state.eco': 'Eco',
     'component.sensor.entity_component.humidity.state.x': 'X',
     'component.sensor.entity_component._.name': 'Sensor',
     'component.localthings.entity.sensor.instance_temperature.state.cold': 'Cold',
+    'component.localthings.entity.sensor.instance_temperature.state_attributes.mode.state.deep': 'Deep',
+    'component.localthings.entity.sensor.instance_temperature.name': 'Instance',
     'component.localthings.entity.sensor.other_key.state.y': 'Y',
   });
   const d = buildDisplay(new Set(['sensor.fridge', 'light.lamp']), registry, devices, icons, translations, { 'sensor.fridge': 'temperature' });
@@ -196,8 +199,14 @@ test('buildDisplay keeps only what Vitro reads, with synthetic device ids', asyn
   assert.deepEqual(d.requested, { domains: ['light', 'sensor'], platforms: ['localthings'] });
   assert.deepEqual(d.icons.entity_component.sensor, { _: { default: 'mdi:eye' }, temperature: { default: 'mdi:thermometer' } });
   assert.deepEqual(d.icons.entity, { localthings: { sensor: { instance_temperature: { default: 'mdi:fridge' } } } });
-  assert.deepEqual(Object.keys(d.translations.entity_component), ['component.sensor.entity_component._.state.on']);
-  assert.deepEqual(Object.keys(d.translations.entity), ['component.localthings.entity.sensor.instance_temperature.state.cold']);
+  // States' labels and their attributes' (a tile's state_content), nothing else.
+  assert.deepEqual(Object.keys(d.translations.entity_component), [
+    'component.sensor.entity_component._.state.on', 'component.sensor.entity_component._.state_attributes.mode.state.eco',
+  ]);
+  assert.deepEqual(Object.keys(d.translations.entity), [
+    'component.localthings.entity.sensor.instance_temperature.state.cold',
+    'component.localthings.entity.sensor.instance_temperature.state_attributes.mode.state.deep',
+  ]);
   const text = JSON.stringify(d);
   assert.ok(!text.includes(realDevice) && !text.includes('SN1') && !text.includes('aa:bb') && !text.includes('4c83f8'));
 });

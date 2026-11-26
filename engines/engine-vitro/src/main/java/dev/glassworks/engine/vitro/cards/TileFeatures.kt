@@ -93,7 +93,10 @@ internal object FanSpeeds {
     fun label(s: EntityState, speed: String): String = when {
         speed == "on" || speed == "off" -> HaDisplay.stateLabel(s.copy(state = speed)) ?: s.copy(state = speed).plainState()
         numbered(speed) -> HaText.ui("ui.card.fan.speed.numbered", "speed" to HaFormat.formatNumber(speed))
-        else -> HaText.ui("ui.card.fan.speed.$speed").ifEmpty { speed }
+        speed == "low" -> HaText.ui("ui.card.fan.speed.low")
+        speed == "medium" -> HaText.ui("ui.card.fan.speed.medium")
+        speed == "high" -> HaText.ui("ui.card.fan.speed.high")
+        else -> speed
     }
 }
 

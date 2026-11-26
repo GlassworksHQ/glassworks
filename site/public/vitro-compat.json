@@ -1344,6 +1344,11 @@
           }
         }
       },
+      "stateContent": {
+        "pattern": "^(?!(device_name|parent_device_name|area_name|floor_name|device_class)$)[\\s\\S]+$",
+        "why": "Vitro doesn't show a name or a device class as a state",
+        "note": "HA's state-display (frontend 20261028.5): state, entity-id, last_changed/last-changed, last_updated/last-updated, last_triggered, remaining_time (timer), install_status (update), a domain's timestamp attributes as a relative time, or any attribute formatted by formatEntityAttributeValue. The name contents and device_class (a translated class name) aren't drawn"
+      },
       "tileFeature": {
         "by": "type",
         "why": "a tile feature Vitro doesn't draw as HA does",
@@ -1354,6 +1359,16 @@
             }
           },
           "toggle": {
+            "keys": {
+              "type": "any"
+            }
+          },
+          "cover-open-close": {
+            "keys": {
+              "type": "any"
+            }
+          },
+          "fan-speed": {
             "keys": {
               "type": "any"
             }
@@ -3190,6 +3205,7 @@
               "automation",
               "binary_sensor",
               "calendar",
+              "climate",
               "counter",
               "cover",
               "fan",
@@ -3203,6 +3219,7 @@
               "lock",
               "media_player",
               "number",
+              "person",
               "plant",
               "remote",
               "schedule",
@@ -3213,14 +3230,20 @@
               "sun",
               "switch",
               "text",
+              "timer",
               "todo",
+              "update",
               "vacuum",
               "water_heater",
               "weather",
               "zone"
             ],
             "why": "HA's tile adds a badge, a countdown, a position or a date Vitro doesn't draw for this domain",
-            "note": "HA's tile adds a badge (person, device tracker, climate, humidifier) or shows a countdown, install status, position or relative time Vitro doesn't draw"
+            "note": "Compared with HA: climate (its action badge), person (its zone badge), timer (the live countdown) and update (its install status) in tile-climate, tile-person*, tile-timer* and tile-update*. Still left out: device_tracker and humidifier (badges not compared yet), valve, and the timestamp domains (button, scene, event, image, ...), whose state HA shows as a relative time"
+          },
+          "color": "@cssColor",
+          "state_content": {
+            "list": "@stateContent"
           },
           "name": "@name",
           "icon": "@icon",
@@ -3238,9 +3261,9 @@
           },
           "show_entity_picture": {
             "values": [
+              true,
               false
-            ],
-            "why": "Vitro draws the icon, not the entity picture"
+            ]
           },
           "features": {
             "list": "@tileFeature"

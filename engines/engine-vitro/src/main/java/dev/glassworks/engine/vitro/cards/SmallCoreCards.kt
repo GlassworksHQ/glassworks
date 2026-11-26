@@ -123,6 +123,12 @@ internal object HaStateColor {
         "state-water_heater-eco-color" to "green", "state-water_heater-electric-color" to "orange", "state-water_heater-gas-color" to "orange",
         "state-water_heater-heat_pump-color" to "orange", "state-water_heater-high_demand-color" to "deep-orange",
         "state-water_heater-performance-color" to "deep-orange",
+        "state-weather-clear_night-color" to "deep-purple", "state-weather-cloudy-color" to "light-grey",
+        "state-weather-exceptional-color" to "red", "state-weather-fog-color" to "grey", "state-weather-hail-color" to "cyan",
+        "state-weather-lightning-color" to "yellow", "state-weather-lightning_rainy-color" to "lime",
+        "state-weather-partlycloudy-color" to "blue-grey", "state-weather-pouring-color" to "indigo",
+        "state-weather-rainy-color" to "blue", "state-weather-snowy_rainy-color" to "light-blue",
+        "state-weather-sunny-color" to "amber", "state-weather-windy-color" to "green", "state-weather-windy_variant-color" to "green",
     )
 
     /** A `--<name>` custom property's color: the theme's, else HA's default. */

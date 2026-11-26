@@ -438,7 +438,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                     applyHaRipple(this, 12f * ctx.dp, ctx.theme.dark)
                     contentDescription = HaText.ui(label)
                     addView(icon, LinearLayout.LayoutParams(ctx.px(20f), ctx.px(20f)))
-                    setOnClickListener { ctx.callService("cover", service, JSONObject().put("entity_id", entityId), null) }
+                    // A disabled ha-control-button sends nothing.
+                    setOnClickListener { v -> if (v.isEnabled) ctx.callService("cover", service, JSONObject().put("entity_id", entityId), null) }
                 }
                 coverRow.addView(btn, LinearLayout.LayoutParams(0, ctx.px(42f), 1f))
                 CoverButton(bit, service, btn, icon)

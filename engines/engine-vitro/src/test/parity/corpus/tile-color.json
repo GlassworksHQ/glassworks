@@ -1,6 +1,5 @@
 {
- "title": "A tile with its own color: HA's frontend draws the view",
- "route": "frontend",
+ "title": "Tile: its own color (red) on a light that is on",
  "card": {
   "type": "tile",
   "entity": "light.hallway_ceiling_ring",
@@ -36,7 +35,7 @@
      ],
      "off_with_transition": false,
      "off_brightness": null,
-     "friendly_name": "Hallway Ceiling Light Hallway Ceiling Ring",
+     "friendly_name": "Hallway Ceiling",
      "supported_features": 40
     }
    }
@@ -47,14 +46,14 @@
     "pl": "zha",
     "tk": "light",
     "di": "dev-hallway-ceiling-light",
-    "en": "Hallway Ceiling Ring",
+    "en": "Ceiling",
     "np": "device"
    }
   ],
   "devices": [
    {
     "id": "dev-hallway-ceiling-light",
-    "name": "Hallway Ceiling Light"
+    "name": "Hallway"
    }
   ]
  }
