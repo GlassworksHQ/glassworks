@@ -1350,12 +1350,18 @@ class VitroView(
         if (!mod.positionFixed) return false
         // A fixed card still lives in its section: when the section hides, so does the card.
         val view = wrapVisibility(card, buildCard(card, ctx, fillViewport = false, layout = layout), ctx, sectionVisibility)
-        sink += view to pinnedLayoutParams(mod)
+        sink += view to pinnedLayoutParams(mod, fillsHeight = card.type in HA_CARD_FULL_HEIGHT)
         return true
     }
 
-    /** Overlay [FrameLayout.LayoutParams] for a pinned card: gravity from its offsets/transform, margins in dp. */
-    internal fun pinnedLayoutParams(mod: CardModStyle): FrameLayout.LayoutParams {
+    /**
+     * Overlay [FrameLayout.LayoutParams] for a pinned card: gravity from its offsets/transform, margins in dp. Its
+     * height is the card-mod `height`, else, for `position: fixed` on a card whose own `ha-card` is `height: 100%`
+     * ([fillsHeight]), the viewport's: the viewport is a fixed box's containing block, so HA draws such a card as tall
+     * as the screen (a tile pinned with `bottom: 24px` runs from 24 px above the top to 24 px above the bottom, its
+     * content centered). Otherwise the card's own height.
+     */
+    internal fun pinnedLayoutParams(mod: CardModStyle, fillsHeight: Boolean = false): FrameLayout.LayoutParams {
         val viewportW = if (width > 0) width else resources.displayMetrics.widthPixels
         val viewportH = if (height > 0) height else resources.displayMetrics.heightPixels
         fun length(raw: String?, extent: Int): Int? {
@@ -1383,7 +1389,9 @@ class VitroView(
             else -> Gravity.TOP
         }
         val w = length(mod.fixedWidth, viewportW)?.takeIf { it > 0 } ?: WRAP_CONTENT
-        return FrameLayout.LayoutParams(w, WRAP_CONTENT, horizontal or vertical).apply {
+        val h = length(mod.fixedHeight, viewportH)?.takeIf { it > 0 }
+            ?: if (fillsHeight && mod.fixedToViewport) viewportH else WRAP_CONTENT
+        return FrameLayout.LayoutParams(w, h, horizontal or vertical).apply {
             if (!mod.fixedCenterY) {
                 topMargin = length(mod.fixedTop, viewportH) ?: 0
                 bottomMargin = length(mod.fixedBottom, viewportH) ?: 0
