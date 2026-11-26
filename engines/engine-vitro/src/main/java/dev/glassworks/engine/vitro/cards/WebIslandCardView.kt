@@ -1236,8 +1236,8 @@ ha-card.vitro-fallback { padding: 12px 16px; }
 <script>
 // Minimal HA custom-element shims for GeckoView Micro-Islands (zero HA SPA).
 // ha-card as HA's is (frontend 20261028.5, ha-card.ts): its look in its own shadow root (:host), so it holds wherever
-// the card puts it, in the card's shadow root too, where a rule in this page never reaches (tablet Vitro run 3: no
-// background, no corners, no border). HA's core tokens aren't in this page: their values are the fallbacks.
+// the card puts it, in the card's shadow root too, where a rule in this page never reaches (it used to have no
+// background, corners or border there). HA's core tokens aren't in this page: their values are the fallbacks.
 if (!customElements.get('ha-card')) {
   const HA_CARD_CSS = ':host{background:var(--ha-card-background,var(--card-background-color,white));' +
     'backdrop-filter:var(--ha-card-backdrop-filter,none);box-shadow:var(--ha-card-box-shadow,none);box-sizing:border-box;' +
@@ -1357,7 +1357,7 @@ vitroDefine('ha-state-icon', class extends HTMLElement {
   set hass(v) { this._hass = v; }
   get hass() { return this._hass; }
   // HA's ha-state-icon: the icon set on it, else the entity's own, else its domain's; with neither an icon nor a state
-  // object, nothing (tablet Vitro run 3 drew a house). A domain HA has no icon for: DEFAULT_DOMAIN_ICON, mdi:bookmark.
+  // object, nothing (it used to draw a house). A domain HA has no icon for: DEFAULT_DOMAIN_ICON, mdi:bookmark.
   _resolve() {
     if (this.icon) return this.icon;
     const st = this._stateObj;
