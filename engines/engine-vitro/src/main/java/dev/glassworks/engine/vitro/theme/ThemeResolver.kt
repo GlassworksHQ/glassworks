@@ -272,7 +272,7 @@ object ThemeResolver {
     private val BLUR = Regex("""blur\(\s*([\d.]+)px\s*\)""", RegexOption.IGNORE_CASE)
     private val PX_NUMBER = Regex("""([\d.]+)px""")
     private val WHITESPACE = Regex("""\s+""")
-    private val CUSTOM_PROPERTY = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""")
+    private val CUSTOM_PROPERTY_NAME = Regex("""--[\w-]+""")
     /** `font-family` values that keep the inherited list. */
     private val FONT_KEYWORDS = setOf("inherit", "unset", "revert", "revert-layer")
 
@@ -286,20 +286,102 @@ object ThemeResolver {
     private val STOP_PERCENT = Regex("""\s+[\d.]+%$""")
     private val STOP_POSITION = Regex("""\s+[\d.]+(?:%|px)$""")
     // One pattern per property name; the names are the literals below, so these stay small.
-    private val declProps = java.util.concurrent.ConcurrentHashMap<String, Regex>()
     private val themeVarProps = java.util.concurrent.ConcurrentHashMap<String, Regex>()
-    private fun declProp(name: String): Regex = declProps.getOrPut(name) {
-        // The value keeps a trailing `!important`: [parseCardMod] lets it win, as the browser does. A font list runs to
-        // the declaration's end, line breaks included (`font-family: Missing,\n  Pacifico, serif;`).
-        if (name == "font-family") Regex("""(?:^|[;\n{])\s*font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
-        else Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;\n]+)""", RegexOption.IGNORE_CASE)
-    }
     private fun themeVarProp(name: String): Regex = themeVarProps.getOrPut(name) {
         Regex("""(?:^|[;\n{])\s*$name\s*:\s*([^;!\n}]+)""", RegexOption.IGNORE_CASE)
     }
 
     private val JINJA_PATTERN = Regex("""\{%.*?%\}|\{\{.*?\}\}|\{#.*?#\}""", RegexOption.DOT_MATCHES_ALL)
-    private val CSS_COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
+
+    /**
+     * [css] with each comment replaced by a space, as the browser reads it: a slash-star inside a quoted string (a
+     * `content:` value, an attribute selector's value) doesn't open one, so it can't hide the rules after it. A string ends
+     * at its closing quote or at a newline, a backslash and the character after it are copied as they are, and a
+     * comment that is never closed runs to the end. The site's checker (`stripCssComments` in
+     * `site/src/lib/vitroCompat.ts`) and the audit script (`strip_css_comments`) do the same.
+     */
+    fun stripCssComments(css: String): String {
+        if (!css.contains("/*")) return css
+        val out = StringBuilder(css.length)
+        var quote = NO_QUOTE
+        var i = 0
+        while (i < css.length) {
+            val c = css[i]
+            when {
+                c == '\\' && i + 1 < css.length -> {
+                    out.append(c).append(css[i + 1])
+                    i += 2
+                    continue
+                }
+                quote != NO_QUOTE -> if (c == quote || c == '\n') quote = NO_QUOTE
+                c == '"' || c == '\'' -> quote = c
+                c == '/' && css.startsWith("/*", i) -> {
+                    val end = css.indexOf("*/", i + 2)
+                    out.append(' ')
+                    i = if (end < 0) css.length else end + 2
+                    continue
+                }
+            }
+            out.append(c)
+            i++
+        }
+        return out.toString()
+    }
+
+    private const val NO_QUOTE = '\u0000'
+
+    /**
+     * Which characters of [css] are quoted text: a string, its quotes included, or a backslash escape and the
+     * character after it. A brace, `;` or `,` there isn't structure (`--label: "{ ; }"`), so the rule readers
+     * ([cssRulesImportant], [hostDeclarations]) skip it. A string ends as in [stripCssComments].
+     */
+    private fun quotedChars(css: String): BooleanArray {
+        val quoted = BooleanArray(css.length)
+        var quote = NO_QUOTE
+        var i = 0
+        while (i < css.length) {
+            val c = css[i]
+            when {
+                c == '\\' && i + 1 < css.length -> {
+                    quoted[i] = true
+                    quoted[i + 1] = true
+                    i += 2
+                    continue
+                }
+                quote != NO_QUOTE -> {
+                    quoted[i] = true
+                    if (c == quote || c == '\n') quote = NO_QUOTE
+                }
+                c == '"' || c == '\'' -> {
+                    quoted[i] = true
+                    quote = c
+                }
+            }
+            i++
+        }
+        return quoted
+    }
+
+    /** A rule body split into declarations at each `;` outside quoted text and parentheses (`url(data:…;base64,…)`). */
+    private fun splitDeclarations(body: String): List<String> {
+        val quoted = quotedChars(body)
+        val out = ArrayList<String>()
+        var parens = 0
+        var start = 0
+        for (i in body.indices) {
+            if (quoted[i]) continue
+            when (body[i]) {
+                '(' -> parens++
+                ')' -> if (parens > 0) parens--
+                ';' -> if (parens == 0) {
+                    out += body.substring(start, i)
+                    start = i + 1
+                }
+            }
+        }
+        out += body.substring(start)
+        return out
+    }
     private val TIME_PATTERN = Regex("""([\d.]+)(ms|s)""")
     private val DIM_PX = Regex("""([\d.]+)\s*(px|rem|em)?""", RegexOption.IGNORE_CASE)
     private val SHADOW_COLOR = Regex("""(?:rgba?|hsla?)\([^)]*\)""", RegexOption.IGNORE_CASE)
@@ -848,12 +930,20 @@ object ThemeResolver {
     }
 
     private fun parseCardModUncached(css: String, vars: Map<String, String>): CardModStyle {
-        val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
+        val cleaned = JINJA_PATTERN.replace(stripCssComments(css), " ")
         if (cleaned.isBlank()) return CardModStyle()
         val (decls, otherRules) = hostDeclarations(cleaned)
+        // The card's declarations in source order, split as the browser splits them ([splitDeclarations]): a `;` in a
+        // string (`content: "a; opacity: 0"`) doesn't start another one. The value keeps a trailing `!important`,
+        // which wins below as it does in the browser. A property's name is ASCII case-insensitive; a custom one's isn't.
+        val declList = splitDeclarations(decls).mapNotNull { d ->
+            val colon = d.indexOf(':').takeIf { it > 0 } ?: return@mapNotNull null
+            val name = d.substring(0, colon).trim()
+            (if (name.startsWith("--")) name else name.lowercase(Locale.ROOT)) to d.substring(colon + 1)
+        }
         // Custom properties cascade like any other: per name, the last `!important` declaration wins, else the last.
-        val rawCustom = CUSTOM_PROPERTY.findAll(decls)
-            .groupBy({ it.groupValues[1] }, { it.groupValues[2] })
+        val rawCustom = declList.filter { (name, _) -> CUSTOM_PROPERTY_NAME.matches(name) }
+            .groupBy({ it.first.removePrefix("--") }, { it.second })
             .mapValues { (_, values) ->
                 val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.last()
                 winner.replace(IMPORTANT, "").trim()
@@ -867,13 +957,9 @@ object ThemeResolver {
         val rawScope = if (rawCustom.isEmpty()) vars else (vars + rawCustom).let { if (cyclic.isEmpty()) it else it - cyclic }
         val custom = rawCustom.mapValues { resolveValue(it.value, rawScope, 0) }
         val scope = if (custom.isEmpty()) vars else (vars + custom).let { if (cyclic.isEmpty()) it else it - cyclic }
-        // Most of the properties asked for below aren't there: skip the pattern when the name isn't in the text at all
-        // (the pattern matches ASCII case-insensitively, so a lowercase miss is always a pattern miss).
-        val lowerDecls = decls.lowercase(Locale.ROOT)
         // As in the browser: the last `!important` declaration wins, else the last one. card-mod keeps the flag.
         fun prop(name: String): String? {
-            if (name !in lowerDecls) return null
-            val values = declProp(name).findAll(decls).map { it.groupValues[1] }.toList()
+            val values = declList.filter { it.first == name }.map { it.second }
             val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.lastOrNull()
             return winner?.replace(IMPORTANT, "")?.trim()?.takeIf { it.isNotEmpty() }?.let { resolveValue(it, scope, 0) }
         }
@@ -884,16 +970,15 @@ object ThemeResolver {
          */
         fun winner(vararg names: String): Pair<String, String>? {
             var best: Triple<String, String, Pair<Boolean, Int>>? = null
-            for (name in names) {
-                if (name !in lowerDecls) continue
-                for (m in declProp(name).findAll(decls)) {
-                    // An invalid declaration is dropped before the cascade (`border: nonsense` hides no width).
-                    if (!borderDeclValid(name, m.groupValues[1].replace(IMPORTANT, "").trim())) continue
-                    val key = IMPORTANT.containsMatchIn(m.groupValues[1]) to m.range.first
-                    val b = best
-                    if (b == null || key.first && !b.third.first || key.first == b.third.first && key.second > b.third.second) {
-                        best = Triple(name, m.groupValues[1], key)
-                    }
+            for ((index, decl) in declList.withIndex()) {
+                val (name, value) = decl
+                if (name !in names) continue
+                // An invalid declaration is dropped before the cascade (`border: nonsense` hides no width).
+                if (!borderDeclValid(name, value.replace(IMPORTANT, "").trim())) continue
+                val key = IMPORTANT.containsMatchIn(value) to index
+                val b = best
+                if (b == null || key.first && !b.third.first || key.first == b.third.first && key.second > b.third.second) {
+                    best = Triple(name, value, key)
                 }
             }
             val (name, raw) = best ?: return null
@@ -1040,13 +1125,15 @@ object ThemeResolver {
 
     /** [cssRules] with each declaration's `!important` flag kept, for code that resolves the cascade. */
     fun cssRulesImportant(css: String): List<Pair<String, List<Triple<String, String, Boolean>>>> {
-        val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
+        val cleaned = JINJA_PATTERN.replace(stripCssComments(css), " ")
         val out = ArrayList<Pair<String, List<Triple<String, String, Boolean>>>>()
         var depth = 0
         var segStart = 0
         var bodyStart = 0
         var selector = ""
+        val quoted = quotedChars(cleaned)
         for (i in cleaned.indices) {
+            if (quoted[i]) continue
             when (cleaned[i]) {
                 '{' -> {
                     if (depth == 0) {
@@ -1058,7 +1145,7 @@ object ThemeResolver {
                 '}' -> if (depth > 0) {
                     depth--
                     if (depth == 0) {
-                        val decls = cleaned.substring(bodyStart, i).split(';').mapNotNull { d ->
+                        val decls = splitDeclarations(cleaned.substring(bodyStart, i)).mapNotNull { d ->
                             val c = d.indexOf(':').takeIf { it > 0 } ?: return@mapNotNull null
                             val name = d.substring(0, c).trim().lowercase(Locale.ROOT)
                             val rawValue = d.substring(c + 1)
@@ -1104,7 +1191,9 @@ object ThemeResolver {
         var segStart = 0
         var bodyStart = 0
         var selector = ""
+        val quoted = quotedChars(css)
         for (i in css.indices) {
+            if (quoted[i]) continue
             when (css[i]) {
                 '{' -> {
                     if (depth == 0) {

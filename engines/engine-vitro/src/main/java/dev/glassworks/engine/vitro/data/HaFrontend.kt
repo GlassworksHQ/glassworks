@@ -54,6 +54,13 @@ object HaFrontend {
      */
     private var owner: Any? = null
 
+    /**
+     * What [HaText] holds now as this object put it there: the strings' source ([Loaded.source] with its origin and
+     * language) and the [HaText.version] the install left. The same source again is no change: nothing is installed and
+     * nobody is told, so a reconnect that reads HA's unchanged files again draws nothing again.
+     */
+    private var applied: Pair<String, Long>? = null
+
     /** Test hook: runs inside the install lock, after the ownership check and before the strings go in. */
     @Volatile internal var beforeInstall: (() -> Unit)? = null
 
@@ -71,8 +78,11 @@ object HaFrontend {
         }
     }
 
-    /** One language's strings as read, with the frontend's metadata, before they are installed. */
-    internal class Loaded(val meta: JSONObject, val strings: Map<String, String>, val complete: Boolean = true)
+    /**
+     * One language's strings as read, with the frontend's metadata, before they are installed. [source] names what they
+     * were read from (the frontend build and the language file's hash): the same source holds the same strings.
+     */
+    internal class Loaded(val meta: JSONObject, val strings: Map<String, String>, val complete: Boolean = true, val source: String? = null)
 
     private val APP_JS = Regex("""/frontend_latest/app\.([0-9a-f]+)\.js""")
 
@@ -116,11 +126,27 @@ object HaFrontend {
      */
     private fun install(requester: Any, key: Pair<String, String>, r: Loaded): Boolean = synchronized(lock) {
         if (owner !== requester || latest != key) return false
+        // Only a whole table counts as installed: without its Lovelace fragment, the next ensure asks again.
+        val id = r.source?.let { "${key.first}|${key.second}|$it|${r.complete}" }
+        val same = id != null && applied?.first == id && applied?.second == HaText.version
+        installed = if (r.complete) key else null
+        // What HaText already holds, from the same files: a start's cached strings and HA's own a moment later, or a
+        // reconnect to an unchanged HA. Installing them again would only draw every card again.
+        if (same) return false
         beforeInstall?.invoke()
         apply(r.meta, key.second, r.strings)
-        // Only a whole table counts as installed: without its Lovelace fragment, the next ensure asks again.
-        installed = if (r.complete) key else null
+        applied = id?.let { it to HaText.version }
         true
+    }
+
+    /**
+     * Waits until every read asked for before this call has run, installs included (tests: one executor runs them in
+     * order, so a no-op queued now runs after them). False when they didn't finish in [timeoutMs].
+     */
+    internal fun awaitIdle(timeoutMs: Long = 5_000): Boolean {
+        val done = java.util.concurrent.CountDownLatch(1)
+        executor.execute { done.countDown() }
+        return done.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     /** Forgets what is installed (a new server, or tests). */
@@ -130,6 +156,7 @@ object HaFrontend {
             wanted = null
             latest = null
             owner = null
+            applied = null
         }
         languages = emptyList()
     }
@@ -154,7 +181,7 @@ object HaFrontend {
         }
         val (strings, complete) = stringsFor(origin, meta, language) ?: return null
         store("current-${key(origin)}.json", JSONObject().put("app", app).toString())
-        return Loaded(meta, strings, complete)
+        return Loaded(meta, strings, complete, sourceOf(app, meta, language))
     }
 
     /** The cached strings of the frontend [origin] served last; null when there are none. */
@@ -163,8 +190,12 @@ object HaFrontend {
         val meta = cached("meta-$app.json") ?: return null
         val (lang, hash) = fileOf(meta, language) ?: return null
         val strings = cached("strings-$lang-$hash.json")?.let(::flatMap) ?: return null
-        return Loaded(meta, strings)
+        return Loaded(meta, strings, source = sourceOf(app, meta, language))
     }
+
+    /** Where [language]'s strings come from in frontend build [app]: the build and the language file it names. */
+    private fun sourceOf(app: String, meta: JSONObject, language: String): String? =
+        fileOf(meta, language)?.let { (lang, hash) -> "$app/$lang-$hash" }
 
     private fun apply(meta: JSONObject, language: String, strings: Map<String, String>) {
         val t = meta.optJSONObject("translations")

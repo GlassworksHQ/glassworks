@@ -14,13 +14,19 @@ All three are the same 640x360 stream (camera.py's 360p profile: a moving test p
 
   GET /vitro-camera-e2e/remove?view=<path>   that view's card is gone from the config from now on
   GET /vitro-camera-e2e/restore              every card is back
+  GET /vitro-camera-e2e/drop?seconds=<n>     HA restarts: every websocket closes, and with it its WebRTC sessions (as
+                                             HA's go2rtc sessions end with their subscription), and new websockets are
+                                             refused for n seconds. HTTP (stills, the MJPEG stream) stays up.
 
-Neither tells the frontend: the test then asks fakeha for HA's `lovelace_updated` (/clarity/lovelace_updated).
+Neither remove nor restore tells the frontend: the test then asks fakeha for HA's `lovelace_updated`
+(/clarity/lovelace_updated).
 Made-up names and loopback only; nothing here reads or reaches a real Home Assistant.
 """
 import json
 import os
+import socket
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "perf"))
@@ -43,6 +49,9 @@ CAMERA_PROFILES = dict(_clarity.CAMERA_PROFILES, **{MJPEG_CAMERA: "360p"})
 CAMERA_STREAM_TYPES = dict(_clarity.CAMERA_STREAM_TYPES, **{MJPEG_CAMERA: []})
 
 REMOVED = set()
+
+# Until when (time.monotonic()) websockets are refused: /vitro-camera-e2e/drop.
+DOWN_UNTIL = 0.0
 
 
 def __getattr__(name):
@@ -74,6 +83,28 @@ def lovelace(url_path):
                        "cards": [] if v in REMOVED else [card(v)]} for v in VIEWS]}
 
 
+def ws_refused():
+    """fakeha asks before it accepts a websocket: refused while HA is down (drop)."""
+    return time.monotonic() < DOWN_UNTIL
+
+
+def drop(seconds):
+    """HA goes down for `seconds`: new websockets are refused, and every open one is cut. A connection's end closes its
+    WebRTC sessions (fakeha's Conn.run), so the cameras' peers go too."""
+    global DOWN_UNTIL
+    DOWN_UNTIL = time.monotonic() + seconds
+    fake = sys.modules.get("fakeha")
+    hub = getattr(getattr(fake, "Handler", None), "hub", None)
+    cut = 0
+    for conn in list(hub.conns) if hub else []:
+        try:
+            conn.sock.shutdown(socket.SHUT_RDWR)
+            cut += 1
+        except OSError:
+            pass
+    return cut
+
+
 def http_get(path, query):
     if path == "/vitro-camera-e2e/remove":
         view = (query.get("view") or [""])[0]
@@ -84,4 +115,12 @@ def http_get(path, query):
     if path == "/vitro-camera-e2e/restore":
         REMOVED.clear()
         return 200, b"[]", "application/json"
+    if path == "/vitro-camera-e2e/drop":
+        try:
+            seconds = float((query.get("seconds") or ["20"])[0])
+        except ValueError:
+            return 400, b"seconds must be a number", "text/plain"
+        if not 0 <= seconds <= 120:
+            return 400, b"seconds must be 0 to 120", "text/plain"
+        return 200, json.dumps({"cut": drop(seconds), "seconds": seconds}).encode(), "application/json"
     return None

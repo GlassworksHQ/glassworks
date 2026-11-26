@@ -1267,10 +1267,13 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         val s = HaGraph.Stream(hours)
         stream = s
         val now = ctx.now()
-        val msg = HaGraph.historyStreamMessage(entityIds, hours, now) { ctx.store[it] != null }
-        unsubscribe = ctx.subscribeWs(msg, { ev ->
+        // Built again for each connection: a reconnect asks for the window as it is then, and the stream starts over.
+        unsubscribe = ctx.subscribeWsFresh({
+            HaGraph.historyStreamMessage(entityIds, hours, ctx.now()) { ctx.store[it] != null }
+        }, { ev, first ->
             ctx.main.post {
                 if (stream !== s) return@post
+                if (first) s.restart()
                 streamError = null
                 val combined = s.process(ev, ctx.now())
                 stateHistory = HaHistory.compute({ ctx.store[it] }, combined, entityIds, temperatureUnit())

@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
@@ -1921,6 +1922,18 @@ class LayoutCardView(
     val tracks = ArrayList<LinearLayout>()
 
     /**
+     * The empty host a pinned card (card-mod `position: fixed`) leaves where it was: its card draws in the view's
+     * overlay. In the grid layout it keeps its cell and margins, as in HA (2026-11-25, fake HA: a 12 px row and its
+     * gaps). In a column its margins collapse through it as an empty block's do: between two cards it takes no space,
+     * and at a column's start or end it only raises the edge margin to the larger of the top and bottom margins.
+     */
+    class PinnedSlot(context: Context) : View(context) {
+        // No content: zero height whatever its row offers (a bare View would take all of an AT_MOST height).
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) =
+            setMeasuredDimension(getDefaultSize(0, widthMeasureSpec), 0)
+    }
+
+    /**
      * A grid whose tracks have percentages: its template, gap, each placed view (a card or a filler) with its first
      * track and span, and the width (dp) the fixed sizes were last resolved at. The build only knows the display's
      * width; [onMeasure] resolves the percentages again against the grid's own.
@@ -2070,14 +2083,31 @@ class LayoutCardView(
         val colW = (inner / used.size.coerceAtLeast(1)).coerceIn(columnWidthDp, columnMaxDp)
         row.removeAllViews()
         tracks.clear()
+        val edge = kotlin.math.max(columnMargin[0], columnMargin[2])
         for (views in used) {
             val col = LinearLayout(ctx.context).apply { orientation = VERTICAL }
-            views.forEachIndexed { k, v ->
+            // Pinned slots ([PinnedSlot]) take no space: they go in with no size and no margins (so they attach and
+            // detach with the column, and their visibility listener with them), and a slot's margins count only at
+            // the edges, on the first and last card.
+            val cards = views.filter { it !is PinnedSlot }
+            val slotFirst = views.first() is PinnedSlot
+            val slotLast = views.last() is PinnedSlot
+            var k = -1
+            for (v in views) {
                 (v.parent as? ViewGroup)?.removeView(v)
+                if (v is PinnedSlot) {
+                    col.addView(v, LayoutParams(MATCH_PARENT, 0))
+                    continue
+                }
+                k++
                 col.addView(v, LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
                     leftMargin = ctx.px(columnMargin[3]); rightMargin = ctx.px(columnMargin[1])
-                    topMargin = ctx.px(if (k == 0) columnMargin[0] else kotlin.math.max(0f, columnMargin[0] - columnMargin[2]))
-                    bottomMargin = ctx.px(columnMargin[2])
+                    topMargin = ctx.px(when {
+                        k > 0 -> kotlin.math.max(0f, columnMargin[0] - columnMargin[2])
+                        slotFirst -> edge
+                        else -> columnMargin[0]
+                    })
+                    bottomMargin = ctx.px(if (k == cards.lastIndex && slotLast) edge else columnMargin[2])
                 })
             }
             tracks += col

@@ -5,6 +5,7 @@
 package dev.glassworks.engine.vitro.cards
 
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import dev.glassworks.engine.vitro.VitroFailures
@@ -15,6 +16,7 @@ import dev.glassworks.engine.vitro.camera.CameraStreamKind
 import dev.glassworks.engine.vitro.camera.CameraStreamVideoSize
 import dev.glassworks.engine.vitro.camera.CameraVideoBudget
 import dev.glassworks.engine.vitro.camera.PlannedStream
+import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
 
@@ -34,6 +36,12 @@ import org.json.JSONObject
  * own page over the dashboard) and true when it shows again, [stop] when the card goes. A camera that plays video
  * holds one of the panel's [CameraVideoBudget] slots while it's active; without one it plays MJPEG until one frees.
  * A player that throws counts as that player failing (logged once by [VitroFailures]), never as the card's crash.
+ *
+ * What failed is tried again later, as HA's `ha-camera-stream` forgets what its players reported when Home Assistant
+ * comes back: when HA's connection is back after a drop ([connectionRestored]; a camera fails all the way down to
+ * stills while HA restarts), when the camera shows after a hide of [LONG_HIDE_MS] or more (the screen woke up), and
+ * every [VIDEO_RETRY_MS] while a camera that offers video plays MJPEG because its video failed. MJPEG stays on screen
+ * until the video that replaces it draws.
  */
 internal class LiveCameraFeed(
     private val ctx: VitroCardContext,
@@ -87,6 +95,20 @@ internal class LiveCameraFeed(
     /** MJPEG failed: snapshots poll until [retry] opens it again. */
     private var mjpegDown = false
 
+    /**
+     * When [setActive] last hid it ([SystemClock.elapsedRealtime], which counts the device's deep sleep: a panel whose
+     * screen slept for hours was hidden that long): a long hide tries what failed again on show.
+     */
+    private var hiddenAt = 0L
+
+    /** [videoRetry] is posted. */
+    private var videoRetryPosted = false
+
+    private val videoRetry = Runnable {
+        videoRetryPosted = false
+        if (running && active) retryFailed()
+    }
+
     /** No video slot was free: MJPEG plays until [CameraVideoBudget] calls back. */
     private var capped = false
 
@@ -138,6 +160,7 @@ internal class LiveCameraFeed(
     fun start() {
         if (running) return
         running = true
+        live += this
         active = true
         streamFrames = 0
         hlsVideo = null
@@ -158,7 +181,9 @@ internal class LiveCameraFeed(
         if (!running || this.active == active) return
         this.active = active
         if (!active) {
+            hiddenAt = SystemClock.elapsedRealtime()
             stopPolling()
+            cancelVideoRetry()
             ctx.main.removeCallbacks(retry)
             ctx.main.removeCallbacks(askAgain)
             ctx.main.removeCallbacks(recomputeTask)
@@ -177,6 +202,8 @@ internal class LiveCameraFeed(
             startPolling()
             return
         }
+        // Hidden long enough for the screen to have slept: what failed before may play now (HA restarted meanwhile).
+        if (SystemClock.elapsedRealtime() - hiddenAt >= LONG_HIDE_MS) forgetFailures()
         // A video camera takes its slot again first; without one it goes to MJPEG (recompute closes the rest). A camera
         // that was capped before it hid starts over too: recompute asks for a slot, or waits for one, from its plan now.
         capped = false
@@ -214,7 +241,9 @@ internal class LiveCameraFeed(
 
     fun stop() {
         running = false
+        live -= this
         stopPolling()
+        cancelVideoRetry()
         inFlight = false
         generation++
         ctx.main.removeCallbacks(retry)
@@ -226,6 +255,58 @@ internal class LiveCameraFeed(
         for (kind in slots.keys.toList()) closeSlot(kind)
         releaseSlots()
         capped = false
+    }
+
+    /**
+     * Home Assistant's connection is back after a drop. Each player hears it (a WebRTC stream waiting to reconnect tries
+     * now); the kinds that failed meanwhile are tried again, from WebRTC down, and a failed capabilities request is
+     * asked again now. A player that still plays is left alone. Hidden, it all waits for [setActive] true.
+     */
+    fun reconnected() {
+        if (!running) return
+        for ((kind, slot) in slots.entries.toList()) {
+            if (guard(kind) { slot.stream.connectionRestored() } == null) {
+                closeSlot(kind)
+                failed(kind)
+            }
+        }
+        if (!stream) return
+        if (capabilities == null && !capabilitiesAsked && active) {
+            ctx.main.removeCallbacks(askAgain)
+            capabilitiesRetryMs = CAPABILITIES_RETRY_MS
+            askCapabilities()
+        }
+        retryFailed()
+    }
+
+    /** Forgets what failed and runs the choice again: true when something had. */
+    private fun retryFailed() {
+        if (forgetFailures()) recompute()
+    }
+
+    /** HLS's and WebRTC's failures and MJPEG's go: the choice starts over from what HA offers. True when any did. */
+    private fun forgetFailures(): Boolean {
+        var any = false
+        if (hlsVideo == false) {
+            hlsVideo = null
+            any = true
+        }
+        if (webRtcVideo == false) {
+            webRtcVideo = null
+            any = true
+        }
+        if (mjpegDown) {
+            mjpegDown = false
+            ctx.main.removeCallbacks(retry)
+            any = true
+        }
+        return any
+    }
+
+    private fun cancelVideoRetry() {
+        if (!videoRetryPosted) return
+        videoRetryPosted = false
+        ctx.main.removeCallbacks(videoRetry)
     }
 
     private fun askCapabilities() {
@@ -316,6 +397,14 @@ internal class LiveCameraFeed(
         }
         // The still polls only while nothing streams: once MJPEG (or video) draws, its frames are the picture.
         if (slots.values.any { it.hasFrame && it.frame.alpha > 0f }) stopPolling()
+        // On MJPEG because the camera's video failed (not for want of a slot): video is tried again after a while.
+        val videoFailed = !capped && video.isEmpty() && supported.any { it != CameraStreamKind.MJPEG }
+        if (!videoFailed) {
+            cancelVideoRetry()
+        } else if (!videoRetryPosted) {
+            videoRetryPosted = true
+            ctx.main.postDelayed(videoRetry, VIDEO_RETRY_MS)
+        }
     }
 
     private fun open(kind: CameraStreamKind): Slot? {
@@ -503,5 +592,22 @@ internal class LiveCameraFeed(
         /** The first wait before asking `camera/capabilities` again after a failed request, and the longest. */
         const val CAPABILITIES_RETRY_MS = 10_000L
         const val CAPABILITIES_RETRY_MAX_MS = 300_000L
+
+        /** A hide this long (HA's frontend closes a hidden page's WebRTC after 60 s) tries what failed again on show. */
+        const val LONG_HIDE_MS = 60_000L
+
+        /** How often a camera whose video failed tries it again while it plays MJPEG. */
+        const val VIDEO_RETRY_MS = 300_000L
+
+        /** The feeds started and not stopped, for [connectionRestored]. Main thread. */
+        private val live = LinkedHashSet<LiveCameraFeed>()
+
+        /**
+         * Home Assistant's connection is back after a drop: every running feed of the engine whose entities are [store]
+         * (the cards' and More Info's, whichever context built them) hears it ([reconnected]). Main thread.
+         */
+        fun connectionRestored(store: EntityStore) {
+            for (feed in live.toList()) if (feed.ctx.store === store) feed.reconnected()
+        }
     }
 }

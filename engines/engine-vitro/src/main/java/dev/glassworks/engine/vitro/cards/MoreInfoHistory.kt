@@ -60,12 +60,13 @@ internal class MoreInfoHistoryView(
     private var pendingDeadline: Runnable? = null
 
     /**
-     * The connection came back while this shows: a state history's subscription went with the old connection (the
-     * client drops it without an error), so it starts again. Statistics are plain requests: the next tick fetches them.
+     * The connection came back while this shows. A live state history's subscription is held by the client, which sends
+     * it again itself; one Home Assistant refused has no subscription left, so it is asked for again here. Statistics
+     * are plain requests: the next tick fetches them.
      */
     fun reconnected() {
-        // By the mode, not the stream: a subscription HA (or a down socket) refused has no stream left to renew.
-        if (!started || !historyMode) return
+        // By the mode, not the stream: a subscription HA refused has no stream left to renew.
+        if (!started || !historyMode || unsubscribe != null) return
         unsubscribe?.invoke()
         unsubscribe = null
         stream = null
@@ -219,10 +220,13 @@ internal class MoreInfoHistoryView(
         historyMode = true
         val s = HaGraph.Stream(HOURS)
         stream = s
-        val msg = HaGraph.historyStreamMessage(listOf(entityId), HOURS, ctx.now()) { ctx.store[it] != null }
-        unsubscribe = ctx.subscribeWs(msg, { ev ->
+        // Built again for each connection: a reconnect asks for the window as it is then, and the stream starts over.
+        unsubscribe = ctx.subscribeWsFresh({
+            HaGraph.historyStreamMessage(listOf(entityId), HOURS, ctx.now()) { ctx.store[it] != null }
+        }, { ev, first ->
             ctx.main.post {
                 if (stream !== s) return@post
+                if (first) s.restart()
                 val combined = s.process(ev, ctx.now())
                 stateHistory = HaHistory.compute({ ctx.store[it] }, combined, listOf(entityId), temperatureUnit())
                 render()

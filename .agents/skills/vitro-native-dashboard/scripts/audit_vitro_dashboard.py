@@ -250,6 +250,12 @@ def button_card_reason(card: dict, templates: dict) -> str | None:
             return f"{key} confirmation exemptions"
     if isinstance(cfg.get("confirmation"), dict) and "exemptions" in cfg["confirmation"]:
         return "confirmation exemptions"
+    # button-card counts a timer down every second, which the engine doesn't draw (unless state_display replaces it).
+    entity = cfg.get("entity")
+    state_display = cfg.get("state_display")
+    if isinstance(entity, str) and entity.split(".")[0] == "timer" and cfg.get("show_state") \
+            and not (isinstance(state_display, str) and state_display):
+        return "show_state on a timer (its countdown)"
     layout = cfg.get("layout")
     if layout is not None and (not isinstance(layout, str) or layout not in BUTTON_CARD_LAYOUTS):
         return "a layout it doesn't draw natively"
@@ -352,19 +358,122 @@ OWN_CARD_SELECTOR = re.compile(
     r"(?:\.[\w-]+|#[\w-]+|\[[^\]]*\]|:(?:hover|active|focus|focus-visible|focus-within)(?![\w-]))*$",
     re.I,
 )
-# An at-rule the renderer doesn't evaluate (@media, @supports): only keyframes and @charset are harmless.
-UNSUPPORTED_AT_RULE = re.compile(r"@(?!(?:-webkit-)?keyframes(?![\w-])|charset(?![\w-]))[a-z-]+", re.I)
+# At-rules the renderer doesn't evaluate (@media, @supports) send the card off: only keyframes and @charset are
+# harmless there. This coarse check also sends @keyframes off, as the animation it serves isn't drawn natively.
+HARMLESS_AT_RULES = {"-webkit-keyframes", "charset"}
+AT_RULE = re.compile(r"@([a-zA-Z-]+)")
 # Jinja is masked before reading selectors, as the renderer replaces it first.
 JINJA = re.compile(r"\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\}")
 
 
-# Quoted strings are emptied before looking for at-rules: an @ in one ([data-label="@media"]) isn't one.
-QUOTED = re.compile(r"\"(?:[^\"\\\n]|\\.)*\"|'(?:[^'\\\n]|\\.)*'")
+def strip_css_comments(css: str) -> str:
+    """The CSS with each comment replaced by a space, as the browser reads it (ThemeResolver.stripCssComments).
+
+    A slash-star inside a quoted string doesn't open a comment, so it can't hide the rules after it. A string ends at
+    its closing quote or at a newline, a backslash and the character after it are copied as they are, and a comment
+    that is never closed runs to the end.
+    """
+    if "/*" not in css:
+        return css
+    out = []
+    quote = ""
+    i = 0
+    while i < len(css):
+        c = css[i]
+        if c == "\\" and i + 1 < len(css):
+            out.append(css[i:i + 2])
+            i += 2
+            continue
+        if quote:
+            if c == quote or c == "\n":
+                quote = ""
+        elif c in "\"'":
+            quote = c
+        elif css.startswith("/*", i):
+            end = css.find("*/", i + 2)
+            out.append(" ")
+            i = len(css) if end < 0 else end + 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def at_rules(css: str) -> list[str]:
+    """The names of the sheet's at-rules, as CardCompat.topLevelAtRules finds them.
+
+    An @ counts only where a rule can start (the start of the sheet, or after a {, } or ;, whitespace aside) and
+    outside quoted strings and parentheses, so url(/local/a@home.png) or [data-label="@media"] isn't one. Unlike the
+    engine, this coarse check also counts one nested in a rule.
+    """
+    out = []
+    parens = 0
+    quote = ""
+    rule_start = True
+    i = 0
+    while i < len(css):
+        c = css[i]
+        if c == "\\":
+            i += 1
+        elif quote:
+            if c == quote or c == "\n":
+                quote = ""
+        elif c in "\"'":
+            quote = c
+        elif c == "(":
+            parens += 1
+        elif c == ")":
+            parens = max(parens - 1, 0)
+        elif c == "@" and parens == 0 and rule_start:
+            m = AT_RULE.match(css, i)
+            if m:
+                out.append(m.group(1).lower())
+        if not c.isspace():
+            rule_start = not quote and c in "{};"
+        i += 1
+    return out
+
+
+def rule_preludes(css: str) -> list[str]:
+    """The text before each rule's {, as the engine's rule readers find it (ThemeResolver.cssRulesImportant).
+
+    Quoted text and escapes aren't structure: a { or ; in a string ([data-label="a;b"]) neither opens a rule nor ends
+    a selector. A prelude starts after the last {, } or ; before it (a bare declaration ahead of a rule isn't part of
+    it), where a ; inside brackets or parentheses doesn't count.
+    """
+    out = []
+    quote = ""
+    nested = 0
+    start = 0
+    i = 0
+    while i < len(css):
+        c = css[i]
+        if c == "\\":
+            i += 2
+            continue
+        if quote:
+            if c == quote or c == "\n":
+                quote = ""
+        elif c in "\"'":
+            quote = c
+        elif c in "([":
+            nested += 1
+        elif c in ")]":
+            nested = max(nested - 1, 0)
+        elif c == "{":
+            out.append(css[start:i])
+            start = i + 1
+            nested = 0
+        elif c == "}" or (c == ";" and nested == 0):
+            start = i + 1
+            nested = 0
+        i += 1
+    return out
 
 
 def mask_css(css: str) -> str:
     """The CSS without comments and Jinja: what the renderer reads rules from."""
-    return JINJA.sub(" ", re.sub(r"/\*[\s\S]*?\*/", " ", css))
+    return JINJA.sub(" ", strip_css_comments(css))
 
 
 def reaches_inside(card_type: str, css: str) -> bool:
@@ -372,8 +481,8 @@ def reaches_inside(card_type: str, css: str) -> bool:
     if card_type in ("markdown", "clock"):
         return False
     text = mask_css(css)
-    for m in re.finditer(r"([^{}]+)\{", text):
-        for sel in m.group(1).split(","):
+    for prelude in rule_preludes(text):
+        for sel in prelude.split(","):
             t = sel.strip()
             if t and not t.startswith("@") and not OWN_CARD_SELECTOR.match(t):
                 return True
@@ -391,8 +500,8 @@ def card_mod_reason(card: dict, card_type: str):
             return True
         # Read without comments and Jinja, as the engine reads the sheet.
         text = mask_css(css)
-        return ("$:" in text or "@keyframes" in text or "::" in text
-                or LEGACY_PSEUDO.search(text) is not None or UNSUPPORTED_AT_RULE.search(QUOTED.sub('""', text)) is not None)
+        return ("$:" in text or "::" in text or LEGACY_PSEUDO.search(text) is not None
+                or any(at not in HARMLESS_AT_RULES for at in at_rules(text)))
     def own(css) -> bool:
         return complex_css(css) or (isinstance(css, str) and reaches_inside(card_type, css))
     if isinstance(style, dict):

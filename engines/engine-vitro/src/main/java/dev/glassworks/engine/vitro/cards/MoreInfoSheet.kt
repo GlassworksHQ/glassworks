@@ -1903,7 +1903,7 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
 
     /** TalkBack and keys: a 0–100 % slider, as HA's `ha-control-slider` is. */
     private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
-        min = { 0 }, max = { 100 }, step = 1,
+        min = { 0 }, max = { 100 }, step = { 1 },
         value = { Math.round(targetPct) },
         preview = { v ->
             pctAnimator?.cancel()
@@ -1928,7 +1928,7 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
     }
 
     override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
-        access.perform(action) ?: super.performAccessibilityAction(action, arguments)
+        access.perform(action, arguments) ?: super.performAccessibilityAction(action, arguments)
 
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
         access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
@@ -2023,6 +2023,8 @@ internal class VerticalSliderPillView(context: Context, private var activeColor:
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
                 onRelease?.invoke(pct.roundToInt())
+                // TalkBack reads the value the drag left (HA's bind that follows matches it, so it says nothing).
+                dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
                 performClick()
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -2377,7 +2379,7 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
 
     /** TalkBack and keys: a Kelvin slider; an arrow moves it a hundredth of the range. */
     private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
-        min = { minOf(minK, maxK) }, max = { maxOf(minK, maxK) }, step = maxOf(1, kotlin.math.abs(maxK - minK) / 100),
+        min = { minOf(minK, maxK) }, max = { maxOf(minK, maxK) }, step = { maxOf(1, kotlin.math.abs(maxK - minK) / 100) },
         value = { kelvin },
         preview = { k ->
             animator?.cancel()
@@ -2390,6 +2392,8 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
         commit = { k -> onRelease?.invoke(k) },
         // Back to HA's value, caption included (onChange), as a cancelled drag does: nothing is sent.
         restore = { bound?.let { kelvin = Int.MIN_VALUE; setKelvin(it); onChange?.invoke(it) } },
+        // In Kelvin, as the caption reads it, not as a percentage of the range.
+        valueText = { k -> "$k K" },
     )
 
     init {
@@ -2402,7 +2406,7 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
     }
 
     override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
-        access.perform(action) ?: super.performAccessibilityAction(action, arguments)
+        access.perform(action, arguments) ?: super.performAccessibilityAction(action, arguments)
 
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
         access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
@@ -2480,6 +2484,8 @@ internal class ColorTempSliderView(context: Context, private val minK: Int, priv
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
                 onRelease?.invoke(kelvin)
+                // TalkBack reads the value the drag left (HA's bind that follows matches it, so it says nothing).
+                dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
                 performClick()
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -2553,7 +2559,7 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
 
     /** TalkBack and keys: the cover's position, 0–100 % open. */
     private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
-        min = { 0 }, max = { 100 }, step = 1,
+        min = { 0 }, max = { 100 }, step = { 1 },
         value = { pct },
         preview = { v ->
             animator?.cancel()
@@ -2578,7 +2584,7 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
     }
 
     override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
-        access.perform(action) ?: super.performAccessibilityAction(action, arguments)
+        access.perform(action, arguments) ?: super.performAccessibilityAction(action, arguments)
 
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
         access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
@@ -2656,6 +2662,8 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)
                 onRelease?.invoke(pct)
+                // TalkBack reads the value the drag left (HA's bind that follows matches it, so it says nothing).
+                dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
                 performClick()
             }
             MotionEvent.ACTION_CANCEL -> {

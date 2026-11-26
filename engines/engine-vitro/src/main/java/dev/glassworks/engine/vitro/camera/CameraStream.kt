@@ -6,6 +6,7 @@ package dev.glassworks.engine.vitro.camera
 
 import android.content.Context
 import android.os.Handler
+import dev.glassworks.engine.vitro.data.HaDashboardClient
 import org.json.JSONObject
 
 /**
@@ -22,6 +23,8 @@ import org.json.JSONObject
  *   keeps the stream; true resumes it, reconnecting if it has to. A stream starts active.
  * - [close] ends it for good and frees the decoder, sockets and threads: the card went. No [Listener] call comes
  *   after it, and nothing else may be called on the stream.
+ * - [connectionRestored]: Home Assistant's connection ([CameraStreamHost]'s WebSocket) is back after it dropped. A
+ *   stream that was waiting for it to reconnect tries now. Optional: a stream that doesn't wait ignores it.
  * - A stream reports through [listener]: [Listener.onFirstFrame] once per [start] or resume, when the first picture
  *   is on screen (HA's `streams` event with `hasVideo: true`); [Listener.onFrameRendered] for each later picture drawn
  *   (Clarity counts them); [Listener.onError] when it can't play or stops playing (HA's `hasVideo: false`: the choice
@@ -36,6 +39,8 @@ interface CameraStream {
     fun setActive(active: Boolean)
 
     fun close()
+
+    fun connectionRestored() {}
 
     var listener: Listener?
 
@@ -89,14 +94,27 @@ class CameraStreamHost(
     val haBase: String,
     /** The current bearer for [haBase], or null before sign-in. Read it per request: it is refreshed. */
     val accessToken: () -> String?,
-    /** One WebSocket command and its result, on any thread (`success`, `result`, `error`). */
+    /**
+     * One WebSocket command and its result, on any thread (`success`, `result`, `error`). Without a connection it fails
+     * at once, with an error [isNotConnected] tells apart from Home Assistant's own.
+     */
     val callWs: (msg: JSONObject, done: (success: Boolean, result: Any?, error: JSONObject?) -> Unit) -> Unit,
     /**
      * A WebSocket subscription (`camera/webrtc/offer`): its events reach `onEvent` on any thread until the returned
      * handle is called; `onError` runs once if HA refuses it or it can't be sent.
      */
     val subscribeWs: (msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit) -> () -> Unit,
-)
+) {
+    companion object {
+        /**
+         * True when [error] (from [callWs] or [subscribeWs]) means there was no connection to Home Assistant, or it
+         * dropped before the answer: HA never saw the request. Null counts, as [subscribeWs] reports a refused send.
+         */
+        @JvmStatic
+        fun isNotConnected(error: JSONObject?): Boolean =
+            error == null || error.optString("code") in setOf(HaDashboardClient.DISCONNECTED, HaDashboardClient.SEND_FAILED)
+    }
+}
 
 /**
  * Where a stream kind's player plugs into Vitro. The engine builds one factory per kind and per connection from the
