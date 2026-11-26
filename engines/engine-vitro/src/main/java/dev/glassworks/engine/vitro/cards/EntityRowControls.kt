@@ -861,7 +861,8 @@ internal object EntityRowControls {
     /**
      * What `secondary_info` shows under a row's name, as HA's entities card migrates it (`last-changed` to
      * `last_changed`, `last-triggered` to `last_triggered`, `position` to `current_position`, `tilt-position` to
-     * `current_tilt_position`) and `state-display` draws that content: a relative time, the entity id, or the
+     * `current_tilt_position`, `area` to `area_name`) and `state-display` draws that content: a relative time, the
+     * entity id, the entity's area (formatEntityName's area part: its own area, else its device's), or the
      * attribute as HA formats it (a light's brightness and a position as a percentage). A content with nothing to show
      * (no such attribute, a light that's off, a cover at 0) falls back to the entity's state, as `state-display` does.
      * Null: no secondary line (`none`, or no `secondary_info`).
@@ -874,6 +875,7 @@ internal object EntityRowControls {
             "last-triggered" -> "last_triggered"
             "position" -> "current_position"
             "tilt-position" -> "current_tilt_position"
+            "area" -> "area_name"
             else -> secondaryInfo
         }
         if (s == null) return ""
@@ -881,6 +883,10 @@ internal object EntityRowControls {
             HaFormat.capitalize(HaFormat.relativeTime((epochSec * 1000).toLong(), nowMs))
         when (content) {
             "entity-id" -> return s.entityId
+            // A name part, never an attribute: no area is the state.
+            "area_name" -> return dev.glassworks.engine.vitro.data.HaEntityName
+                .format(org.json.JSONObject().put("type", "area"), s.entityId, s.friendlyName)
+                ?.takeIf { it.isNotEmpty() } ?: s.formattedState()
             "last_changed" -> if (s.lastChanged > 0.0) return relative(s.lastChanged)
             "last_updated" -> (s.lastUpdated.takeIf { it > 0.0 } ?: s.lastChanged).let { if (it > 0.0) return relative(it) }
             "last_triggered" -> {
@@ -909,6 +915,6 @@ internal object EntityRowControls {
 
     /** The secondary_info values [secondaryText] draws as HA does. */
     val SECONDARY_INFO: Set<String> = setOf(
-        "none", "last-changed", "last-updated", "last-triggered", "entity-id", "brightness", "position", "tilt-position",
+        "none", "last-changed", "last-updated", "last-triggered", "entity-id", "brightness", "position", "tilt-position", "area",
     )
 }

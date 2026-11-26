@@ -14,6 +14,7 @@ import android.widget.TextView
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.compat.BubbleFallback
 import dev.glassworks.engine.vitro.compat.CompatChecker
 import dev.glassworks.engine.vitro.compat.IslandBudget
 import dev.glassworks.engine.vitro.compat.IslandFrontend
@@ -24,6 +25,8 @@ import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
 import dev.glassworks.engine.vitro.model.LovelaceParser
+import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.model.LovelaceResourceList
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONObject
@@ -49,6 +52,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class WebFallbackTest {
+    /** The picture loads a test starts are all back before the next test: one in flight lands in its looper (D28). */
+    private val pendingImagesBefore = dev.glassworks.engine.vitro.ui.VitroCardContext.pendingImageLoads.get()
+
     private val base = FakeHaServer.BASE
     private val settings = EngineSettings(secureHosts = listOf("192.0.2.10"), zoom = 1f, remoteDebugging = false, dashboard = "$base/wall-test/living")
     private lateinit var activity: Activity
@@ -64,15 +70,20 @@ class WebFallbackTest {
     }
 
     @After fun tearDown() {
-        IslandFrontend.clear()
-        engines.forEach { runCatching { it.islandServer.stop() } }
-        opened.forEach { page ->
-            runCatching {
-                val f = page.javaClass.getDeclaredField("client"); f.isAccessible = true
-                (f.get(page) as? HaDashboardClient)?.close()
+        // The servers and clients close whether or not the picture loads came back (that failure still fails the test).
+        try {
+            awaitImageLoads(pendingImagesBefore)
+        } finally {
+            IslandFrontend.clear()
+            engines.forEach { runCatching { it.islandServer.stop() } }
+            opened.forEach { page ->
+                runCatching {
+                    val f = page.javaClass.getDeclaredField("client"); f.isAccessible = true
+                    (f.get(page) as? HaDashboardClient)?.close()
+                }
             }
+            server.shutdown()
         }
-        server.shutdown()
     }
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
@@ -243,6 +254,60 @@ class WebFallbackTest {
         idle()
         assertNull("drawn natively", pageFallback())
         assertEquals(3, islandOpens())
+    }
+
+    // ---- A Bubble card no island can draw (#939) ----
+
+    private val bubbleSubButtons = """{"title": "Bubble", "path": "bubble", "cards": [
+        {"type": "vertical-stack", "cards": [{"type": "custom:bubble-card", "card_type": "button", "entity": "light.lounge_lamp",
+          "sub_button": [{"entity": "light.lounge_lamp", "tap_action": {"action": "toggle"}}]}]}]}"""
+    private val bubblePlain = """{"title": "Plain", "path": "plain", "cards": [
+        {"type": "custom:bubble-card", "card_type": "button", "entity": "light.lounge_lamp"}]}"""
+
+    @Test fun aBubbleCardVitroCantDrawWithNoBubbleScriptShowsInHomeAssistantsFrontend() {
+        // The fake HA's resources don't load bubble-card.js: no island can draw the sub-button, and Vitro's own Bubble
+        // button would drop it.
+        server.dashboardConfig = views(living, bubbleSubButtons)
+        val p = page()
+        p.load("$base/wall-test/living")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        val vv = vitroView(p)
+        tab(vv, "Bubble").performClick()
+        idle()
+        assertEquals(listOf("$base/wall-test/bubble"), pageFallback()!!.loads)
+        assertEquals(0, islandOpens())
+    }
+
+    @Test fun aBubbleCardVitroDrawsStaysNativeWithoutBubblesScript() {
+        server.dashboardConfig = views(living, bubblePlain)
+        val p = page()
+        p.load("$base/wall-test/living")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        val vv = vitroView(p)
+        tab(vv, "Plain").performClick()
+        idle()
+        assertNull("drawn natively", pageFallback())
+        // The same resources, now known to come with Bubble modules (only Bubble's script applies them): the view
+        // is built again, in HA's frontend.
+        val same = vv.resourcesList.toList()
+        vv.resourcesList = LovelaceResourceList(same, bubbleModules = true)
+        idle()
+        assertEquals(listOf("$base/wall-test/plain"), pageFallback()!!.loads)
+    }
+
+    @Test fun bubbleFallbackFollowsTheIslandsScriptsAndBubblesModules() {
+        fun view(card: String) = LovelaceParser.parseView(0, JSONObject("""{"cards": [$card]}"""))
+        val sub = view("""{"type": "custom:bubble-card", "entity": "switch.fan", "sub_button": [{"entity": "switch.fan"}]}""")
+        val plain = view("""{"type": "custom:bubble-card", "entity": "switch.fan"}""")
+        fun scripts(bubble: Boolean, modules: Boolean) = IslandScripts.of(LovelaceResourceList(
+            if (bubble) listOf(LovelaceResource("/hacsfiles/Bubble-Card/bubble-card.js?hacstag=343", "module")) else emptyList(), modules,
+        ))
+        assertNotNull(BubbleFallback.reason(sub, scripts(bubble = false, modules = false)))
+        assertNull("the island draws it", BubbleFallback.reason(sub, scripts(bubble = true, modules = false)))
+        assertNull("Vitro draws it as Bubble does", BubbleFallback.reason(plain, scripts(bubble = false, modules = false)))
+        assertNotNull("modules only Bubble's script applies", BubbleFallback.reason(plain, scripts(bubble = false, modules = true)))
+        assertNull("the island applies them", BubbleFallback.reason(plain, scripts(bubble = true, modules = true)))
+        assertNull(BubbleFallback.reason(sub, IslandScripts.ANY))
     }
 
     @Test fun theIslandCountIsWhatTheViewsBuildOpens() {

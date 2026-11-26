@@ -474,6 +474,19 @@ class EntityRowControlsTest {
         assertNull(EntityRowControls.secondaryText(auto, null, now))
     }
 
+    @Test fun secondaryInfoAreaIsTheAreasName() {
+        // HA's migrateSecondaryInfoConfig: `area` is state-display's `area_name`, formatEntityName's area part (the
+        // entity's own area, else its device's); with none, the state.
+        HaDisplay.applyAreas(org.json.JSONArray("""[{"area_id": "porch", "name": "Porch"}]"""))
+        HaDisplay.applyDevices(org.json.JSONArray("""[{"id": "d-lamp", "name": "Lantern", "area_id": "porch"}]"""))
+        HaDisplay.applyRegistry(JSONObject().put("entities", org.json.JSONArray("""[{"ei": "light.porch", "di": "d-lamp"}, {"ei": "switch.kettle"}]""")))
+        assertEquals("Porch", EntityRowControls.secondaryText(EntityState("light.porch", "on", emptyMap()), "area", NOW))
+        assertEquals("no area: the state", "Off", EntityRowControls.secondaryText(EntityState("switch.kettle", "off", emptyMap()), "area", NOW))
+        // An attribute called `area` isn't what it reads.
+        assertEquals("Off", EntityRowControls.secondaryText(EntityState("switch.kettle", "off", mapOf("area" to "Attic")), "area", NOW))
+        assertTrue("area" in EntityRowControls.SECONDARY_INFO)
+    }
+
     @Test fun aRowShowsItsSecondaryLine() {
         store.putLocal(EntityState("switch.kettle", "off", mapOf("friendly_name" to "Kettle"), lastChanged = (NOW - 300_000) / 1000.0))
         val c = entities("{\"entity\": \"switch.kettle\", \"secondary_info\": \"entity-id\"}")

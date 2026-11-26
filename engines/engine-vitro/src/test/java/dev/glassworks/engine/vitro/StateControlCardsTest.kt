@@ -150,6 +150,51 @@ class StateControlCardsTest {
     }
 
     @Test
+    fun aKeyEditShowsItsPercentageAndTalkBackReadsIt() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", dimmable + mapOf("brightness" to 128, "friendly_name" to "Desk")))
+        val card = LightCardView(context(store), LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}""")))
+        activity.setContentView(card)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val dial = all(card).filterIsInstance<BrightnessDialView>().single()
+        // 128 is 50 %: a press moves it to 51, shown as HA's value-changing shows it, and described for TalkBack.
+        assertTrue(dial.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_RIGHT)))
+        assertTrue(visibleTexts(card).toString(), "51 %" in visibleTexts(card))
+        assertTrue(dial.contentDescription.toString(), "51" in dial.contentDescription.toString())
+        // HA's update while the key is held doesn't put the old value back in the description.
+        store.putLocal(EntityState("light.desk", "on", dimmable + mapOf("brightness" to 130, "friendly_name" to "Desk")))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertTrue(dial.contentDescription.toString(), "51" in dial.contentDescription.toString())
+        dial.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertEquals(51, calls.last().data!!.getInt("brightness_pct"))
+        // The percentage goes half a second after the last key event, as HA's does.
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(600, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertFalse(visibleTexts(card).toString(), "51 %" in visibleTexts(card))
+    }
+
+    @Test
+    fun aCancelledDragIsDescribedAsHasBrightnessAgain() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", dimmable + mapOf("brightness" to 128, "friendly_name" to "Desk")))
+        val card = LightCardView(context(store), LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}""")))
+        activity.setContentView(card)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val dial = all(card).filterIsInstance<BrightnessDialView>().single()
+        dial.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY))
+        dial.layout(0, 0, 400, 400)
+        val t = android.os.SystemClock.uptimeMillis()
+        // A drag on the ring's right (about 63 %), then the system takes the gesture.
+        dial.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_DOWN, 200f + 400f * 145f / 320f, 200f, 0))
+        assertFalse(dial.contentDescription.toString(), "50" in dial.contentDescription.toString())
+        dial.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 20, android.view.MotionEvent.ACTION_CANCEL, 200f, 200f, 0))
+        assertTrue(dial.contentDescription.toString(), "50" in dial.contentDescription.toString())
+        val info = android.view.accessibility.AccessibilityNodeInfo.obtain()
+        dial.onInitializeAccessibilityNodeInfo(info)
+        assertEquals(50f, info.rangeInfo.current, 0f)
+        assertTrue(calls.toString(), calls.isEmpty())
+    }
+
+    @Test
     fun theLightButtonRunsTheTapActionAndTheNameNone() {
         // Default: tap toggles.
         val (card, dial) = light("on", dimmable + ("brightness" to 128))

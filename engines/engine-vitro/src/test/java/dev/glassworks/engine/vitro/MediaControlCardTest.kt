@@ -21,6 +21,7 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -189,6 +190,67 @@ class MediaControlCardTest {
         still.dispatchTouchEvent(android.view.MotionEvent.obtain(0L, 0L, android.view.MotionEvent.ACTION_DOWN, still.width / 2f, 1f, 0))
         still.dispatchTouchEvent(android.view.MotionEvent.obtain(0L, 10L, android.view.MotionEvent.ACTION_UP, still.width / 2f, 1f, 0))
         assertTrue(calls.isEmpty())
+    }
+
+    @Test
+    fun theSeekBarIsASliderForTalkBackAndKeys() {
+        // HA's ha-slider: 0 to media_duration in seconds, step 1; a change seeks.
+        val c = card(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 120, "media_position" to 10)))
+        c.measure(View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        c.layout(0, 0, c.measuredWidth, c.measuredHeight)
+        val bar = progressOf(c)
+        assertTrue(bar.isFocusable)
+        val info = bar.createAccessibilityNodeInfo()
+        assertEquals("android.widget.SeekBar", info.className)
+        assertEquals(120f, info.rangeInfo.max, 0f)
+        assertEquals(10f, info.rangeInfo.current, 0f)
+        // TalkBack: a tenth (12 s), sent at once.
+        assertTrue(bar.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null))
+        assertTrue(calls.toString(), calls.single().contains("\"seek_position\":22"))
+        calls.clear()
+        val args = android.os.Bundle().apply { putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 90f) }
+        assertTrue(bar.performAccessibilityAction(android.R.id.accessibilityActionSetProgress, args))
+        assertTrue(calls.toString(), calls.single().contains("\"seek_position\":90"))
+        calls.clear()
+        // A key: shown on the press, sent when it comes up, and HA's position meanwhile doesn't move it back.
+        assertTrue(bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_RIGHT)))
+        assertTrue(calls.isEmpty())
+        store.putLocal(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 120, "media_position" to 30)))
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(91f / 120f, fractionOf(bar), 0.001f)
+        bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertTrue(calls.toString(), calls.single().contains("\"seek_position\":91"))
+        // Then HA's position shows again.
+        store.putLocal(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 120, "media_position" to 60)))
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(0.5f, fractionOf(bar), 0.001f)
+        // Without SEEK: no slider, nothing to move.
+        val noSeek = card(player("paused", 8321599 and 2.inv(), mapOf("media_title" to "Song", "media_duration" to 120, "media_position" to 10)))
+        val still = progressOf(noSeek)
+        assertFalse(still.isFocusable)
+        assertFalse(still.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null))
+    }
+
+    @Test
+    fun aKeyEditKeepsItsPositionWhenTheDurationChanges() {
+        val c = card(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 120, "media_position" to 10)))
+        c.measure(View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        c.layout(0, 0, c.measuredWidth, c.measuredHeight)
+        val bar = progressOf(c)
+        assertTrue(bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_RIGHT)))
+        // HA reports a longer track while the key is held: the edit still means second 11, drawn on the new length.
+        store.putLocal(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 240, "media_position" to 10)))
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(11f / 240f, fractionOf(bar), 0.001f)
+        bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertTrue(calls.toString(), calls.single().contains("\"seek_position\":11"))
+        // A shorter one: the edit is clamped to its end.
+        calls.clear()
+        assertTrue(bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MOVE_END)))
+        store.putLocal(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 100, "media_position" to 10)))
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_MOVE_END))
+        assertTrue(calls.toString(), calls.single().contains("\"seek_position\":100"))
     }
 
     @Test

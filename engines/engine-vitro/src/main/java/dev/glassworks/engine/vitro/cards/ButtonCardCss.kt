@@ -66,18 +66,16 @@ object ButtonCardCss {
 
     /** A declaration the browser takes, or null for one it drops (lit's styleMap then sets nothing). */
     private fun toDecl(name: String, rawValue: String): Decl? {
-        var v = rawValue.trim()
+        // Comments first, quote-aware: a quoted `/*` is text, and a comment after `!important` doesn't hide it.
+        var v = ThemeResolver.stripCssComments(rawValue).trim()
         var important = false
         if (v.endsWith("!important")) {
             important = true
             v = v.removeSuffix("!important").trim()
         }
-        v = COMMENT.replace(v, " ").trim()
         if (v.isEmpty() || !balanced(v)) return null
         return Decl(name.trim(), v, important)
     }
-
-    private val COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
 
     /** No `;`, `{` or `}` outside quotes, and brackets that close: anything else is a value the browser rejects. */
     private fun balanced(v: String): Boolean {

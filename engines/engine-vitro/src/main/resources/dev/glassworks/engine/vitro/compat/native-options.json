@@ -9,7 +9,7 @@
         "(default)": {"keys": {"confirmation": "@confirmation"}},
         "none": {"keys": {"action": "any"}},
         "toggle": {"keys": {"action": "any", "confirmation": "@confirmation"}},
-        "more-info": {"keys": {"action": "any", "confirmation": "@confirmation"}},
+        "more-info": {"keys": {"action": "any", "entity": {"entity": ["*"]}, "confirmation": "@confirmation"}},
         "navigate": {
           "keys": {
             "action": "any",
@@ -144,7 +144,7 @@
         "name": "@name",
         "icon": "@icon",
         "secondary_info": {
-          "values": ["last-changed", "last-updated", "last-triggered", "entity-id", "brightness", "position", "tilt-position", "none"],
+          "values": ["last-changed", "last-updated", "last-triggered", "entity-id", "brightness", "position", "tilt-position", "area", "none"],
           "why": "a secondary line Vitro doesn't draw as HA does",
           "note": "HA's entities card migrates these to state-display contents (last_triggered, current_position, ...); EntityRowControls.secondaryText draws them (parity case entities-secondary-info)"
         },
@@ -634,6 +634,85 @@
         "cards": "any",
         "column_span": {"values": [1, 2, 3, 4], "why": "Vitro clamps a section to 4 columns"},
         "visibility": "@visibility"
+      }
+    },
+    "bubbleText": {
+      "pattern": "^(?![\\s\\S]*(\\{\\{|\\{%|\\[\\[\\[))[\\s\\S]*$",
+      "why": "Bubble renders templates (Jinja or its JavaScript) itself"
+    },
+    "bubbleIcon": {"anyOf": ["@icon", {"values": [""]}], "why": "only Material Design Icons are bundled; another icon set would draw the home glyph"},
+    "bubbleLayout": {"values": ["normal", "large"], "why": "Vitro draws Bubble's normal and large layouts"},
+    "bubbleRows": {
+      "range": [1, 24],
+      "why": "a row size Vitro doesn't lay out",
+      "note": "Below one row a large button is too short for its 42 px icon (Bubble clips it; rows 0.125 leaves no height at all). BubbleCardView's BUBBLE_MIN_ROWS"
+    },
+    "bubbleSeparatorRows": {
+      "range": [0.8, 24],
+      "why": "a row size Vitro doesn't lay out",
+      "note": "Bubble's own separator default is 0.8; BubbleCardView's BUBBLE_MIN_ROWS_SEPARATOR"
+    },
+    "bubbleGridOptions": {
+      "keys": {
+        "columns": "any",
+        "min_columns": "any",
+        "max_columns": "any",
+        "min_rows": "any",
+        "max_rows": "any",
+        "rows": {"anyOf": ["@bubbleRows", {"values": ["auto"]}], "why": "a row size Vitro doesn't lay out"}
+      }
+    },
+    "bubbleSeparatorGridOptions": {
+      "keys": {
+        "columns": "any",
+        "min_columns": "any",
+        "max_columns": "any",
+        "min_rows": "any",
+        "max_rows": "any",
+        "rows": {"anyOf": ["@bubbleSeparatorRows", {"values": ["auto"]}], "why": "a row size Vitro doesn't lay out"}
+      }
+    },
+    "bubbleButton": {
+      "keys": {
+        "card_type": "any",
+        "button_type": "any",
+        "entity": {
+          "entity": [
+            "alarm_control_panel", "automation", "binary_sensor", "button", "calendar", "camera", "counter", "cover",
+            "date", "datetime", "device_tracker", "event", "fan", "group", "image", "input_boolean", "input_button",
+            "input_datetime", "input_number", "input_select", "input_text", "lawn_mower", "light", "lock", "media_player",
+            "number", "person", "remote", "scene", "schedule", "script", "select", "sensor", "siren", "sun", "switch",
+            "text", "time", "todo", "update", "vacuum", "valve", "weather", "zone"
+          ],
+          "why": "Bubble colors a climate, humidifier or water heater icon by its mode and counts a timer down its own way",
+          "note": "getClimateColor (cards/climate/helpers.js) and computeDisplayTimer aren't ported"
+        },
+        "name": "@bubbleText",
+        "icon": "@bubbleIcon",
+        "force_icon": "@bool",
+        "show_name": "@bool",
+        "show_icon": "@bool",
+        "show_state": "@bool",
+        "show_attribute": "@bool",
+        "attribute": {
+          "pattern": "^(?![\\s\\S]*forecast)(?!(start_time|end_time|timestamp|next_dawn|next_dusk|next_midnight|next_noon|next_rising|next_setting)$)[A-Za-z0-9_]+$",
+          "why": "Bubble formats a forecast, a nested attribute or a time (a calendar's, an input_datetime's or the sun's) its own way",
+          "note": "TIMESTAMP_DOMAIN_CONTENTS (tools/state-content.js): Bubble writes these as relative times and keeps them current; BubbleStateLine doesn't"
+        },
+        "show_last_changed": "@bool",
+        "show_last_updated": "@bool",
+        "use_accent_color": "@bool",
+        "scrolling_effect": "@bool",
+        "card_layout": "@bubbleLayout",
+        "rows": "@bubbleRows",
+        "grid_options": "@bubbleGridOptions",
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap",
+        "button_action": {
+          "keys": {"tap_action": "@action", "hold_action": "@action", "double_tap_action": "@doubleTap"}
+        },
+        "modules": "any"
       }
     },
     "mushroomTemplate": {
@@ -1715,11 +1794,30 @@
     "custom:bubble-card": {
       "by": "card_type",
       "default": "button",
+      "why": "a Bubble Card type Vitro doesn't draw as Bubble Card 3.4.3 does",
+      "note": "BubbleCardView (cards/BubbleCard.kt) draws the separator and the switch, state and name buttons from Bubble 3.4.3's own stylesheets and rules; parity cases bubble-card-* and m-bubble-*. Sub-buttons, styles, state_content, the slider and every other card type go to the island. On a Home Assistant with Bubble Card modules every Bubble card goes there (data/BubbleModules.kt), so `modules` is accepted here.",
       "cases": {
         "button": {
-          "gap": "Vitro's button doesn't match Bubble Card 3.4.3: no slider or on-fill, a state line Bubble hides, and taps on the whole pill"
+          "by": "button_type",
+          "default": "switch",
+          "why": "Vitro draws Bubble's switch, state and name buttons, not its slider",
+          "cases": {
+            "switch": "@bubbleButton",
+            "state": "@bubbleButton",
+            "name": "@bubbleButton"
+          }
         },
-        "separator": {"gap": "Vitro's separator is smaller than Bubble Card 3.4.3's"}
+        "separator": {
+          "keys": {
+            "card_type": "any",
+            "name": "@bubbleText",
+            "icon": "@bubbleIcon",
+            "card_layout": "@bubbleLayout",
+            "rows": "@bubbleSeparatorRows",
+            "grid_options": "@bubbleSeparatorGridOptions",
+            "modules": "any"
+          }
+        }
       }
     },
     "custom:mini-graph-card": {

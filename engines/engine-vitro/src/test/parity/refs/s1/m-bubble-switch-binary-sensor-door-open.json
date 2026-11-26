@@ -1,0 +1,110 @@
+{
+ "case": "m-bubble-switch-binary-sensor-door-open",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 72
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 56,
+   "type": "bubble-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Back Door",
+   "x": 60,
+   "y": 20,
+   "w": 60.13,
+   "h": 15,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "binary_sensor.binary_sensor_door_open": {
+   "s": "on",
+   "a": {
+    "device_class": "door",
+    "friendly_name": "Back Door"
+   },
+   "lc": 1794499440,
+   "lu": 1794499440
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "binary_sensor.binary_sensor_door_open",
+    "pl": "zha",
+    "di": "device-1",
+    "en": "Door",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Back"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "binary_sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "binary_sensor": {
+     "_": {
+      "default": "mdi:radiobox-blank",
+      "state": {
+       "on": "mdi:checkbox-marked-circle"
+      }
+     },
+     "door": {
+      "default": "mdi:door-closed",
+      "state": {
+       "on": "mdi:door-open"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.binary_sensor.entity_component._.state.off": "Off",
+    "component.binary_sensor.entity_component._.state.on": "On",
+    "component.binary_sensor.entity_component.door.state.off": "Closed",
+    "component.binary_sensor.entity_component.door.state.on": "Open"
+   },
+   "entity": {}
+  }
+ }
+}

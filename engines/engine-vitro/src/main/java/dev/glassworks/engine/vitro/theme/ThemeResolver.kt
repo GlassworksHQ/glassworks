@@ -1093,7 +1093,8 @@ object ThemeResolver {
             fixedLeft = prop("left")?.let(::inset),
             fixedWidth = prop("width")?.let(::inset),
             // An explicit `height: auto` is kept: the card's content height, unlike no height (a 100% card's viewport).
-            fixedHeight = prop("height")?.let { if (it.trim().lowercase(Locale.ROOT) == "auto") "auto" else inset(it) },
+            // `initial` and `unset` are `auto` too: height isn't inherited, so both reset it to its initial value.
+            fixedHeight = prop("height")?.let { if (it.trim().lowercase(Locale.ROOT) in NO_INSET) "auto" else it },
             fixedToViewport = position == "fixed",
             fixedCenterY = centerY,
             fixedCenterX = centerX,

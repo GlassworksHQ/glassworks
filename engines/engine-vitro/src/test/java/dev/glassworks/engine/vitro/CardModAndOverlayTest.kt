@@ -23,6 +23,7 @@ import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,6 +41,11 @@ import org.robolectric.shadows.ShadowLooper
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class CardModAndOverlayTest {
+    /** The picture loads a test starts are all back before the next test: one in flight lands in its looper (D28). */
+    private val pendingImagesBefore = dev.glassworks.engine.vitro.ui.VitroCardContext.pendingImageLoads.get()
+
+    @After fun imageLoadsSettle() = awaitImageLoads(pendingImagesBefore)
+
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
 
     private class Templates {
@@ -430,6 +436,11 @@ class CardModAndOverlayTest {
         // An explicit `height: auto` is the content's height, not the 100% card's viewport.
         val auto = ThemeResolver.parseCardMod("ha-card { position: fixed; top: 0; height: auto; }")
         assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, vv.pinnedLayoutParams(auto, fillsHeight = true).height)
+        // `initial` and `unset` reset height to `auto` too (it isn't inherited).
+        for (reset in listOf("initial", "unset", "UNSET")) {
+            val r = ThemeResolver.parseCardMod("ha-card { position: fixed; top: 0; height: $reset; }")
+            assertEquals(reset, ViewGroup.LayoutParams.WRAP_CONTENT, vv.pinnedLayoutParams(r, fillsHeight = true).height)
+        }
         // `entity-button` is the button card's other name: the same 100%.
         assertTrue("button" in dev.glassworks.engine.vitro.ui.HA_CARD_FULL_HEIGHT && "entity-button" in dev.glassworks.engine.vitro.ui.HA_CARD_FULL_HEIGHT)
     }

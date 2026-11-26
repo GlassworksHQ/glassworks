@@ -6,7 +6,10 @@
 // VitroSupport.kt in the engine and to the audit script's lists.
 import manifest from "../../public/vitro-compat.json";
 import { buttonCardReasons } from "./vitroButtonCard";
+import { stripCssComments } from "./vitroCss";
 import { type NativeOptionsSchema, cardOptionReasons, viewOptionReasons } from "./vitroNativeOptions";
+
+export { stripCssComments };
 
 export const VITRO_COMPAT = manifest;
 
@@ -614,6 +617,9 @@ function verdict(card: Obj): Verdict {
   // A built-in card Vitro has no renderer for (`map`, the energy cards): the island can't draw it, so its view opens in
   // HA's frontend (WebFallback). A custom card goes to its island.
   if (!type.startsWith("custom:") && !CORE.has(type)) return { native: false, frontend: true, reasons: [`the built-in \`${type}\` card`], notes: [] };
+  // A shortcut whose default label or icon only HA's frontend knows, and an iframe of HA's own pages (WebFallback).
+  const own = type === "shortcut" ? shortcutReason(card) : type === "iframe" && sameOriginIframe(optString(card, "url", "")) ? "an `iframe` card of a Home Assistant page" : null;
+  if (own) return { native: false, frontend: true, reasons: [own], notes: [] };
   if (!CORE.has(type) && !HACS.has(type)) {
     reasons.add(`\`${type}\` is a custom card with no native renderer`);
     return { native: false, reasons: [...reasons], notes: [...notes] };
@@ -639,6 +645,44 @@ function verdict(card: Obj): Verdict {
     return { native: true, reasons: [], notes: [...notes] };
   }
   return { native: reasons.size === 0, reasons: [...reasons], notes: [...notes] };
+}
+
+/**
+ * Why a `shortcut` card needs HA's frontend (WebFallback.shortcutReason): with no `label` (or no `icon`), HA shows its
+ * action's own, which for a dashboard, view or panel path is that page's title and icon, and for an action the
+ * service's name. Vitro draws the defaults it knows: none, `url`, and area, device and settings paths. It doesn't open
+ * Assist.
+ */
+function shortcutReason(card: Obj): string | null {
+  const assist = (k: string) => isObj(card[k]) && (card[k] as Obj).action === "assist";
+  if (assist("tap_action") || assist("hold_action")) return "a `shortcut` card that opens Assist";
+  if (optString(card, "label", "") !== "" && optString(card, "icon", "") !== "") return null;
+  const tap = isObj(card.tap_action) ? card.tap_action : null;
+  const action = tap ? optString(tap, "action", "none") : "none";
+  if (action === "perform-action" || action === "call-service") return "a `shortcut` card that shows its action's name or icon";
+  if (action === "navigate" && !knownNavigation(optString(tap ?? {}, "navigation_path", ""))) {
+    return "a `shortcut` card that shows the page it opens by its title or icon";
+  }
+  return null;
+}
+
+const CONFIG_ROUTES = new Set(["automation", "scene", "script", "tools", "integrations", "devices", "entities"]);
+
+/** ShortcutDefaults.navigation: a path whose default label and icon Vitro knows without HA's frontend. */
+function knownNavigation(path: string): boolean {
+  if (!path) return true;
+  const segments = path.replace(/^\//, "").split(/[/?]/);
+  const panel = segments[0] ?? "";
+  const sub = segments[1];
+  if (panel === "config" && sub === "areas" && segments[2] === "area" && segments[3]) return true;
+  if (panel === "config" && sub === "devices" && segments[2] === "device" && segments[3]) return true;
+  if (panel === "config" && sub !== undefined && CONFIG_ROUTES.has(sub)) return true;
+  return sub !== undefined && sub.startsWith("areas-");
+}
+
+/** WebFallback.sameOriginIframe: an iframe `url` HA resolves on its own origin, which a loopback island can't frame. */
+function sameOriginIframe(url: string): boolean {
+  return !/^[A-Za-z][A-Za-z0-9+.\-]*:\/\//.test(url.trim());
 }
 
 function checkOptions(card: Obj, type: string, reasons: Set<string>) {
@@ -747,40 +791,6 @@ const HARMLESS_AT_RULES = new Set(["keyframes", "-webkit-keyframes", "charset"])
 const OFFSETS = ["top", "right", "bottom", "left"];
 const PLACEMENT = new Set(["position", "width", "transform", ...OFFSETS]);
 const UNSET = new Set(["auto", "unset", "initial"]);
-
-/**
- * The sheet with each comment replaced by a space, as the browser reads it (ThemeResolver.stripCssComments): a
- * slash-star inside a quoted string doesn't open one, so it can't hide the rules after it. A string ends at its closing
- * quote or at a newline, a backslash and the character after it are copied as they are, and a comment that is never
- * closed runs to the end.
- */
-export function stripCssComments(css: string): string {
-  if (!css.includes("/*")) return css;
-  let out = "";
-  let quote = "";
-  let i = 0;
-  while (i < css.length) {
-    const c = css[i];
-    if (c === "\\" && i + 1 < css.length) {
-      out += c + css[i + 1];
-      i += 2;
-      continue;
-    }
-    if (quote) {
-      if (c === quote || c === "\n") quote = "";
-    } else if (c === '"' || c === "'") {
-      quote = c;
-    } else if (c === "/" && css[i + 1] === "*") {
-      const end = css.indexOf("*/", i + 2);
-      out += " ";
-      i = end < 0 ? css.length : end + 2;
-      continue;
-    }
-    out += c;
-    i++;
-  }
-  return out;
-}
 
 /**
  * Which characters of the sheet are quoted text (ThemeResolver.quotedChars): a string, its quotes included, or a

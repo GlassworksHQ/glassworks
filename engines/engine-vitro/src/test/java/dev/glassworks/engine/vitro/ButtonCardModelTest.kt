@@ -116,6 +116,11 @@ class ButtonCardModelTest {
         // for font-size, but a declaration all the same).
         assertEquals(listOf("font-size"), decls.map { it.name })
         assertNull(ButtonCardCss.declarations(JSONObject("""{"color": "red"}""")))
+        // A comment goes, but a quoted `/*` is text, not a comment (the font names stay whole); a comment after
+        // `!important` doesn't hide it.
+        val quoted = ButtonCardCss.declarations(JSONArray("""[{"font-family": "'a/*b', 'c*/d'"}, {"color": "red /* note */"}, {"width": "10px !important /* x */"}]"""))!!
+        assertEquals(listOf("'a/*b', 'c*/d'", "red", "10px"), quoted.map { it.value })
+        assertEquals(listOf(false, false, true), quoted.map { it.important })
         assertEquals(0xFFFF0000.toInt(), ButtonCardCss.color("red"))
         assertEquals(0xFF808080.toInt(), ButtonCardCss.color("grey"))
     }

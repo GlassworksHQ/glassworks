@@ -102,6 +102,7 @@ import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatChecker
+import dev.glassworks.engine.vitro.compat.BubbleFallback
 import dev.glassworks.engine.vitro.compat.IslandBudget
 import dev.glassworks.engine.vitro.compat.IslandFrontend
 import dev.glassworks.engine.vitro.compat.IslandScripts
@@ -110,6 +111,7 @@ import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.CardTier
 import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.model.LovelaceResourceList
 import dev.glassworks.engine.vitro.model.SectionConfig
 import dev.glassworks.engine.vitro.model.ViewConfig
 import dev.glassworks.engine.vitro.model.VisibilityCondition
@@ -269,7 +271,8 @@ class VitroView(
      */
     @Volatile var resourcesList: List<LovelaceResource> = emptyList()
         set(v) {
-            if (field == v) return
+            // A list equals another with the same resources; whether Bubble's modules apply changes the routes too.
+            if (field == v && (field as? LovelaceResourceList)?.bubbleModules == (v as? LovelaceResourceList)?.bubbleModules) return
             field = v
             // The islands load the resources into their page: new resources need new pages, pooled ones too.
             dropBuiltViews(keepIslands = false)
@@ -345,6 +348,7 @@ class VitroView(
         view.webFallbackReason ?: (if (gaveUpViews.isEmpty()) null else gaveUpViews[viewKey(view)])
             ?: (if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) })
             ?: IslandBudget.reason(view, IslandScripts.of(resourcesList), islandBudget)
+            ?: BubbleFallback.reason(view, IslandScripts.of(resourcesList))
 
     /**
      * The most island pages one view opens on this device ([IslandBudget]): a view with more goes to HA's frontend.
@@ -603,10 +607,36 @@ class VitroView(
         localeRebuilds++
         // An open More Info sheet built its words once: it opens again in the new language.
         val reopen = moreInfoEntityId?.takeIf { moreInfo != null }
+        // HA's page re-renders in place: the view stays where it was scrolled.
+        val scrolledTo = currentScroll()?.scrollY ?: 0
         closeMoreInfo()
         dropBuiltViews(keepIslands = false)
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+        if (scrolledTo > 0) currentScroll()?.let { scrollOnLayout(it, scrolledTo) }
         reopen?.let { openMoreInfo(it) }
+    }
+
+    /**
+     * Scrolls [scroll] to [y] as it's laid out: before that it has no content to scroll, and an island reports its
+     * height later, so each layout scrolls on (clamped to the content there is) until [y] is reached. It stops then,
+     * when anything else moved the scroll since (the user), or after [RESTORE_SCROLL_MS].
+     */
+    private fun scrollOnLayout(scroll: ScrollView, y: Int) {
+        val listener = object : OnLayoutChangeListener {
+            var placed = -1
+
+            override fun onLayoutChange(v: View, l: Int, t: Int, r: Int, b: Int, ol: Int, ot: Int, or: Int, ob: Int) {
+                if (placed >= 0 && v.scrollY != placed) {
+                    v.removeOnLayoutChangeListener(this)
+                    return
+                }
+                v.scrollTo(0, y)
+                placed = v.scrollY
+                if (placed >= y) v.removeOnLayoutChangeListener(this)
+            }
+        }
+        scroll.addOnLayoutChangeListener(listener)
+        scroll.postDelayed({ scroll.removeOnLayoutChangeListener(listener) }, RESTORE_SCROLL_MS)
     }
 
     /**
@@ -1037,6 +1067,7 @@ class VitroView(
             // The view's body font rides on the cards' context, not only on VitroFonts.family: a card that builds a
             // child later (auto-entities' refresh) while another view is shown still gets this view's font.
             val cardCtx = contextFactory?.invoke(theme)?.withFontFamily(VitroFonts.familyFor(theme)) ?: return closePooledIslands()
+            cardCtx.viewType = viewCfg.type
             // The fonts the dashboard's stylesheets declare: read only once a card draws a family Vitro doesn't have.
             WebFonts.configure(cardCtx.haBase, cardCtx.resources, context.cacheDir)
             fontsFor = cardCtx.haBase to cardCtx.resources
@@ -1881,6 +1912,7 @@ class VitroView(
                 // The card's theme sets the body font for the text inside it only if it sets one; a theme of colors
                 // only keeps the font in force outside the card.
                 themed.withFontFamily(VitroFonts.declaredFamily(overrideTheme) ?: VitroFonts.familyOf(parentCtx.context))
+                    .also { it.viewType = parentCtx.viewType }
             } ?: parentCtx
         } else {
             parentCtx
@@ -2356,6 +2388,9 @@ class VitroView(
     }
 
     companion object {
+        /** How long a rebuilt view keeps scrolling back to where it was while its islands report their heights. */
+        private const val RESTORE_SCROLL_MS = 5_000L
+
         /** Whether a card is drawn through a hardware layer: never when it casts a shadow, which the layer's bounds would clip. */
         internal fun cardLayerWanted(themeElevationDp: Float, viewElevation: Float): Boolean =
             themeElevationDp == 0f && viewElevation == 0f

@@ -3,6 +3,7 @@
 // style Vitro doesn't draw goes to a web island; the rest is drawn natively. Dashboard templates
 // (`button_card_templates`) are merged first, as button-card merges them.
 import manifest from "../../public/vitro-compat.json";
+import { stripCssComments } from "./vitroCss";
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -172,7 +173,8 @@ function checkList(list: unknown, part: string, where: string, out: string[]) {
   const decls = new Map<string, string>();
   for (const e of list) if (isObj(e)) for (const [k, v] of Object.entries(e)) if (v !== null && v !== undefined) decls.set(k, typeof v === "string" ? v : String(v));
   for (const [k, raw] of decls) {
-    const v = raw.replace(/!important\s*$/, "").replace(/\/\*[\s\S]*?\*\//g, " ").trim();
+    // Comments first, quote-aware (ButtonCardCss.toDecl): a quoted `/*` is text, not a comment.
+    const v = stripCssComments(raw).trim().replace(/!important$/, "").trim();
     if (!v || !valid(v) || isJs(raw)) continue;
     const p = problem(part, k, v);
     if (p) out.push(`\`${where}\` ${p}`);

@@ -5,6 +5,7 @@
 package dev.glassworks.engine.vitro.compat
 
 import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.model.LovelaceResourceList
 import java.util.Locale
 
 /**
@@ -12,7 +13,14 @@ import java.util.Locale
  * type but `css`, as `WebIslandCardView.buildIslandHtml` loads them). An island can only draw a custom card whose
  * script is among them, and only applies card_mod when card-mod is.
  */
-class IslandScripts private constructor(private val files: Set<String>?) {
+class IslandScripts private constructor(
+    private val files: Set<String>?,
+    /**
+     * Bubble Card modules may restyle every Bubble card on this Home Assistant ([LovelaceResourceList.bubbleModules]),
+     * so a Bubble card Vitro would draw goes to the island, which runs Bubble's own script and its modules.
+     */
+    val bubbleModules: Boolean = false,
+) {
     /** card-mod is among the scripts, so the island applies a card's card_mod styles. */
     val cardMod: Boolean get() = files == null || CARD_MOD in files
 
@@ -36,8 +44,8 @@ class IslandScripts private constructor(private val files: Set<String>?) {
         return files.any { f -> tag in f || f.removeSuffix(".js").startsWith(stem) }
     }
 
-    override fun equals(other: Any?): Boolean = other is IslandScripts && other.files == files
-    override fun hashCode(): Int = files.hashCode()
+    override fun equals(other: Any?): Boolean = other is IslandScripts && other.files == files && other.bubbleModules == bubbleModules
+    override fun hashCode(): Int = files.hashCode() * 31 + bubbleModules.hashCode()
 
     companion object {
         private const val CARD_MOD = "card-mod.js"
@@ -51,8 +59,10 @@ class IslandScripts private constructor(private val files: Set<String>?) {
          */
         fun of(resources: List<LovelaceResource>): IslandScripts {
             last?.let { (list, scripts) -> if (list === resources) return scripts }
-            return IslandScripts(resources.filter { it.type != "css" }.map { fileName(it.url) }.toSet())
-                .also { last = resources to it }
+            return IslandScripts(
+                resources.filter { it.type != "css" }.map { fileName(it.url) }.toSet(),
+                bubbleModules = (resources as? LovelaceResourceList)?.bubbleModules == true,
+            ).also { last = resources to it }
         }
 
         @Volatile private var last: Pair<List<LovelaceResource>, IslandScripts>? = null

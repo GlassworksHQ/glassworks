@@ -136,6 +136,9 @@ def owner_of_file(path, parts, lint):
                 return ("pane", k), "assets"
         lint.append(f"{path}: an asset that is neither the engine's, the core's, nor under assets/panes/<id>/")
         return ("core", None), "assets"
+    for k, v in parts.get("engines", {}).items():
+        if not k.startswith("_") and any(path.startswith(p) for p in v.get("files", [])):
+            return ("engine", k), "other"
     for k, v in parts["libraries"].items():
         if any(path.startswith(p) for p in v.get("files", [])):
             return ("library", k), "other"

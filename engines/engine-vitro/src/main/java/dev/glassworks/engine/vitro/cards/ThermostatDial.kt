@@ -34,6 +34,7 @@ import dev.glassworks.engine.vitro.ui.NumberText
 import dev.glassworks.engine.vitro.ui.VitroAccess
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroFonts
+import dev.glassworks.platform.Platform
 import dev.glassworks.ui.Inter
 import org.json.JSONObject
 import java.util.Locale
@@ -456,6 +457,9 @@ internal class ThermostatDialView(
         boundTarget = target
         boundLow = low
         boundHigh = high
+        // No target any more (turned off, say): a single target's key edit has nothing to set, so it's dropped now, not
+        // sent by a release that comes after the target is back.
+        if (keyPending && !wasRange && target == null) dropEdit()
         if (!dragging && !keyPending) {
             setTarget(target)
             this.low = low
@@ -489,13 +493,21 @@ internal class ThermostatDialView(
         }
         val t = target ?: return
         // HA's _handleButton: the target plus a step, kept within the limits (not snapped to a grid).
-        val next = ClimateTargets.roundToStep(t + sign * step, step).coerceIn(min, max)
-        if (next == t) return
+        commitTarget(ClimateTargets.roundToStep(t + sign * step, step).coerceIn(min, max))
+    }
+
+    /** Sends a single target at once (a button, TalkBack); a key edit under way is replaced by it. False if unchanged. */
+    private fun commitTarget(next: Double): Boolean {
+        val t = target ?: return false
+        if (next == t) return false
+        keyPending = false
+        keyCodePending = 0
         setTarget(next)
         describe()
         invalidate()
         onCommit(next)
         VitroAccess.valueChanged(this)
+        return true
     }
 
     /** Picks the end of a range the − and + buttons move. */
@@ -1272,13 +1284,26 @@ internal class ThermostatDialView(
         info.rangeInfo = AccessibilityNodeInfo.RangeInfo.obtain(AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_FLOAT, min.toFloat(), max.toFloat(), t.toFloat())
         if (t < max) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)
         if (t > min) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD)
+        // The humidity control is AdjustableAccess's slider, as it was before it moved here: a value can be set.
+        if (humidifier) VitroAccess.offerSetProgress(info)
     }
 
     override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean {
-        if (!isRange && target != null) {
+        val t = target
+        if (!isRange && t != null) {
             when (action) {
-                AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> { nudge(1); return true }
-                AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> { nudge(-1); return true }
+                AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> {
+                    val sign = if (action == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) 1 else -1
+                    // A thermostat moves a step, as its − and + do. The humidity slider moves HA's tenth of the range
+                    // (`_tenPercentStep`, as Page Up and Down do), as AdjustableAccess's sliders do.
+                    if (!humidifier) nudge(sign)
+                    else commitTarget(snap(t + sign * maxOf(step, (max - min) / 10.0)))
+                    return true
+                }
+                android.R.id.accessibilityActionSetProgress -> if (humidifier && Platform.hasSetProgressAction) {
+                    val p = arguments?.getFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, Float.NaN) ?: Float.NaN
+                    return !p.isNaN() && commitTarget(snap(p.toDouble()))
+                }
             }
         }
         return super.performAccessibilityAction(action, arguments)

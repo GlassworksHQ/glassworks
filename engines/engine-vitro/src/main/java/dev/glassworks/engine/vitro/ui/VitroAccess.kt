@@ -50,6 +50,15 @@ internal enum class A11yRole(val className: String) {
  * it on a view tree while TalkBack is on or a keyboard or D-pad is attached, and never otherwise.
  */
 internal object VitroAccess {
+    /**
+     * Offers `ACTION_SET_PROGRESS` on a slider's node, so an accessibility service can set its value: API 24 and up
+     * (Platform.hasSetProgressAction), nothing on the legacy build. Sliders outside [AdjustableAccess] call it here, so
+     * the API 24 call stays in this file (tools/legacy/api23-baseline.txt).
+     */
+    fun offerSetProgress(info: AccessibilityNodeInfo) {
+        if (Platform.hasSetProgressAction) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS)
+    }
+
     /** Views whose role was set where they were built: [applyDefaults] leaves them alone. */
     private val declared: MutableSet<View> = Collections.newSetFromMap(WeakHashMap())
 

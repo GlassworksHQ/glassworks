@@ -40,6 +40,23 @@ data class LovelaceResource(
     val type: String, // "module", "js", "css"
 )
 
+/**
+ * The dashboard's Lovelace resources as Home Assistant's connection lists them, with what it learned about that Home
+ * Assistant alongside: [bubbleModules] is true when Bubble Card modules may restyle every Bubble card there
+ * ([dev.glassworks.engine.vitro.data.BubbleModules]), so Vitro can't draw one as Bubble does. A plain list (tests, the
+ * offline checker) knows of no modules.
+ */
+class LovelaceResourceList(
+    private val items: List<LovelaceResource>,
+    val bubbleModules: Boolean,
+) : List<LovelaceResource> by items {
+    // A List like any other: equal to a list of the same resources, and hashed as one. Whoever needs [bubbleModules]
+    // compares it on its own (VitroView.resourcesList).
+    override fun equals(other: Any?): Boolean = other is List<*> && items == other
+    override fun hashCode(): Int = items.hashCode()
+    override fun toString(): String = "$items (bubbleModules=$bubbleModules)"
+}
+
 data class DashboardConfig(
     val title: String?,
     val views: List<ViewConfig>,
@@ -115,6 +132,8 @@ data class ActionConfig(
     val urlPath: String? = null,
     /** Text of HA's `confirmation:` prompt (`true` gives "Are you sure?"), or null when the action runs straight away. */
     val confirmation: String? = null,
+    /** A `more-info` action's own `entity`, which HA's `handleAction` opens before the card's. */
+    val entity: String? = null,
 ) {
     companion object {
         private const val DEFAULT_CONFIRMATION = "Are you sure?"
@@ -158,6 +177,7 @@ data class ActionConfig(
                 target = raw.optJSONObject("target"),
                 urlPath = raw.optString("url_path", "").ifEmpty { null },
                 confirmation = parseConfirmation(raw),
+                entity = (raw.opt("entity") as? String)?.trim()?.ifEmpty { null },
             )
         }
     }
@@ -969,6 +989,8 @@ object CardRouter {
      * Every `entity_id` referenced anywhere in [view]: the view's own, which its first build waits for, and with every
      * other view's the dashboard's `subscribe_entities` (VitroEngine's dashboardEntities).
      */
+    private val ACTION_KEYS = listOf("tap_action", "hold_action", "double_tap_action")
+
     fun referencedEntities(view: ViewConfig): Set<String> {
         val out = LinkedHashSet<String>()
         fun scanJson(v: Any?) {
@@ -987,9 +1009,19 @@ object CardRouter {
                 }
             }
         }
+        // An action's own `entity` (HA's handleAction: a more-info or toggle of another entity than the card's): the
+        // More Info sheet it opens reads that entity from the store.
+        fun actionTargets(raw: JSONObject?) {
+            if (raw == null) return
+            for (key in ACTION_KEYS) {
+                raw.optJSONObject(key)?.optString("entity", "")?.takeIf { isEntityId(it) }?.let { out += it }
+            }
+        }
         fun walkCard(c: CardConfig) {
             c.entity?.let { out += it }
             c.entities().forEach { it.referencedEntities(out) }
+            actionTargets(c.raw)
+            c.raw.optJSONArray("entities")?.let { rows -> for (i in 0 until rows.length()) actionTargets(rows.optJSONObject(i)) }
             c.visibility.forEach { it.referencedEntities(out) }
             VisibilityCondition.parseList(c.raw.optJSONArray("conditions")).forEach { it.referencedEntities(out) }
             // Deep-scan custom cards (e.g. room arrays, sleep/outside/camera objects) so the entity

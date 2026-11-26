@@ -91,6 +91,10 @@
  "ui.panel.lovelace.components.timestamp-display.invalid": "Ungültiger Zeitstempel",
  "ui.panel.lovelace.components.timestamp-display.invalid_format": "Ungültiges Anzeigeformat",
  "ui.panel.lovelace.editor.action-editor.actions.more-info": "Detailansicht",
+ "ui.panel.lovelace.editor.action-editor.actions.navigate": "Navigieren",
+ "ui.panel.lovelace.editor.action-editor.actions.perform-action": "Aktion ausführen",
+ "ui.panel.lovelace.editor.action-editor.actions.toggle": "Umschalten",
+ "ui.panel.lovelace.editor.action-editor.actions.url": "URL",
  "ui.panel.lovelace.warning.attribute_not_numeric": "Attribut {attribute} ist nicht numerisch",
  "ui.panel.lovelace.warning.entity_non_numeric": "Entität ist nicht-numerisch: {entity}",
  "ui.panel.lovelace.warning.entity_unavailable": "Entität ist derzeit nicht verfügbar: {entity}"

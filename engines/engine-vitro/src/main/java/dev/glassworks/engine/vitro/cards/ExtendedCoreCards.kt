@@ -286,7 +286,10 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
             // The same button's hold: `hold_action`, more-info unless configured.
             dial.bindHoldAction(ctx, ActionConfig.parse(config.raw.optJSONObject("hold_action"), "more-info"), eid)
             dial.onBrightness = { pct -> setBrightness(eid, pct) }
-            dial.onDragging = ::showDragBrightness
+            dial.onDragging = { pct ->
+                showDragBrightness(pct)
+                describeDial(ctx.store[eid])
+            }
             observe(eid, ::render)
         } else {
             render(null)
@@ -341,9 +344,17 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         }
         val dims = s != null && lightSupportsBrightness(s)
         dial.update(on, if (on && pct != null) BrightnessDialView.fractionOf(pct) else 0f, MdiIcons.resolveIconName(config.icon, s), lightButtonColor(s), dims, enabled = !unavailable)
+        describeDial(s)
+    }
+
+    /** What TalkBack reads for the dial: the brightness an edit under way shows (a drag, a held key), else HA's. */
+    private fun describeDial(s: EntityState?) {
+        val on = s?.state == "on"
+        val pct = dial.editPercent ?: s?.brightnessPct
+        val dims = s != null && lightSupportsBrightness(s)
         dial.contentDescription = when {
             s == null || s.isUnavailable -> s?.formattedState() ?: "–"
-            !on -> s.formattedState()
+            !on && dial.editPercent == null -> s.formattedState()
             dims && pct != null -> "${HaText.ui("ui.card.light.brightness")} ${HaFormat.formatNumber(pct)}${HaFormat.blankBeforePercent(HaLocale.current)}%"
             else -> s.formattedState()
         }
@@ -429,8 +440,14 @@ internal class BrightnessDialView(
     var onToggle: (() -> Unit)? = null
     var onBrightness: ((Int) -> Unit)? = null
 
-    /** The brightness under a drag, in percent, as it moves; null when it ends. */
+    /**
+     * The brightness under a drag, in percent, as it moves; null when it ends. A key edit tells it each step, then null
+     * (HA's `value-changing` per keydown: the percentage shows, and goes half a second after the last one).
+     */
     var onDragging: ((Int?) -> Unit)? = null
+
+    /** The brightness an edit under way shows (a drag or a held key), in percent; null with none. */
+    val editPercent: Int? get() = dragFraction?.let { percentAt(it) }
 
     /**
      * [iconColor] is the light button's color; without one, the active color while on (or dragged up), else the
@@ -442,15 +459,21 @@ internal class BrightnessDialView(
         basePath = MdiIcons.pathFor(iconName)
         tint = iconColor
         dims = dimmable
+        val dragEnded = !enabled && touchMode == TOUCH_DRAG
         if (!enabled && touchMode != TOUCH_NONE) {
             // The light went unavailable mid-gesture: the whole gesture ends (no MOVE or UP of it acts later, no hold
             // fires), and the dial waits for a fresh press.
-            if (touchMode == TOUCH_DRAG) onDragging?.invoke(null)
             touchMode = TOUCH_NONE
             removeCallbacks(holdCheck)
             parent?.requestDisallowInterceptTouchEvent(false)
         }
-        if (!enabled) dragFraction = null
+        if (!enabled) {
+            dragFraction = null
+            // A key edit under way ends too: its release must not send (an off light's fallback would turn it on at 1 %).
+            access.cancel()
+        }
+        // Told once the preview is gone, so the card describes what HA reports, not the dropped drag.
+        if (dragEnded) onDragging?.invoke(null)
         this.enabled = enabled
         isEnabled = enabled
         sentFraction = null
@@ -559,8 +582,9 @@ internal class BrightnessDialView(
             }
             MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(holdCheck)
-                if (touchMode == TOUCH_DRAG) onDragging?.invoke(null)
+                // Nothing was sent: the preview goes first, so the card describes HA's brightness again.
                 dragFraction = null
+                if (touchMode == TOUCH_DRAG) onDragging?.invoke(null)
                 touchMode = TOUCH_NONE
                 invalidate()
             }
@@ -593,6 +617,8 @@ internal class BrightnessDialView(
         preview = { v ->
             dragFraction = fractionOf(v)
             invalidate()
+            onDragging?.invoke(v)
+            onDragging?.invoke(null)
             VitroAccess.valueChanged(this)
         },
         commit = { v ->
@@ -606,6 +632,8 @@ internal class BrightnessDialView(
         restore = {
             dragFraction = null
             invalidate()
+            // The card describes HA's brightness again.
+            onDragging?.invoke(null)
         },
     )
 

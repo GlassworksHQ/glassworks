@@ -41,6 +41,16 @@ data class CardVerdict(
      */
     val innerTypes: Set<String> = emptySet(),
 ) {
+    /**
+     * A Bubble card Vitro draws natively, which only matches Bubble where no Bubble Card module restyles it: Bubble
+     * applies its `default` module and every global one to each card, from Home Assistant ([IslandScripts.bubbleModules]).
+     */
+    private val bubbleModulesMatter: Boolean get() = route == CardRoute.NATIVE && type == BUBBLE
+
+    /** Native, but Bubble's modules may restyle it and the island can draw it: the island draws it ([inIsland]). */
+    private fun toBubbleIsland(scripts: IslandScripts): Boolean =
+        bubbleModulesMatter && scripts.bubbleModules && scripts.provides(type)
+
     /** Cards Vitro draws natively (this one or one inside it) whose script no Lovelace resource provides. */
     private fun missingScripts(scripts: IslandScripts): List<String> =
         (listOf(type) + innerTypes).filter { it in VitroSupport.HACS_CARD_TYPES && !scripts.provides(it) }.distinct()
@@ -53,7 +63,7 @@ data class CardVerdict(
      * goes there only when a resource provides its script, and, for a card_mod-only fallback, card-mod too.
      * Otherwise it stays native. A custom card with no native renderer goes there regardless: it's its only chance.
      */
-    fun inIsland(scripts: IslandScripts = IslandScripts.ANY): Boolean = route == CardRoute.ISLAND &&
+    fun inIsland(scripts: IslandScripts = IslandScripts.ANY): Boolean = toBubbleIsland(scripts) || route == CardRoute.ISLAND &&
         (type !in VitroSupport.HACS_CARD_TYPES || (missingScripts(scripts).isEmpty() && (!cardModOnly || scripts.cardMod)))
 
     /**
@@ -61,6 +71,7 @@ data class CardVerdict(
      * card stays; for a card with no native renderer, a note when no registered script seems to define it.
      */
     fun effective(scripts: IslandScripts = IslandScripts.ANY): CardVerdict = when {
+        toBubbleIsland(scripts) -> copy(route = CardRoute.ISLAND, reasons = listOf(BUBBLE_MODULES_REASON))
         route != CardRoute.ISLAND -> this
         inIsland(scripts) ->
             if (type !in VitroSupport.HACS_CARD_TYPES && type.startsWith("custom:") && !scripts.mentions(type)) {
@@ -79,6 +90,12 @@ data class CardVerdict(
         }
     }
 }
+
+private const val BUBBLE = "custom:bubble-card"
+
+/** Why a Bubble card Vitro could draw goes to the island on a Home Assistant with Bubble Card modules. */
+const val BUBBLE_MODULES_REASON =
+    "Bubble Card modules are set up in Home Assistant, and Bubble applies its default and global ones to every Bubble card"
 
 /**
  * Checks one card against [VitroSupport]. Pure and deterministic: it reads the card's config once (at parse time,

@@ -16,14 +16,6 @@
   "region": 0.44,
   "reason": "Bubble Card 3.4.3's slider button: HA fills the whole pill as the slider (65% grey-beige fill, name inside, no state line); Vitro draws a plain button with the name and '65%' on two lines and no fill (2026-11-25, fake HA)"
  },
- "mirror/bubble-card-separator": {
-  "pixel": 0.0256,
-  "bounds": 9.2,
-  "font": 2,
-  "missingText": 0,
-  "region": 0.3,
-  "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
- },
  "mirror/calendar-month-bars": {
   "pixel": 0.0431,
   "bounds": 0,
@@ -191,14 +183,6 @@
   "region": 0.44,
   "reason": "Bubble Card 3.4.3's slider button: HA fills the whole pill as the slider (65% grey-beige fill, name inside, no state line); Vitro draws a plain button with the name and '65%' on two lines and no fill (2026-11-25, fake HA)"
  },
- "s1/bubble-card-separator": {
-  "pixel": 0.0256,
-  "bounds": 9.2,
-  "font": 2,
-  "missingText": 0,
-  "region": 0.3,
-  "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
- },
  "s1/calendar-month-bars": {
   "pixel": 0.0987,
   "bounds": 0,
@@ -286,6 +270,14 @@
   "font": 0,
   "missingText": 0,
   "reason": "sub-pixel text: the name and state are the same text, size and place, and differ only in Chromium's and Skia's glyph antialiasing over a long name (2026-11-26, fake HA, state matrix)"
+ },
+ "s1/m-bubble-state-wrap-sensor-long-name": {
+  "pixel": 0.0631,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "region": 0.23,
+  "reason": "Bubble's scrolling_effect: false name wraps onto two lines one word earlier in HA: Chrome's Roboto 13 px / 600 runs ~1.3% wider than Robolectric's, so the break moves (same font drift as the gauge's bold text); layout, colors and the second line match (2026-11-26, fake HA)"
  },
  "s1/m-gauge-sensor-unknown": {
   "pixel": 0.0215,
@@ -450,14 +442,6 @@
   "missingText": 0,
   "region": 0.45,
   "reason": "Bubble Card 3.4.3's slider button: HA fills the whole pill as the slider (65% grey-beige fill, name inside, no state line); Vitro draws a plain button with the name and '65%' on two lines and no fill (2026-11-25, fake HA)"
- },
- "tablet/bubble-card-separator": {
-  "pixel": 0.0226,
-  "bounds": 9.2,
-  "font": 2,
-  "missingText": 0,
-  "region": 0.29,
-  "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
  },
  "tablet/calendar-month-bars": {
   "pixel": 0.0926,

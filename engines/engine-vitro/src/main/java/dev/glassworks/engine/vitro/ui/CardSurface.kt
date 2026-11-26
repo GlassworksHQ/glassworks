@@ -214,6 +214,12 @@ class VitroCardContext(
      */
     var cardLayout: String? = null
 
+    /**
+     * The type of the view being built (`masonry`, `sections`, `panel`, `sidebar`, a layout-card view's `custom:` type),
+     * null outside a view (More Info, tests). Set once per view build; Bubble Card picks its layout from it.
+     */
+    var viewType: String? = null
+
     fun px(dpVal: Float): Int = (dpVal * dp).toInt()
 
     /**
@@ -260,6 +266,7 @@ class VitroCardContext(
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout
+        it.viewType = viewType
     }
 
     /** [sp] scaled by the theme's text size ([ResolvedTheme.fontScale]); pass the result to `setTextSize(SP, …)`. */
@@ -308,7 +315,8 @@ class VitroCardContext(
         when (action.action) {
             "none" -> Unit
             "toggle" -> defaultEntityId?.let(::toggleEntity)
-            "more-info" -> defaultEntityId?.let(openMoreInfo)
+            // HA's handleAction: the action's own `entity`, else the card's.
+            "more-info" -> (action.entity ?: defaultEntityId)?.let(openMoreInfo)
             "navigate" -> action.navigationPath?.let(navigate)
             "call-service", "perform-action" -> {
                 val svc = action.service ?: return

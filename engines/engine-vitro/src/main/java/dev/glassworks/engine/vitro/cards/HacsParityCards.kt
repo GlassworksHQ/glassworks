@@ -44,7 +44,7 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 // Tier 2 HACS parity wave: the rest of the Mushroom suite, mini-media-player, auto-entities, the seamless stack
-// containers (stack-in-card, vertical-stack-in-card, layout-card) and Bubble Card's sub-buttons. Every card here
+// containers (stack-in-card, vertical-stack-in-card, layout-card). Every card here
 // reads the same YAML its HACS original does and calls the same Home Assistant services, with no web view.
 
 /** Builds one child card through `VitroView.buildCard`, visibility included. Containers get it from the view. */
@@ -2382,84 +2382,6 @@ class LayoutCardView(
             return out
         }
     }
-}
-
-// ---------------------------------------------------------------------------------------------------------------
-// custom:bubble-card sub_button
-// ---------------------------------------------------------------------------------------------------------------
-
-/**
- * Bubble Card's `sub_button:` row: round (icon only) or pill (icon + name/state/attribute) buttons on the right of
- * a button card. Each follows its own `entity` (the card's when unset) and reads `icon`, `name`, `show_icon`,
- * `show_name`, `show_state`, `show_attribute` + `attribute`, `show_background` and `state_background`; `tap_action`
- * defaults to `more-info`, `hold_action` to none. Takes the list or Bubble 3's `{ main: [...] }`. Null when empty.
- */
-internal fun bubbleSubButtons(
-    ctx: VitroCardContext,
-    config: CardConfig,
-    observe: (String, (EntityState?) -> Unit) -> Unit,
-): LinearLayout? {
-    val raw = config.raw.opt("sub_button")
-    val arr = when (raw) {
-        is JSONArray -> raw
-        is JSONObject -> raw.optJSONArray("main") ?: raw.optJSONArray("buttons")
-        null -> null
-        else -> null
-    } ?: return null
-    if (arr.length() == 0) return null
-    val row = LinearLayout(ctx.context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-    }
-    for (i in 0 until arr.length()) {
-        val sub = arr.optJSONObject(i) ?: continue
-        val entity = sub.optString("entity", "").ifEmpty { config.entity }
-        val showIcon = sub.optBoolean("show_icon", true)
-        val showName = sub.optBoolean("show_name", false)
-        val showState = sub.optBoolean("show_state", false)
-        val showAttribute = sub.optBoolean("show_attribute", false)
-        val attribute = sub.optString("attribute", "")
-        val showBackground = sub.optBoolean("show_background", true)
-        val stateBackground = sub.optBoolean("state_background", true)
-        val icon = MdiIconView(ctx.context)
-        val text = label(ctx, 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply { visibility = View.GONE }
-        val button = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            isClickable = true
-            minimumWidth = ctx.px(36f)
-            contentDescription = sub.optString("name", "").ifEmpty { entity ?: "Sub-button ${i + 1}" }
-            if (showIcon) addView(icon, LinearLayout.LayoutParams(ctx.px(18f), ctx.px(18f)))
-            addView(text, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { if (showIcon) marginStart = ctx.px(6f) })
-        }
-        val tap = ActionConfig.parse(sub.optJSONObject("tap_action"), "more-info")
-        val hold = ActionConfig.parse(sub.optJSONObject("hold_action"), "none")
-        button.setOnClickListener { ctx.performAction(tap, entity) }
-        button.bindHoldAction(ctx, hold, entity)
-        fun render(s: EntityState?) {
-            val active = s?.isActive == true
-            val tint = if (active) ctx.theme.activeColor(s.domain) else ctx.theme.primaryTextColor
-            icon.setIcon(MdiIcons.resolveIconName(sub.optString("icon", "").ifEmpty { null }, s), tint)
-            val parts = ArrayList<String>()
-            if (showName) parts += sub.optString("name", "").ifEmpty { s?.friendlyName ?: entity.orEmpty() }
-            if (showState && s != null) parts += s.formattedState()
-            if (showAttribute && s != null && attribute.isNotEmpty()) s.attributes[attribute]?.let { parts += it.toString() }
-            text.text = parts.joinToString(" · ")
-            text.visibility = if (parts.isEmpty()) View.GONE else View.VISIBLE
-            val padH = if (parts.isEmpty()) 0 else ctx.px(12f)
-            button.setPadding(padH, 0, padH, 0)
-            button.background = if (!showBackground) null else GradientDrawable().apply {
-                cornerRadius = ctx.px(18f).toFloat()
-                setColor(
-                    if (active && stateBackground) CardSurface.withAlpha(tint, 0.24f)
-                    else CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.07f),
-                )
-            }
-        }
-        if (entity != null) observe(entity, ::render) else render(null)
-        row.addView(button, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(36f)).apply { if (row.childCount > 0) marginStart = ctx.px(6f) })
-    }
-    return row.takeIf { it.childCount > 0 }
 }
 
 /**

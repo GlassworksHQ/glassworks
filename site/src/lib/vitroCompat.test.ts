@@ -165,6 +165,29 @@ describe("auditDashboard and custom:button-card", () => {
     expect(audit([{ type: "custom:button-card", styles: { card: [{ border: "1px dashed red" }] } }]).totals.tier3).toBe(1);
     // A value the browser drops (a stray `;`) is dropped natively too.
     expect(audit([{ type: "custom:button-card", styles: { card: [{ padding: "0;" }] } }]).totals.tier3).toBe(0);
+    // A quoted slash-star is text: it doesn't hide the dashed border after it.
+    expect(audit([{ type: "custom:button-card", styles: { card: [{ border: "'/*' 1px dashed red '*/'" }] } }]).totals.tier3).toBe(1);
+  });
+
+  it("sends a shortcut whose default only HA's frontend knows, and an iframe of HA's own pages, to HA's frontend", () => {
+    const frontend = (card: Record<string, unknown>) => {
+      const r = audit([card]);
+      return r.triggers.length === 1 && r.triggers[0].reasons.join().startsWith("Home Assistant's frontend draws this view:");
+    };
+    // WebFallback.shortcutReason: a dashboard or view path is named by that page, an action by the service.
+    expect(frontend({ type: "shortcut", tap_action: { action: "navigate", navigation_path: "/lovelace/kitchen" } })).toBe(true);
+    expect(frontend({ type: "shortcut", label: "Kitchen", tap_action: { action: "navigate", navigation_path: "/lovelace/kitchen" } })).toBe(true);
+    expect(frontend({ type: "shortcut", tap_action: { action: "perform-action", perform_action: "light.turn_on" } })).toBe(true);
+    expect(frontend({ type: "shortcut", label: "Ask", icon: "mdi:microphone", tap_action: { action: "assist" } })).toBe(true);
+    // Both given, or a default Vitro knows (an area, a settings page, a URL, none): native.
+    expect(audit([{ type: "shortcut", label: "Kitchen", icon: "mdi:fridge", tap_action: { action: "navigate", navigation_path: "/lovelace/kitchen" } }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "shortcut", tap_action: { action: "navigate", navigation_path: "/config/areas/area/kitchen" } }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "shortcut", tap_action: { action: "navigate", navigation_path: "/config/automation" } }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "shortcut", tap_action: { action: "url", url_path: "https://example.com" } }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "shortcut" }]).totals.tier3).toBe(0);
+    // WebFallback.sameOriginIframe: HA's own page refuses a frame on the island's origin.
+    expect(frontend({ type: "iframe", url: "/history" })).toBe(true);
+    expect(audit([{ type: "iframe", url: "https://example.com/" }]).triggers[0].reasons.join()).toMatch(/GeckoView island/);
   });
 
   it("routes the other fast paths", () => {
@@ -469,7 +492,7 @@ describe("parseYaml", () => {
 });
 
 describe("auditDashboard and the cards built from a configuration", () => {
-  it("sends Bubble Card to its island, and an unknown layout to the island or HA's frontend by what it holds", () => {
+  it("draws Bubble Card's separator and plain buttons, sends the rest to its island, and an unknown layout to the island or HA's frontend by what it holds", () => {
     const r = auditDashboard(
       JSON.stringify({
         views: [{ cards: [
@@ -480,11 +503,9 @@ describe("auditDashboard and the cards built from a configuration", () => {
         ] }],
       }),
     );
-    // Vitro's Bubble Card doesn't match Bubble Card 3.4.3 in any configuration (a gap in native-options.json).
+    // Vitro draws Bubble Card 3.4.3's separator and its switch, state and name buttons; a pop-up goes to the island.
     expect(r.triggers.map((t) => [t.type, t.reasons[0].split(": ")[0]])).toEqual([
       ["custom:bubble-card", "`custom:bubble-card` `card_type"],
-      ["custom:bubble-card", "`custom:bubble-card` isn't drawn natively"],
-      ["custom:bubble-card", "`custom:bubble-card` isn't drawn natively"],
     ]);
     // An unknown layout with a built-in card inside sends the view to HA's frontend: the island would draw the tile as
     // a summary.

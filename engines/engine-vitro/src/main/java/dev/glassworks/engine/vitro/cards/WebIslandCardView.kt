@@ -153,6 +153,12 @@ class WebIslandCardView(
     private val pageSubs = HashMap<(JSONObject) -> Unit, HashMap<Int, PageSub>>()
     private val sentConnected = HashMap<(JSONObject) -> Unit, Boolean>()
 
+    /**
+     * Sockets seeded before HA had answered for this card's entities: they're seeded again once it has. Under
+     * [seedLock], and declared before `init` for the same reason as [pageSubs].
+     */
+    private val incompleteSeeds = LinkedHashSet<(JSONObject) -> Unit>()
+
     /** The connection watcher's handle: on for as long as the island is this card's, a move in the layout included. */
     @Volatile private var connectionWatch: (() -> Unit)? = null
 
@@ -286,7 +292,13 @@ class WebIslandCardView(
                 // reconnect that changed no state sends no patch.
                 renewing { ctx.watchToken { synchronized(seedLock) { sendTokenIfChanged() } } }
                 // HA's answer for more entities landed: a page seeded before it gets the whole store, complete.
-                renewing { ctx.store.subscribeSnapshot { synchronized(seedLock) { completeSeeds() } } }
+                renewing {
+                    val off = ctx.store.subscribeSnapshot { synchronized(seedLock) { completeSeeds() } }
+                    // A snapshot listener hears only later answers: one that landed before it (a bridge seeded while
+                    // the card was still being built, or while it was detached) is checked for here.
+                    synchronized(seedLock) { completeSeeds() }
+                    off
+                }
                 // The connection to HA went down or is back: the page's `hass.connection` hears of it, and its
                 // subscriptions start again on the new connection (HA dropped them with the old one). On while the
                 // card is detached too (a move in the layout): a drop then is never missed, and live ones stay live.
@@ -350,9 +362,6 @@ class WebIslandCardView(
         if (!complete) incompleteSeeds += send
         send(JSONObject().put("type", "snapshot").put("states", seed).put("complete", complete))
     }
-
-    /** Sockets seeded before HA had answered for this card's entities: they're seeded again once it has. */
-    private val incompleteSeeds = LinkedHashSet<(JSONObject) -> Unit>()
 
     /**
      * True when HA has answered for every entity the card names (a state, or HA's word that it has none); for a card
