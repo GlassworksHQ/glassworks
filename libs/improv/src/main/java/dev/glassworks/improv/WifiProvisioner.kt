@@ -399,25 +399,23 @@ public class WifiProvisioner(
                     WifiSecurity.EAP -> return false
                 }
             }
-            val existing = if (loc) runCatching {
-                wm.configuredNetworks.orEmpty().firstOrNull { WifiSecurityRules.unquote(it.SSID) == ssid }
-            }.getOrNull() else null
-            // the ids saved before this attempt, read without the location gate: null when Android won't list them
+            // the ids saved before this attempt: whether it made the entry addNetwork returns. Only a list Android gives in
+            // full counts (from Android 10 an app that isn't the device owner gets an empty or filtered one)
             val idsBefore = runCatching { wm.configuredNetworks?.map { it.networkId }?.toSet() }.getOrNull()
             netId = wm.addNetwork(conf)
             if (netId == -1) {
                 Log.w(TAG, "addNetwork refused (not device owner / no SYSTEM_ALERT_WINDOW?); trying a suggestion")
                 return false
             }
-            addedNew = if (idsBefore != null) netId !in idsBefore else existing == null || existing.networkId != netId
+            // unknown counts as not ours: a failed attempt may leave its entry behind, but never removes one saved earlier
+            addedNew = SavedNetworks.madeHere(netId, idsBefore, Compat.listsSavedNetworks(isDeviceOwner, loc)) == true
             val enabled = wm.enableNetwork(netId, true)
             wm.reconnect()
             method = if (isDeviceOwner) "device-owner" else "addNetwork"
             Log.i(TAG, "addNetwork -> $netId (new=$addedNew), enableNetwork -> $enabled")
             if (!enabled) {
-                // don't leave our new entry behind: a later save (below API 26) would keep it for good. Only when the list
-                // from before proves this attempt made it, so a network saved earlier is never removed
-                if (idsBefore != null && netId !in idsBefore) Log.i(TAG, "removeNetwork($netId) -> ${wm.removeNetwork(netId)}")
+                // don't leave our new entry behind: a later save (below API 26) would keep it for good
+                if (addedNew) Log.i(TAG, "removeNetwork($netId) -> ${wm.removeNetwork(netId)}")
                 finish(Outcome.Failed("enableNetwork refused", null))
                 return true
             }
@@ -567,4 +565,14 @@ private fun suggestionOrThrow(ssid: String, security: WifiSecurity, password: St
         WifiSecurity.OPEN, WifiSecurity.WEP, WifiSecurity.EAP -> {}
     }
     return b.build()
+}
+
+/** Which saved Wi-Fi network an attempt made, from the ids saved before it (pure, so tests cover it). */
+internal object SavedNetworks {
+    /**
+     * True when [netId] wasn't among [idsBefore], false when it was, null when that can't be known: the list wasn't
+     * readable, or Android filters it for this app ([listTrusted] false).
+     */
+    fun madeHere(netId: Int, idsBefore: Set<Int>?, listTrusted: Boolean): Boolean? =
+        if (!listTrusted || idsBefore == null) null else netId !in idsBefore
 }

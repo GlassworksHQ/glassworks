@@ -19,6 +19,13 @@ internal class CompatApi(private val level: Int) {
      */
     val mustSaveNetworks: Boolean get() = level < 26
 
+    /**
+     * `getConfiguredNetworks` gives every saved network: always before Android 10. From Android 10 an app that isn't
+     * privileged gets an empty list, and without location access a filtered one, so only the device owner with location
+     * access gets them all.
+     */
+    fun listsSavedNetworks(deviceOwner: Boolean, locationAccess: Boolean): Boolean = level < 29 || (deviceOwner && locationAccess)
+
     /** `AdvertisingSet` exists (Android 8). Below it, advertising uses `startAdvertising` only. */
     @get:ChecksSdkIntAtLeast(api = 26)
     val hasAdvertisingSets: Boolean get() = level >= 26
