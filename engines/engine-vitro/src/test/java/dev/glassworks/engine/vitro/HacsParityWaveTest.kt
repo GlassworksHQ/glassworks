@@ -411,6 +411,23 @@ class HacsParityWaveTest {
     }
 
     @Test
+    fun autoEntitiesHearsStatesThatLandWhileItsFirstBuildRuns() {
+        // HA's snapshot is written on the socket's thread: it can land after the card read the store, while it builds
+        // what it matched, and before it would listen. HA's auto-entities renders again whenever hass changes.
+        val st = store()
+        var landed = false
+        val view = AutoEntitiesCardView(context(st), card("""{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]}}""")) { c ->
+            if (!landed) {
+                landed = true
+                st.putLocal(entity("light.kitchen", "on", "friendly_name" to "Kitchen"))
+            }
+            builder(st)(c)
+        }
+        idle()
+        assertEquals(listOf("light.kitchen"), view.matchedEntities)
+    }
+
+    @Test
     fun autoEntitiesValueRulesAndCardsParam() {
         val temps = listOf(
             entity("sensor.a_temp", "19.5", "device_class" to "temperature"),

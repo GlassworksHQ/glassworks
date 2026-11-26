@@ -335,6 +335,9 @@ class EntityStore {
     /** True once the current subscription's answer has landed, for some entities or every one. */
     val anyAnswered: Boolean get() = snapshot.get().filter != null
 
+    /** True once the current subscription's answer covers every entity (it followed them all, an empty filter). */
+    val answeredAll: Boolean get() = snapshot.get().filter?.isEmpty() == true
+
     /** Calls [listener] after each part of HA's answer lands ([markSnapshot]); returns its unsubscribe. */
     fun subscribeSnapshot(listener: () -> Unit): () -> Unit {
         snapshotListeners += listener

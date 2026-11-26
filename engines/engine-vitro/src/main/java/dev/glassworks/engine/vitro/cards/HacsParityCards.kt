@@ -1871,8 +1871,18 @@ class AutoEntitiesCardView(
         }
 
     init {
-        refresh()
+        // Listening before the first read: HA's snapshot is written on the socket's thread, and one that lands while
+        // the card reads the store or builds its first match would otherwise reach no listener, leaving the card (and
+        // its view's fallback check) on the empty store for good. HA's auto-entities renders again whenever hass changes.
         unsubscribe = ctx.store.subscribeAny { scheduleRefresh() }
+        // A first build that throws aborts the card before anything can detach it: its listener goes with it.
+        try {
+            refresh()
+        } catch (t: Throwable) {
+            unsubscribe?.invoke()
+            unsubscribe = null
+            throw t
+        }
     }
 
     private fun scheduleRefresh() {
