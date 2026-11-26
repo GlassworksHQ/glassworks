@@ -19,7 +19,7 @@ import { inPlaceWords, parseGwsbBundle, sha256Hex, verifyGwsbBundle, type FirstS
 import { GLASSWORKS, type MirrorApp } from './app';
 import { makeOnlyHome, setPortrait } from './flash';
 import { AID, LABELS, buildUserdata, macFromSerial } from './image';
-import { DEFAULT_WIFI_TEMPLATE, STOCK_PROBE_ASSETS, buildStageUserdata } from './stage';
+import { DEFAULT_WIFI_TEMPLATE, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata } from './stage';
 import {
   SPARSE_BLOCK_SIZE, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES, USB_ALLOW_PERMISSION, buildSurgicalSparseImage, buildSurgicalSparseImageFiles, hideStockBloat, patchStockServicesJar, patchedKeyFingerprint,
   type FiemapExtent,
@@ -161,10 +161,20 @@ export function keptBundleFits(bundle: Uint8Array, agent: Record<string, unknown
   }
 }
 
-/** Builds a fresh userdata as a sparse image: this browser's adb key, and the network when given. */
+/**
+ * Builds a fresh userdata as a sparse image: this browser's adb key, USB debugging on from the first moment of boot, and
+ * the network when given. The USB setting is the stage's (`persist.sys.usb.config=adb`): stock turns adb on only in its
+ * post-boot script's last line, after boot completes, so without it the Mirror's first start (5–7 minutes of app
+ * optimizing) has no adb at all. With it, adb is up from the start, as on the stage.
+ */
 async function cleanUserdata(o: { adbKey: string; userdataBytes: number; wifi?: { ssid: string; password: string } }): Promise<Blob> {
   const disk = new Disk(new MemoryStore(), 4096, Math.floor(o.userdataBytes / 4096), { zeroed: true });
-  await buildUserdata(disk, { adbKey: o.adbKey, ...(o.wifi ? { wifi: { ...o.wifi, template: DEFAULT_WIFI_TEMPLATE } } : {}) });
+  const time = Math.floor(Date.now() / 1000);
+  const fs = await buildUserdata(disk, { adbKey: o.adbKey, ...(o.wifi ? { wifi: { ...o.wifi, template: DEFAULT_WIFI_TEMPLATE } } : {}) });
+  // init.rc: mkdir /data/property 0700 root root; property files are 0600 root:root, property_data_file (as the stage's)
+  await fs.mkdir('/property', { mode: 0o700, uid: 0, gid: 0, label: STOCK_PROBE_LABELS.property, time });
+  await fs.writeFile('/property/persist.sys.usb.config', new TextEncoder().encode('adb'), { mode: 0o600, uid: 0, gid: 0, label: STOCK_PROBE_LABELS.property, time });
+  await fs.flush();
   const parts: Uint8Array[] = [];
   await writeSparse(disk, (b) => { parts.push(b.slice()); });
   return new Blob(parts as BlobPart[]);

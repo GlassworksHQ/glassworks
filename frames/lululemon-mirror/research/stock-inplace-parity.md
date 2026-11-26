@@ -155,6 +155,36 @@ change to an existing file at the same size, or a change outside `/system`.
    upright PNG without its grain, `desc.txt` `1080 1920 10` / `p 0 0 part0`, the same shape as stock's own zip.
    Full-screen, nothing is left for the player to clear around it. Without the grain it compresses to about 10 KB even
    at 256 colors, well inside the 22,901-byte slot. The in-place build and `padZipToExactLength` are unchanged.
+10. **adb on USB from the first moment of boot, and a USB dead end that was the hub** (2026-11-25, verified on a
+    Mirror). Stock turns adb on only in the last line of `init.qcom.post_boot.sh`
+    (`setprop persist.sys.usb.config mtp,adb`), after `sys.boot_completed`. The in-place userdata planted only
+    `adb_keys`, so the first start, 5–7 minutes of dex2oat, had no adb at all. It now plants
+    `/data/property/persist.sys.usb.config` = `adb` (0600 root, `property_data_file`), as the stage's userdata does
+    (`cleanUserdata`, `installer/src/inplace.ts`).
+
+    On the same afternoon the Mirror stopped showing up on USB after every flash, which looked like our doing. It
+    wasn't. Over Wi-Fi adb (`persist.adb.tcp.port 5555`, planted for the test) Android said USB was configured
+    (`sys.usb.state` `mtp,adb`, `adbd` running), but the hardware said nothing was plugged in:
+
+    | Read | Value | Means |
+    |---|---|---|
+    | `/sys/class/power_supply/usb/present` | 0 | no VBUS |
+    | `/proc/interrupts` `usbin_valid` (qpnp-int) | 0 | VBUS never seen since boot |
+    | `/sys/kernel/debug/gpio` `USB_ID_GPIO` (TLMM 121) | in, lo | the cable-detect line low |
+    | `/sys/kernel/debug/msm_otg/otg_state` | `a_host` | the one controller drives the internal hub (`smsc75xx` Ethernet) |
+    | `/sys/class/android_usb/android0/state` | DISCONNECTED | no gadget link |
+
+    Fastboot still enumerated over the same cable and socket, because the bootloader raises D+ without checking VBUS.
+    That ruled out the data lines and pointed at power. The jar patches were ruled out first: the jar from the last
+    working install and the time zone jar differ by two `const-string` operands and the dex checksums only, and the old jar with a fresh userdata
+    behaved the same. A power bank on the Mirror's micro-USB settled it: `present` 1, `USB_ID_GPIO` high, the
+    `msm_otg` interrupt fired, `msm_hsusb_host` removed the internal hub, and `otg_state` went to `b_charger`. The USB
+    hub it had been on for weeks had stopped supplying 5 V (a tablet on the same hub stopped charging too). The Mirror
+    and the software were fine.
+
+    So on this board Android uses VBUS to pick the socket over the internal hub: without 5 V from the computer, adb
+    never appears on USB, even with every property right. A Mirror that reaches fastboot but never adb after boot
+    needs a port or hub that supplies power before anyone suspects the install.
 
 ## Result
 

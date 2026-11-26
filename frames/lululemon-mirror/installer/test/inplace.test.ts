@@ -160,6 +160,10 @@ describe('the build', () => {
     expect(m.systemBytes).toBe(SYSTEM_BYTES);
     expect(JSON.stringify(m)).not.toContain(FAKE_SERIAL);
     expect(built.files?.['services.jar.orig']).toEqual(jar);
+    // USB debugging on from the start of boot, as the stage has it: stock's own switch comes too late for app-install
+    const data = await openSparse(built.writes.userdata!);
+    expect(new TextDecoder().decode(await data.readFile('/property/persist.sys.usb.config'))).toBe('adb');
+    expect(new TextDecoder().decode(await data.readFile('/misc/adb/adb_keys'))).toBe(`${fakeAdbKey(4)}\n`);
   }, 60_000);
 
   describe('the boot animation', () => {
