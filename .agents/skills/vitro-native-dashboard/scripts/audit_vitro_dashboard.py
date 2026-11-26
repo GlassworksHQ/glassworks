@@ -4,13 +4,16 @@
 Exits 0 if the entire dashboard renders 100% natively in Vitro (zero Tier 3 GeckoView triggers),
 or exits 1 if any card would boot GeckoView.
 
-Routes cards the way the engine does (compat/CardCompat.kt): a custom card with something Vitro can't draw goes
-to an island; a built-in card stays native and gets a WARN line instead, because the island can't draw built-in
-cards. Its card_mod check is coarser than the engine's: the site's checker (glassworks.dev/blueprints#vitro-check)
-and the panel's own report read every property.
+Routes cards the way the engine does (compat/CardCompat.kt, WebFallback.kt): a custom card with something Vitro can't
+draw goes to an island. A built-in card (or a custom card holding built-in ones) with an option or value Vitro doesn't
+draw as HA does sends its view to HA's frontend: the strict compat rule, read from the engine's own declaration
+(native-options.json, see NativeOptions.kt). For its card_mod, a built-in card stays native and gets a WARN line
+instead, because the island can't draw built-in cards. The card_mod check is coarser than the engine's: the site's
+checker (glassworks.dev/blueprints#vitro-check) and the panel's own report read every property.
 """
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -92,42 +95,201 @@ NATIVE_HACS_TYPES = {
     "custom:weather-card",
 }
 
-SUPPORTED_TILE_FEATURES = {
-    "light-brightness",
-    "light-color-temp",
-    "fan-speed",
-    "cover-open-close",
-    "cover-position",
-    "climate-hvac-modes",
-    "target-temperature",
-    "select-options",
-    "media-player-volume-slider",
-    "toggle",
-    "media-player-playback",
-    "light-color-favorites",
-    "numeric-input",
-    "vacuum-commands",
-}
+# What each native card draws exactly as HA does: the engine's declaration, which NativeOptions.kt documents.
+NATIVE_OPTIONS_FILE = (Path(__file__).resolve().parents[4]
+                       / "engines/engine-vitro/src/main/resources/dev/glassworks/engine/vitro/compat/native-options.json")
+NATIVE_OPTIONS = json.loads(NATIVE_OPTIONS_FILE.read_text(encoding="utf-8"))
 
-# Cards drawn natively only in some configurations: card type -> (option, its default, the native values). Any
-# other value is a web card when its script is installed, as the engine routes it. Same as configDependentTypes in
-# site/public/vitro-compat.json.
-CONFIG_DEPENDENT_TYPES = {
-    "custom:bubble-card": ("card_type", "button", {"button", "separator"}),
-    "custom:layout-card": ("layout_type", "masonry-layout", {"masonry-layout", "horizontal-layout", "vertical-layout", "grid-layout"}),
-}
+# Values a reason may name: a key, a type, an enum value. Never a path, a URL or an entity id.
+SAFE = re.compile(r"^[A-Za-z0-9_:+\-]{1,48}$")
 
-# `entities` rows with a `type:` Vitro draws; a row without one is a plain entity row.
-ENTITIES_ROW_TYPES = {"divider", "section", "button", "call-service", "perform-action", "text", "weblink", "buttons", "conditional"}
+# A number written as text, as all three checkers read one (no hex, `NaN`, `Infinity` or `_`).
+NUMBER = re.compile(r"^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$")
 
-# Options of an `entities` card Vitro doesn't draw.
-ENTITIES_UNSUPPORTED_OPTIONS = {"header", "footer"}
 
-# `picture-elements` element types Vitro draws.
-PICTURE_ELEMENT_TYPES = {"state-icon", "state-label", "state-badge", "icon", "service-button"}
+class _Walk:
+    """One check against the declaration (NativeOptions.Walk): the reasons it found, worded for `subject`."""
 
-# Mushroom chip types Vitro draws; `conditional` wraps one of the others.
-CHIP_TYPES = {"entity", "template", "weather", "light", "action", "menu", "back", "spacer", "conditional"}
+    def __init__(self, subject: str):
+        self.subject = subject
+        self.reasons: list[str] = []
+
+    def fail(self, path: str, detail=None, why=None):
+        where = f" `{path}`" if path else ""
+        r = f"{self.subject}{where}" + (f" ({detail})" if detail is not None else "") + " isn't drawn natively" + (f": {why}" if why else "")
+        if r not in self.reasons:
+            self.reasons.append(r)
+
+    @staticmethod
+    def resolve(spec):
+        hops = 0
+        while isinstance(spec, str) and spec.startswith("@"):
+            spec = NATIVE_OPTIONS["defs"][spec[1:]]
+            hops += 1
+            if hops > 16:
+                raise ValueError("native-options.json: a def refers to itself")
+        return spec
+
+    def check(self, value, raw_spec, path: str, extra):
+        spec = self.resolve(raw_spec)
+        if spec == "any":
+            return
+        if spec == "text":
+            if isinstance(value, (dict, list)):
+                self.fail(path, "an object or a list")
+            return
+        if not isinstance(spec, dict):
+            raise ValueError(f"native-options.json: unknown spec {spec!r} at {path}")
+        why = spec.get("why") or None
+        if "gap" in spec:
+            self.fail(path, why=spec["gap"])
+        elif "values" in spec:
+            if not any(_same(v, value) for v in spec["values"]):
+                self.fail(_join(path, _shown(value)), why=why)
+        elif "pattern" in spec:
+            if not isinstance(value, str) or not re.search(spec["pattern"], value):
+                self.fail(path, why=why)
+        elif "range" in spec:
+            lo, hi = spec["range"]
+            n = None
+            try:
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    n = float(value)
+                elif isinstance(value, str) and NUMBER.match(value):
+                    n = float(value.strip())
+            except OverflowError:
+                n = None  # a number too large for a double, as Kotlin and JavaScript read it: not finite
+            if n is None or not math.isfinite(n) or (lo is not None and n < lo) or (hi is not None and n > hi):
+                # Never the value itself: a number that isn't one may be any text of the dashboard's.
+                self.fail(path, "not a number in range", why)
+        elif "entity" in spec:
+            domain = value.split(".", 1)[0].strip() if isinstance(value, str) and "." in value else ""
+            if not domain or not any(d in ("*", domain) for d in spec["entity"]):
+                self.fail(path, f"a `{domain}` entity" if domain and SAFE.match(domain) else "this entity", why)
+        elif "keys" in spec:
+            if not isinstance(value, dict):
+                return self.fail(path, "not an object", why)
+            for k in spec.get("required", []):
+                if value.get(k) is None:
+                    self.fail(f"{path}.{k}" if path else k, "missing", why)
+            for k, v in value.items():
+                if v is None:
+                    continue
+                sub = spec["keys"].get(k)
+                if sub is None and extra is not None:
+                    sub = extra.get(k)
+                at = f"{path}.{k}" if path else str(k)
+                if sub is None:
+                    self.fail(at if isinstance(k, str) and SAFE.match(k) else _join(path, "an option"), why=why)
+                else:
+                    self.check(v, sub, at, None)
+        elif "list" in spec:
+            if isinstance(value, list):
+                for i, item in enumerate(value):
+                    if item is not None:
+                        self.check(item, spec["list"], f"{path}[{i}]", None)
+            else:
+                self.check(value, spec["list"], path, None)
+        elif "anyOf" in spec:
+            tries = []
+            for option in spec["anyOf"]:
+                w = _Walk(self.subject)
+                w.check(value, option, path, extra)
+                tries.append(w)
+            if any(not w.reasons for w in tries):
+                return
+            fit = next((i for i, o in enumerate(spec["anyOf"]) if self.fits(value, o)), 0)
+            for r in tries[fit].reasons:
+                if r not in self.reasons:
+                    self.reasons.append(r)
+        elif "by" in spec:
+            if not isinstance(value, dict):
+                return self.fail(path, "not an object", why)
+            field = spec["by"]
+            raw = value.get(field)
+            if raw is None:
+                picked = spec.get("default", "")
+            elif isinstance(raw, bool):
+                picked = "true" if raw else "false"
+            elif isinstance(raw, (dict, list)):
+                picked = json.dumps(raw)
+            else:
+                picked = str(raw)
+            case = spec["cases"].get(picked)
+            if case is None:
+                self.fail(_join(f"{path}.{field}" if path else field, _shown(picked)), why=why)
+            else:
+                self.check(value, case, path, extra)
+        else:
+            raise ValueError(f"native-options.json: unknown spec {spec!r} at {path}")
+
+    def fits(self, value, spec) -> bool:
+        s = self.resolve(spec)
+        scalar = not isinstance(value, (dict, list))
+        if s == "any":
+            return True
+        if s == "text":
+            return scalar
+        if not isinstance(s, dict):
+            return False
+        if "keys" in s or "by" in s:
+            return isinstance(value, dict)
+        if "list" in s:
+            return isinstance(value, list)
+        if "anyOf" in s:
+            return any(self.fits(value, o) for o in s["anyOf"])
+        return scalar
+
+
+def _shown(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int) and abs(value) >= 10**24:
+        return None  # str() of a very long int raises on Python 3.11+, and the reason wouldn't show it anyway
+    if isinstance(value, (int, float)):
+        return str(value) if len(str(value)) <= 24 else None
+    if isinstance(value, str) and SAFE.match(value):
+        return value
+    return None
+
+
+def _join(path: str, value) -> str:
+    return path if value is None else value if not path else f"{path}: {value}"
+
+
+def _same(a, b) -> bool:
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a is b
+    # Python compares an int and a float by value without converting either (no overflow): 1 == 1.0.
+    return a == b
+
+
+class _Inner(dict):
+    """auto-entities' inner card: the fields Vitro writes into it aren't the user's options (WebFallback drops them)."""
+
+    def __init__(self, base: dict, **written):
+        super().__init__(base, **written)
+        self.written = set(written)
+
+
+def native_option_reasons(card: dict, ctype: str) -> list[str]:
+    """What a native card's config holds that it doesn't draw as HA does (NativeOptions.cardReasons)."""
+    spec = NATIVE_OPTIONS["cards"].get(ctype)
+    if spec is None:
+        return []
+    if isinstance(card, _Inner):
+        card = {k: v for k, v in card.items() if k not in card.written}
+    w = _Walk(f"`{ctype}`")
+    w.check(card, spec, "", NATIVE_OPTIONS["common"])
+    return w.reasons
+
+
+def view_option_reasons(view: dict) -> list[str]:
+    """What a view's own config holds that Vitro doesn't draw as HA does (NativeOptions.viewReasons)."""
+    w = _Walk("the view")
+    w.check(view, NATIVE_OPTIONS["view"], "", None)
+    return w.reasons
+
 
 # Tags HA's Markdown sanitizer keeps that Vitro doesn't draw.
 UNDRAWN_MARKDOWN_TAGS = {
@@ -521,8 +683,8 @@ def card_type_of(card: dict) -> str:
 
 
 def option_reasons(card: dict, ctype: str) -> list[str]:
-    """Options Vitro doesn't draw (CardCompat.checkOptions)."""
-    out = []
+    """What sends a custom card Vitro draws to its island (CardCompat.checkOptions): the strict rule, then its own checks."""
+    out = list(native_option_reasons(card, ctype))
     if ctype == "custom:button-card":
         reason = button_card_reason(card, TEMPLATES)
         if reason:
@@ -533,46 +695,6 @@ def option_reasons(card: dict, ctype: str) -> list[str]:
             out.append(f"swipe-card with {reason}")
     if ctype == "custom:weather-card" and not (isinstance(card.get("entity"), str) and card["entity"]):
         out.append("weather-card without an entity")
-    objs = lambda v: [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
-    rule = CONFIG_DEPENDENT_TYPES.get(ctype)
-    if rule:
-        option, default, native = rule
-        value = str(card.get(option) or default)
-        if option == "layout_type":
-            value = value.removeprefix("custom:") or default
-        if value not in native:
-            out.append(f"{option}: {value} isn't drawn natively")
-    if ctype == "tile":
-        for feat in objs(card.get("features")):
-            ftype = str(feat.get("type") or "")
-            if ftype and ftype not in SUPPORTED_TILE_FEATURES:
-                out.append(f"tile feature '{ftype}' isn't drawn natively")
-    if ctype == "entities":
-        out += [f"'{k}:' isn't drawn natively" for k in sorted(ENTITIES_UNSUPPORTED_OPTIONS) if card.get(k) is not None]
-    if ctype in ("entities", "entity-filter"):
-        for row in objs(card.get("entities")):
-            rtype = str(row.get("type") or "")
-            if rtype and rtype not in ENTITIES_ROW_TYPES:
-                out.append(f"entities row type '{rtype}' isn't drawn natively")
-    if ctype == "picture-elements":
-        for el in objs(card.get("elements")):
-            etype = str(el.get("type") or "")
-            if etype not in PICTURE_ELEMENT_TYPES:
-                out.append(f"picture-elements element '{etype or '(no type)'}' isn't drawn natively")
-    if ctype == "custom:mushroom-chips-card":
-        for chip in objs(card.get("chips")):
-            ctype_ = str(chip.get("type", "entity"))
-            if ctype_ not in CHIP_TYPES:
-                out.append(f"mushroom chip '{ctype_}' isn't drawn natively")
-            inner = chip.get("chip")
-            if ctype_ == "conditional" and isinstance(inner, dict):
-                itype = str(inner.get("type", "entity"))
-                if itype not in CHIP_TYPES or itype == "conditional":
-                    out.append(f"mushroom chip '{itype}' (in a conditional chip) isn't drawn natively")
-    if ctype == "markdown":
-        for tag in re.findall(r"<([a-zA-Z][a-zA-Z0-9-]*)", str(card.get("content") or "")):
-            if tag.lower() in UNDRAWN_MARKDOWN_TAGS:
-                out.append(f"Markdown <{tag.lower()}> isn't drawn natively")
     return out
 
 
@@ -603,6 +725,11 @@ def produced_cards(card: dict, ctype: str, per_entity: bool) -> list[tuple[str, 
     param = raw_param if isinstance(raw_param, str) and raw_param else (
         "entities" if raw_param in (None, "") else json.dumps(raw_param))
     inner.pop(param, None)
+    # Its explicit `entities:` entries are always among them: the strict rule checks them as the inner card's own, as
+    # the engine's WebFallback does. Under `cards`, each is a card.
+    if param != "cards" and isinstance(card.get("entities"), list):
+        inner = _Inner(inner)
+        inner[param] = card["entities"]
     generated = []
     if param == "cards":
         for entry in as_list(card.get("entities")):
@@ -616,7 +743,7 @@ def produced_cards(card: dict, ctype: str, per_entity: bool) -> list[tuple[str, 
         for rule in include if isinstance(include, list) else []:
             opts = rule.get("options") if isinstance(rule, dict) else None
             generated.append(dict({"type": "tile"}, **opts) if isinstance(opts, dict) else {"type": "tile"})
-        inner["cards"] = generated
+        inner = _Inner(inner, cards=generated)
     out.append(("card", len(out), inner))
     if per_entity:
         out += [(f"entities[{i}]", len(out) + i, g) for i, g in enumerate(generated)]
@@ -637,7 +764,22 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
     if card.get("type") in (None, ""):
         warnings.append(f"  WARN  {loc}: no type, so Vitro draws it as an entities card")
 
-    if ctype in NATIVE_CORE_TYPES or ctype in NATIVE_HACS_TYPES:
+    if ctype in NATIVE_CORE_TYPES or (ctype in NATIVE_HACS_TYPES and needs_ha_frontend(card)):
+        # The island can't draw it: what its native card doesn't draw as HA does sends the view to HA's frontend.
+        frontend = native_option_reasons(card, ctype)
+        if ctype == "markdown":
+            frontend += [f"Markdown <{t.lower()}> isn't drawn natively"
+                         for t in re.findall(r"<([a-zA-Z][a-zA-Z0-9-]*)", str(card.get("content") or ""))
+                         if t.lower() in UNDRAWN_MARKDOWN_TAGS]
+        if frontend:
+            counts["tier3"] += 1
+            triggers.append(f"  TIER 3 [HA FRONTEND]  {loc}: type='{ctype}': {'; '.join(dict.fromkeys(frontend))}")
+            return
+        reasons = [r for r in option_reasons(card, ctype) if r not in frontend]
+        cm = card_mod_reason(card, ctype)
+        if cm:
+            reasons.append(cm)
+    elif ctype in NATIVE_HACS_TYPES:
         reasons = option_reasons(card, ctype)
         cm = card_mod_reason(card, ctype)
         if cm:
@@ -645,7 +787,11 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
     elif ctype.startswith("custom:"):
         reasons = ["a custom card with no native renderer"]
     else:
-        reasons = ["not a card type Vitro draws"]
+        # A built-in card Vitro has no renderer for (`map`, the energy cards): the island can't draw it, so its view
+        # opens in HA's frontend (WebFallback).
+        counts["tier3"] += 1
+        triggers.append(f"  TIER 3 [HA FRONTEND]  {loc}: type='{ctype}': the built-in `{ctype}` card")
+        return
 
     if ctype == "iframe" and not reasons:
         # The view stays native, but the frame's own page runs in a GeckoView island.
@@ -664,6 +810,28 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
         return
 
     children = produced_cards(card, ctype, False)
+    if ctype == "custom:auto-entities":
+        # The cards a filter rule's `options` build aren't listed (they depend on live states), but the engine routes
+        # them, so one Vitro can't draw sends the view to HA's frontend or itself to an island.
+        # The explicit entries come first, and the inner card's walk below lists them.
+        entries = sum(isinstance(e, (str, dict)) for e in as_list(card.get("entities"))) if card.get("card_param") == "cards" else 0
+        # Every generated card at any depth: one that needs HA's frontend decides, whatever comes before it.
+        found: list[str] = []
+        for label, _, gen in produced_cards(card, ctype, True)[len(children) + entries:]:
+            sub_triggers: list[str] = []
+            walk_card(gen, f"{loc}.generated", {"tier1": 0, "tier2": 0, "tier3": 0}, sub_triggers, [])
+            found += sub_triggers
+        frontend = next((t for t in found if "[HA FRONTEND]" in t), None)
+        if frontend:
+            # The whole view goes to HA's frontend: nothing else in the card changes that.
+            counts["tier3"] += 1
+            triggers.append(frontend)
+            return
+        if found:
+            # An island for a generated card; the inner card and its explicit entries are still checked below, since
+            # one of them may send the view to HA's frontend.
+            counts["tier3"] += 1
+            triggers.append(found[0])
     if explicit >= 0 and ctype in CONTAINER_TYPES and ctype != "conditional":
         # auto-entities' inner card: only its explicit `entities:` entries are known before it runs.
         for _, i, child in children:
@@ -721,6 +889,10 @@ def audit(data: dict) -> int:
         vtriggers: list[str] = []
         vwarnings: list[str] = []
 
+        own = view_option_reasons(view)
+        if own:
+            vcounts["tier3"] += 1
+            vtriggers.append(f"  TIER 3 [HA FRONTEND]  {vname}: {'; '.join(own)}")
         for loc, card in view_roots(view, vname):
             walk_card(card, loc, vcounts, vtriggers, vwarnings)
 

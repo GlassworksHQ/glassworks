@@ -1,0 +1,15 @@
+{
+ "title": "A button that opens Assist: HA's frontend draws the view",
+ "route": "frontend",
+ "card": {
+  "type": "button",
+  "name": "Ask",
+  "icon": "mdi:microphone",
+  "tap_action": {
+   "action": "assist"
+  }
+ },
+ "fixture": {
+  "states": {}
+ }
+}

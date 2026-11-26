@@ -93,7 +93,7 @@ class FakeHaServer {
           "title": "Test Home",
           "views": [
             {"title": "Living", "path": "living", "type": "sections", "sections": [
-              {"type": "grid", "title": "Lights", "cards": [
+              {"type": "grid", "cards": [
                 {"type": "tile", "entity": "light.lounge_lamp"},
                 {"type": "entities", "title": "Sensors", "entities": ["sensor.kitchen_temp", "binary_sensor.front_door"]},
                 {"type": "custom:mushroom-entity-card", "entity": "light.lounge_lamp"}
@@ -447,4 +447,23 @@ class RecordingPage(activity: Activity) : Page {
     override fun goBack() { backs++ }
     override fun restart() { restarts++ }
     override fun post(message: JSONObject) { posted += message }
+}
+
+/**
+ * Runs the main looper until the picture loads a test started are all back on it (the shared count is [before]
+ * again), or [timeoutMs] pass, and fails if they aren't: a load still in flight when a test ends lands in a later
+ * test's looper, and leaves the count the parity harness waits on off by one (D28). Robolectric shares that count
+ * between the test classes of one sandbox, so a test passes the count it started with.
+ */
+fun awaitImageLoads(before: Int, timeoutMs: Long = 10_000) {
+    val deadline = System.nanoTime() + timeoutMs * 1_000_000L
+    while (dev.glassworks.engine.vitro.ui.VitroCardContext.pendingImageLoads.get() != before && System.nanoTime() < deadline) {
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(20))
+        Thread.sleep(5)
+    }
+    org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+    org.junit.Assert.assertEquals(
+        "every picture load this test started has finished", before,
+        dev.glassworks.engine.vitro.ui.VitroCardContext.pendingImageLoads.get(),
+    )
 }

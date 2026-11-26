@@ -1,5 +1,6 @@
 {
  "title": "bar-card: four ink levels with severity colors",
+ "route": "island",
  "card": {
   "type": "custom:bar-card",
   "title": "Printer ink",

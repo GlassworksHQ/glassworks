@@ -728,7 +728,7 @@ class HacsParityWaveTest {
             0,
             JSONObject(
                 """{"cards": [{"type": "custom:stack-in-card", "cards": [{"type": "tile"}, {"type": "custom:apexcharts-card"}]},
-                   {"type": "custom:layout-card", "cards": [{"type": "custom:mushroom-lock-card", "entity": "lock.a"}]},
+                   {"type": "custom:layout-card", "layout_type": "masonry", "cards": [{"type": "custom:mushroom-entity-card", "entity": "lock.a"}]},
                    {"type": "custom:auto-entities", "card": {"type": "entities"}, "filter": {"include": [{"domain": "light"}]}}]}""",
             ),
         )

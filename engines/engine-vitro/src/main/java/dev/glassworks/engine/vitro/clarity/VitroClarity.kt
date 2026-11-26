@@ -249,12 +249,7 @@ class VitroClarity internal constructor(
     private var ticking = false
     private var frameCallbackPosted = false
     private val frames = ArrayList<Double>()
-    /** One look at each frame until it says done ([awaitFrames]); a probe whose wait ended is dropped unread. */
-    private class Probe(val step: (Double) -> Boolean) {
-        @Volatile var cancelled = false
-    }
-
-    private val steps = ArrayList<Probe>()
+    private val steps = ArrayList<FrameProbe>()
     private val choreographer: Choreographer by lazy { Choreographer.getInstance() }
 
     private val frameCallback = object : Choreographer.FrameCallback {
@@ -276,8 +271,7 @@ class VitroClarity internal constructor(
             if (steps.isNotEmpty()) {
                 val it = steps.iterator()
                 while (it.hasNext()) {
-                    val p = it.next()
-                    if (p.cancelled || p.step(ts)) it.remove()
+                    if (it.next().look(ts)) it.remove()
                 }
             }
             requestFrame()
@@ -309,12 +303,13 @@ class VitroClarity internal constructor(
 
     /**
      * Runs [step] on the main thread at each frame until it returns true (that frame's time) or [timeoutMs] pass
-     * (null).
+     * (null). Once this returns, [step] has stopped for good: a step running on the main thread as the wait ends
+     * finishes first, and none runs after, so the caller reads what the steps wrote without racing the next frame.
      */
     private fun awaitFrames(timeoutMs: Double, step: (Double) -> Boolean): Double? {
         val done = CountDownLatch(1)
         var at: Double? = null
-        val s = Probe { ts ->
+        val s = FrameProbe { ts ->
             if (step(ts)) {
                 at = ts
                 done.countDown()
@@ -329,18 +324,17 @@ class VitroClarity internal constructor(
                 steps += s
                 requestFrame()
             }
-            ok = try {
+            try {
                 done.await(timeoutMs.toLong().coerceAtLeast(1), TimeUnit.MILLISECONDS)
             } catch (_: InterruptedException) {
                 throw Stopped()
             }
         } finally {
-            if (!ok) {
-                // Ended without its frame (timed out, stopped, the main thread stalled past onMain's wait): the next frame
-                // drops it unread, and its removal is posted, never waited for.
-                s.cancelled = true
-                main.post { steps.remove(s) }
-            }
+            // Ended either way: a step that said done after the wait timed out still counts. One that never did (timed
+            // out, stopped, the main thread stalled past onMain's wait) is dropped unread by the next frame, and its
+            // removal is posted, never waited for.
+            ok = s.end()
+            if (!ok) main.post { steps.remove(s) }
         }
         check()
         return if (ok) at else null

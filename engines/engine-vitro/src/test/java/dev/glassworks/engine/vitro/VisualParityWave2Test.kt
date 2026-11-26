@@ -204,8 +204,11 @@ class VisualParityWave2Test {
 
     @Test
     fun bothCardsAreTierTwo() {
+        // Neither matches its card yet (a `gap` in native-options.json): the island draws them when a Lovelace resource
+        // provides their script, and Vitro's fast path only when none does.
         for (t in listOf("custom:modern-circular-gauge", "custom:bar-card")) {
-            assertEquals("$t is Tier 2", CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "$t"}""")))
+            assertEquals("$t is Tier 2", CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "$t"}"""), dev.glassworks.engine.vitro.compat.IslandScripts.of(emptyList())))
+            assertEquals("$t with its script", CardTier.WEB_ISLAND, CardRouter.tier(card("""{"type": "$t"}""")))
         }
         assertEquals(30, CardRouter.NATIVE_HACS_TYPES.size)
     }

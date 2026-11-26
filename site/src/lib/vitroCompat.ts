@@ -6,6 +6,7 @@
 // VitroSupport.kt in the engine and to the audit script's lists.
 import manifest from "../../public/vitro-compat.json";
 import { buttonCardReasons } from "./vitroButtonCard";
+import { type NativeOptionsSchema, cardOptionReasons, viewOptionReasons } from "./vitroNativeOptions";
 
 export const VITRO_COMPAT = manifest;
 
@@ -15,14 +16,8 @@ const CONTAINERS = new Set<string>(manifest.containerTypes);
 /** Containers whose children are their `cards:` list (LovelaceParser.CARDS_FIELD_TYPES): all but `conditional`. */
 const CARDS_FIELD = new Set<string>(manifest.containerTypes.filter((t) => t !== "conditional"));
 const STACK_TYPES = new Set<string>(manifest.stackTypes);
-const TILE_FEATURES = new Set<string>(manifest.supportedTileFeatures);
-const ENTITIES_ROW_TYPES = new Set<string>(manifest.entitiesRowTypes);
-const PICTURE_ELEMENT_TYPES = new Set<string>(manifest.pictureElementTypes);
-const CHIP_TYPES = new Set<string>(manifest.chipTypes);
-const BUBBLE_CARD_TYPES = new Set<string>(manifest.configDependentTypes["custom:bubble-card"].native);
-const LAYOUT_CARD_TYPES = new Set<string>(manifest.configDependentTypes["custom:layout-card"].native);
-const UNSUPPORTED_OPTIONS: Record<string, Record<string, string>> = manifest.unsupportedOptions;
-const AUTO_ENTITIES_RULE_KEYS = new Set<string>(manifest.autoEntitiesRuleKeys);
+/** What each native card draws exactly as HA does: the engine's native-options.json (vitroNativeOptions.ts). */
+const NATIVE_OPTIONS = manifest.nativeOptions as unknown as NativeOptionsSchema;
 const SWIPE_PARAMETERS = new Set<string>(manifest.swipeCardParameters);
 /** The dashboard's `button_card_templates`, which button-card merges before it draws (set by auditDashboard). */
 let buttonCardTemplates: Record<string, unknown> = {};
@@ -581,8 +576,13 @@ function producedCards(card: Obj, perEntity: boolean): [number, Obj][] {
   const param = optString(card, "card_param", "entities") || "entities";
   // auto-entities replaces this field with what it matched, so what the config wrote there never shows.
   delete inner[param];
+  // Its explicit `entities:` entries are always among them (the ones a filter adds depend on live states), so the strict
+  // rule checks them as the inner card's own, as the engine's WebFallback does. Under `cards`, each is a card.
+  if (param !== "cards" && Array.isArray(card.entities)) inner[param] = card.entities;
   const generated = param === "cards" ? generatedCards(card) : [];
-  if (param === "cards") inner.cards = generated.map((g) => ({ ...g }));
+  // Vitro writes this field, so the strict rule doesn't judge it as the user's option (the engine's WebFallback drops it
+  // too): it's there for the walk, but not among the card's keys.
+  if (param === "cards") Object.defineProperty(inner, "cards", { value: generated.map((g) => ({ ...g })), enumerable: false });
   out.push([out.length, inner]);
   if (perEntity) for (const g of generated) out.push([out.length, g]);
   return out;
@@ -598,109 +598,51 @@ function needsHaFrontend(card: Obj): boolean {
 
 interface Verdict {
   native: boolean;
+  /** True when the card's view goes to Home Assistant's frontend (WebFallback), not the card to an island. */
+  frontend?: boolean;
   reasons: string[];
   notes: string[];
 }
+
+/** A card the island can't draw (CardCompat.staysNative): built in, or a custom card Vitro draws with one inside. */
+const staysNative = (card: Obj, type: string) => CORE.has(type) || (HACS.has(type) && needsHaFrontend(card));
 
 function verdict(card: Obj): Verdict {
   const type = cardType(card);
   const reasons = new Set<string>();
   const notes = new Set<string>();
+  // A built-in card Vitro has no renderer for (`map`, the energy cards): the island can't draw it, so its view opens in
+  // HA's frontend (WebFallback). A custom card goes to its island.
+  if (!type.startsWith("custom:") && !CORE.has(type)) return { native: false, frontend: true, reasons: [`the built-in \`${type}\` card`], notes: [] };
   if (!CORE.has(type) && !HACS.has(type)) {
-    reasons.add(type.startsWith("custom:") ? `\`${type}\` is a custom card with no native renderer` : `\`${type}\` isn't a card type Vitro draws`);
-  } else {
-    checkOptions(card, type, reasons, notes);
-    checkCardMod(card, type, reasons, notes);
-    if (type === "markdown") checkMarkdownContent(optString(card, "content", ""), reasons);
+    reasons.add(`\`${type}\` is a custom card with no native renderer`);
+    return { native: false, reasons: [...reasons], notes: [...notes] };
   }
+  // The strict rule (NativeOptions): an option or value the native card doesn't draw as HA does. A card the island
+  // can't draw sends its view to HA's frontend for it (WebFallback); any other card goes to its island.
+  const options = cardOptionReasons(NATIVE_OPTIONS, type, card);
+  const frontendOnly = staysNative(card, type);
+  if (frontendOnly) {
+    const frontend = [...options, ...(type === "markdown" ? markdownReasons(optString(card, "content", "")) : [])];
+    if (frontend.length > 0) return { native: false, frontend: true, reasons: frontend, notes: [] };
+  } else {
+    for (const r of options) reasons.add(r);
+  }
+  checkOptions(card, type, reasons);
+  checkCardMod(card, type, reasons, notes);
   // The island runs a custom card's own code but has no HA frontend, so a built-in card there would be a plain
-  // summary. A built-in card stays native, and so does a custom card Vitro draws with a built-in card inside it.
-  if (reasons.size > 0) {
-    const why = CORE.has(type)
-      ? "the island can't draw built-in cards yet"
-      : HACS.has(type) && needsHaFrontend(card)
-        ? "the island can't draw the built-in cards inside it yet"
-        : null;
-    if (why) {
-      for (const r of reasons) notes.add(`would fall back for ${r}, but ${why}`);
-      return { native: true, reasons: [], notes: [...notes] };
-    }
+  // summary. A built-in card stays native for its card_mod, and so does a custom card Vitro draws with a built-in card
+  // inside it.
+  if (reasons.size > 0 && frontendOnly) {
+    const why = CORE.has(type) ? "the island can't draw built-in cards yet" : "the island can't draw the built-in cards inside it yet";
+    for (const r of reasons) notes.add(`would fall back for ${r}, but ${why}`);
+    return { native: true, reasons: [], notes: [...notes] };
   }
   return { native: reasons.size === 0, reasons: [...reasons], notes: [...notes] };
 }
 
-function checkOptions(card: Obj, type: string, reasons: Set<string>, notes: Set<string>) {
-  const unsupported = has(UNSUPPORTED_OPTIONS, type) ? UNSUPPORTED_OPTIONS[type] : {};
-  for (const [key, what] of Object.entries(unsupported)) {
-    if (card[key] !== undefined && card[key] !== null) reasons.add(`\`${key}:\` (${what}) isn't drawn natively`);
-  }
+function checkOptions(card: Obj, type: string, reasons: Set<string>) {
   switch (type) {
-    case "tile": {
-      for (const f of objects(card.features)) {
-        const t = optString(f, "type", "");
-        if (t && !TILE_FEATURES.has(t)) reasons.add(`tile feature \`${t}\` isn't drawn natively`);
-      }
-      if (optString(card, "features_position", "") === "inline" && Array.isArray(card.features) && card.features.length > 0) {
-        notes.add(gap("tile features_position: inline", "`features_position: inline`"));
-      }
-      break;
-    }
-    case "entities":
-    case "entity-filter":
-      for (const row of objects(card.entities)) {
-        const t = optString(row, "type", "");
-        if (t && !ENTITIES_ROW_TYPES.has(t)) reasons.add(`entities row type \`${t}\` isn't drawn natively`);
-      }
-      break;
-    case "picture-elements":
-      for (const el of objects(card.elements)) {
-        const t = optString(el, "type", "");
-        if (!PICTURE_ELEMENT_TYPES.has(t)) reasons.add(`picture-elements element \`${t || "(no type)"}\` isn't drawn natively`);
-      }
-      break;
-    case "custom:mushroom-chips-card":
-      for (const chip of objects(card.chips)) {
-        const t = optString(chip, "type", "entity");
-        if (!CHIP_TYPES.has(t)) reasons.add(`mushroom chip \`${t}\` isn't drawn natively`);
-        if (t === "conditional" && isObj(chip.chip)) {
-          const inner = optString(chip.chip, "type", "entity");
-          if (!CHIP_TYPES.has(inner) || inner === "conditional") reasons.add(`mushroom chip \`${inner}\` (in a conditional chip) isn't drawn natively`);
-        }
-      }
-      break;
-    case "custom:bubble-card": {
-      const t = optString(card, "card_type", "button") || "button";
-      if (!BUBBLE_CARD_TYPES.has(t)) reasons.add(`Bubble Card \`card_type: ${t}\` isn't drawn natively`);
-      break;
-    }
-    case "custom:auto-entities": {
-      // Filter keys Vitro doesn't evaluate: the child stays native, but the entities those keys would match are left out.
-      const unknown = new Set<string>();
-      const scan = (rule: Obj) => {
-        for (const k of Object.keys(rule)) {
-          if (!AUTO_ENTITIES_RULE_KEYS.has(k)) unknown.add(k);
-          if (k === "not" && isObj(rule[k])) scan(rule[k] as Obj);
-          if (k === "or" || k === "and") objects(rule[k]).forEach(scan);
-        }
-      };
-      if (isObj(card.filter)) {
-        objects(card.filter.include).forEach(scan);
-        objects(card.filter.exclude).forEach(scan);
-        if ("template" in card.filter) unknown.add("template");
-      }
-      if (unknown.size > 0) {
-        notes.add(
-          `auto-entities filter ${[...unknown].map((k) => `\`${k}\``).join(", ")} isn't evaluated natively: entities an include rule ` +
-            "matches are left out, and an exclude rule can't remove its matches",
-        );
-      }
-      break;
-    }
-    case "custom:layout-card": {
-      const t = optString(card, "layout_type", "masonry-layout").replace(/^custom:/, "") || "masonry-layout";
-      if (!LAYOUT_CARD_TYPES.has(t)) reasons.add(`layout-card \`layout_type: ${t}\` isn't drawn natively`);
-      break;
-    }
     // button-card without JavaScript templates, cards or HTML, and with styles Vitro draws (vitroButtonCard.ts).
     case "custom:button-card":
       for (const r of buttonCardReasons(card, buttonCardTemplates)) reasons.add(`button-card ${r}`);
@@ -730,11 +672,14 @@ function checkOptions(card: Obj, type: string, reasons: Set<string>, notes: Set<
 
 const OPEN_TAG = /<([a-zA-Z][a-zA-Z0-9-]*)/g;
 
-function checkMarkdownContent(content: string, reasons: Set<string>) {
+/** Tags HA's Markdown sanitizer keeps that Vitro doesn't draw (CardCompat.markdownReasons): they send the view to HA. */
+function markdownReasons(content: string): string[] {
+  const reasons = new Set<string>();
   for (const m of content.matchAll(OPEN_TAG)) {
     const tag = m[1].toLowerCase();
     if (has(UNDRAWN_MARKDOWN_TAGS, tag)) reasons.add(`Markdown \`<${tag}>\` (${UNDRAWN_MARKDOWN_TAGS[tag]}) isn't drawn natively`);
   }
+  return [...reasons];
 }
 
 // ---- card_mod ----
@@ -1360,7 +1305,8 @@ function walkCard(card: Obj, loc: string, view: ViewAudit, holdsGenerated = -1) 
   for (const note of v.notes) view.warnings.push(`${loc}: ${note}`);
   if (!v.native) {
     view.tier3++;
-    view.triggers.push({ view: view.name, path: loc, type, reasons: v.reasons });
+    const reasons = v.frontend ? v.reasons.map((r) => `${FRONTEND} ${r}`) : v.reasons;
+    view.triggers.push({ view: view.name, path: loc, type, reasons });
     return;
   }
   if (type === "iframe") {
@@ -1379,11 +1325,39 @@ function walkCard(card: Obj, loc: string, view: ViewAudit, holdsGenerated = -1) 
     else view.tier2++;
   }
   const explicit = generatesCards(card, type) ? (Array.isArray(card.entities) ? card.entities.length : 0) : -1;
+  if (type === "custom:auto-entities") {
+    // The cards a filter rule's `options` build aren't listed (they depend on live states), but the engine routes them,
+    // so one Vitro can't draw sends the view to HA's frontend or itself to an island, as listed cards do.
+    // The explicit entries come first, and the inner card's walk below lists them.
+    const entries = Array.isArray(card.entities) ? card.entities.filter((e) => typeof e === "string" || isObj(e)).length : 0;
+    // Every generated card at any depth: one that needs HA's frontend decides, whatever comes before it.
+    const off: [Obj, Verdict][] = [];
+    const scan = (c: Obj) => {
+      const v = verdict(c);
+      if (!v.native) off.push([c, v]);
+      // An iframe's page runs in a GeckoView island, as a listed one's does.
+      else if (cardType(c) === "iframe") off.push([c, { native: false, reasons: ["its page runs in a GeckoView island (the view stays native)"], notes: [] }]);
+      else for (const [, inner] of producedCards(c, true)) scan(inner);
+    };
+    for (const [, g] of producedCards(card, true).slice(children.length + (explicit >= 0 ? entries : 0))) scan(g);
+    const first = off.find(([, v]) => v.frontend) ?? off[0];
+    if (first) {
+      const [g, gv] = first;
+      view.tier3++;
+      view.triggers.push({ view: view.name, path: `${loc}.generated`, type: cardType(g), reasons: gv.frontend ? gv.reasons.map((r) => `${FRONTEND} ${r}`) : gv.reasons });
+      // The whole view goes to HA's frontend. An island for a generated card leaves the inner card and its explicit
+      // entries to check below, since one of them may still send the view there.
+      if (gv.frontend) return;
+    }
+  }
   for (const [i, child] of children) {
     const where = type === "custom:auto-entities" ? `${loc}.card` : `${loc}.${type}[${i}]`;
     walkCard(child, where, view, explicit);
   }
 }
+
+/** How a reason that sends the whole view to Home Assistant's frontend (WebFallback) starts. */
+const FRONTEND = "Home Assistant's frontend draws this view:";
 
 /** Finds the `{ views: [...] }` object in a pasted Lovelace config or a lovelace/config response. */
 function unwrap(data: unknown): unknown {
@@ -1429,6 +1403,12 @@ export function auditDashboard(input: string): VitroAuditResult {
     const sections = objects(v.sections);
     const type = viewType(v, sections);
     const view: ViewAudit = { name, type, tier1: 0, tier2: 0, tier3: 0, native: true, triggers: [], warnings: [] };
+    // The view's own config (its header, sections, badges): what Vitro doesn't draw as HA does sends it to HA.
+    const own = viewOptionReasons(NATIVE_OPTIONS, v);
+    if (own.length > 0) {
+      view.tier3++;
+      view.triggers.push({ view: name, path: name, type: "view", reasons: own.map((r) => `${FRONTEND} ${r}`) });
+    }
     const each = (list: unknown, loc: (i: number) => string) => {
       (Array.isArray(list) ? list : []).forEach((card, i) => {
         if (isObj(card)) walkCard(card, loc(i), view);
@@ -1489,7 +1469,6 @@ views:
                 entity: light.lamp # Tier 1
                 features:
                   - type: light-brightness
-                  - type: light-effect-list
               - type: custom:mushroom-light-card # Tier 2
                 entity: light.shelf
           - type: conditional
