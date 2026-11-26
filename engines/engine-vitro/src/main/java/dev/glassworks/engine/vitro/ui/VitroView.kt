@@ -2156,8 +2156,8 @@ class VitroView(
         /** A badge's text: `name · state` when the name shows, else the formatted state (`21.5 °C`, `Closed`). */
         fun badgeText(badge: CardConfig, s: EntityState?): String {
             val raw = badge.raw
-            val name = badge.name ?: s?.friendlyName ?: badge.entity.orEmpty()
-            val showName = raw.optBoolean("show_name", badge.name != null)
+            val name = badge.name(s) ?: s?.friendlyName ?: badge.entity.orEmpty()
+            val showName = raw.optBoolean("show_name", badge.name(s) != null)
             val showState = raw.optBoolean("show_state", true)
             val state = s?.formattedState() ?: "…"
             return when {
@@ -2173,9 +2173,9 @@ class VitroView(
          */
         fun badgeLines(badge: CardConfig, s: EntityState?): Pair<String?, String?> {
             val raw = badge.raw
-            val showName = raw.optBoolean("show_name", badge.name != null)
+            val showName = raw.optBoolean("show_name", badge.name(s) != null)
             val showState = raw.optBoolean("show_state", true)
-            val name = if (showName) badge.name ?: s?.friendlyName ?: badge.entity.orEmpty() else null
+            val name = if (showName) badge.name(s) ?: s?.friendlyName ?: badge.entity.orEmpty() else null
             // `show_state: false` hides the state even when no name shows (an icon-only badge).
             val state = if (showState) s?.formattedState() ?: "…" else null
             return name to state

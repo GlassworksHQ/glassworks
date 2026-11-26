@@ -51,6 +51,8 @@ class UartBaseLinkEmulatorTest {
         val emu = ProcessBuilder(py, "-I", "-u", script.absolutePath, "--port", port.toString(), "--report-interval", "1", "--no-hello")
             .redirectErrorStream(true).start()
         val emuLog = Collections.synchronizedList(ArrayList<String>())
+        // The reader thread appends while the test scans: a synchronized list is iterated under its own lock.
+        fun logged(line: (String) -> Boolean): Boolean = synchronized(emuLog) { emuLog.any(line) }
         Thread { emu.inputStream.bufferedReader().forEachLine { emuLog += it } }.apply { isDaemon = true; start() }
         val exec = Executors.newSingleThreadScheduledExecutor()
         val got = ConcurrentHashMap<String, Any>()
@@ -67,7 +69,7 @@ class UartBaseLinkEmulatorTest {
             }
         }
         try {
-            waitFor("emulator listening") { emuLog.any { "base emulator on" in it } }
+            waitFor("emulator listening") { logged { "base emulator on" in it } }
             var saved = -1f
             link = UartBaseLink(exec, listener, "tcp:127.0.0.1:$port", saveEnergy = { saved = it }, log = { _, m -> logs += m })
             exec.execute { link.start() }
@@ -78,14 +80,15 @@ class UartBaseLinkEmulatorTest {
             assertEquals(3, values[BaseRes.RELAY_MASK])
             assertEquals(BaseKind.SWITCH, BaseProtocol.decodeDockClass((values[BaseRes.DOCK_CLASS] as Long).toInt()).first)
             waitFor("config writes acked by the emulator") {
-                listOf("200.4.1", "4.103.85", "200.4.2", "200.4.3", "200.4.4").all { r -> emuLog.any { "write ack $r=" in it } }
+                listOf("200.4.1", "4.103.85", "200.4.2", "200.4.3", "200.4.4").all { r -> logged { "write ack $r=" in it } }
             }
-            assertTrue("emulator saw a bad CRC", emuLog.none { "BAD" in it })
+            assertTrue("emulator saw a bad CRC", !logged { "BAD" in it })
 
             // Relay write from "Home Assistant".
             exec.execute { link.write("4.1.85", 1) }
             waitFor("relay 1 on") { values["4.1.85"] == 1 }
-            assertTrue(emuLog.any { "write ack 4.1.85=1" in it })
+            // The emulator's log reaches us on its own stdout reader thread, which can trail the link's reply.
+            waitFor("emulator acks relay 1") { logged { "write ack 4.1.85=1" in it } }
             // Power arrives by report (emulator: 60 W per relay that is on).
             waitFor("power report") { (values[BaseRes.POWER] as? Float ?: 0f) > 50f }
 

@@ -190,7 +190,7 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
 
         stateIcon.setIcon(if (s != null) MdiIcons.resolveIconName(null, s) else "mdi:cast", fg)
         nameView.setTextColor(fg)
-        nameView.text = config.name ?: s?.displayName ?: eid.orEmpty()
+        nameView.text = config.name(s) ?: s?.displayName ?: eid.orEmpty()
         moreIcon.setIcon("mdi:dots-vertical", fg)
 
         val buttons = if (s != null && !unavailableLook) removeSecondaryStop(s, mediaControls(s)) else null

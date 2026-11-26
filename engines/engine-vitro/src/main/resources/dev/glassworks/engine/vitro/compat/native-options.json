@@ -43,7 +43,22 @@
         }
       }
     },
-    "name": "text",
+    "name": {
+      "anyOf": ["text", "@namePart", {"list": "@namePart"}],
+      "note": "HA's formatEntityName (app.js module 360): a string, or the name picker's part or list of parts, which HaEntityName joins as HA does"
+    },
+    "namePart": {
+      "by": "type",
+      "why": "a name part HA's name picker doesn't write",
+      "cases": {
+        "text": {"keys": {"type": "any", "text": "text"}},
+        "entity": {"keys": {"type": "any"}},
+        "device": {"keys": {"type": "any"}},
+        "parent_device": {"keys": {"type": "any"}},
+        "area": {"keys": {"type": "any"}},
+        "floor": {"keys": {"type": "any"}}
+      }
+    },
     "noAction": {
       "by": "action",
       "default": "none",
@@ -377,18 +392,6 @@
       "pattern": "^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
       "why": "a CSS name, var() or theme color name is resolved differently from HA's raw CSS"
     },
-    "lightTap": {
-      "by": "action",
-      "default": "toggle",
-      "why": "Vitro's light button always toggles",
-      "cases": {"toggle": {"keys": {"action": "any"}}}
-    },
-    "lightHold": {
-      "by": "action",
-      "default": "more-info",
-      "why": "Vitro's light card holds only to more-info",
-      "cases": {"more-info": {"keys": {"action": "any"}}}
-    },
     "graphFooter": {
       "by": "type",
       "default": "(none)",
@@ -464,16 +467,10 @@
     },
     "pictureGlanceEntity": {
       "anyOf": [
-        {
-          "entity": ["fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve"],
-          "why": "HA puts other domains in a separate icon group before the toggle icons; Vitro draws one group in config order"
-        },
+        {"entity": ["*"]},
         {
           "keys": {
-            "entity": {
-              "entity": ["fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve"],
-              "why": "HA puts other domains in a separate icon group before the toggle icons; Vitro draws one group in config order"
-            },
+            "entity": {"entity": ["*"]},
             "name": "@name",
             "icon": "any",
             "show_state": {"values": [false], "why": "Vitro draws no state under the icons"},
@@ -1291,8 +1288,8 @@
         "entity": {"entity": ["light"], "why": "HA shows an error for another domain"},
         "name": "@name",
         "icon": "@icon",
-        "tap_action": "@lightTap",
-        "hold_action": "@lightHold",
+        "tap_action": "@action",
+        "hold_action": "@action",
         "double_tap_action": "@doubleTap"
       }
     },
@@ -1424,7 +1421,7 @@
         "aspect_ratio": "@aspectRatio",
         "fit_mode": {"values": ["cover"], "why": "stills are always cropped to cover"},
         "show_state": {"values": [false], "why": "Vitro draws no state under the icons"},
-        "force_dialog": {"values": [false]},
+        "force_dialog": "@bool",
         "tap_action": "@action",
         "hold_action": "@action",
         "double_tap_action": "@doubleTap"
@@ -1434,7 +1431,7 @@
     "area": {
       "keys": {
         "area": "text",
-        "name": "@name",
+        "name": "text",
         "color": "@cssColor",
         "navigation_path": {"pattern": "^/", "why": "a path that isn't absolute resolves against the current page in HA"},
         "display_type": {"values": ["picture", "compact"], "why": "the camera picture isn't refreshed every 10 s as hui-image does"},

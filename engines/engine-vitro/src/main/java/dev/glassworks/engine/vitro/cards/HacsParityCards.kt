@@ -223,7 +223,7 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
     }
 
     private fun renderShell(s: EntityState?) {
-        primary.text = config.name ?: s?.displayName ?: eid ?: ""
+        primary.text = config.name(s) ?: s?.displayName ?: eid ?: ""
         render(s)
     }
 
@@ -1423,7 +1423,7 @@ class MiniMediaPlayerCardView(ctx: VitroCardContext, private val config: CardCon
         val fg = if (backdropShown) Color.WHITE else ctx.theme.primaryTextColor
         val fgSoft = if (backdropShown) CardSurface.withAlpha(Color.WHITE, 0.8f) else ctx.theme.secondaryTextColor
 
-        val name = config.name ?: s?.friendlyName ?: eid.orEmpty()
+        val name = config.name(s) ?: s?.friendlyName ?: eid.orEmpty()
         nameView.text = name
         nameView.setTextColor(fg)
         val title = (attrs["media_title"] as? String)?.takeIf { it.isNotBlank() }

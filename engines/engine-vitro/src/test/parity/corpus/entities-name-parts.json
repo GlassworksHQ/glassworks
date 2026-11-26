@@ -1,0 +1,122 @@
+{
+ "title": "Entities: rows named with HA's name picker (device, text and entity, area and device)",
+ "card": {
+  "type": "entities",
+  "entities": [
+   {
+    "entity": "light.kitchen_pendant_ceiling",
+    "name": {
+     "type": "device"
+    }
+   },
+   {
+    "entity": "light.reading_lamp",
+    "name": [
+     {
+      "type": "text",
+      "text": "Study"
+     },
+     {
+      "type": "entity"
+     }
+    ]
+   },
+   {
+    "entity": "sensor.kitchen_pendant_power",
+    "name": [
+     {
+      "type": "area"
+     },
+     {
+      "type": "device"
+     }
+    ]
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.kitchen_pendant_ceiling": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "off_with_transition": false,
+     "off_brightness": null,
+     "friendly_name": "Kitchen Pendant Ceiling",
+     "supported_features": 40
+    }
+   },
+   "light.reading_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "off_with_transition": false,
+     "off_brightness": null,
+     "friendly_name": "Reading Lamp",
+     "supported_features": 40
+    }
+   },
+   "sensor.kitchen_pendant_power": {
+    "state": "12.4",
+    "last_changed": "-5m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "W",
+     "device_class": "power",
+     "friendly_name": "Kitchen Pendant Power"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.kitchen_pendant_ceiling",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-kitchen-pendant",
+    "en": "Ceiling",
+    "np": "device"
+   },
+   {
+    "ei": "light.reading_lamp",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-reading-lamp",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.kitchen_pendant_power",
+    "pl": "zha",
+    "di": "dev-kitchen-pendant",
+    "en": "Power",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen-pendant",
+    "name": "Kitchen Pendant",
+    "area_id": "kitchen"
+   },
+   {
+    "id": "dev-reading-lamp",
+    "name": "Reading Lamp"
+   }
+  ],
+  "areas": [
+   {
+    "area_id": "kitchen",
+    "name": "Kitchen"
+   }
+  ]
+ }
+}
