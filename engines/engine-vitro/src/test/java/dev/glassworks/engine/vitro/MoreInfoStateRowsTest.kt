@@ -35,6 +35,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowLooper
 import org.robolectric.shadows.ShadowPopupMenu
 
@@ -170,6 +171,34 @@ class MoreInfoStateRowsTest {
         assertEquals(912f - 8f - badge, menu, 0.01f)
         // The tablet's 580 px dialog (532 px inside).
         assertEquals(36.64f, MoreInfoStateCard.shares(532f).first, 0.01f)
+    }
+
+    // ---- number, input_number ----
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE) // real text widths: the name is wider than the row
+    fun aLongNumberNameGivesWayToItsControl() {
+        // state-info shrinks to its 120 px min-width and ellipsizes; the `.flex` keeps its content (the slider, the box).
+        val long = "A very long number name that would take the whole row of the dialog and then some more"
+        for (state in listOf(
+            EntityState("number.volume", "40", mapOf("friendly_name" to long, "mode" to "slider", "min" to 0, "max" to 100, "step" to 1)),
+            EntityState("number.volume", "40", mapOf("friendly_name" to long, "mode" to "box", "min" to 0, "max" to 100, "step" to 1)),
+        )) {
+            val sheet = open(store(state), "number.volume")
+            val row = all(sheet).filterIsInstance<dev.glassworks.engine.vitro.cards.StateCardRow>().single()
+            val w = Math.round(400 * activity.resources.displayMetrics.density)
+            row.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            row.layout(0, 0, row.measuredWidth, row.measuredHeight)
+            assertTrue("the control keeps its room: ${row.flexWidthPx}", row.flexWidthPx > 0)
+            val control = row.getChildAt(2)
+            val shown = all(control).filter { it.isShown && it !== control && it.width > 0 }
+            assertTrue("a drawn control (${state.attributes["mode"]})", shown.isNotEmpty())
+            assertTrue("the control ends at the row's end", control.right <= row.measuredWidth && control.left >= 0)
+            val name = all(row).filterIsInstance<TextView>().first { it.text.toString() == long }
+            assertTrue("the name alone is wider than the row", name.paint.measureText(long) > w)
+            assertTrue("state-info ends where the `.flex` starts", (name.parent as View).right <= row.measuredWidth - row.flexWidthPx)
+            assertTrue("the name ellipsizes", (name.layout?.getEllipsisCount(0) ?: 0) > 0)
+        }
     }
 
     // ---- button, input_button ----

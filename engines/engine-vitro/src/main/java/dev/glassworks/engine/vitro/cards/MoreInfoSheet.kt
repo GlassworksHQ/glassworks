@@ -1511,6 +1511,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             val time = cssText(ctx, 14f, theme.secondaryTextColor).apply {
                 maxLines = 1
+                // `.time-ago { text-overflow: ellipsis }`, as the name.
+                ellipsize = TextUtils.TruncateAt.END
                 gravity = Gravity.CENTER_VERTICAL
             }
             labels.addView(name, LinearLayout.LayoutParams(MATCH_PARENT, Math.round(16.8f * ctx.dp)))
@@ -1933,7 +1935,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 /**
  * A number's `state-card-*` row: `state-info` (the 40 px badge, 8 px, the name over the time), at least 120 px and as
  * wide as its text, then the control in the `.flex` that takes the rest ([flexWidthPx]), all centred on the row's
- * height (at least 40 px).
+ * height (at least 40 px). As the browser lays out that flex row when the two don't fit: the `.flex` doesn't shrink
+ * below its content (the slider's 100 px minimum and the state, or the input box), so `state-info` gives way, down to
+ * its 120 px `min-width`, and its name ellipsizes. Narrower still, the control overflows the row's end.
  */
 @SuppressLint("ViewConstructor")
 internal class StateCardRow(context: Context, private val badge: View, private val labels: View, private val dp: Float) : android.view.ViewGroup(context) {
@@ -1944,6 +1948,9 @@ internal class StateCardRow(context: Context, private val badge: View, private v
         private set
     var flexWidthPx = 0
         private set
+
+    /** `state-info`'s width, as last measured (px): the `.flex` starts after it. */
+    private var infoPx = 0
 
     init {
         addView(badge)
@@ -1962,17 +1969,24 @@ internal class StateCardRow(context: Context, private val badge: View, private v
         val badgePx = Math.round(40f * dp)
         badge.measure(MeasureSpec.makeMeasureSpec(badgePx, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(badgePx, MeasureSpec.EXACTLY))
         labels.measure(unspecified, unspecified)
-        val info = maxOf(Math.round(120f * dp), badgePx + Math.round(8f * dp) + labels.measuredWidth).coerceAtMost(w)
+        val minInfo = Math.round(120f * dp)
+        val natural = maxOf(minInfo, badgePx + Math.round(8f * dp) + labels.measuredWidth)
         rowWidthPx = w
-        flexWidthPx = (w - info).coerceAtLeast(0)
+        val c = control
+        val lp = c?.layoutParams
+        val hs = if (lp != null && lp.height > 0) MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY) else unspecified
+        // The `.flex`'s min-content: the control measured with no room to grow (the slider row keeps its basis).
+        flexWidthPx = 0
+        val controlMin = c?.let { it.measure(unspecified, hs); it.measuredWidth } ?: 0
+        val info = minOf(natural, maxOf(minInfo, w - controlMin)).coerceAtMost(w)
+        infoPx = info
+        flexWidthPx = maxOf(w - info, controlMin)
         // The labels get what state-info has after the badge (they ellipsize).
         labels.measure(MeasureSpec.makeMeasureSpec((info - badgePx - Math.round(8f * dp)).coerceAtLeast(0), MeasureSpec.EXACTLY), unspecified)
         var h = badgePx
-        control?.let { c ->
-            val lp = c.layoutParams
-            val hs = if (lp != null && lp.height > 0) MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY) else unspecified
-            c.measure(MeasureSpec.makeMeasureSpec(flexWidthPx, MeasureSpec.AT_MOST), hs)
-            h = maxOf(h, c.measuredHeight)
+        c?.let {
+            it.measure(MeasureSpec.makeMeasureSpec(flexWidthPx, MeasureSpec.AT_MOST), hs)
+            h = maxOf(h, it.measuredHeight)
         }
         h = maxOf(h, labels.measuredHeight)
         setMeasuredDimension(w, h)
@@ -1987,8 +2001,8 @@ internal class StateCardRow(context: Context, private val badge: View, private v
         }
         center(badge, 0)
         center(labels, badge.measuredWidth + Math.round(8f * dp))
-        // `.flex { justify-content: flex-end }`: the control at the row's end.
-        control?.let { c -> center(c, w - c.measuredWidth) }
+        // `.flex { justify-content: flex-end }`: the control at the `.flex`'s end, which is the row's unless it overflows.
+        control?.let { c -> center(c, infoPx + flexWidthPx - c.measuredWidth) }
     }
 }
 
