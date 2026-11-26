@@ -32,6 +32,7 @@ import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
@@ -182,11 +183,11 @@ class HacsParityWaveTest {
 
     @Test
     fun mushroomCoverButtonsAndItsStateLine() {
-        val st = store(entity("cover.blind", "open", "current_position" to 100))
+        val st = store(entity("cover.blind", "open", "current_position" to 40, "supported_features" to 15))
         val card = dev.glassworks.engine.vitro.cards.MushroomCoverCardView(context(st),
             card("""{"type": "custom:mushroom-cover-card", "entity": "cover.blind", "show_buttons_control": true}"""))
         idle()
-        assertTrue(card.texts().toString(), "Open \u2E31 100%" in card.texts())
+        assertTrue(card.texts().toString(), "Open \u2E31 40%" in card.texts())
         card.click("Open"); assertEquals("cover.open_cover", calls.last().service)
         card.click("Stop"); assertEquals("cover.stop_cover", calls.last().service)
         card.click("Close"); assertEquals("cover.close_cover", calls.last().service)
@@ -202,6 +203,52 @@ class HacsParityWaveTest {
         assertFalse(shown("Open")); assertTrue(sliderShown())
         both.click("buttons_control")
         assertTrue(shown("Open")); assertFalse(sliderShown())
+    }
+
+    @Test
+    fun mushroomCoverButtonsFollowMushroomsRules() {
+        // mushroom-cover-buttons-control (Mushroom 5.3.0): a button per supported feature (OPEN 1, CLOSE 2, STOP 8),
+        // open disabled while fully open or opening, close while fully closed or closing (unless assumed_state), stop
+        // only while unavailable. Tablet Vitro run 3: a closed cover's close button stayed enabled.
+        val st = store(entity("cover.blind", "closed", "current_position" to 0, "supported_features" to 15))
+        val ctx = context(st)
+        val card = dev.glassworks.engine.vitro.cards.MushroomCoverCardView(ctx,
+            card("""{"type": "custom:mushroom-cover-card", "entity": "cover.blind", "show_buttons_control": true}"""))
+        idle()
+        fun button(d: String) = card.all().single { it.contentDescription?.toString() == d }
+        fun enabled() = listOf("Open", "Stop", "Close").filter { button(it).visibility == View.VISIBLE }.associateWith { button(it).isEnabled }
+        assertEquals(mapOf("Open" to true, "Stop" to true, "Close" to false), enabled())
+        val before = calls.size
+        button("Close").performClick()
+        assertEquals("a disabled button sends nothing", before, calls.size)
+        val icon = (button("Close") as android.view.ViewGroup).getChildAt(0) as MdiIconView
+        assertEquals(dev.glassworks.engine.vitro.cards.mushroomDisabledColor(ctx), icon.tintColor)
+
+        fun set(state: String, vararg attrs: Pair<String, Any>) {
+            st.putLocal(entity("cover.blind", state, *attrs))
+            idle()
+        }
+        set("open", "current_position" to 100, "supported_features" to 15)
+        assertEquals(mapOf("Open" to false, "Stop" to true, "Close" to true), enabled())
+        set("opening", "current_position" to 50, "supported_features" to 15)
+        assertEquals(mapOf("Open" to false, "Stop" to true, "Close" to true), enabled())
+        set("closing", "current_position" to 50, "supported_features" to 15)
+        assertEquals(mapOf("Open" to true, "Stop" to true, "Close" to false), enabled())
+        set("closed", "current_position" to 0, "supported_features" to 15, "assumed_state" to true)
+        assertEquals(mapOf("Open" to true, "Stop" to true, "Close" to true), enabled())
+        set("unavailable", "supported_features" to 15)
+        assertEquals(mapOf("Open" to false, "Stop" to false, "Close" to false), enabled())
+        // No position: the state alone. Open and close only (3): no stop button.
+        set("open", "supported_features" to 3)
+        assertEquals(mapOf("Open" to false, "Close" to true), enabled())
+        set("closed", "supported_features" to 3)
+        assertEquals(mapOf("Open" to true, "Close" to false), enabled())
+        // A curtain's buttons are sideways.
+        set("closed", "supported_features" to 3, "device_class" to "curtain")
+        assertEquals("mdi:arrow-expand-horizontal", ((button("Open") as android.view.ViewGroup).getChildAt(0) as MdiIconView).icon)
+        // No supported_features: Mushroom draws no button.
+        set("open", "current_position" to 30)
+        assertEquals(emptyMap<String, Boolean>(), enabled())
     }
 
     @Test

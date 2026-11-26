@@ -85,8 +85,8 @@ class HaDashboardClient(
      * once they are spent, the error goes to the listener.
      */
     private val configRetryMs: LongArray = CONFIG_RETRY_MS,
-    /** The HTTP status of a GET (null when unreadable), off the socket's threads: [BubbleModules]' legacy file. */
-    private val httpStatus: (url: String) -> Int? = BubbleModules::httpStatus,
+    /** A GET's answer (null when unreadable), off the socket's threads: [BubbleModules]' legacy file. */
+    private val fileProbe: (url: String) -> BubbleModules.FileProbe? = BubbleModules::probe,
 ) {
     interface Listener {
         fun onConnected(haVersion: String) {}
@@ -1572,7 +1572,7 @@ class HaDashboardClient(
         fun legacyFile() {
             val url = (origin ?: haBase.trimEnd('/')) + BubbleModules.LEGACY_FILE
             try {
-                bubbleProbeExecutor.execute { answer(BubbleModules.fileAnswer(httpStatus(url))) }
+                bubbleProbeExecutor.execute { answer(BubbleModules.fileAnswer(fileProbe(url))) }
             } catch (_: RejectedExecutionException) {
                 answer(true)
             }

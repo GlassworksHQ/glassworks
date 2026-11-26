@@ -38,7 +38,7 @@ class BubbleModulesTest {
     }
 
     private fun start(
-        fileStatus: Int?,
+        file: BubbleModules.FileProbe?,
         connect: (String) -> HaSocket = server::connect,
     ): LovelaceResourceList {
         val c = HaDashboardClient(
@@ -49,7 +49,7 @@ class BubbleModulesTest {
             listener = object : HaDashboardClient.Listener {
                 override fun onResources(resources: List<LovelaceResource>) { this@BubbleModulesTest.resources += resources }
             },
-            httpStatus = { url -> fetched += url; fileStatus },
+            fileProbe = { url -> fetched += url; file },
         )
         clients += c
         c.start(null)
@@ -81,7 +81,7 @@ class BubbleModulesTest {
 
     @Test
     fun aHomeAssistantWithoutBubbleIsNeverAsked() {
-        val list = start(fileStatus = 200)
+        val list = start(file = BubbleModules.FileProbe(200, "text/yaml", "default:"))
         assertFalse(list.bubbleModules)
         assertTrue(server.commands(BubbleModules.TOOLS_COMMAND).isEmpty())
         assertTrue(fetched.isEmpty())
@@ -90,7 +90,7 @@ class BubbleModulesTest {
     @Test
     fun noToolsNoSensorAndNoFileMeansNoModules() {
         withBubble()
-        val list = start(fileStatus = 404)
+        val list = start(file = MISSING)
         assertFalse(list.bubbleModules)
         assertEquals(1, server.commands(BubbleModules.TOOLS_COMMAND).size)
         // The sensor is asked for on its own, and its subscription ends once answered.
@@ -101,27 +101,36 @@ class BubbleModulesTest {
     }
 
     @Test
-    fun theLegacyFileOrAnUnreadableAnswerMeansModules() {
+    fun theLegacyFileMeansModules() {
         withBubble()
-        assertTrue(start(fileStatus = 200).bubbleModules)
-        resources.clear()
-        assertTrue(start(fileStatus = null).bubbleModules)
-        resources.clear()
-        assertTrue(start(fileStatus = 500).bubbleModules)
+        assertTrue(start(file = MODULES_FILE).bubbleModules)
+    }
+
+    @Test
+    fun theLegacyFileCountsOnlyWhereBubbleWouldReadIt() {
+        // Bubble Card 3.4.3 skips an answer that isn't ok and catches a failed fetch: no modules from the file, so
+        // Vitro draws its cards. So does a 200 page for a file that isn't there (a proxy's, or the fake HA's before
+        // tablet Vitro run 3): every Bubble card went to an island on it.
+        withBubble()
+        for (file in listOf(null, BubbleModules.FileProbe(500), BubbleModules.FileProbe(403), BubbleModules.FileProbe(302),
+            BubbleModules.FileProbe(200, "text/html; charset=utf-8", "<!DOCTYPE html>"))) {
+            resources.clear()
+            assertFalse("$file", start(file = file).bubbleModules)
+        }
     }
 
     @Test
     fun theModulesSensorMeansModules() {
         withBubble()
         server.initialEntities = JSONObject().put(BubbleModules.SENSOR, JSONObject().put("s", "3").put("a", JSONObject().put("modules", JSONObject())))
-        assertTrue(start(fileStatus = 404).bubbleModules)
+        assertTrue(start(file = MISSING).bubbleModules)
         assertTrue(fetched.isEmpty())
     }
 
     @Test
     fun bubbleCardToolsMeansModules() {
         withBubble()
-        assertTrue(start(fileStatus = 404, connect = toolsConnect(JSONArray())).bubbleModules)
+        assertTrue(start(file = MISSING, connect = toolsConnect(JSONArray())).bubbleModules)
         assertTrue(server.commands("subscribe_entities").none { it.optJSONArray("entity_ids")?.toString() == """["${BubbleModules.SENSOR}"]""" })
         assertTrue(fetched.isEmpty())
     }
@@ -140,7 +149,7 @@ class BubbleModulesTest {
             },
             // The first connection's file answer (none: 404) is held until the next connection has asked; that one
             // finds the file.
-            httpStatus = { if (calls.incrementAndGet() == 1) { release.await(10, java.util.concurrent.TimeUnit.SECONDS); 404 } else 200 },
+            fileProbe = { if (calls.incrementAndGet() == 1) { release.await(10, java.util.concurrent.TimeUnit.SECONDS); MISSING } else MODULES_FILE },
             connect = server::connect,
         )
         clients += c
@@ -175,10 +184,51 @@ class BubbleModulesTest {
         assertTrue(BubbleModules.toolsAnswer(JSONObject("""{"success": true, "result": []}""")))
         assertFalse(BubbleModules.sensorAnswer(JSONObject("""{"a": {}}""")))
         assertTrue(BubbleModules.sensorAnswer(JSONObject("""{"a": {"sensor.bubble_card_modules": {"s": "1"}}}""")))
-        assertFalse(BubbleModules.fileAnswer(404))
-        assertTrue(BubbleModules.fileAnswer(200))
-        assertTrue(BubbleModules.fileAnswer(null))
+        assertFalse(BubbleModules.fileAnswer(MISSING))
+        assertTrue(BubbleModules.fileAnswer(MODULES_FILE))
+        assertTrue(BubbleModules.fileAnswer(BubbleModules.FileProbe(200, null, "my_module:")))
+        assertTrue(BubbleModules.fileAnswer(BubbleModules.FileProbe(206, "application/octet-stream", "default:")))
+        // As Bubble's `if (!response.ok) continue` and its caught fetch: none.
+        assertFalse(BubbleModules.fileAnswer(null))
+        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(500)))
+        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(301, "text/html")))
+        // A 200 with nothing YAML reads as modules: empty, or an HTML page (by its type or its first character).
+        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(200, "text/yaml", "")))
+        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(200, "TEXT/HTML", "default:")))
+        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(200, "application/octet-stream", "<html><head>")))
         assertTrue(BubbleModules.loaded(listOf(LovelaceResource("/hacsfiles/Bubble-Card/bubble-card.js", "module"))))
         assertFalse(BubbleModules.loaded(listOf(LovelaceResource("/local/bubble-card.css", "css"))))
+    }
+
+    @Test
+    fun theProbeReadsTheStatusTheTypeAndTheBodysStart() {
+        val http = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        fun route(path: String, status: Int, type: String, body: String) = http.createContext(path) { ex ->
+            val bytes = body.toByteArray()
+            ex.responseHeaders.add("Content-Type", type)
+            ex.sendResponseHeaders(status, if (bytes.isEmpty()) -1 else bytes.size.toLong())
+            ex.responseBody.use { it.write(bytes) }
+        }
+        route("/yaml", 200, "text/yaml", "\n\n  default:\n    name: Default\n" + "x".repeat(10_000))
+        route("/page", 200, "text/html; charset=utf-8", "<!DOCTYPE html><html></html>")
+        route("/missing", 404, "text/plain", "404: Not Found")
+        http.start()
+        try {
+            val base = "http://127.0.0.1:${http.address.port}"
+            assertEquals(BubbleModules.FileProbe(200, "text/yaml", "default:\n    nam"), BubbleModules.probe("$base/yaml"))
+            assertTrue(BubbleModules.fileAnswer(BubbleModules.probe("$base/yaml")))
+            assertFalse(BubbleModules.fileAnswer(BubbleModules.probe("$base/page")))
+            assertEquals(BubbleModules.FileProbe(404, "text/plain", ""), BubbleModules.probe("$base/missing"))
+        } finally {
+            http.stop(0)
+        }
+        // Nothing listening: the request fails, and so the file gives no modules.
+        val closed = java.net.ServerSocket(0).use { it.localPort }
+        assertEquals(null, BubbleModules.probe("http://127.0.0.1:$closed/x"))
+    }
+
+    private companion object {
+        val MISSING = BubbleModules.FileProbe(404, "text/plain")
+        val MODULES_FILE = BubbleModules.FileProbe(200, "text/yaml", "default:")
     }
 }
