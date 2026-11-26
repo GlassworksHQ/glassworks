@@ -128,6 +128,10 @@ describe("auditDashboard and custom:button-card", () => {
     expect(timer.totals.tier3).toBe(1);
     expect(timer.triggers[0].reasons.join()).toMatch(/timer/);
     expect(audit([{ type: "custom:button-card", entity: "timer.laundry" }]).totals.tier3).toBe(0);
+    // `show_state` as button-card reads it: the string "0" is on; false and 0 are off.
+    expect(audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: "0" }]).totals.tier3).toBe(1);
+    expect(audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: false }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: 0 }]).totals.tier3).toBe(0);
     expect(audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: true, state_display: "Running" }]).totals.tier3).toBe(0);
     expect(audit([{ type: "custom:button-card", entity: "light.timer", show_state: true }]).totals.tier3).toBe(0);
   });

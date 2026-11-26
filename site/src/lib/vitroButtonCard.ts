@@ -232,7 +232,8 @@ export function buttonCardReasons(card: Obj, templates: Obj): string[] {
     if (on) out.push(`\`${key}:\` isn't drawn natively`);
   }
   // button-card counts a timer down every second, which Vitro doesn't draw: only when no `state_display` replaces it.
-  if (typeof raw.entity === "string" && raw.entity.split(".")[0] === "timer" && truthy(raw.show_state) && !(typeof raw.state_display === "string" && raw.state_display))
+  // `show_state` as button-card reads it (plain JavaScript truthiness: the string "0" shows the state), as the engine does.
+  if (typeof raw.entity === "string" && raw.entity.split(".")[0] === "timer" && !!raw.show_state && !(typeof raw.state_display === "string" && raw.state_display))
     out.push("`show_state:` on a timer (its countdown) isn't drawn natively");
   if (raw.layout !== undefined && raw.layout !== null && !BC.layouts.includes(String(raw.layout))) out.push(`\`layout: ${String(raw.layout)}\` isn't drawn natively`);
   if (raw.aspect_ratio !== undefined && raw.aspect_ratio !== null && raw.aspect_ratio !== "" && !aspectRatio(raw.aspect_ratio)) out.push("an `aspect_ratio` Vitro doesn't read");

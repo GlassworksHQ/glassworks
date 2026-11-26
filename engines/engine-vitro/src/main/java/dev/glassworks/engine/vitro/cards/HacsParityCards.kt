@@ -2086,13 +2086,20 @@ class LayoutCardView(
         val edge = kotlin.math.max(columnMargin[0], columnMargin[2])
         for (views in used) {
             val col = LinearLayout(ctx.context).apply { orientation = VERTICAL }
-            // Pinned slots ([PinnedSlot]) take no space: only the cards go in, with a slot's margins at the edges.
+            // Pinned slots ([PinnedSlot]) take no space: they go in with no size and no margins (so they attach and
+            // detach with the column, and their visibility listener with them), and a slot's margins count only at
+            // the edges, on the first and last card.
             val cards = views.filter { it !is PinnedSlot }
             val slotFirst = views.first() is PinnedSlot
             val slotLast = views.last() is PinnedSlot
-            for (v in views) if (v is PinnedSlot) (v.parent as? ViewGroup)?.removeView(v)
-            cards.forEachIndexed { k, v ->
+            var k = -1
+            for (v in views) {
                 (v.parent as? ViewGroup)?.removeView(v)
+                if (v is PinnedSlot) {
+                    col.addView(v, LayoutParams(MATCH_PARENT, 0))
+                    continue
+                }
+                k++
                 col.addView(v, LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
                     leftMargin = ctx.px(columnMargin[3]); rightMargin = ctx.px(columnMargin[1])
                     topMargin = ctx.px(when {

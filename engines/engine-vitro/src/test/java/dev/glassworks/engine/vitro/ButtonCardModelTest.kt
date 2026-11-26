@@ -183,6 +183,9 @@ class ButtonCardModelTest {
         val timer = card("""{"type": "custom:button-card", "entity": "timer.laundry", "show_state": true}""").compat
         assertEquals(CardRoute.ISLAND, timer.route)
         assertTrue(timer.reasons.single(), "timer" in timer.reasons.single())
+        // `show_state` as button-card reads it (JavaScript truthiness): the string "0" is on, as the site checker has it.
+        assertEquals(CardRoute.ISLAND, card("""{"type": "custom:button-card", "entity": "timer.laundry", "show_state": "0"}""").compat.route)
+        assertEquals(CardRoute.NATIVE, card("""{"type": "custom:button-card", "entity": "timer.laundry", "show_state": 0}""").compat.route)
         // No state shown, a state_display of its own, or another domain: native as before.
         for (json in listOf(
             """{"type": "custom:button-card", "entity": "timer.laundry"}""",

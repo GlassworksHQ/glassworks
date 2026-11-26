@@ -208,6 +208,30 @@ class StackGridLayoutTest {
     }
 
     @Test
+    fun aPinnedSlotsVisibilityListenerEndsWithTheView() {
+        // A pinned card with a visibility condition leaves a slot that follows it too. That slot must be in the tree
+        // (attached with its column), so its store listener ends when the view is detached, in every layout.
+        @Suppress("UNCHECKED_CAST")
+        fun listeners(store: EntityStore, id: String): Int =
+            (EntityStore::class.java.getDeclaredField("listeners").apply { isAccessible = true }.get(store) as Map<String, List<*>>)[id]?.size ?: 0
+        for (layout in listOf("custom:masonry-layout", "custom:grid-layout", "custom:vertical-layout", "custom:horizontal-layout")) {
+            val store = store()
+            val vv = render(store, """{"title": "Home", "type": "$layout", "cards": [
+                {"type": "tile", "entity": "light.a"},
+                {"type": "tile", "entity": "light.b", "visibility": [{"condition": "state", "entity": "input_boolean.guest", "state": "on"}],
+                 "card_mod": {"style": "ha-card { position: fixed; bottom: 0; }"}}]}""")
+            activity.setContentView(vv)
+            ShadowLooper.idleMainLooper()
+            val slot = all(vv).filterIsInstance<dev.glassworks.engine.vitro.cards.LayoutCardView.PinnedSlot>().single()
+            assertTrue(layout, slot.isAttachedToWindow)
+            assertTrue(layout, listeners(store, "input_boolean.guest") > 0)
+            activity.setContentView(View(activity))
+            ShadowLooper.idleMainLooper()
+            assertEquals(layout, 0, listeners(store, "input_boolean.guest"))
+        }
+    }
+
+    @Test
     fun aFixedFirstCardRaisesTheColumnsTopMargin() {
         // Its empty slot's 8 px bottom margin collapses with the next card's 4 px top margin: 8 px above the first.
         fun firstTop(cards: String) = render(store(), """{"title": "Home", "type": "custom:masonry-layout", "cards": [$cards]}""")
