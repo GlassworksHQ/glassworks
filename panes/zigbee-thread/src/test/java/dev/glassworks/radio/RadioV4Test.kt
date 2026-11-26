@@ -125,6 +125,10 @@ class RadioV4Test {
         val f3 = fw(old)
         assertTrue(f3.select(RadioFirmware.STOCK)!!.contains("root helper v4 (installed: v3)"))
         assertTrue(f3.statusText().contains("update the panel's system software once"))
+        val missing = V4Props().apply { props.remove(RadioHelper.PROP_SVC_STATE); props.remove(RadioHelper.PROP_VERSION) }
+        val f0 = fw(missing)
+        assertTrue(f0.select(RadioFirmware.STOCK)!!.contains("root helper v4 (installed: none)"))
+        assertTrue(f0.statusText().contains("root helper v4 (installed: none)"))
     }
 
     // ------------------------------------------------------------------------------ bundle

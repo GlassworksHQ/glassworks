@@ -438,6 +438,9 @@ class UpdateManager(
     }
 
     private fun installAttempt(a: UpdateModel.Attempt) {
+        if (root?.takeIf { agent.offers(AgentCapability.APP_UPDATES) } == null) {
+            packageInstallerBlocker(ctx, hasRootBackend = root != null)?.let { return fail(a, it) }
+        }
         val o = a.offer
         val dir = updateDir
         cleanup()
@@ -563,6 +566,10 @@ class UpdateManager(
      */
     private fun installWithPackageInstaller(a: UpdateModel.Attempt, apk: File) {
         refreshSilent()
+        packageInstallerBlocker(ctx, hasRootBackend = root != null)?.let {
+            apk.delete()
+            return fail(a, it)
+        }
         val pi = ctx.packageManager.packageInstaller
         val id = pi.createSession(sessionParams(ctx.packageName, apk.length(), Platform))
         try {
@@ -714,6 +721,23 @@ class UpdateManager(
         const val FRAME_BUSY = "Not installed: a frame update is installing. Try again once the panel has restarted."
         /** PackageInstaller where Android lets the app install without a tap, unless it asks after all. */
         const val NO_TAP_NOTE = "Installs without a tap, unless Android asks for one on the screen."
+        fun unknownAppsWithRootBackend(packageName: String) =
+            "Install unknown apps is not allowed for this app (reinstall with Kiln, or run: adb shell appops set $packageName REQUEST_INSTALL_PACKAGES allow)"
+        const val UNKNOWN_APPS_GENERIC =
+            "Install unknown apps is not allowed for this app (allow it in Android's settings, under Apps)"
+
+        /**
+         * Why a `PackageInstaller` session cannot proceed right now, or null when Android lets the app install.
+         * Checked before downloading and again before committing the session so an app without "Install unknown apps"
+         * fails fast instead of launching a refusal dialog and timing out after 10 minutes (#908).
+         */
+        internal fun packageInstallerBlocker(
+            context: Context,
+            hasRootBackend: Boolean,
+            platform: PlatformApi = Platform,
+        ): String? =
+            if (SilentUpdates.canInstallPackages(context, platform)) null
+            else if (hasRootBackend) unknownAppsWithRootBackend(context.packageName) else UNKNOWN_APPS_GENERIC
         private const val FIRST_CHECK_DELAY_S = 30L
         private const val TICK_S = 15 * 60L
         private const val NETWORK_SETTLE_S = 10L
