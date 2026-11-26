@@ -8,6 +8,7 @@ import dev.glassworks.auth.HaSocket
 import dev.glassworks.auth.HaThreadClient
 import dev.glassworks.net.HappyEyeballs
 import dev.glassworks.sendspin.WsClient
+import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.DashboardSummary
 import dev.glassworks.engine.vitro.model.LovelaceParser
@@ -77,6 +78,11 @@ class HaDashboardClient(
      */
     private val keepAliveMs: Long = KEEP_ALIVE_MS,
     private val pongTimeoutMs: Long = PONG_TIMEOUT_MS,
+    /**
+     * How long each retry of a `lovelace/config` that failed with an error that may pass waits ([fetchDashboard]);
+     * once they are spent, the error goes to the listener.
+     */
+    private val configRetryMs: LongArray = CONFIG_RETRY_MS,
 ) {
     interface Listener {
         fun onConnected(haVersion: String) {}
@@ -91,8 +97,9 @@ class HaDashboardClient(
         fun onDashboardConfig(urlPath: String?, config: DashboardConfig) {}
 
         /**
-         * Home Assistant answered `lovelace/config` for [urlPath] with an error ([code], such as `config_not_found` for
-         * a dashboard with no saved config, which HA's frontend auto-generates). Only for the dashboard still requested.
+         * Home Assistant answered `lovelace/config` for [urlPath] with an error ([code]): [CONFIG_NOT_FOUND] for a
+         * dashboard with no saved config, which HA's frontend auto-generates, at once; any other (HA still starting, a
+         * YAML dashboard that doesn't load) once the client's retries are spent. Only for the dashboard still requested.
          */
         fun onDashboardConfigFailed(urlPath: String?, code: String) {}
 
@@ -415,16 +422,39 @@ class HaDashboardClient(
         if (dashboardActive) fetchDashboard(requestedDashboardPath) else missedRefetch = true
     }
 
+    /** Bumped by every [fetchDashboard]: the retries of an older one stop. Under [pathLock]. */
+    private var dashboardFetch = 0
+
     /** Loads a different Lovelace dashboard config over the live socket. */
     fun fetchDashboard(urlPath: String?) = synchronized(pathLock) {
         requestedDashboardPath = urlPath
         dashboardActive = true
+        requestDashboard(urlPath, ++dashboardFetch, attempt = 0)
+    }
+
+    /** Asks for [urlPath]'s config, for fetch [fetch] (its [attempt]th retry). Under [pathLock]. */
+    private fun requestDashboard(urlPath: String?, fetch: Int, attempt: Int) {
         val msg = JSONObject().put("type", "lovelace/config")
         if (!urlPath.isNullOrEmpty()) msg.put("url_path", urlPath)
         request(msg) { res ->
             // The connection, not Home Assistant, failed: the reconnect asks again (onAuthenticated). Reporting it
             // would send a dashboard that exists to the fallback as "not found".
             if (isTransportError(res)) return@request
+            // An error that may pass (HA still starting answers `unknown_command` until Lovelace is loaded; a passing
+            // `home_assistant_error`) is asked again, a few times with more time between: HA's frontend reads the
+            // config again too, when its connection is back. Only `config_not_found` means HA has none.
+            val code = res.optJSONObject("error")?.optString("code", "").orEmpty()
+            if (!res.optBoolean("success", false) && code != CONFIG_NOT_FOUND && attempt < configRetryMs.size) {
+                val due = schedule(configRetryMs[attempt]) {
+                    synchronized(pathLock) {
+                        // Only while it is still the fetch the page waits for: a newer one (a reconnect, another
+                        // dashboard, lovelace_updated) or a page gone to the fallback ends the retries.
+                        if (closed.get() || !dashboardActive || dashboardFetch != fetch || urlPath != requestedDashboardPath) return@synchronized
+                        requestDashboard(urlPath, fetch, attempt + 1)
+                    }
+                }
+                if (due) return@request
+            }
             // Nothing is handed on before HA has said whether this user may see the dashboard.
             afterAccessKnown {
                 val ok = res.optBoolean("success", false)
@@ -434,6 +464,9 @@ class HaDashboardClient(
                 val allowed = synchronized(pathLock) {
                     // An answer for a dashboard the page has since moved away from must not replace the current one.
                     if (closed.get() || !dashboardActive || urlPath != requestedDashboardPath) return@afterAccessKnown
+                    // A retry's answer is its fetch's alone: a newer fetch of the same dashboard, started while this
+                    // one waited (here, for the user's access), has its own answer coming.
+                    if (attempt > 0 && dashboardFetch != fetch) return@afterAccessKnown
                     val allowed = mayOpen(urlPath)
                     deliveredDashboard = urlPath
                     hasDelivered = allowed && ok
@@ -668,14 +701,23 @@ class HaDashboardClient(
 
     /** The connection ([connectionGen]) the feed runs on, -1 when it doesn't run. */
     private var registryGen = -1
+
+    /**
+     * Bumped by every [startRegistries]: a read the feed sent before it stopped and started again on the same
+     * connection (where [registryGen] is the same again) puts nothing into the new feed's [registryParts].
+     */
+    private var registryEpoch = 0
     private var registrySubs: List<Int> = emptyList()
 
     /** Each registry's last `result` on this connection; the set goes out once all four answered. */
     private val registryParts = HashMap<HassRegistries.Kind, Any?>()
     private var registriesNow: JSONObject? = null
 
-    /** Registries whose refetch is waiting out [REGISTRY_DEBOUNCE_MS]. */
-    private val registryDue = Collections.newSetFromMap(ConcurrentHashMap<HassRegistries.Kind, Boolean>())
+    /**
+     * Registries whose refetch is waiting out [REGISTRY_DEBOUNCE_MS], with the connection it is for: one still waiting
+     * for a connection that dropped doesn't swallow the next connection's.
+     */
+    private val registryDue = Collections.newSetFromMap(ConcurrentHashMap<Pair<HassRegistries.Kind, Int>, Boolean>())
 
     /** The client's timer ([schedule]): registry refetches and [keepAlive]. Made on first use, stopped by close(). */
     @Volatile private var timer: java.util.concurrent.ScheduledExecutorService? = null
@@ -706,11 +748,26 @@ class HaDashboardClient(
         val gen = connectionGen.get()
         if (registryWatchers.isEmpty() || !authenticated || registryGen == gen) return
         registryGen = gen
+        val epoch = ++registryEpoch
         registryParts.clear()
-        registrySubs = HassRegistries.Kind.values().map { kind ->
+        // The registries native cards draw with have their events on every connection ([watchDisplayRegistries]), and
+        // a refetch of one feeds the islands too. Only the floors' are the islands' alone.
+        registrySubs = HassRegistries.Kind.values().filter { it !in DISPLAY_REGISTRIES }.map { kind ->
             subscribe(JSONObject().put("type", "subscribe_events").put("event_type", kind.event)) { refetchRegistry(kind, gen) }
         }.filter { it > 0 }
-        for (kind in HassRegistries.Kind.values()) fetchRegistry(kind, gen)
+        for (kind in HassRegistries.Kind.values()) fetchRegistry(kind, gen, epoch, display = false)
+    }
+
+    /**
+     * The entity, device and area registries' update events, on every connection: native cards draw names, display
+     * precision, translated states and areas from them ([HaDisplay]), and HA's frontend follows them all the time
+     * (`subscribeEntityRegistryDisplay`, the device and area collections). Each change reads that registry again.
+     */
+    private fun watchDisplayRegistries() {
+        val gen = connectionGen.get()
+        for (kind in DISPLAY_REGISTRIES) {
+            subscribe(JSONObject().put("type", "subscribe_events").put("event_type", kind.event)) { refetchRegistry(kind, gen) }
+        }
     }
 
     /** Stops the feed and forgets the registries: nobody watches. Under [registryLock]. */
@@ -722,10 +779,31 @@ class HaDashboardClient(
         registriesNow = null
     }
 
-    private fun fetchRegistry(kind: HassRegistries.Kind, gen: Int) {
-        request(JSONObject().put("type", kind.command)) { res ->
+    /**
+     * Reads [kind] on connection [gen]: into [HaDisplay] with [display] (the cards draw again once it is in), and into
+     * the islands' feed of [epoch] (none when -1).
+     */
+    private fun fetchRegistry(kind: HassRegistries.Kind, gen: Int, epoch: Int, display: Boolean) {
+        if (display) displayPending.incrementAndGet()
+        val sent = request(JSONObject().put("type", kind.command)) { res ->
+            // A read cut off by a dropped connection: the next one reads every registry afresh.
+            if (gen != connectionGen.get()) return@request
+            if (display) {
+                if (res.optBoolean("success", false)) applyDisplay {
+                    when (kind) {
+                        HassRegistries.Kind.ENTITIES -> res.optJSONObject("result")?.let(HaDisplay::applyRegistry)
+                        HassRegistries.Kind.DEVICES -> res.optJSONArray("result")?.let(HaDisplay::applyDevices)
+                        HassRegistries.Kind.AREAS -> res.optJSONArray("result")?.let(HaDisplay::applyAreas)
+                        HassRegistries.Kind.FLOORS -> Unit
+                    }
+                }
+                // A new entity may be of an integration whose icons and state words aren't in yet.
+                if (kind == HassRegistries.Kind.ENTITIES) loadDisplayFor(displayIds())
+                settleDisplay()
+            }
+            if (epoch < 0) return@request
             val (set, watchers) = synchronized(registryLock) {
-                if (gen != connectionGen.get() || registryGen != gen) return@request
+                if (gen != connectionGen.get() || registryGen != gen || registryEpoch != epoch) return@request
                 // A refused list (an older Home Assistant without floors) counts as empty; a failed refetch keeps the
                 // last answer.
                 if (res.optBoolean("success", false)) registryParts[kind] = res.opt("result")
@@ -737,20 +815,27 @@ class HaDashboardClient(
             }
             watchers.forEach { it(set) }
         }
+        // Not sent (the connection is going): nothing will settle it.
+        if (sent <= 0 && display) displayPending.decrementAndGet()
     }
 
     /** A registry changed: read it again once its burst of events is over (an integration reload sends dozens). */
     private fun refetchRegistry(kind: HassRegistries.Kind, gen: Int) {
-        if (!registryDue.add(kind)) return
+        val due = kind to gen
+        if (!registryDue.add(due)) return
         val scheduled = schedule(REGISTRY_DEBOUNCE_MS) {
-            registryDue.remove(kind)
-            // Only for the feed still running: the last watcher may have gone, or the connection, meanwhile. Checked
-            // and sent under one lock, which stopRegistries() takes too: a stop can't slip in between.
+            registryDue.remove(due)
+            // For the connection still up: native cards' registries always, the islands' feed only while it still
+            // runs (the last watcher may have gone meanwhile). Checked and sent under one lock, which stopRegistries()
+            // takes too: a stop can't slip in between.
             synchronized(registryLock) {
-                if (registryGen == gen && gen == connectionGen.get()) fetchRegistry(kind, gen)
+                if (gen != connectionGen.get()) return@synchronized
+                val epoch = if (registryGen == gen) registryEpoch else -1
+                val display = kind in DISPLAY_REGISTRIES
+                if (epoch >= 0 || display) fetchRegistry(kind, gen, epoch, display)
             }
         }
-        if (!scheduled) registryDue.remove(kind)
+        if (!scheduled) registryDue.remove(due)
     }
 
     /** Subscribes to HA's server-side Jinja2 `render_template` (for markdown & mushroom-template-card). */
@@ -1070,8 +1155,10 @@ class HaDashboardClient(
         synchronized(pathLock) { hasDelivered = false }
         displayRequested.clear()
         displayPending.set(0)
-        // Icons and state labels are this Home Assistant's: a new connection loads them again.
-        HaDisplay.reset()
+        // Icons and state labels are this Home Assistant's: a new connection loads them again. Those of the same Home
+        // Assistant stay until this connection's answers replace them, so the snapshot below doesn't draw every card
+        // with plain names and English states first (another Home Assistant's go at once).
+        HaDisplay.connectionTo(origin)
         // 0. The user's language and formats (HA's translations-mixin subscribes to them on connect), first: the
         // translations asked for below are in that language. Its first event is the current value.
         subscribe(JSONObject().put("type", "frontend/subscribe_user_data").put("key", "language")) { ev ->
@@ -1189,6 +1276,8 @@ class HaDashboardClient(
             }
             settleDisplay()
         }
+        // ... and each of the three read again when it changes.
+        watchDisplayRegistries()
         // 8. The registries web islands read, when one does (they ask on first read): again on every connection.
         synchronized(registryLock) { startRegistries() }
         // 9. The cards' own subscriptions (templates, forecasts, to-do lists, history streams): the ones the last
@@ -1243,10 +1332,27 @@ class HaDashboardClient(
     private fun handleIncoming(msg: JSONObject) {
         val id = msg.optInt("id", -1)
         when (msg.optString("type")) {
-            "result" -> pending.remove(id)?.invoke(msg)
+            "result" -> pending.remove(id)?.let { cb -> contained("result") { cb(msg) } }
             // The answer to a `ping` (an island's callWS can send one): settle it as a result, or its promise hangs.
-            "pong" -> pending.remove(id)?.invoke(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", JSONObject.NULL))
-            "event" -> msg.optJSONObject("event")?.let { ev -> subscriptions[id]?.invoke(ev) }
+            "pong" -> pending.remove(id)?.let { cb ->
+                contained("result") { cb(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", JSONObject.NULL)) }
+            }
+            "event" -> msg.optJSONObject("event")?.let { ev -> subscriptions[id]?.let { cb -> contained("event") { cb(ev) } } }
+        }
+    }
+
+    /**
+     * Runs one result or event callback on the reader thread. A throw in it (a parser edge case, a card's callback) is
+     * that callback's alone: it is reported ([VitroFailures]) and the connection carries on. Left to the reader's loop,
+     * it would drop the connection, and a config that throws every time would reconnect forever.
+     */
+    private inline fun contained(where: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            VitroFailures.report("socket $where", null, e)
+        } catch (e: StackOverflowError) {
+            VitroFailures.report("socket $where", null, e)
         }
     }
 
@@ -1367,6 +1473,15 @@ class HaDashboardClient(
         /** Error codes this client makes up when the connection fails (HA never sent them). */
         const val DISCONNECTED = "disconnected"
 
+        /** `lovelace/config`'s answer for a dashboard with no saved config: HA's frontend generates one. */
+        const val CONFIG_NOT_FOUND = "config_not_found"
+
+        /**
+         * The waits between the retries of a `lovelace/config` that failed with another error (about 30 s in all),
+         * before it goes to the listener.
+         */
+        internal val CONFIG_RETRY_MS = longArrayOf(1_000L, 2_000L, 4_000L, 8_000L, 15_000L)
+
         /** The default dashboard's panel (`lovelace`), the one a request with no url path opens. */
         const val DEFAULT_DASHBOARD_PANEL = "lovelace"
         const val SEND_FAILED = "send_failed"
@@ -1377,6 +1492,9 @@ class HaDashboardClient(
 
         /** How long a registry's refetch waits for its burst of update events to end, as HA's frontend debounces its own. */
         internal const val REGISTRY_DEBOUNCE_MS = 500L
+
+        /** The registries native cards draw with ([HaDisplay]), followed on every connection. */
+        private val DISPLAY_REGISTRIES = setOf(HassRegistries.Kind.ENTITIES, HassRegistries.Kind.DEVICES, HassRegistries.Kind.AREAS)
 
         /** Default bound on the greeting and auth exchange; after `auth_ok`, [keepAlive] checks the connection. */
         const val AUTH_TIMEOUT_MS = 20_000L

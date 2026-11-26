@@ -49,6 +49,14 @@ object HaFrontend {
     private var latest: Pair<String, String>? = null
 
     /**
+     * Counts every read [ensure] queues; [wantedRead] is the one [wanted] waits for. A read that ends clears [wanted]
+     * only when it is that one: an older read of the same key ending first would leave [wanted] empty while the newer
+     * one is still queued, and the next [ensure] would queue a third.
+     */
+    private var reads = 0L
+    private var wantedRead = 0L
+
+    /**
      * The client whose requests may install strings ([claim]): a retired client's download, finishing late, leaves
      * [HaText] alone.
      */
@@ -94,15 +102,17 @@ object HaFrontend {
      */
     fun ensure(requester: Any, origin: String, language: String, revalidate: Boolean = false, done: () -> Unit) {
         val key = origin to language
-        synchronized(lock) {
+        val mine = synchronized(lock) {
             if (owner !== requester) return
             latest = key
             if (!revalidate && (installed == key || wanted == key)) return
             wanted = key
+            wantedRead = ++reads
+            wantedRead
         }
         executor.execute {
             val r = runCatching { read(origin, language) }.getOrNull() ?: runCatching { readCached(origin, language) }.getOrNull()
-            synchronized(lock) { if (wanted == key) wanted = null }
+            synchronized(lock) { if (wanted == key && wantedRead == mine) wanted = null }
             if (r != null && install(requester, key, r)) done()
         }
     }
