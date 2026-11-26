@@ -216,7 +216,7 @@ class WebFallbackTest {
         assertEquals("the built-in `map` card", reason("""{"type": "vertical-stack", "cards": [{"type": "tile"}, {"type": "map"}]}"""))
         assertEquals("the built-in `energy-distribution` card", reason("""{"type": "conditional", "conditions": [], "card": {"type": "energy-distribution"}}"""))
         assertEquals("the built-in `map` card", reason("""{"type": "custom:auto-entities", "card": {"type": "map"}, "filter": {"include": [{"domain": "person"}]}}"""))
-        assertEquals("the built-in `water-sankey` card", reason("""{"type": "custom:layout-card", "cards": [{"type": "water-sankey"}]}"""))
+        assertEquals("the built-in `water-sankey` card", reason("""{"type": "custom:layout-card", "layout_type": "masonry", "cards": [{"type": "water-sankey"}]}"""))
         assertNull("a custom card goes to its island", reason("""{"type": "custom:acme-card"}"""))
         assertNull(reason("""{"type": "grid", "cards": [{"type": "tile"}, {"type": "entities", "entities": ["light.a"]}]}"""))
     }
@@ -451,16 +451,19 @@ class WebFallbackTest {
         fun reason(row: String) = WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject(
             """{"cards": [{"type": "entities", "entities": ["light.a", $row]}]}""",
         )))
-        for (t in listOf("attribute", "cast")) {
-            assertEquals(t, "an `$t` row in an entities card", reason("""{"type": "$t", "name": "x"}"""))
+        for (t in listOf("attribute", "cast", "section", "toggle-entity", "custom:slider-entity-row")) {
+            assertTrue(t, reason("""{"type": "$t", "name": "x", "entity": "light.b"}""")!!.startsWith("`entities` `entities[1].type: $t` isn't drawn natively"))
         }
         // In a conditional row too.
-        assertEquals("an `attribute` row in an entities card", reason(
+        assertEquals("`entities` `entities[1].row.type: attribute` isn't drawn natively: a row type Vitro doesn't draw as HA does (section, attribute, cast, an explicit *-entity type or a custom row)", reason(
             """{"type": "conditional", "conditions": [], "row": {"type": "attribute", "entity": "sun.sun", "attribute": "elevation"}}""",
         ))
+        // A plain row of a domain HA draws with a control Vitro doesn't have (a slider, a dropdown, Run, Lock).
+        for (domain in listOf("input_number", "input_select", "script", "scene", "button", "lock", "climate", "cover")) {
+            assertTrue(domain, reason("\"$domain.x\"")!!.contains("(a `$domain` entity) isn't drawn natively"))
+        }
         for (row in listOf(
-            """{"type": "divider"}""", """{"type": "section", "label": "Lights"}""", """{"entity": "light.b"}""",
-            """{"type": "toggle-entity", "entity": "light.b"}""", "\"light.b\"",
+            """{"type": "divider"}""", """{"entity": "light.b"}""", "\"light.b\"", "\"sensor.b\"", "\"input_boolean.b\"",
             """{"type": "button", "name": "Go", "tap_action": {"action": "toggle"}}""",
             """{"type": "call-service", "name": "Ring", "action": "script.ring"}""",
             """{"type": "text", "name": "Wi-Fi", "text": "Guest"}""",
@@ -470,13 +473,15 @@ class WebFallbackTest {
         )) {
             assertNull(row, reason(row))
         }
-        // A button row, or a buttons row's chip, with a double-tap action: Vitro has no double tap yet.
-        assertEquals("a `button` row with a double-tap action",
+        // A button row, or a buttons row's chip, with a double-tap action (Vitro has no double tap yet) or one that
+        // opens Assist (Vitro's actions don't).
+        assertEquals("`entities` `entities[1].double_tap_action.action: toggle` isn't drawn natively: Vitro has no double tap yet",
             reason("""{"type": "button", "name": "Go", "double_tap_action": {"action": "toggle"}}"""))
-        assertEquals("a `buttons` row with a double-tap action",
+        assertEquals("`entities` `entities[1].entities[0].double_tap_action.action: more-info` isn't drawn natively: Vitro has no double tap yet",
             reason("""{"type": "buttons", "entities": [{"entity": "light.a", "double_tap_action": {"action": "more-info"}}]}"""))
-        assertEquals("a `button` row that opens Assist", reason("""{"type": "button", "name": "Ask", "tap_action": {"action": "assist"}}"""))
-        assertEquals("a `buttons` row that opens Assist",
+        assertEquals("`entities` `entities[1].tap_action.action: assist` isn't drawn natively",
+            reason("""{"type": "button", "name": "Ask", "tap_action": {"action": "assist"}}"""))
+        assertEquals("`entities` `entities[1].entities[0].hold_action.action: assist` isn't drawn natively",
             reason("""{"type": "buttons", "entities": [{"entity": "light.a", "hold_action": {"action": "assist"}}]}"""))
         // In the cards an entity-filter builds too.
         assertNotNull(WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject(
@@ -524,17 +529,17 @@ class WebFallbackTest {
         }
         // Vitro's actions don't open Assist, and it has no double tap yet.
         assertEquals("a `shortcut` card that opens Assist", reason("""{"type": "shortcut", "label": "Ask", "icon": "mdi:microphone", "tap_action": {"action": "assist"}}"""))
-        assertEquals("a `shortcut` card with a double-tap action",
+        assertEquals("`shortcut` `double_tap_action.action: navigate` isn't drawn natively: Vitro has no double tap yet",
             reason("""{"type": "shortcut", "label": "Go", "icon": "mdi:home", "double_tap_action": {"action": "navigate", "navigation_path": "/x"}}"""))
         // HA's own pages can't be framed from a loopback page (HA sends X-Frame-Options: SAMEORIGIN).
         assertEquals("an `iframe` card of a Home Assistant page", reason("""{"type": "iframe", "url": "/local/plan.html"}"""))
         assertEquals("an `iframe` card of a Home Assistant page", reason("""{"type": "iframe", "url": "plan.html"}"""))
         assertNull(reason("""{"type": "iframe", "url": "https://example.com/"}"""))
-        assertEquals("an `alert` card that opens Assist", reason("""{"type": "alert", "entity": "binary_sensor.d", "tap_action": {"action": "assist"}}"""))
-        assertEquals("a `statistic` card with a footer", reason(
+        assertEquals("`alert` `tap_action.action: assist` isn't drawn natively", reason("""{"type": "alert", "entity": "binary_sensor.d", "tap_action": {"action": "assist"}}"""))
+        assertEquals("`statistic` `footer` isn't drawn natively", reason(
             """{"type": "statistic", "entity": "sensor.e", "stat_type": "change", "period": {}, "footer": {"type": "graph", "entity": "sensor.e"}}""",
         ))
-        assertEquals("a `alert` card with a double-tap action",
+        assertEquals("`alert` `double_tap_action.action: more-info` isn't drawn natively: Vitro has no double tap yet",
             reason("""{"type": "alert", "entity": "binary_sensor.d", "double_tap_action": {"action": "more-info"}}"""))
     }
 
@@ -624,6 +629,12 @@ class WebFallbackTest {
         "calendar" -> """{"type": "$type", "entities": ["calendar.home"]}"""
         "area" -> """{"type": "$type", "area": "lounge"}"""
         "todo-list" -> """{"type": "$type", "entity": "todo.shopping"}"""
+        "sensor" -> """{"type": "$type", "entity": "sensor.power"}"""
+        "thermostat" -> """{"type": "$type", "entity": "climate.lounge"}"""
+        "humidifier" -> """{"type": "$type", "entity": "humidifier.lounge"}"""
+        "weather-forecast" -> """{"type": "$type", "entity": "weather.home", "forecast_type": "daily"}"""
+        "media-control" -> """{"type": "$type", "entity": "media_player.lounge"}"""
+        "alarm-panel" -> """{"type": "$type", "entity": "alarm_control_panel.home"}"""
         else -> """{"type": "$type", "entity": "light.lounge_lamp"}"""
     }
 

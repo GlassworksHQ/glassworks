@@ -1,5 +1,6 @@
 {
  "title": "Calendar: one calendar in the list (agenda) view",
+ "route": "frontend",
  "card": {
   "type": "calendar",
   "entities": [

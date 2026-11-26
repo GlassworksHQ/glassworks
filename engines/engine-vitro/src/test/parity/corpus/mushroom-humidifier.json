@@ -1,5 +1,6 @@
 {
  "title": "Mushroom humidifier card with its target humidity control",
+ "route": "island",
  "expect": {
   "humidifier.bedroom": "on"
  },

@@ -1,5 +1,6 @@
 {
  "title": "layout-card: masonry columns of entities cards (layout width 200, two columns)",
+ "route": "frontend",
  "span": 2,
  "card": {
   "type": "custom:layout-card",

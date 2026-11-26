@@ -1,5 +1,6 @@
 {
  "title": "vertical-stack-in-card: a title and two tiles in one card",
+ "route": "frontend",
  "card": {
   "type": "custom:vertical-stack-in-card",
   "title": "Lights",

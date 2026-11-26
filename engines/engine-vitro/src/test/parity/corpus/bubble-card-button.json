@@ -1,5 +1,6 @@
 {
  "title": "Bubble Card: a light as a slider button",
+ "route": "island",
  "card": {
   "type": "custom:bubble-card",
   "card_type": "button",
