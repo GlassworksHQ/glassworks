@@ -30,7 +30,7 @@ internal object MoreInfoRoute {
             "siren" -> if (s.supports(SIREN_TONES or SIREN_VOLUME or SIREN_DURATION)) "siren's advanced controls" else null
             in NATIVE_CONTROLS -> null
             "vacuum" -> vacuumGap(s)
-            "update" -> updateGap(s)
+            "update" -> updateGap(entityId, s)
             "number", "input_number" -> null
             in HA_DIALOGS, in HA_ROW_CONTROLS -> "$domain's dialog"
             else -> null
@@ -70,8 +70,17 @@ internal object MoreInfoRoute {
     private fun vacuumGap(s: EntityState?): String? =
         if (VacuumFeatures.has(s, VacuumFeatures.CLEAN_AREA)) "vacuum's clean-by-area view" else null
 
-    /** `more-info-update`: everything but the backup switch (`BACKUP`), which reads the Supervisor's settings. */
-    private fun updateGap(s: EntityState?): String? = if (UpdateFeatures.has(s, UpdateFeatures.BACKUP)) "update's backup option" else null
+    /**
+     * `more-info-update`: everything but the backup switch (`BACKUP`, which reads the Supervisor's and the backup
+     * integration's settings), what only the Supervisor's updates have (a backup running holds them back, their
+     * failures link to its logs: `platform: hassio`), and Skip on an update that updates itself, which asks first.
+     */
+    private fun updateGap(entityId: String, s: EntityState?): String? = when {
+        UpdateFeatures.has(s, UpdateFeatures.BACKUP) -> "update's backup option"
+        dev.glassworks.engine.vitro.data.HaDisplay.registry[entityId]?.platform == "hassio" -> "a Supervisor update"
+        s?.attributes?.get("auto_update") == true -> "an update that installs itself (Skip asks first)"
+        else -> null
+    }
 }
 
 /** HA's `supportsFeature`: [bit] is set in the entity's `supported_features`. */
