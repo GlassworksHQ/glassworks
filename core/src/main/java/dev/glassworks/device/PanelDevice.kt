@@ -556,7 +556,7 @@ class PanelDevice(
     }
 
     /** The chime player, made on first use (from the ESPHome, voice or main thread). */
-    private fun chimes(): TtsPlayer = synchronized(this) { chimePlayer ?: TtsPlayer().also { it.setVolume(volume.gain); chimePlayer = it } }
+    private fun chimes(): TtsPlayer = synchronized(this) { chimePlayer ?: TtsPlayer { volume.gain }.also { chimePlayer = it } }
 
     /** Home Assistant is connected and listening to the panel's states now. */
     fun homeAssistantConnected(): Boolean = server?.hasSubscriber == true

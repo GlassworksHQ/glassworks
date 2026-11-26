@@ -20,9 +20,11 @@ class MasterVolumeTest {
 
     private class FakeStream(override var max: Int = 15, var at: Int = 10, override var fixed: Boolean = false) : MediaStream {
         val writes = ArrayList<Int>()
+        /** Android refuses to move the stream (Do Not Disturb on some devices). */
+        var refuse = false
         override var index: Int
             get() = at
-            set(v) { at = v; writes += v }
+            set(v) { if (!refuse) at = v; writes += v }
     }
 
     private inner class FakeStore(override var level: Float = -1f, override var muted: Boolean = false, var old: Float? = null) : VolumeStore {
@@ -148,6 +150,37 @@ class MasterVolumeTest {
         volume.set(0.2f)
         volume.full(3_000)()
         assertEquals(listOf(3), store.clearedAt)
+    }
+
+    @Test fun aRestoreAndroidRefusesIsTriedAgainAndFullIsNeverTakenForTheLevel() {
+        volume.set(0.2f)
+        volume.mute(true)
+        val end = volume.full(3_000)
+        stream.refuse = true
+        end()
+        assertEquals("still at full", 15, stream.at)
+        assertTrue("the mark stays", store.raised)
+        assertEquals("the level isn't full", 0.2f, volume.level, 0.001f)
+        assertTrue("nor unmuted", volume.muted)
+        volume.full(3_000)()
+        assertTrue(store.raised)
+        stream.refuse = false
+        assertTrue(volume.muted)
+        assertEquals("the next read put it back", 0, stream.at)
+        assertFalse(store.raised)
+    }
+
+    @Test fun aStartAfterARefusedRestoreTriesAgain() {
+        store.level = 0.2f
+        store.raised = true
+        stream.at = 15
+        stream.refuse = true
+        volume.start()
+        assertTrue(store.raised)
+        stream.refuse = false
+        assertEquals(0.2f, volume.level, 0.001f)
+        assertEquals(3, stream.at)
+        assertFalse(store.raised)
     }
 
     @Test fun whereTheVolumeIsFixedACriticalAlertPlaysAtFullGainAndThePlayersHear() {

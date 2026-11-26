@@ -77,9 +77,8 @@ class MasterVolume(
             started = true
             val old = store.takeOldVolume()
             when {
-                // The app stopped mid-alert: the stream is still at full. The mark goes once the stream is back, so a
-                // stop in between leaves it for the next start.
-                store.raised -> { push(); store.raised = false }
+                // The app stopped mid-alert: the stream is still at full.
+                store.raised -> settle()
                 // The old volume scaled voice and announcements on top of the stream: keep them as loud as they were.
                 old != null -> { store.level = if (fixed()) old else streamLevel() * old.coerceIn(0f, 1f); push() }
                 // A first start: Android's level is the panel's. A mute saved before (Home Assistant's) still holds.
@@ -122,7 +121,8 @@ class MasterVolume(
         val tell = synchronized(lock) {
             val first = raises == 0
             if (first && !fixed()) {
-                pull()
+                // A restore Android refused is still pending: the stream is at full already, and the level is kept.
+                if (!store.raised) pull()
                 store.raised = true
                 stream.index = stream.max
             }
@@ -135,8 +135,7 @@ class MasterVolume(
             if (ended.compareAndSet(false, true)) {
                 val last = synchronized(lock) {
                     raises--
-                    // As at start: the mark goes once the stream is back.
-                    if (raises == 0 && store.raised) { push(); store.raised = false }
+                    settle()
                     raises == 0 && fixed()
                 }
                 if (last) onChange?.invoke()
@@ -167,9 +166,23 @@ class MasterVolume(
 
     private fun streamLevel() = (stream.index.toFloat() / stream.max).coerceIn(0f, 1f)
 
+    /**
+     * Puts the stream back after the last alert, and clears the mark once it has left full. Until then (Android
+     * refused, as Do Not Disturb can) the mark stays: reads don't take full for the level, and each one tries again,
+     * as does the next start after a stop.
+     */
+    private fun settle() {
+        if (raises > 0 || !store.raised) return
+        push()
+        if (fixed() || stream.index < stream.max || want() == stream.max) store.raised = false
+    }
+
+    private fun want() = if (store.muted) 0 else index(store.level)
+
     /** Takes in a change made outside the app. True when the level or mute changed. */
     private fun pull(): Boolean {
-        if (raises > 0 || fixed()) return false
+        settle()
+        if (raises > 0 || store.raised || fixed()) return false
         val i = stream.index
         if (store.muted) {
             if (i == 0) return false
@@ -182,7 +195,7 @@ class MasterVolume(
     /** Puts the stream where the level and mute say, unless an alert holds it at full. */
     private fun push() {
         if (raises > 0 || fixed()) return
-        val want = if (store.muted) 0 else index(store.level)
+        val want = want()
         if (stream.index != want) stream.index = want
     }
 

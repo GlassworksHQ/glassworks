@@ -67,7 +67,13 @@ fun AudioOutput.wakeChime(onDone: () -> Unit = {}) {
  * natively; 24/32-bit integer samples are reduced to 16-bit; more than 2 channels are reduced
  * to the first channel.
  */
-class TtsPlayer : AudioOutput {
+class TtsPlayer(
+    /**
+     * The gain each sound opens at, read as it opens: the master volume where the device keeps its volume fixed
+     * ([dev.glassworks.audio.MasterVolume.gain]), so a critical alert raised just before it plays at full. 1 by default.
+     */
+    private val gainNow: () -> Float = { 1f },
+) : AudioOutput {
 
     private sealed class Cmd {
         class Begin(val gen: Int, val rate: Int, val width: Int, val channels: Int) : Cmd()
@@ -80,8 +86,11 @@ class TtsPlayer : AudioOutput {
     @Volatile private var gen = 0
     @Volatile private var track: AudioTrack? = null
     private val trackLock = Any()
-    /** Under [trackLock]: the gain every track plays at ([setVolume]). */
+    /** Under [trackLock]: the gain the track plays at ([gainNow] as it opened, then [setVolume]). */
     private var gain = 1f
+
+    /** The gain the last sound opened at, for tests. */
+    internal val openedAt: Float get() = synchronized(trackLock) { gain }
     private val thread = Thread({ loop() }, "voice-tts").apply { isDaemon = true; start() }
 
     override fun begin(rate: Int, width: Int, channels: Int) {
@@ -104,10 +113,7 @@ class TtsPlayer : AudioOutput {
         haltTrack()
     }
 
-    /**
-     * The gain, 0 to 1, for this sound and the next ones: the master volume where the device keeps its volume fixed
-     * ([dev.glassworks.audio.MasterVolume.gain]), 1 elsewhere. Safe from any thread.
-     */
+    /** A new gain, 0 to 1, for the sound playing now (the next ones read [gainNow]). Safe from any thread. */
     fun setVolume(gain: Float) {
         synchronized(trackLock) {
             this.gain = gain.coerceIn(0f, 1f)
@@ -195,8 +201,13 @@ class TtsPlayer : AudioOutput {
             .setBufferSizeInBytes(bufBytes) // >= 250 ms
             .build()
         t.play()
-        // Nothing is written yet: the gain is in place before the first sample. Under the lock, no change is lost.
-        synchronized(trackLock) { track = t; t.setVolume(gain) }
+        // Nothing is written yet: the gain is in place before the first sample. Read under the lock, so a
+        // setVolume can't land between the read and the track.
+        synchronized(trackLock) {
+            gain = runCatching { gainNow().coerceIn(0f, 1f) }.getOrDefault(1f)
+            track = t
+            t.setVolume(gain)
+        }
         VoiceLog.i("TTS stream: ${rate} Hz, ${width * 8}-bit, $channels ch")
     }
 
