@@ -603,10 +603,23 @@ class VitroView(
         localeRebuilds++
         // An open More Info sheet built its words once: it opens again in the new language.
         val reopen = moreInfoEntityId?.takeIf { moreInfo != null }
+        // HA's page re-renders in place: the view stays where it was scrolled.
+        val scrolledTo = currentScroll()?.scrollY ?: 0
         closeMoreInfo()
         dropBuiltViews(keepIslands = false)
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+        if (scrolledTo > 0) currentScroll()?.let { scrollOnLayout(it, scrolledTo) }
         reopen?.let { openMoreInfo(it) }
+    }
+
+    /** Scrolls [scroll] to [y] once it's laid out (before that it has no content to scroll, and would stay at 0). */
+    private fun scrollOnLayout(scroll: ScrollView, y: Int) {
+        scroll.addOnLayoutChangeListener(object : OnLayoutChangeListener {
+            override fun onLayoutChange(v: View, l: Int, t: Int, r: Int, b: Int, ol: Int, ot: Int, or: Int, ob: Int) {
+                v.removeOnLayoutChangeListener(this)
+                v.scrollTo(0, y)
+            }
+        })
     }
 
     /**
