@@ -866,4 +866,17 @@ class ThemeResolverTest {
         // An escaped quote doesn't end the string.
         assertEquals(listOf("ha-card"), ThemeResolver.cssRules("""ha-card { content: "\" }"; opacity: .5 }""").map { it.first })
     }
+
+    @Test
+    fun aQuotedDeclarationIsTextNotAnotherDeclaration() {
+        // The real `opacity` comes first; the string holds a fake one, which the browser reads as text.
+        assertEquals(0.5f, ThemeResolver.parseCardMod("""ha-card { opacity: .5; --label: "x; opacity: 0.1" }""").opacity)
+        assertEquals(0.5f, ThemeResolver.parseCardMod("""ha-card { opacity: .5; content: 'a; opacity: 0.1; b' }""").opacity)
+        // Nor does a quoted custom property define one.
+        assertNull(ThemeResolver.parseCardMod("""ha-card { --label: "a; --fill: red"; background: var(--fill) }""").backgroundColor)
+        // Duplicates keep the cascade: the last one wins, an `!important` one before it beats it.
+        assertEquals(0.5f, ThemeResolver.parseCardMod("ha-card { opacity: .3; opacity: .5 }").opacity)
+        assertEquals(0.2f, ThemeResolver.parseCardMod("ha-card { opacity: .2 !important; opacity: .5 }").opacity)
+        assertEquals(0.4f, ThemeResolver.parseCardMod("ha-card { opacity: .2 } :host { opacity: .4 }").opacity)
+    }
 }

@@ -272,7 +272,7 @@ object ThemeResolver {
     private val BLUR = Regex("""blur\(\s*([\d.]+)px\s*\)""", RegexOption.IGNORE_CASE)
     private val PX_NUMBER = Regex("""([\d.]+)px""")
     private val WHITESPACE = Regex("""\s+""")
-    private val CUSTOM_PROPERTY = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""")
+    private val CUSTOM_PROPERTY_NAME = Regex("""--[\w-]+""")
     /** `font-family` values that keep the inherited list. */
     private val FONT_KEYWORDS = setOf("inherit", "unset", "revert", "revert-layer")
 
@@ -286,14 +286,7 @@ object ThemeResolver {
     private val STOP_PERCENT = Regex("""\s+[\d.]+%$""")
     private val STOP_POSITION = Regex("""\s+[\d.]+(?:%|px)$""")
     // One pattern per property name; the names are the literals below, so these stay small.
-    private val declProps = java.util.concurrent.ConcurrentHashMap<String, Regex>()
     private val themeVarProps = java.util.concurrent.ConcurrentHashMap<String, Regex>()
-    private fun declProp(name: String): Regex = declProps.getOrPut(name) {
-        // The value keeps a trailing `!important`: [parseCardMod] lets it win, as the browser does. A font list runs to
-        // the declaration's end, line breaks included (`font-family: Missing,\n  Pacifico, serif;`).
-        if (name == "font-family") Regex("""(?:^|[;\n{])\s*font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
-        else Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;\n]+)""", RegexOption.IGNORE_CASE)
-    }
     private fun themeVarProp(name: String): Regex = themeVarProps.getOrPut(name) {
         Regex("""(?:^|[;\n{])\s*$name\s*:\s*([^;!\n}]+)""", RegexOption.IGNORE_CASE)
     }
@@ -940,9 +933,17 @@ object ThemeResolver {
         val cleaned = JINJA_PATTERN.replace(stripCssComments(css), " ")
         if (cleaned.isBlank()) return CardModStyle()
         val (decls, otherRules) = hostDeclarations(cleaned)
+        // The card's declarations in source order, split as the browser splits them ([splitDeclarations]): a `;` in a
+        // string (`content: "a; opacity: 0"`) doesn't start another one. The value keeps a trailing `!important`,
+        // which wins below as it does in the browser. A property's name is ASCII case-insensitive; a custom one's isn't.
+        val declList = splitDeclarations(decls).mapNotNull { d ->
+            val colon = d.indexOf(':').takeIf { it > 0 } ?: return@mapNotNull null
+            val name = d.substring(0, colon).trim()
+            (if (name.startsWith("--")) name else name.lowercase(Locale.ROOT)) to d.substring(colon + 1)
+        }
         // Custom properties cascade like any other: per name, the last `!important` declaration wins, else the last.
-        val rawCustom = CUSTOM_PROPERTY.findAll(decls)
-            .groupBy({ it.groupValues[1] }, { it.groupValues[2] })
+        val rawCustom = declList.filter { (name, _) -> CUSTOM_PROPERTY_NAME.matches(name) }
+            .groupBy({ it.first.removePrefix("--") }, { it.second })
             .mapValues { (_, values) ->
                 val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.last()
                 winner.replace(IMPORTANT, "").trim()
@@ -956,13 +957,9 @@ object ThemeResolver {
         val rawScope = if (rawCustom.isEmpty()) vars else (vars + rawCustom).let { if (cyclic.isEmpty()) it else it - cyclic }
         val custom = rawCustom.mapValues { resolveValue(it.value, rawScope, 0) }
         val scope = if (custom.isEmpty()) vars else (vars + custom).let { if (cyclic.isEmpty()) it else it - cyclic }
-        // Most of the properties asked for below aren't there: skip the pattern when the name isn't in the text at all
-        // (the pattern matches ASCII case-insensitively, so a lowercase miss is always a pattern miss).
-        val lowerDecls = decls.lowercase(Locale.ROOT)
         // As in the browser: the last `!important` declaration wins, else the last one. card-mod keeps the flag.
         fun prop(name: String): String? {
-            if (name !in lowerDecls) return null
-            val values = declProp(name).findAll(decls).map { it.groupValues[1] }.toList()
+            val values = declList.filter { it.first == name }.map { it.second }
             val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.lastOrNull()
             return winner?.replace(IMPORTANT, "")?.trim()?.takeIf { it.isNotEmpty() }?.let { resolveValue(it, scope, 0) }
         }
@@ -973,16 +970,15 @@ object ThemeResolver {
          */
         fun winner(vararg names: String): Pair<String, String>? {
             var best: Triple<String, String, Pair<Boolean, Int>>? = null
-            for (name in names) {
-                if (name !in lowerDecls) continue
-                for (m in declProp(name).findAll(decls)) {
-                    // An invalid declaration is dropped before the cascade (`border: nonsense` hides no width).
-                    if (!borderDeclValid(name, m.groupValues[1].replace(IMPORTANT, "").trim())) continue
-                    val key = IMPORTANT.containsMatchIn(m.groupValues[1]) to m.range.first
-                    val b = best
-                    if (b == null || key.first && !b.third.first || key.first == b.third.first && key.second > b.third.second) {
-                        best = Triple(name, m.groupValues[1], key)
-                    }
+            for ((index, decl) in declList.withIndex()) {
+                val (name, value) = decl
+                if (name !in names) continue
+                // An invalid declaration is dropped before the cascade (`border: nonsense` hides no width).
+                if (!borderDeclValid(name, value.replace(IMPORTANT, "").trim())) continue
+                val key = IMPORTANT.containsMatchIn(value) to index
+                val b = best
+                if (b == null || key.first && !b.third.first || key.first == b.third.first && key.second > b.third.second) {
+                    best = Triple(name, value, key)
                 }
             }
             val (name, raw) = best ?: return null
