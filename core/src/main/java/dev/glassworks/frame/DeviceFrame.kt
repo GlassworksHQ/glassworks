@@ -20,6 +20,8 @@ class DeviceFrame(
     val release: (prop: (String) -> String) -> FrameRelease? = { null },
     /** frame.json's `camera.maxPixels` ([Frame.cameraMaxPixels]), or null when it sets none. */
     val cameraMaxPixels: Int? = null,
+    /** frame.json's `camera.sensorDegrees` ([Frame.cameraSensorDegrees]), or null when it sets none. */
+    val cameraSensorDegrees: Int? = null,
     /** How the frame's screen stands ([Frame.orientation]), or null to turn as Android says ([Orientation.ANY]). */
     val orientation: Orientation? = null,
     /** How the frame's screen sleeps ([Frame.sleepMode]). */
@@ -48,6 +50,9 @@ class DeviceFrame(
             },
             // 720p: about 950 MB of RAM, and the page's process was killed while the camera ran at 1080p (#679).
             cameraMaxPixels = 1280 * 720,
+            // Its camera says 0 degrees, but with the screen at rotation 3 that turned every still upside down: the
+            // sensor sits at 180 (frames/lululemon-mirror/research/camera-stock.md).
+            cameraSensorDegrees = 180,
             // Upright is rotation 3 (frames/lululemon-mirror/research/image-patch.md). Kiln's first boot locks it, but
             // Android 6 turns auto-rotate on and rotation to 0 on every update of the app (#686), so the app asks
             // for portrait itself.

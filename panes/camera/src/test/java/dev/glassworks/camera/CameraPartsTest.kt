@@ -58,6 +58,7 @@ class CameraPartsTest {
         assertEquals(270, stillRotation(270, 0, front = false))
         assertEquals(0, stillRotation(270, 270, front = false))
         assertEquals(180, stillRotation(90, 90, front = true))
+        assertEquals("the Mirror: its sensor at 180 under a screen at rotation 3", 270, stillRotation(180, 270, front = false))
     }
 
     // ------------------------------------------------------------ blank frames (the Mirror's green stills, 2026-11-25)

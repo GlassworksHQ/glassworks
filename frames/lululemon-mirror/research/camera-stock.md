@@ -175,6 +175,24 @@ series of connects from another crashed `mediaserver`.
    encoder the rest, with the encoder told the real rate. Only the size rule stays LEGACY's own (#679): it follows
    how Android's shim sizes its preview.
 
+   On the Mirror (2026-11-26, verified, the test build with the single path): the camera opened at `[30, 30] fps`,
+   Home Assistant's still was a real picture, and with Home Assistant playing the RTSP stream the log said
+   `camera: streaming; the reader gets 1 frame in 10`. `top` gave the app 13% of the CPU while streaming, its page 2–4%
+   and `mediaserver` 3%. The first session after the install was the first-frame stall again (one green frame, then
+   nothing); the watchdog reopened it 15 s later and the second session was clean.
+
+7. **Upside-down stills** (2026-11-26, verified). With a real picture at last, the still stood upside down. The camera
+   reports `Orientation: 0` (`dumpsys media.camera`), and the screen runs at rotation 3 (`dumpsys display`:
+   `rotation 3`, `persist.panel.orientation` 270) to stand the landscape panel up. Android's rule for a back camera,
+   sensor minus screen, turned the still by (0 − 270) mod 360 = 90 degrees, which came out upside down, so the turn
+   upright is 270 and the sensor really sits at 180. The Mirror's frame.json now says so (`camera.sensorDegrees: 180`),
+   and the app goes by that over Android's value on this frame only.
+
+   The RTSP stream isn't turned at all: the encoder takes the camera's frames as they come, so a frame grabbed with
+   `ffmpeg -rtsp_transport tcp -i rtsp://…:8554/ -frames:v 1` is 1280×720 with the room on its side, needing a
+   quarter turn counter-clockwise. Turning it in the app would mean drawing every frame through the GPU before the
+   encoder; see Open questions.
+
 ## Result
 
 | Problem | Cause | What the camera pane does now |
@@ -182,6 +200,7 @@ series of connects from another crashed `mediaserver`.
 | Green stills | The pane asked the camera for 15–15, which it lists but runs broken: a third of streaky picture over two thirds of green | Every camera is asked for the steadiest range at its top rate (30–30 on the Mirror, its own default). As a safety net, a frame with a quarter of its sampled rows dead (zero in Y and both chroma planes, or the green a LEGACY camera draws zero as) counts as no frame: it doesn't reach presence, doesn't answer a still, and the session is reopened by the silence watchdog and backoff. A dark room is never blank: its Y has noise and its chroma is near 128 |
 | No pictures in the stream | The same blank or empty sessions | The reopen above. The reader stays in a few of the stream's requests, so the check still sees the stream's session |
 | Stream at 7 fps | The shim reads back every frame the reader gets | While streaming, the repeating request is a burst on every camera: the encoder gets every frame, the reader one in ten at the Mirror's steady 30 fps (3 fps), enough for presence and stills. The interval comes from the slowest rate the camera may run at, so the reader keeps at least 3 fps; a camera that may run slower than 6 fps keeps the reader in every request |
+| Upside-down stills | The camera reports its sensor at 0 degrees, but it sits at 180 | The frame says 180 (`camera.sensorDegrees`), and the still turns by that and the screen's rotation |
 | `mediaserver` crashes | Bursts of connects while another app held the camera | A failed open waits 5 s, then 10, 20, 40, up to 60 s, and nothing else tries in the meantime. When Android reports that camera free again, it's tried at once, but never within 2 s of the last failure |
 
 ## How to reproduce
@@ -202,6 +221,10 @@ To see the pane's handling on a Mirror running Glassworks with the camera pane:
    in …` with growing waits, and `is free again; opening now` when the spike closes the camera.
 
 ## Open questions
+
+- How to stand the stream upright. It goes out as the sensor sees it, on its side on the Mirror. Home Assistant can
+  turn a camera's stream in the entity's settings (**untested** on this camera); turning it in the app needs a GPU pass
+  in front of the encoder, which costs the Mirror memory and CPU it is short of.
 
 - Why the HAL starts a third of its sessions this way. The `mm-camera` logs show nothing different before a bad
   session. Without the vendor's source this is a workaround, not a fix.

@@ -279,7 +279,7 @@
     }
   ],
   "provides": ["microphone", "speaker", "bluetooth-le", "camera"],
-  "camera": { "maxPixels": 921600 },
+  "camera": { "maxPixels": 921600, "sensorDegrees": 180 },
   "panes": {
     "assist": {
       "support": "alpha",

@@ -106,8 +106,11 @@ export interface FrameDesign {
   abis?: Abi[];
   /** the device can sit on a dock (the Pixel Tablet): the app gives Home Assistant its Docked sensor from the start (docs/esphome.md#docked) */
   dock?: boolean;
-  /** `maxPixels`: the most the camera and its stream may run at, for a device whose memory can't hold more next to the page */
-  camera?: { maxPixels: number };
+  /**
+   * `maxPixels`: the most the camera and its stream may run at, for a device whose memory can't hold more next to the page.
+   * `sensorDegrees`: how the camera's sensor really sits, for a device whose camera reports it wrong (the Mirror's)
+   */
+  camera?: { maxPixels?: number; sensorDegrees?: 0 | 90 | 180 | 270 };
   /**
    * The app Kiln installs on this frame, when it isn't Glassworks: its package (`id`), the activity adb
    * starts it with (whose extras it trusts from adb), the activity its HOME filter is on (an alias),
