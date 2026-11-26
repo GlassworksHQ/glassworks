@@ -38,9 +38,12 @@ async function settle() { for (let i = 0; i < 5; i++) await tick(); }
  * One island page: the module run in its own context, with [card] as the custom element (a class-like factory:
  * (el) => void sets up el). Returns the bridge and the page's globals.
  */
-async function openPage({ card, strings = STRINGS, height = 40, mountHeight, snapshot = LAMP, source = SOURCE, epoch = () => 1 } = {}) {
+async function openPage({ card, strings = STRINGS, height = 40, mountHeight, snapshot = LAMP, source = SOURCE, epoch = () => 1, defineLater = false } = {}) {
   const listeners = {};
   const sockets = [];
+  let defined = !defineLater;
+  let define = () => {};
+  const definedPromise = defineLater ? new Promise((r) => { define = () => { defined = true; r(); }; }) : Promise.resolve();
   let cardEl = null;
   const mount = {
     children: [],
@@ -79,9 +82,10 @@ async function openPage({ card, strings = STRINGS, height = 40, mountHeight, sna
       if (String(url).startsWith('/__vitro/ws/')) return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
       return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
     },
+    // [defineLater]: the card's script defines it only when the test says (page.define()), as a slow one does.
     customElements: {
-      get: (t) => (t === TAG ? function () {} : undefined),
-      whenDefined: (t) => (t === TAG ? Promise.resolve() : new Promise(() => {})),
+      get: (t) => (t === TAG && defined ? function () {} : undefined),
+      whenDefined: (t) => (t === TAG ? definedPromise : new Promise(() => {})),
     },
     document: {
       getElementById: (id) => (id === 'mount' ? mount : mount.children.find((c) => c.id === id) || null),
@@ -103,7 +107,7 @@ async function openPage({ card, strings = STRINGS, height = 40, mountHeight, sna
   vm.createContext(sandbox);
   const ws = () => sockets[sockets.length - 1];
   const page = {
-    sandbox, sockets, ws, listeners, card: () => cardEl,
+    sandbox, sockets, ws, listeners, card: () => cardEl, define: () => define(),
     hass: () => sandbox.__vitroHass,
     sent: (type) => sockets.flatMap((s) => s.sent).filter((m) => !type || m.type === type),
     // An error the page's handlers hear, as a browser reports an uncaught one.
@@ -684,4 +688,66 @@ test('a card whose every update fails on a missing member goes to HA\'s frontend
   for (let i = 0; i < 3; i++) page.rejectInPage(new TypeError("Cannot read properties of undefined (reading 'split')"));
   await settle();
   assert.deepEqual(page.sent('cardBroken'), [{ type: 'cardBroken', member: 'split' }]);
+});
+
+// ---- A slow script, links, an empty card (#799 D6-D8) ----
+
+test('a card whose script is late shows HA\'s error while the page waits, and is made when the script comes', async () => {
+  const page = await openPage({ card: plainCard, defineLater: true });
+  await tick(4200);
+  assert.deepEqual(page.sent('cardError'), [{ type: 'cardError', message: "Custom element doesn't exist: acme-island-card.", waiting: true }],
+    'the panel hears it may still come');
+  assert.equal(page.card(), null);
+  page.define();
+  await settle();
+  assert.deepEqual(page.sent('cardDefined'), [{ type: 'cardDefined' }]);
+  assert.ok(page.card(), 'made when the script defined it (HA\'s ll-rebuild)');
+  assert.equal(page.card().got[0].states['light.lounge'].state, 'on');
+});
+
+test('a url action opens as a native card\'s does, never in the card\'s own page', async () => {
+  const page = await openPage({ card: plainCard });
+  let opened = null;
+  page.sandbox.open = (u) => { opened = u; };
+  const action = { action: 'url', url_path: 'https://www.example.com/' };
+  for (const fn of page.listeners['hass-action'] || []) fn({ detail: { config: { entity: 'light.lounge', tap_action: action }, action: 'tap' } });
+  assert.equal(opened, null, 'no window.open: it would load the site into the island');
+  assert.deepEqual(page.sent('action'), [{ type: 'action', action, entity: 'light.lounge' }]);
+});
+
+test('a card that draws nothing collapses once it rendered, and not before', async () => {
+  // A wrapper with no match (a state-switch, a conditional): its host takes no room.
+  const empty = (el) => {
+    el.setConfig = () => {};
+    let done;
+    el.updateComplete = new Promise((r) => { done = r; });
+    Object.defineProperty(el, 'hass', { set() { setTimeout(() => done(true), 200); } });
+  };
+  const page = await openPage({ card: empty });
+  await tick(100);
+  assert.deepEqual(page.sent('resize'), [], 'not drawn yet: no 0 that would flash');
+  await tick(300);
+  assert.deepEqual(page.sent('resize').map((m) => m.height), [0], 'drawn and empty: no height, as HA gives it');
+});
+
+test('formatEntityState is HA\'s computeStateDisplay: precision, numbers, money, options, timestamps', async () => {
+  const page = await openPage({ card: plainCard });
+  page.ws().push({ type: 'registries', registries: {
+    entities: { 'sensor.power': { entity_id: 'sensor.power', display_precision: 1 } }, devices: {}, areas: {}, floors: {},
+  } });
+  await settle();
+  const f = page.card().hass.formatEntityState;
+  assert.equal(f({ entity_id: 'sensor.power', state: '1234.567', attributes: { unit_of_measurement: 'W' } }), '1,234.6 W', 'the registry\'s display precision');
+  assert.equal(f({ entity_id: 'sensor.count', state: '1234', attributes: { state_class: 'measurement' } }), '1,234', 'numeric by its state class, no unit');
+  assert.equal(f({ entity_id: 'input_number.level', state: '40.0', attributes: { step: 1 } }), '40', 'a whole step: no decimals');
+  assert.equal(f({ entity_id: 'sensor.bill', state: '12.5', attributes: { device_class: 'monetary', unit_of_measurement: 'EUR' } }), '€12.50');
+  assert.equal(page.card().hass.formatEntityStateToParts({ entity_id: 'sensor.bill', state: '12.5', attributes: { device_class: 'monetary', unit_of_measurement: 'EUR' } }).map((p) => p.type).join(','), 'unit,value');
+  assert.equal(f({ entity_id: 'input_select.scene', state: 'movie_night', attributes: {} }), 'Movie night', 'a domain the page has no labels for: its words, as HA\'s label would be');
+  assert.equal(f({ entity_id: 'light.lounge', state: 'flashing', attributes: {} }), 'flashing', 'a state its domain\'s labels don\'t name: as it is, as HA');
+  // IslandHassContractTest runs this with TZ=UTC; the user's time format is the language's (12-hour for English).
+  assert.match(f({ entity_id: 'sensor.last_boot', state: '2026-11-20T08:05:00+00:00', attributes: { device_class: 'timestamp' } }), /^November 20, 2026\D+8:05\sAM$/u,
+    'a timestamp as HA\'s formatDateTime writes it');
+  assert.equal(f({ entity_id: 'sensor.last_boot', state: 'soon', attributes: { device_class: 'timestamp' } }), 'soon', 'not a date: as it is');
+  assert.equal(f({ entity_id: 'input_datetime.alarm', state: '2026-11-20', attributes: {} }), 'November 20, 2026');
+  assert.match(f({ entity_id: 'input_datetime.alarm', state: '07:30:00', attributes: {} }), /^7:30\sAM$/u);
 });

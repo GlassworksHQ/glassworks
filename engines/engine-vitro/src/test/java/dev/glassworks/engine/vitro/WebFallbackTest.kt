@@ -15,7 +15,9 @@ import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.compat.CompatChecker
+import dev.glassworks.engine.vitro.compat.IslandBudget
 import dev.glassworks.engine.vitro.compat.IslandFrontend
+import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.VitroSupport
 import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.EntityState
@@ -209,6 +211,82 @@ class WebFallbackTest {
         assertEquals("one browser page, for the iframe's own page", 1, islandOpens())
         val island = fallback.pages[fallback.opens.indexOfFirst { it.host !== host }]
         assertTrue(island.loads.single(), island.loads.single().contains("/__vitro/island/"))
+    }
+
+    // ---- How many islands one view runs (#799 D2) ----
+
+    private val manyIslands = """{"title": "Many", "path": "many", "cards": [
+        {"type": "custom:acme-a-card"},
+        {"type": "vertical-stack", "cards": [{"type": "custom:acme-b-card"}, {"type": "custom:acme-c-card"}]}]}"""
+
+    @Test fun aViewWithMoreIslandsThanTheDeviceRunsShowsInHomeAssistantsFrontend() {
+        server.dashboardConfig = views(living, manyIslands)
+        val p = page()
+        p.load("$base/wall-test/living")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        val vv = vitroView(p)
+        vv.islandBudget = 2
+        tab(vv, "Many").performClick()
+        idle()
+        assertEquals(listOf("$base/wall-test/many"), pageFallback()!!.loads)
+        assertEquals("three browser pages would cost more than HA's one: none opens", 0, islandOpens())
+    }
+
+    @Test fun aViewWithinTheIslandBudgetIsDrawnWithItsIslands() {
+        server.dashboardConfig = views(living, manyIslands)
+        val p = page()
+        p.load("$base/wall-test/living")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        val vv = vitroView(p)
+        vv.islandBudget = 3
+        tab(vv, "Many").performClick()
+        idle()
+        assertNull("drawn natively", pageFallback())
+        assertEquals(3, islandOpens())
+    }
+
+    @Test fun theIslandCountIsWhatTheViewsBuildOpens() {
+        fun count(cards: String) = IslandBudget.islandCount(
+            LovelaceParser.parseView(0, JSONObject("""{"cards": [$cards]}""")), IslandScripts.ANY,
+        )
+        assertEquals(0, count("""{"type": "tile", "entity": "light.lounge_lamp"}"""))
+        assertEquals(1, count("""{"type": "custom:acme-a-card"}"""))
+        assertEquals("the cards a stack holds", 2, count("""{"type": "grid", "cards": [{"type": "custom:acme-a-card"},
+            {"type": "conditional", "conditions": [], "card": {"type": "custom:acme-b-card"}}, {"type": "tile", "entity": "light.a"}]}"""))
+        assertEquals("an island draws the cards inside it in its own page", 1, count("""{"type": "custom:acme-wrap-card",
+            "cards": [{"type": "custom:acme-a-card"}, {"type": "custom:acme-b-card"}]}"""))
+        assertEquals("an iframe is a page of its own", 1, count("""{"type": "iframe", "url": "https://example.com/"}"""))
+        assertEquals("a panel view builds its first card", 1, IslandBudget.islandCount(LovelaceParser.parseView(0, JSONObject(
+            """{"type": "panel", "cards": [{"type": "custom:acme-a-card"}, {"type": "custom:acme-b-card"}]}""")), IslandScripts.ANY))
+    }
+
+    @Test fun theBudgetFollowsTheDevicesMemory() {
+        assertEquals(IslandBudget.SMALL, IslandBudget.forTotalMem(1_073_741_824L))
+        // The S1 reads 2.07 GB: a 2 GB panel.
+        assertEquals(IslandBudget.MEDIUM, IslandBudget.forTotalMem(2_070_000_000L))
+        assertEquals(IslandBudget.LARGE, IslandBudget.forTotalMem(7_800_000_000L))
+    }
+
+    // ---- A link in an island (#799 D7) ----
+
+    @Test fun aLinkInAnIslandOpensInThePanelsPageAndTheCardStays() {
+        server.dashboardConfig = views("""{"title": "Home", "path": "home", "cards": [{"type": "custom:acme-a-card"}]}""")
+        val p = page()
+        p.load("$base/wall-test/home")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        val i = fallback.opens.indexOfFirst { it.background == Color.TRANSPARENT }
+        val islandHost = fallback.opens[i].host
+        val islandUrl = fallback.pages[i].loads.single()
+        assertTrue("its own page loads", islandHost.allowsLoad(islandUrl))
+        assertTrue(islandHost.allowsLoad("about:blank"))
+        val origin = islandUrl.substringBefore("/__vitro/")
+        assertFalse("another host that starts like the island's", islandHost.allowsLoad("$origin.example.com/"))
+        assertFalse("a calendar event's link", islandHost.allowsLoad("https://www.example.com/events/1.html"))
+        assertFalse("nothing but a web address is opened elsewhere", islandHost.allowsLoad("javascript:alert(1)"))
+        idle()
+        assertEquals("the island stays on its page", listOf(islandUrl), fallback.pages[i].loads)
+        // Web addresses open in the panel's page, as a native card's url action does, in the order they came.
+        assertEquals(listOf("$origin.example.com/", "https://www.example.com/events/1.html"), pageFallback()?.loads)
     }
 
     @Test fun aBuiltInCardNestedInAStackOrAutoEntitiesCounts() {

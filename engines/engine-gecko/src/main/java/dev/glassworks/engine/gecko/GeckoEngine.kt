@@ -379,6 +379,7 @@ class GeckoEngine(
             // target=_blank / window.open: keep it in the single kiosk session.
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
                 if (guard?.allows(PageGuard.Load.WINDOW, uri) == false) return null
+                if (!host.allowsLoad(uri)) return null
                 session.loadUri(uri)
                 return null
             }
@@ -402,6 +403,8 @@ class GeckoEngine(
                 if (guard?.allows(if (current) PageGuard.Load.PAGE else PageGuard.Load.WINDOW, request.uri) == false) {
                     return GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
+                // The host's own policy, for this window and a new one (a new one opens in this session).
+                if (!host.allowsLoad(request.uri)) return GeckoResult.fromValue(AllowOrDeny.DENY)
                 if (!current) return null
                 val target = host.redirect(request.uri) ?: return null
                 // Like the activity's handler before: a redirect still queued when the activity is destroyed is dropped.

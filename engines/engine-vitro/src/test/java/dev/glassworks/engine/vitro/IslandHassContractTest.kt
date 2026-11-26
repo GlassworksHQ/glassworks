@@ -81,7 +81,8 @@ class IslandHassContractTest {
             val types = File(RepoFiles.root, "engines/engine-vitro/src/test/ha-frontend/hass-types.ts")
             val (code, out) = IslandNode.run(
                 node, listOf("--test", harness.path),
-                env = mapOf("ISLAND_MODULE" to module.path, "ISLAND_MODULE_NO_CONFIG" to noConfig.path, "HASS_TYPES" to types.path),
+                // TZ: the dates the page formats in its time zone are the same on every machine.
+                env = mapOf("ISLAND_MODULE" to module.path, "ISLAND_MODULE_NO_CONFIG" to noConfig.path, "HASS_TYPES" to types.path, "TZ" to "UTC"),
                 timeoutSeconds = 120,
             )
             assertEquals(out, 0, code)

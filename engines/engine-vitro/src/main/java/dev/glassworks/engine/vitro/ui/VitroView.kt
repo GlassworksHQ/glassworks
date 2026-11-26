@@ -102,6 +102,7 @@ import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatChecker
+import dev.glassworks.engine.vitro.compat.IslandBudget
 import dev.glassworks.engine.vitro.compat.IslandFrontend
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.WebFallback
@@ -336,12 +337,20 @@ class VitroView(
     var onWebView: ((ViewConfig, String) -> Unit)? = null
 
     /**
-     * Why [view] goes to HA's frontend now: its own reason ([ViewConfig.webFallbackReason]), or a card in it that an
-     * island found drawing with Home Assistant's own elements this session ([IslandFrontend]). Null: Vitro draws it.
+     * Why [view] goes to HA's frontend now: its own reason ([ViewConfig.webFallbackReason]), a card in it that an
+     * island found drawing with Home Assistant's own elements this session ([IslandFrontend]), or more island pages
+     * than this device runs in one view ([islandBudget]). Null: Vitro draws it.
      */
     fun fallbackReason(view: ViewConfig): String? =
         view.webFallbackReason ?: (if (gaveUpViews.isEmpty()) null else gaveUpViews[viewKey(view)])
-            ?: if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) }
+            ?: (if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) })
+            ?: IslandBudget.reason(view, IslandScripts.of(resourcesList), islandBudget)
+
+    /**
+     * The most island pages one view opens on this device ([IslandBudget]): a view with more goes to HA's frontend.
+     * Tests set it.
+     */
+    internal var islandBudget: Int = IslandBudget.forDevice(context)
 
     /**
      * What this session learned about [card] with [resources]: its island page kept dying ([islandPagesGone]), or,

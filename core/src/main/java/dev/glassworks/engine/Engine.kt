@@ -140,6 +140,13 @@ interface PageHost {
     /** A top-level load in the page's own window. Return a URL to load instead, or null to let it load. */
     fun redirect(url: String): String?
 
+    /**
+     * Whether the page may load [url] at the top level, in its own window or in one it opens (a link, `window.open`).
+     * False drops the load: the page stays where it is. Asked before [redirect]. A page that hosts a card in a frame of
+     * the dashboard (a Vitro island) says no to everything but its own address, so a link can't replace the card.
+     */
+    fun allowsLoad(url: String): Boolean = true
+
     /** The content process crashed, or the system [killed] it. The page shows nothing until [Page.restart]. */
     fun onContentGone(killed: Boolean)
 
