@@ -172,6 +172,9 @@ export async function installInPlace(p: PanelShell, o: { apk: Uint8Array; onStep
   const ws = await p.run(`appops set ${ours.package} WRITE_SETTINGS allow`);
   r.detail(ws.code === 0 ? 'Setup Wi-Fi: allowed' : `Setup Wi-Fi: not allowed (${ws.out.trim().split('\n')[0] || `exit ${ws.code}`})`);
 
+  r.step('Keep Wi-Fi on');
+  r.detail(await keepWifiOn(p));
+
   r.step('Hide the stock apps');
   const bloat = await hideStockBloat(p);
   for (const b of bloat) r.detail(`${b.ok ? 'hidden   ' : 'not yet  '} ${b.pkg}`);
@@ -186,6 +189,29 @@ export async function installInPlace(p: PanelShell, o: { apk: Uint8Array; onStep
   const updates = await readMirrorUpdates(p, ours);
   r.detail(describeMirrorUpdates(updates));
   return { app, hidden: [...bloat.filter((b) => b.ok).map((b) => b.pkg), ...hidden], home, updates: { state: updates.state } };
+}
+
+/**
+ * Wi-Fi's switch (`Settings.Global.WIFI_ON`), set back on when it reads off, and the detail line that says what
+ * happened. Not `svc wifi enable`: on stock the shell lacks CHANGE_WIFI_STATE, and the shell is killed for asking
+ * (verified on a Mirror 2026-11-25). It may write global settings, and Android reads this one when it starts, so a
+ * switch put back on takes effect at the next start. Wi-Fi reads off on stock when a fast start loses the race with the
+ * Wi-Fi firmware: Android then switches Wi-Fi off for good. From then on the app switches it back on after each such
+ * failure (research/stock-wifi-boot.md); a switch that is off from the start of a boot has no failure to react to,
+ * which is what this write is for. Airplane mode (3) is left as it is.
+ */
+export async function keepWifiOn(p: PanelShell): Promise<string> {
+  const read = await p.run('settings get global wifi_on');
+  const v = read.out.trim();
+  if (read.code !== 0 || !/^\d+$/.test(v)) return `Wi-Fi: switch not read (${v.split('\n')[0] || `exit ${read.code}`}), left as it is`;
+  if (v === '1' || v === '2') return 'Wi-Fi: on';
+  if (v === '3') return 'Wi-Fi: off for airplane mode, left as it is';
+  const put = await p.run('settings put global wifi_on 1');
+  if (put.code !== 0) return `Wi-Fi: off, and not set (${put.out.trim().split('\n')[0] || `exit ${put.code}`})`;
+  // Android 6's `settings` can exit 0 after a refused write: only a read-back says it took
+  const back = await p.run('settings get global wifi_on');
+  if (back.code !== 0 || back.out.trim() !== '1') return `Wi-Fi: off, and not set (it reads ${back.out.trim().split('\n')[0] || `exit ${back.code}`} after the write)`;
+  return 'Wi-Fi: was off, on from the next start';
 }
 
 /** The Mirror's in-place code. `words`: installer.json `device.words` (the `inPlace.*` keys, checked here). */

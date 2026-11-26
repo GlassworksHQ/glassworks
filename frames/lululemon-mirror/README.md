@@ -175,6 +175,7 @@ Deep engineering notes from bringing up the Mirror (see [all research notes](../
 - [improv-ble-disconnect.md](research/improv-ble-disconnect.md) — Why Wi-Fi setup over Bluetooth never finished in Home Assistant, and the advertising fix
 - [stock-firmware-probe.md](research/stock-firmware-probe.md) — Live probe of untouched stock 1.24.0 firmware via userdata-only HTTP app, `FS_IOC_FIEMAP`, and reversible surgical USB ADB
 - [stock-softap.md](research/stock-softap.md) — Why stock software keeps opening its `mirror-<serial>` hotspot, and the `services.jar` edit that turns it off
+- [stock-wifi-boot.md](research/stock-wifi-boot.md) — Why stock Wi-Fi switches itself off after a fast boot, and how the app turns it back on
 
 ## Files
 
