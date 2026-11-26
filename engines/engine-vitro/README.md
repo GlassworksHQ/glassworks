@@ -203,7 +203,7 @@ Its title names the entity on two lines, as Home Assistant does: the area and de
 | Light | Brightness dimmer, an HSV color wheel, a Kelvin color-temperature picker, and color swatches |
 | Climate | A circular thermostat dial with mode buttons, and two thumbs for a heat/cool range |
 | Cover | A top-down position slider |
-| Fan, lock, media player, select, siren, button, script and scene | Their controls as in Home Assistant's dialog. A siren's tones, volume and duration, and a script that asks for fields, open Home Assistant's own dialog |
+| Fan, lock, media player, siren, script and scene | Their controls as in Home Assistant's dialog. A siren's tones, volume and duration, and a script that asks for fields, open Home Assistant's own dialog |
 | Vacuum | Its status and battery, Home Assistant's robot posed for its state, the commands it supports and the fan speed. Cleaning by area opens Home Assistant's own dialog |
 | Update | The installed and latest versions, the release notes, the progress while it installs, and Skip, Clear skipped and Update. An update with the backup option, a Supervisor update and one that installs itself open Home Assistant's own dialog |
 | Sensor, binary sensor and the like | Its icon, name, last change and state, then the last 24 hours: Home Assistant's 5-minute statistics for a sensor with a state class ("5-minute aggregated"), its state history otherwise, and "Show more", which opens the history page in Home Assistant's frontend (Back returns to the dashboard). Under it, the Activity section lists the entity's recent changes and what caused them, as Home Assistant's does |
@@ -211,6 +211,12 @@ Its title names the entity on two lines, as Home Assistant does: the area and de
 | Camera | A live stream, chosen as on the picture cards (WebRTC, then HLS and MJPEG) |
 | Switch | A toggle pill |
 | Alarm panel | Its modes in a vertical selector, or while it's triggered, arming or pending, its pulsing status and Disarm. A mode that needs a code opens Home Assistant's code dialog: a keypad for a number code, a field for a text one |
+| Select, input select | The options menu next to the entity's icon, then the history and the Activity section |
+| Button, input button | Its icon, name and last press, a Press button, then the history and the Activity section |
+| Alert | Its icon, name and last change, a toggle while the alert is active (turning it off acknowledges it), then the history and the Activity section |
+| Event | Its icon and name, the time of the last event over its type, then the history and the Activity section |
+
+Some details only Home Assistant's frontend has. Tapping an Activity entry, or an entry of a logbook card, opens Home Assistant's own More-Info dialog for that entity, where the entry's detail is one tap away. Closing it brings back the dashboard.
 
 An entity whose dialog Vitro doesn't draw as Home Assistant does opens Home Assistant's own dialog over the same view, in its frontend: weather, timer, person, valve, water heater, automation, humidifier, text and the other domains with a dialog of their own, a group with members, and an entity with a custom More-Info element. Closing it, or Back, returns to the native view where it was.
 

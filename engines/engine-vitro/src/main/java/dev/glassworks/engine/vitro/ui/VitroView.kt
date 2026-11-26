@@ -781,6 +781,19 @@ class VitroView(
      */
     var onMoreInfoInFrontend: ((ViewConfig, String, String, String?) -> Unit)? = null
 
+    /**
+     * HA's own More Info dialog for [entityId], on its view [moreInfoView] (null: its default), in HA's frontend over the
+     * view on screen ([onMoreInfoInFrontend]), for what only it has ([reason]: a logbook card entry's detail). Closes
+     * an open sheet first. False when there's no page for it (no [onMoreInfoInFrontend], no view): nothing happens.
+     */
+    internal fun moreInfoInFrontend(entityId: String, moreInfoView: String?, reason: String): Boolean {
+        val inFrontend = onMoreInfoInFrontend ?: return false
+        val shown = dashboard?.views?.getOrNull(currentViewIndex) ?: return false
+        closeMoreInfo()
+        inFrontend(shown, entityId, reason, moreInfoView)
+        return true
+    }
+
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         val inFrontend = onMoreInfoInFrontend

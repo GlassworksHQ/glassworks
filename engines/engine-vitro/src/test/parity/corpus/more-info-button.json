@@ -1,0 +1,81 @@
+{
+ "title": "More Info of a button (a coffee maker's descale): its state row with the Press button, then the timeline and the Activity section of its presses",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "button",
+  "entity": "button.coffee_maker_descale"
+ },
+ "more_info": "button.coffee_maker_descale",
+ "expect": {
+  "button.coffee_maker_descale": "2026-11-12T14:08:00+00:00"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "button.coffee_maker_descale": {
+    "state": "2026-11-12T14:08:00+00:00",
+    "last_changed": -7200,
+    "attributes": {
+     "friendly_name": "Coffee Maker Descale"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "button.coffee_maker_descale",
+    "pl": "mqtt",
+    "di": "dev-coffee",
+    "en": "Descale",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-coffee",
+    "name": "Coffee Maker"
+   }
+  ],
+  "history": {
+   "button.coffee_maker_descale": {
+    "steps": [
+     [
+      "-30h",
+      "@-50h"
+     ],
+     [
+      "-9h",
+      "@-9h"
+     ],
+     [
+      "-2h",
+      "@-2h"
+     ]
+    ]
+   }
+  },
+  "logbook": [
+   {
+    "entity_id": "button.coffee_maker_descale",
+    "state": "@-9h",
+    "when": "-9h"
+   },
+   {
+    "entity_id": "button.coffee_maker_descale",
+    "state": "@-2h",
+    "when": "-2h"
+   }
+  ]
+ }
+}
