@@ -243,6 +243,30 @@ object HaDisplay {
         return fromTranslations(byClass, s)
     }
 
+    /**
+     * HA's `attributeIcon` (`data/icons.ts`): the icon of [attribute]'s [value] (a climate's `hvac_action`), from the
+     * integration's icons for the entity's translation key, else the domain's for its device class or its default.
+     * Null until HA's icons are loaded, or when none is set.
+     */
+    fun attributeIcon(s: EntityState, attribute: String, value: String): String? {
+        val entry = registry[s.entityId]
+        val domain = s.domain
+        if (entry?.translationKey != null && entry.platform != null) {
+            platformIcons[entry.platform]?.optJSONObject(domain)?.optJSONObject(entry.translationKey)
+                ?.optJSONObject("state_attributes")?.optJSONObject(attribute)
+                ?.let { fromAttributeTranslations(it, value) }?.let { return it }
+        }
+        val comp = componentIcons[domain] ?: return null
+        val t = s.deviceClass?.let { comp.optJSONObject(it)?.optJSONObject("state_attributes")?.optJSONObject(attribute) }
+            ?: comp.optJSONObject("_")?.optJSONObject("state_attributes")?.optJSONObject(attribute)
+            ?: return null
+        return fromAttributeTranslations(t, value)
+    }
+
+    /** HA's `getIconFromTranslations` for an attribute value: its `state` match, else `default`. */
+    private fun fromAttributeTranslations(t: JSONObject, value: String): String? =
+        t.optJSONObject("state")?.optString(value)?.takeIf { it.isNotEmpty() } ?: t.optString("default").takeIf { it.isNotEmpty() }
+
     /** The domain's own icon for [s]'s state and device class, skipping the entity's and its integration's. */
     fun domainIcon(s: EntityState): String? {
         val comp = componentIcons[s.domain] ?: return null

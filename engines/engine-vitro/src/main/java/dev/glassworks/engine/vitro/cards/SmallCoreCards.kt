@@ -162,7 +162,7 @@ internal object HaStateColor {
             }
         }
         if (domain !in STATE_COLORED) return null
-        val active = s.copy(state = state).isActive
+        val active = HaStateActive.of(s, state)
         val key = state.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "_")
         val activeKey = if (active) "active" else "inactive"
         val props = buildList {

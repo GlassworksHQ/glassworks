@@ -288,6 +288,8 @@
       "cases": {
         "light-brightness": {"keys": {"type": "any"}},
         "toggle": {"keys": {"type": "any"}},
+        "cover-open-close": {"keys": {"type": "any"}},
+        "fan-speed": {"keys": {"type": "any"}},
         "select-options": {"keys": {"type": "any", "style": {"values": ["dropdown"], "why": "Vitro draws the dropdown only"}}},
         "numeric-input": {
           "by": "style",

@@ -1,6 +1,6 @@
 {
  "title": "Tile: a fan with the speed feature",
- "route": "frontend",
+ 
  "card": {
   "type": "tile",
   "entity": "fan.ceiling_fan",
