@@ -247,6 +247,8 @@ object MdiIcons {
             "assist_satellite" -> "mdi:account-voice"
             "humidifier" -> if (st == "off") "mdi:air-humidifier-off" else "mdi:air-humidifier"
             "siren" -> "mdi:bullhorn"
+            // No icons.json in core: the frontend's FALLBACK_DOMAIN_ICONS.
+            "alert" -> "mdi:alert"
             "update" -> if (st == "off") "mdi:package" else "mdi:package-up"
             "valve" -> when (st) { "closed" -> "mdi:valve-closed"; "closing", "opening" -> "mdi:valve"; else -> "mdi:valve-open" }
             "binary_sensor" -> {

@@ -13,7 +13,9 @@ import org.json.JSONArray
  * HA's dialog (frontend 20261028.5, `src/dialogs/more-info/`) is the spec. A domain with a dialog of its own
  * (`DOMAINS_WITH_MORE_INFO`) or a control in its state row (`input_text`, `text`) that the sheet doesn't draw, or a
  * feature of one it does draw that the sheet leaves out, opens HA's own dialog: never a generic sheet with the controls
- * missing. The rest are HA's default dialog (the state row, the history, the logbook), which the sheet draws.
+ * missing. The rest are HA's default dialog (the state row, the history, the Activity section), which the sheet draws:
+ * a number's and an input_number's state row is its slider or box (`state-card-number`); a select's its menu, a
+ * button's its Press, an alert's its toggle and an event's its last event ([MoreInfoStateCard]).
  */
 internal object MoreInfoRoute {
     /**
@@ -31,15 +33,15 @@ internal object MoreInfoRoute {
             in NATIVE_CONTROLS -> null
             "vacuum" -> vacuumGap(s)
             "update" -> updateGap(entityId, s)
-            // Their state row's slider or box, the history, then HA's Activity (the logbook), whose entries open a
-            // detail dialog: the sheet has no Activity section yet.
-            "number", "input_number" -> "$domain's dialog (its Activity section)"
             in HA_DIALOGS, in HA_ROW_CONTROLS -> "$domain's dialog"
             else -> null
         }
     }
 
-    /** The domains whose control view the sheet draws itself. */
+    /**
+     * The domains whose dialog the sheet draws itself: a control view of its own, or (select, input_select, button,
+     * input_button) HA's default view with the domain's state row.
+     */
     private val NATIVE_CONTROLS = setOf(
         "light", "switch", "input_boolean", "siren", "fan", "camera", "climate", "cover",
         "select", "input_select", "lock", "media_player", "alarm_control_panel", "button", "input_button", "script",

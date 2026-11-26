@@ -556,9 +556,11 @@ class WebIslandCardView(
             }
             "navigate" -> {
                 // A card's `navigate` action / `history.pushState` + `location-changed` inside the island:
-                // the path is a dashboard path (`/lovelace/1`), handed to Vitro's own navigation.
+                // the path is a dashboard path (`/lovelace/1`), handed to Vitro's own navigation. `replace`: HA's
+                // `navigate(path, {replace: true})` (`navigation_replace`), no step in the history.
                 val path = msg.optString("path", "").trim()
-                if (path.isNotEmpty() && !path.startsWith("/__vitro/")) ctx.main.post { ctx.navigate(path) }
+                val go = if (msg.optBoolean("replace", false)) ctx.navigateReplace else ctx.navigate
+                if (path.isNotEmpty() && !path.startsWith("/__vitro/")) ctx.main.post { go(path) }
             }
         }
     }
@@ -2795,10 +2797,10 @@ function moreInfo(id) {
   if (id) sendBridge({ type: 'moreInfo', entity_id: id });
 }
 
-function navigateTo(path) {
+function navigateTo(path, replace) {
   // Never the island's own address: only a dashboard path a card navigated to, or an outside page's full URL, which
-  // Vitro opens as a page (never in this island's own window).
-  if (path && typeof path === 'string' && !path.startsWith('/__vitro/')) sendBridge({ type: 'navigate', path });
+  // Vitro opens as a page (never in this island's own window). `replace`: HA's navigate(path, {replace: true}).
+  if (path && typeof path === 'string' && !path.startsWith('/__vitro/')) sendBridge({ type: 'navigate', path, replace: replace === true });
 }
 
 // A link the card's user tapped: the island's window never leaves the card for it. One to another site goes to
@@ -2830,7 +2832,7 @@ function runAction(config, gesture) {
   }
   switch (action.action) {
     case 'more-info': moreInfo(entity); break;
-    case 'navigate': navigateTo(action.navigation_path); break;
+    case 'navigate': navigateTo(action.navigation_path, action.navigation_replace === true); break;
     case 'toggle': if (entity) hassBase.callService('homeassistant', 'toggle', { entity_id: entity }); break;
     case 'call-service':
     case 'perform-action': {
@@ -2855,10 +2857,10 @@ function wireEvents() {
     const d = (ev && ev.detail) || {};
     runAction(d.config, d.action);
   });
-  // HA's navigate(): history.pushState, then `location-changed` on window.
+  // HA's navigate(): history.pushState (replaceState with `replace`), then `location-changed` on window.
   window.addEventListener('location-changed', (ev) => {
     const p = (ev && ev.detail && ev.detail.path) || (location.pathname + location.search);
-    navigateTo(p);
+    navigateTo(p, Boolean(ev && ev.detail && ev.detail.replace));
   });
   window.addEventListener('hass-navigate', (ev) => {
     const p = ev && ev.detail && ev.detail.path;

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { SAMPLE_DASHBOARD, VITRO_COMPAT, auditDashboard, parseYaml, stripCssComments, topLevelAtRules } from "./vitroCompat";
+import { MATCHED_ROWS_NOTE, SAMPLE_DASHBOARD, VITRO_COMPAT, auditDashboard, parseYaml, stripCssComments, topLevelAtRules } from "./vitroCompat";
 import { kotlin, kotlinCardModSheets, kotlinSet, kotlinSetMap, kotlinStringMap } from "./vitroSupportSource";
 
 const repo = join(import.meta.dirname, "../../..");
@@ -546,6 +546,21 @@ describe("auditDashboard and the cards built from a configuration", () => {
       JSON.stringify({ views: [{ cards: [{ type: "custom:auto-entities", filter: { include: [{ domain: "light" }] } }] }] }),
     );
     expect(plain.isFullyNative).toBe(true);
+  });
+
+  it("says an auto-entities view is native if the rows it matches at run time are, as the engine's report does", () => {
+    const plain = auditDashboard(
+      JSON.stringify({ views: [{ cards: [{ type: "custom:auto-entities", filter: { include: [{ domain: "light" }] } }] }] }),
+    );
+    expect(plain.warnings).toContain(`view_0/card[0]: ${MATCHED_ROWS_NOTE}`);
+    // One wording in the three checkers: the engine's constant (its literals joined) and the audit script's.
+    const literals = (src: string, name: string) => {
+      const body = src.match(new RegExp(`${name}\\s*=\\s*\\(?([\\s\\S]*?)(?:\\)\\n|\\n\\n|\\n\\s*/\\*\\*)`))?.[1] ?? "";
+      return [...body.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]).join("");
+    };
+    const engine = readFileSync(join(repo, "engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/WebFallback.kt"), "utf8");
+    expect(literals(engine, "const val MATCHED_ROWS_NOTE")).toBe(MATCHED_ROWS_NOTE);
+    expect(literals(python, "MATCHED_ROWS_NOTE")).toBe(MATCHED_ROWS_NOTE);
   });
 });
 

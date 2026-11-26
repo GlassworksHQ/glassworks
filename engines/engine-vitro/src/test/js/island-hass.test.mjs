@@ -462,6 +462,19 @@ test('a url action and a tapped link leave through Vitro, never in the island\'s
   assert.deepEqual(page.sent('navigate').map((m) => m.path), ['https://example.com/news', '/lovelace/1?x=1']);
 });
 
+test('a navigate with replace leaves no step in the history, as HA\'s navigate(path, {replace: true})', async () => {
+  const page = await openPage({ card: plainCard });
+  const fire = (type, ev) => { for (const fn of page.listeners[type] || []) fn(ev); };
+  fire('hass-action', { detail: { config: { tap_action: { action: 'navigate', navigation_path: '/lovelace/1', navigation_replace: true } }, action: 'tap' } });
+  fire('hass-action', { detail: { config: { tap_action: { action: 'navigate', navigation_path: '/lovelace/2' } }, action: 'tap' } });
+  // HA's navigate() fires location-changed with { replace }.
+  fire('location-changed', { detail: { path: '/lovelace/3', replace: true } });
+  fire('location-changed', { detail: { path: '/lovelace/4' } });
+  await settle();
+  assert.deepEqual(page.sent('navigate').map((m) => [m.path, m.replace]),
+    [['/lovelace/1', true], ['/lovelace/2', false], ['/lovelace/3', true], ['/lovelace/4', false]]);
+});
+
 test('formatEntityState writes a duration as HA does, at the entity\'s display precision', async () => {
   const page = await openPage({ card: plainCard });
   const { formatEntityState } = page.hass();

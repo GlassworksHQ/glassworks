@@ -881,6 +881,8 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
             # one of them may send the view to HA's frontend.
             counts["tier3"] += 1
             triggers.append(found[0])
+        # Its rows are picked at run time, so no config check can claim them: the engine checks what it matched.
+        warnings.append(f"  WARN  {loc}: {MATCHED_ROWS_NOTE}")
     if explicit >= 0 and ctype in CONTAINER_TYPES and ctype != "conditional":
         # auto-entities' inner card: only its explicit `entities:` entries are known before it runs.
         for _, i, child in children:
@@ -897,6 +899,11 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
     holds = len(as_list(card.get("entities"))) if ctype == "custom:auto-entities" and card.get("card_param") == "cards" else -1
     for label, _, child in children:
         walk_card(child, f"{loc}.{label}", counts, triggers, warnings, holds)
+
+
+# The engine's WebFallback.MATCHED_ROWS_NOTE (and the site checker's): what a native auto-entities card is native on.
+MATCHED_ROWS_NOTE = ("auto-entities picks its rows at run time: the view is native if the rows it matches are, and a row "
+                     "Vitro doesn't draw natively opens the view in Home Assistant's frontend")
 
 
 def view_type(view: dict) -> str:

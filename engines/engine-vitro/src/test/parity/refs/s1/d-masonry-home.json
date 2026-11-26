@@ -43,27 +43,6 @@
    "type": "hui-vertical-stack-card"
   },
   {
-   "x": 8,
-   "y": 530.38,
-   "w": 309.33,
-   "h": 56,
-   "type": "hui-tile-card"
-  },
-  {
-   "x": 8,
-   "y": 594.38,
-   "w": 309.33,
-   "h": 56,
-   "type": "hui-tile-card"
-  },
-  {
-   "x": 8,
-   "y": 658.38,
-   "w": 309.33,
-   "h": 56,
-   "type": "hui-tile-card"
-  },
-  {
    "x": 325.33,
    "y": 8,
    "w": 309.33,
@@ -416,110 +395,6 @@
   {
    "slot": 3,
    "clipped": false,
-   "text": "Office Blind",
-   "x": 56,
-   "y": 12.61,
-   "w": 74.38,
-   "h": 16,
-   "size": 14,
-   "weight": 500,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 3,
-   "clipped": false,
-   "text": "Open",
-   "x": 56,
-   "y": 32,
-   "w": 29.56,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 3,
-   "clipped": false,
-   "text": "·",
-   "x": 88.92,
-   "y": 32,
-   "w": 3.55,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 3,
-   "clipped": false,
-   "text": "40%",
-   "x": 95.84,
-   "y": 32,
-   "w": 23.47,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 4,
-   "clipped": false,
-   "text": "Office Blind",
-   "x": 56,
-   "y": 12.61,
-   "w": 74.38,
-   "h": 16,
-   "size": 14,
-   "weight": 500,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 4,
-   "clipped": false,
-   "text": "Closed",
-   "x": 56,
-   "y": 32,
-   "w": 39.28,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 5,
-   "clipped": false,
-   "text": "Bedroom Ceiling Fan",
-   "x": 56,
-   "y": 12.61,
-   "w": 131.84,
-   "h": 16,
-   "size": 14,
-   "weight": 500,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 5,
-   "clipped": false,
-   "text": "67%",
-   "x": 56,
-   "y": 32,
-   "w": 23.47,
-   "h": 14,
-   "size": 12,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 6,
-   "clipped": false,
    "text": "Hallway Thermostat",
    "x": 83.41,
    "y": 15,
@@ -531,7 +406,7 @@
    "transform": "none"
   },
   {
-   "slot": 6,
+   "slot": 3,
    "clipped": false,
    "text": "Heating",
    "x": 126.31,
@@ -544,7 +419,7 @@
    "transform": "none"
   },
   {
-   "slot": 6,
+   "slot": 3,
    "clipped": false,
    "text": "21",
    "x": 113.28,
@@ -557,7 +432,7 @@
    "transform": "none"
   },
   {
-   "slot": 6,
+   "slot": 3,
    "clipped": false,
    "text": ".0",
    "x": 176.8,
@@ -570,7 +445,7 @@
    "transform": "none"
   },
   {
-   "slot": 6,
+   "slot": 3,
    "clipped": false,
    "text": "°C",
    "x": 176.8,
@@ -583,7 +458,7 @@
    "transform": "none"
   },
   {
-   "slot": 6,
+   "slot": 3,
    "clipped": false,
    "text": "19.5 °C",
    "x": 138.22,
@@ -596,7 +471,7 @@
    "transform": "none"
   },
   {
-   "slot": 7,
+   "slot": 4,
    "clipped": false,
    "text": "Kitchen Pendant",
    "x": 93.44,
@@ -609,7 +484,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "House Alarm",
    "x": 17,
@@ -622,7 +497,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "Disarmed",
    "x": 224.05,
@@ -635,7 +510,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "Arm home",
    "x": 73.89,
@@ -648,7 +523,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "Arm away",
    "x": 173.25,
@@ -661,7 +536,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "Code",
    "x": 95.66,
@@ -674,7 +549,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "1",
    "x": 75.83,
@@ -687,7 +562,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "2",
    "x": 147.83,
@@ -700,7 +575,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "3",
    "x": 219.83,
@@ -713,7 +588,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "4",
    "x": 75.83,
@@ -726,7 +601,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "5",
    "x": 147.83,
@@ -739,7 +614,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "6",
    "x": 219.83,
@@ -752,7 +627,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "7",
    "x": 75.83,
@@ -765,7 +640,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "8",
    "x": 147.83,
@@ -778,7 +653,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "9",
    "x": 219.83,
@@ -791,7 +666,7 @@
    "transform": "none"
   },
   {
-   "slot": 8,
+   "slot": 5,
    "clipped": false,
    "text": "0",
    "x": 147.83,
@@ -804,7 +679,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "Sunny",
    "x": 81,
@@ -817,7 +692,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "Home",
    "x": 81,
@@ -830,7 +705,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "14.2",
    "x": 223.63,
@@ -843,7 +718,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "°C",
    "x": 276.33,
@@ -856,7 +731,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "14.7 °C",
    "x": 197.31,
@@ -869,7 +744,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "/",
    "x": 245.86,
@@ -882,7 +757,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "9.1 °C",
    "x": 255.11,
@@ -895,7 +770,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "Thu",
    "x": 38.8,
@@ -908,7 +783,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "14.7",
    "x": 30.42,
@@ -921,7 +796,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "°",
    "x": 61.59,
@@ -934,7 +809,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "9.1",
    "x": 36.67,
@@ -947,7 +822,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "°",
    "x": 56.09,
@@ -960,7 +835,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "Fri",
    "x": 106.27,
@@ -973,7 +848,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "12.5",
    "x": 94.42,
@@ -986,7 +861,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "°",
    "x": 125.59,
@@ -999,7 +874,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "8.7",
    "x": 100.67,
@@ -1012,7 +887,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "°",
    "x": 120.09,
@@ -1025,7 +900,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "Sat",
    "x": 168.2,
@@ -1038,7 +913,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "11.2",
    "x": 158.42,
@@ -1051,7 +926,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "°",
    "x": 189.59,
@@ -1064,7 +939,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "6.4",
    "x": 164.67,
@@ -1077,7 +952,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "°",
    "x": 184.09,
@@ -1090,7 +965,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "Sun",
    "x": 230.81,
@@ -1103,7 +978,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "13.9",
    "x": 222.42,
@@ -1116,7 +991,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "°",
    "x": 253.59,
@@ -1129,7 +1004,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "4.2",
    "x": 228.67,
@@ -1142,7 +1017,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "°",
    "x": 248.09,
@@ -1155,7 +1030,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": true,
    "text": "Mon",
    "x": 293.02,
@@ -1168,7 +1043,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": true,
    "text": "15.3",
    "x": 286.42,
@@ -1181,7 +1056,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": false,
    "text": "7",
    "x": 298.44,
@@ -1194,7 +1069,7 @@
    "transform": "none"
   },
   {
-   "slot": 9,
+   "slot": 6,
    "clipped": true,
    "text": "°",
    "x": 306.31,
@@ -1207,7 +1082,7 @@
    "transform": "none"
   },
   {
-   "slot": 10,
+   "slot": 7,
    "clipped": false,
    "text": "Kitchen Pendant",
    "x": 19.34,
@@ -1220,7 +1095,7 @@
    "transform": "none"
   },
   {
-   "slot": 10,
+   "slot": 7,
    "clipped": false,
    "text": "Front Door Lock",
    "x": 117.06,
@@ -1233,7 +1108,7 @@
    "transform": "none"
   },
   {
-   "slot": 10,
+   "slot": 7,
    "clipped": false,
    "text": "Patio Heater",
    "x": 216.14,
@@ -1246,7 +1121,7 @@
    "transform": "none"
   },
   {
-   "slot": 11,
+   "slot": 8,
    "clipped": false,
    "text": "Den Speaker",
    "x": 49,
@@ -1259,7 +1134,7 @@
    "transform": "none"
   },
   {
-   "slot": 11,
+   "slot": 8,
    "clipped": false,
    "text": "Evening Tide",
    "x": 17,
@@ -1272,7 +1147,7 @@
    "transform": "none"
   },
   {
-   "slot": 11,
+   "slot": 8,
    "clipped": false,
    "text": "The Placeholder Trio",
    "x": 17,
@@ -1285,7 +1160,7 @@
    "transform": "none"
   },
   {
-   "slot": 12,
+   "slot": 9,
    "clipped": false,
    "text": "12%",
    "x": 109.74,
@@ -1298,7 +1173,7 @@
    "transform": "none"
   },
   {
-   "slot": 12,
+   "slot": 9,
    "clipped": false,
    "text": "Living Room Temperature",
    "x": 75.03,
@@ -2021,6 +1896,13 @@
     "component.alarm_control_panel.entity_component._.state.disarming": "Disarming",
     "component.alarm_control_panel.entity_component._.state.pending": "Pending",
     "component.alarm_control_panel.entity_component._.state.triggered": "Triggered",
+    "component.alarm_control_panel.entity_component._.state_attributes.changed_by.name": "Changed by",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_arm_required.name": "Code for arming",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_arm_required.state.false": "Not required",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_arm_required.state.true": "Required",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_format.name": "Code format",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_format.state.number": "Number",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_format.state.text": "Text",
     "component.binary_sensor.entity_component._.state.off": "Off",
     "component.binary_sensor.entity_component._.state.on": "On",
     "component.binary_sensor.entity_component.door.state.off": "Closed",
@@ -2034,15 +1916,114 @@
     "component.climate.entity_component._.state.heat": "Heat",
     "component.climate.entity_component._.state.heat_cool": "Heat/Cool",
     "component.climate.entity_component._.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.current_humidity.name": "Current humidity",
+    "component.climate.entity_component._.state_attributes.current_temperature.name": "Current temperature",
+    "component.climate.entity_component._.state_attributes.fan_mode.name": "Fan mode",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.auto": "Auto",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.diffuse": "Diffuse",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.focus": "Focus",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.high": "High",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.low": "Low",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.medium": "Medium",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.middle": "Middle",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.on": "On",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.top": "Top",
+    "component.climate.entity_component._.state_attributes.fan_modes.name": "Fan modes",
+    "component.climate.entity_component._.state_attributes.humidity.name": "Target humidity",
+    "component.climate.entity_component._.state_attributes.hvac_action.name": "Current action",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.cooling": "Cooling",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.defrosting": "Defrosting",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.drying": "Drying",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.fan": "Fan",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.heating": "Heating",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.idle": "Idle",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.preheating": "Preheating",
+    "component.climate.entity_component._.state_attributes.hvac_modes.name": "HVAC modes",
+    "component.climate.entity_component._.state_attributes.max_humidity.name": "Max target humidity",
+    "component.climate.entity_component._.state_attributes.max_temp.name": "Max target temperature",
+    "component.climate.entity_component._.state_attributes.min_humidity.name": "Min target humidity",
+    "component.climate.entity_component._.state_attributes.min_temp.name": "Min target temperature",
+    "component.climate.entity_component._.state_attributes.preset_mode.name": "Preset",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.activity": "Activity",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.away": "Away",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.boost": "Boost",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.comfort": "Comfort",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.eco": "Eco",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.home": "Home",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.none": "None",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.sleep": "Sleep",
+    "component.climate.entity_component._.state_attributes.preset_modes.name": "Presets",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_mode.name": "Horizontal swing mode",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_mode.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_mode.state.on": "On",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_modes.name": "Horizontal swing modes",
+    "component.climate.entity_component._.state_attributes.swing_mode.name": "Swing mode",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.both": "Both",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.horizontal": "Horizontal",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.on": "On",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.vertical": "Vertical",
+    "component.climate.entity_component._.state_attributes.swing_modes.name": "Swing modes",
+    "component.climate.entity_component._.state_attributes.target_temp_high.name": "Upper target temperature",
+    "component.climate.entity_component._.state_attributes.target_temp_low.name": "Lower target temperature",
+    "component.climate.entity_component._.state_attributes.target_temp_step.name": "Target temperature step",
+    "component.climate.entity_component._.state_attributes.temperature.name": "Target temperature",
     "component.cover.entity_component._.state.closed": "Closed",
     "component.cover.entity_component._.state.closing": "Closing",
     "component.cover.entity_component._.state.open": "Open",
     "component.cover.entity_component._.state.opening": "Opening",
     "component.cover.entity_component._.state.stopped": "Stopped",
+    "component.cover.entity_component._.state_attributes.current_position.name": "Position",
+    "component.cover.entity_component._.state_attributes.current_tilt_position.name": "Tilt position",
+    "component.cover.entity_component._.state_attributes.speed.name": "Speed",
+    "component.cover.entity_component._.state_attributes.speed.state.fast": "Fast",
+    "component.cover.entity_component._.state_attributes.speed.state.medium": "Medium",
+    "component.cover.entity_component._.state_attributes.speed.state.slow": "Slow",
     "component.fan.entity_component._.state.off": "Off",
     "component.fan.entity_component._.state.on": "On",
+    "component.fan.entity_component._.state_attributes.direction.name": "Direction",
+    "component.fan.entity_component._.state_attributes.direction.state.forward": "Forward",
+    "component.fan.entity_component._.state_attributes.direction.state.reverse": "Reverse",
+    "component.fan.entity_component._.state_attributes.oscillating.name": "Oscillating",
+    "component.fan.entity_component._.state_attributes.oscillating.state.false": "No",
+    "component.fan.entity_component._.state_attributes.oscillating.state.true": "Yes",
+    "component.fan.entity_component._.state_attributes.percentage.name": "Speed",
+    "component.fan.entity_component._.state_attributes.percentage_step.name": "Speed step",
+    "component.fan.entity_component._.state_attributes.preset_mode.name": "Preset mode",
+    "component.fan.entity_component._.state_attributes.preset_modes.name": "Available preset modes",
     "component.light.entity_component._.state.off": "Off",
     "component.light.entity_component._.state.on": "On",
+    "component.light.entity_component._.state_attributes.brightness.name": "Brightness",
+    "component.light.entity_component._.state_attributes.color_mode.name": "Color mode",
+    "component.light.entity_component._.state_attributes.color_mode.state.brightness": "Brightness only",
+    "component.light.entity_component._.state_attributes.color_mode.state.color_temp": "Color temperature",
+    "component.light.entity_component._.state_attributes.color_mode.state.hs": "HS",
+    "component.light.entity_component._.state_attributes.color_mode.state.onoff": "On/Off",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgb": "RGB",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgbw": "RGBW",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgbww": "RGBWW",
+    "component.light.entity_component._.state_attributes.color_mode.state.unknown": "Unknown",
+    "component.light.entity_component._.state_attributes.color_mode.state.white": "White",
+    "component.light.entity_component._.state_attributes.color_mode.state.xy": "XY",
+    "component.light.entity_component._.state_attributes.color_temp_kelvin.name": "Color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.effect.name": "Effect",
+    "component.light.entity_component._.state_attributes.effect.state.off": "Off",
+    "component.light.entity_component._.state_attributes.effect_list.name": "Available effects",
+    "component.light.entity_component._.state_attributes.max_color_temp_kelvin.name": "Maximum color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.min_color_temp_kelvin.name": "Minimum color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.supported_color_modes.name": "Available color modes",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.brightness": "Brightness only",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.color_temp": "Color temperature",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.hs": "HS",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.onoff": "On/Off",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgb": "RGB",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgbw": "RGBW",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgbww": "RGBWW",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.unknown": "Unknown",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.white": "White",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.xy": "XY",
     "component.lock.entity_component._.state.jammed": "Jammed",
     "component.lock.entity_component._.state.locked": "Locked",
     "component.lock.entity_component._.state.locking": "Locking",
@@ -2050,6 +2031,8 @@
     "component.lock.entity_component._.state.opening": "Opening",
     "component.lock.entity_component._.state.unlocked": "Unlocked",
     "component.lock.entity_component._.state.unlocking": "Unlocking",
+    "component.lock.entity_component._.state_attributes.changed_by.name": "Changed by",
+    "component.lock.entity_component._.state_attributes.code_format.name": "Code format",
     "component.media_player.entity_component._.state.buffering": "Buffering",
     "component.media_player.entity_component._.state.idle": "Idle",
     "component.media_player.entity_component._.state.off": "Off",
@@ -2057,8 +2040,69 @@
     "component.media_player.entity_component._.state.paused": "Paused",
     "component.media_player.entity_component._.state.playing": "Playing",
     "component.media_player.entity_component._.state.standby": "Standby",
+    "component.media_player.entity_component._.state_attributes.app_id.name": "App ID",
+    "component.media_player.entity_component._.state_attributes.app_name.name": "App",
+    "component.media_player.entity_component._.state_attributes.entity_picture_local.name": "Local accessible entity picture",
+    "component.media_player.entity_component._.state_attributes.groups_members.name": "Group members",
+    "component.media_player.entity_component._.state_attributes.is_volume_muted.name": "Muted",
+    "component.media_player.entity_component._.state_attributes.is_volume_muted.state.false": "No",
+    "component.media_player.entity_component._.state_attributes.is_volume_muted.state.true": "Yes",
+    "component.media_player.entity_component._.state_attributes.media_album_artist.name": "Album artist",
+    "component.media_player.entity_component._.state_attributes.media_album_name.name": "Album",
+    "component.media_player.entity_component._.state_attributes.media_artist.name": "Artist",
+    "component.media_player.entity_component._.state_attributes.media_channel.name": "Channel",
+    "component.media_player.entity_component._.state_attributes.media_content_id.name": "Content ID",
+    "component.media_player.entity_component._.state_attributes.media_content_type.name": "Content type",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.album": "Album",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.app": "App",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.artist": "Artist",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.channel": "Channel",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.channels": "Channels",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.composer": "Composer",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.contributing_artist": "Contributing artist",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.episode": "Episode",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.game": "Game",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.genre": "Genre",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.image": "Image",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.movie": "Movie",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.music": "Music",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.playlist": "Playlist",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.podcast": "Podcast",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.season": "Season",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.track": "Track",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.tvshow": "TV show",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.url": "URL",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.video": "Video",
+    "component.media_player.entity_component._.state_attributes.media_duration.name": "Duration",
+    "component.media_player.entity_component._.state_attributes.media_episode.name": "Episode",
+    "component.media_player.entity_component._.state_attributes.media_playlist.name": "Playlist",
+    "component.media_player.entity_component._.state_attributes.media_position.name": "Position",
+    "component.media_player.entity_component._.state_attributes.media_position_updated_at.name": "Position updated",
+    "component.media_player.entity_component._.state_attributes.media_season.name": "Season",
+    "component.media_player.entity_component._.state_attributes.media_series_title.name": "Series",
+    "component.media_player.entity_component._.state_attributes.media_title.name": "Title",
+    "component.media_player.entity_component._.state_attributes.media_track.name": "Track",
+    "component.media_player.entity_component._.state_attributes.repeat.name": "Repeat",
+    "component.media_player.entity_component._.state_attributes.repeat.state.all": "All",
+    "component.media_player.entity_component._.state_attributes.repeat.state.off": "Off",
+    "component.media_player.entity_component._.state_attributes.repeat.state.one": "One",
+    "component.media_player.entity_component._.state_attributes.shuffle.name": "Shuffle",
+    "component.media_player.entity_component._.state_attributes.shuffle.state.false": "Off",
+    "component.media_player.entity_component._.state_attributes.shuffle.state.true": "On",
+    "component.media_player.entity_component._.state_attributes.sound_mode.name": "Sound mode",
+    "component.media_player.entity_component._.state_attributes.sound_mode_list.name": "Available sound modes",
+    "component.media_player.entity_component._.state_attributes.source.name": "Source",
+    "component.media_player.entity_component._.state_attributes.source_list.name": "Available sources",
+    "component.media_player.entity_component._.state_attributes.volume_level.name": "Volume",
     "component.sensor.entity_component._.state.off": "Off",
     "component.sensor.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state_attributes.last_reset.name": "Last reset",
+    "component.sensor.entity_component._.state_attributes.options.name": "Possible states",
+    "component.sensor.entity_component._.state_attributes.state_class.name": "State class",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement": "Measurement",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement_angle": "Measurement angle",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total": "Total",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total_increasing": "Total increasing",
     "component.switch.entity_component._.state.off": "Off",
     "component.switch.entity_component._.state.on": "On",
     "component.weather.entity_component._.state.clear-night": "Clear, night",
@@ -2075,7 +2119,25 @@
     "component.weather.entity_component._.state.snowy-rainy": "Snowy, rainy",
     "component.weather.entity_component._.state.sunny": "Sunny",
     "component.weather.entity_component._.state.windy": "Windy",
-    "component.weather.entity_component._.state.windy-variant": "Windy, cloudy"
+    "component.weather.entity_component._.state.windy-variant": "Windy, cloudy",
+    "component.weather.entity_component._.state_attributes.apparent_temperature.name": "Apparent temperature",
+    "component.weather.entity_component._.state_attributes.cloud_coverage.name": "Cloud coverage",
+    "component.weather.entity_component._.state_attributes.dew_point.name": "Dew point temperature",
+    "component.weather.entity_component._.state_attributes.forecast.name": "Forecast",
+    "component.weather.entity_component._.state_attributes.humidity.name": "Humidity",
+    "component.weather.entity_component._.state_attributes.ozone.name": "Ozone",
+    "component.weather.entity_component._.state_attributes.precipitation_unit.name": "Precipitation unit",
+    "component.weather.entity_component._.state_attributes.pressure.name": "Pressure",
+    "component.weather.entity_component._.state_attributes.pressure_unit.name": "Pressure unit",
+    "component.weather.entity_component._.state_attributes.temperature.name": "Temperature",
+    "component.weather.entity_component._.state_attributes.temperature_unit.name": "Temperature unit",
+    "component.weather.entity_component._.state_attributes.uv_index.name": "UV index",
+    "component.weather.entity_component._.state_attributes.visibility.name": "Visibility",
+    "component.weather.entity_component._.state_attributes.visibility_unit.name": "Visibility unit",
+    "component.weather.entity_component._.state_attributes.wind_bearing.name": "Wind bearing",
+    "component.weather.entity_component._.state_attributes.wind_gust_speed.name": "Wind gust speed",
+    "component.weather.entity_component._.state_attributes.wind_speed.name": "Wind speed",
+    "component.weather.entity_component._.state_attributes.wind_speed_unit.name": "Wind speed unit"
    },
    "entity": {}
   }

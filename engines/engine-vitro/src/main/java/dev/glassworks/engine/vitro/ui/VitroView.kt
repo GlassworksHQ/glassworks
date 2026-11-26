@@ -196,7 +196,7 @@ class VitroView(
     }
 
     /** One top-bar tab and the dashboard view it opens. */
-    private class TabEntry(val viewIndex: Int, val label: TextView, val icon: MdiIconView?, val indicator: View)
+    private class TabEntry(val viewIndex: Int, val label: TextView, val icon: MdiIconView?, val indicator: View, val tab: View)
 
     private val tabs = ArrayList<TabEntry>()
     private var moreInfo: MoreInfoSheet? = null
@@ -214,32 +214,17 @@ class VitroView(
     /** Views the user came from, newest last; [goBack] pops it. Capped at [MAX_BACK_STACK]. */
     private val viewBackStack = ArrayDeque<Int>()
 
-    private val bannerText = TextView(context).apply {
-        text = HaText.ui("ui.notification_toast.connection_lost")
-        textSize = 13f
-        setTextColor(0xFFFFFFFF.toInt())
-        typeface = VitroFonts.typeface(context, Inter.MEDIUM, 13f)
-        includeFontPadding = false
+    /**
+     * HA's `notification-manager`: the toasts HA's frontend shows over the page (an update that failed after its dialog
+     * closed, a tap with nothing to do, the connection lost), over the view and any sheet.
+     */
+    private val toasts = HaToastHost(context) { ThemeResolver.resolve(themeCatalog, darkMode, userThemeName) }
+
+    /** HA's `disconnect-toast-mixin`: the connection-lost toast waits a second, so a quick reconnect shows nothing. */
+    private val connectionLostToast = Runnable {
+        toasts.show(HaToast(connectionLostMessage ?: HaText.ui("ui.notification_toast.connection_lost"), durationMs = -1L, id = CONNECTION_LOST_TOAST))
     }
-    private val connectionBanner = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(px(16f), px(10f), px(18f), px(10f))
-        background = GradientDrawable().apply {
-            cornerRadius = 999f * dp
-            setColor(0xEB2B2B2B.toInt())
-        }
-        elevation = 6f * dp
-        visibility = GONE
-        val dot = View(context).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xFFFFB300.toInt())
-            }
-        }
-        addView(dot, LinearLayout.LayoutParams(px(8f), px(8f)).apply { marginEnd = px(10f) })
-        addView(bannerText, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-    }
+    private var connectionLostMessage: String? = null
 
     var dashboard: DashboardConfig? = null
         private set
@@ -341,14 +326,24 @@ class VitroView(
 
     /**
      * Why [view] goes to HA's frontend now: its own reason ([ViewConfig.webFallbackReason]), a card in it that an
-     * island found drawing with Home Assistant's own elements this session ([IslandFrontend]), or more island pages
-     * than this device runs in one view ([islandBudget]). Null: Vitro draws it.
+     * island found drawing with Home Assistant's own elements this session ([IslandFrontend]), a row auto-entities
+     * matches now that Vitro doesn't draw natively ([WebFallback.matchedRowsReason]), an `iframe` card of a page on
+     * this Home Assistant at its full address ([haOrigin]), or more island pages than this device runs in one view
+     * ([islandBudget]). Null: Vitro draws it.
      */
     fun fallbackReason(view: ViewConfig): String? =
         view.webFallbackReason ?: (if (gaveUpViews.isEmpty()) null else gaveUpViews[viewKey(view)])
             ?: (if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) })
+            ?: WebFallback.matchedRowsReason(view, IslandScripts.of(resourcesList), store.all().values, store::get)
+            ?: WebFallback.haIframeReason(view, haOrigin())
             ?: IslandBudget.reason(view, IslandScripts.of(resourcesList), islandBudget)
             ?: BubbleFallback.reason(view, IslandScripts.of(resourcesList))
+
+    /**
+     * The origin of the Home Assistant this dashboard is from, or null while none: an `iframe` card of a page on it goes
+     * to HA's frontend ([WebFallback.haIframeReason]). The engine sets it.
+     */
+    var haOrigin: () -> String? = { null }
 
     /**
      * The most island pages one view opens on this device ([IslandBudget]): a view with more goes to HA's frontend.
@@ -393,6 +388,17 @@ class VitroView(
     fun cardFailedInIsland(card: CardConfig, reason: String, resources: List<LovelaceResource> = resourcesList) {
         if (IslandFrontend.recordReason(resources, card.type, reason)) Log.w(TAG, "Island ${card.type}: handed to HA's frontend: $reason")
         leaveForFrontend()
+    }
+
+    /**
+     * A native auto-entities [card] matched a row Vitro doesn't draw natively ([reason]): the views whose matches now
+     * need HA's frontend ([WebFallback.matchedRowsReason]) leave, the one on screen included. Posted, since the card
+     * reports from its own build. Nothing is remembered: the view is decided again from the states each time it's
+     * shown, so one whose matches are all native again comes back to Vitro.
+     */
+    fun matchedNeedFrontend(card: CardConfig, reason: String) {
+        Log.i(TAG, "${card.type}: $reason")
+        mainHandler.post { leaveForFrontend() }
     }
 
     /**
@@ -486,22 +492,38 @@ class VitroView(
         addView(shell, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         addView(overlayLayer, LayoutParams(MATCH_PARENT, MATCH_PARENT))
         addView(statusLabel, LayoutParams(MATCH_PARENT, MATCH_PARENT))
-        addView(
-            connectionBanner,
-            LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = px(16f) },
-        )
+        addView(toasts, LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
 
-    /** Shows a small floating pill (e.g. "Connection lost. Reconnecting…") while [message] is non-blank; hides it otherwise. */
+    /**
+     * HA's toasts sit above its dialogs: a layer added over the view after the toasts (a More Info sheet opened while
+     * one shows) goes under them, so a toast on screen stays in sight until it closes.
+     */
+    override fun onViewAdded(child: View) {
+        super.onViewAdded(child)
+        if (child !== toasts && toasts.parent === this && indexOfChild(toasts) != childCount - 1) toasts.bringToFront()
+    }
+
+    /**
+     * The connection to HA dropped ([message]: HA's "Connection lost. Reconnecting…") or came back (null): HA's toast
+     * for it, shown a second after the drop until the connection is back, as `disconnect-toast-mixin` does.
+     */
     fun setConnectionBanner(message: String?) {
+        removeCallbacks(connectionLostToast)
         if (message.isNullOrBlank()) {
-            connectionBanner.visibility = GONE
+            connectionLostMessage = null
+            toasts.show(HaToast("", durationMs = 0L, id = CONNECTION_LOST_TOAST))
             return
         }
-        bannerText.text = message
-        connectionBanner.visibility = VISIBLE
-        connectionBanner.bringToFront()
+        connectionLostMessage = message
+        postDelayed(connectionLostToast, CONNECTION_LOST_DELAY_MS)
     }
+
+    /** Shows [toast] as HA's frontend shows a toast (`showToast`), over the view and any sheet. Main thread. */
+    fun showToast(toast: HaToast) = toasts.show(toast)
+
+    /** The toasts showing (tests). */
+    internal val toastMessages: List<String> get() = toasts.messages
 
     /**
      * Back navigation for the host's back key: closes the More-Info sheet first, then returns to the view the user
@@ -762,10 +784,24 @@ class VitroView(
     /**
      * Opens More Info for an entity in Home Assistant's own frontend, over the view on screen (its URL's
      * `more-info-entity-id`), with the reason Vitro's sheet can't show it as HA does ([MoreInfoRoute]), or a script
-     * with fields, whose form only HA's dialog has. Null (a view with no page): Vitro's sheet, for every entity, whose
-     * Run then never starts such a script.
+     * with fields, whose form only HA's dialog has. Its last argument is the dialog's view (`more-info-view`:
+     * `history` for an Activity entry on the History tab), or null for its default. Null (a view with no page): Vitro's
+     * sheet, for every entity, whose Run then never starts such a script, and whose Activity entries open nothing.
      */
-    var onMoreInfoInFrontend: ((ViewConfig, String, String) -> Unit)? = null
+    var onMoreInfoInFrontend: ((ViewConfig, String, String, String?) -> Unit)? = null
+
+    /**
+     * HA's own More Info dialog for [entityId], on its view [moreInfoView] (null: its default), in HA's frontend over the
+     * view on screen ([onMoreInfoInFrontend]), for what only it has ([reason]: a logbook card entry's detail). Closes
+     * an open sheet first. False when there's no page for it (no [onMoreInfoInFrontend], no view): nothing happens.
+     */
+    internal fun moreInfoInFrontend(entityId: String, moreInfoView: String?, reason: String): Boolean {
+        val inFrontend = onMoreInfoInFrontend ?: return false
+        val shown = dashboard?.views?.getOrNull(currentViewIndex) ?: return false
+        closeMoreInfo()
+        inFrontend(shown, entityId, reason, moreInfoView)
+        return true
+    }
 
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
@@ -775,7 +811,7 @@ class VitroView(
         if (inFrontend != null && trace == null && view != null) {
             MoreInfoRoute.handOff(entityId, store[entityId])?.let { reason ->
                 closeMoreInfo()
-                inFrontend(view, entityId, "More Info: $reason")
+                inFrontend(view, entityId, "More Info: $reason", null)
                 return
             }
         }
@@ -789,7 +825,7 @@ class VitroView(
                 val shown = dashboard?.views?.getOrNull(currentViewIndex)
                 if (fields == true && shown != null) {
                     closeMoreInfo()
-                    inFrontend(shown, entityId, "More Info of a script with fields")
+                    inFrontend(shown, entityId, "More Info of a script with fields", null)
                 } else {
                     showMoreInfo(entityId, trace)
                 }
@@ -817,6 +853,15 @@ class VitroView(
         }
         sheetRef = sheet
         sheet.trace = trace
+        // What only HA's dialog has (an Activity entry's detail): its dialog, on the same view, over this one.
+        if (onMoreInfoInFrontend != null) sheet.inFrontend = { id, moreInfoView, reason ->
+            val shown = dashboard?.views?.getOrNull(currentViewIndex)
+            val inFrontend = onMoreInfoInFrontend
+            if (shown != null && inFrontend != null && moreInfo === sheet) {
+                closeMoreInfo()
+                inFrontend(shown, id, reason, moreInfoView.takeIf { it != "info" })
+            }
+        }
         // Keys stay in the sheet, as in HA's modal dialog: nothing behind it takes focus while it's open.
         blockDashboardFocus(true)
         sheet.show(entityId)
@@ -824,14 +869,38 @@ class VitroView(
         addView(sheet, LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
 
-    private fun resolveViewIndex(config: DashboardConfig, path: String?): Int = config.viewIndex(path)
+    private fun resolveViewIndex(config: DashboardConfig, path: String?): Int = config.viewIndex(path, currentUserId())
+
+    /**
+     * The signed-in Home Assistant user's id (`auth/current_user`), or null while it isn't known. A view's `visible`
+     * reads it: which tabs show ([applyTabVisibility]) and which view a dashboard opens on ([resolveViewIndex]).
+     */
+    var currentUserId: () -> String? = { null }
+
+    /** The signed-in user changed (it arrived, or another one signed in): the tabs follow their views' `visible`. */
+    fun userChanged() = applyTabVisibility(currentViewIndex)
+
+    /**
+     * HA's `hui-root` tab rules, outside edit mode: a view hidden from the signed-in user ([ViewConfig.tabHiddenFor]:
+     * `visible: false`, or a `visible` list of other users) has no tab, unless it's the view on screen (reached by its
+     * path). Subviews have none at all ([rebuildTabs]).
+     */
+    private fun applyTabVisibility(selected: Int) {
+        val views = dashboard?.views ?: return
+        val userId = currentUserId()
+        for (t in tabs) {
+            val hidden = t.viewIndex != selected && views.getOrNull(t.viewIndex)?.tabHiddenFor(userId) == true
+            t.tab.visibility = if (hidden) GONE else VISIBLE
+        }
+    }
 
     private fun rebuildTabs(config: DashboardConfig) {
         tabBar.removeAllViews()
         tabs.clear()
         val theme = ThemeResolver.resolve(themeCatalog, darkMode)
         tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
-        // Like HA, subviews have no tab: they are reached by navigation and come back with their back arrow.
+        // Like HA, subviews have no tab: they are reached by navigation and come back with their back arrow. A view
+        // hidden from this user gets one, shown only while it's on screen ([applyTabVisibility]).
         config.views.forEachIndexed { idx, v ->
             if (v.subview) return@forEachIndexed
             val tab = LinearLayout(context).apply {
@@ -849,13 +918,18 @@ class VitroView(
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(px(16f), px(12f), px(16f), px(9.5f))
             }
-            val icon = v.icon?.let { name ->
+            // HA's hui-root: an icon alone for a view with one, its title too only with `show_icon_and_title`.
+            val content = v.tab { HaText.ui("ui.panel.lovelace.views.unnamed_view") }
+            tab.contentDescription = content.label
+            val icon = content.icon?.let { name ->
                 MdiIconView(context).apply { setIcon(name, theme.secondaryTextColor) }.also {
-                    row.addView(it, LinearLayout.LayoutParams(px(18f), px(18f)).apply { marginEnd = px(6f) })
+                    val gap = if (content.text != null) px(6f) else 0
+                    row.addView(it, LinearLayout.LayoutParams(px(18f), px(18f)).apply { marginEnd = gap })
                 }
             }
             val label = TextView(context).apply {
-                text = v.title
+                text = content.text
+                visibility = if (content.text == null) GONE else VISIBLE
                 textSize = 13f
                 typeface = VitroFonts.typeface(context, Inter.MEDIUM, 13f)
                 includeFontPadding = false
@@ -865,8 +939,9 @@ class VitroView(
             val indicator = View(context).apply { visibility = INVISIBLE }
             tab.addView(indicator, LinearLayout.LayoutParams(MATCH_PARENT, (2.5f * dp).toInt().coerceAtLeast(1)))
             tabBar.addView(tab, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-            tabs += TabEntry(idx, label, icon, indicator)
+            tabs += TabEntry(idx, label, icon, indicator, tab)
         }
+        applyTabVisibility(currentViewIndex)
         updateTabVisibility()
     }
 
@@ -878,6 +953,7 @@ class VitroView(
     private fun highlightTab(selected: Int, theme: ResolvedTheme) {
         // The strip itself follows the theme too (a light/dark switch, a cached view's own theme).
         tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
+        applyTabVisibility(selected)
         for (t in tabs) {
             val active = t.viewIndex == selected
             val color = if (active) theme.primaryColor else theme.secondaryTextColor
@@ -1766,7 +1842,7 @@ class VitroView(
     private fun buildMasonryLayout(cards: List<CardConfig>, ctx: VitroCardContext, widthDp: Int): View {
         // A pinned card (card-mod `position: fixed`) goes to the overlay first: it takes no column and no weight.
         val placed = cards.withIndex().filter { (_, card) -> !pinIfFixed(card, ctx) }
-        val (placement, count) = HaMasonry.place(placed.map { it.value }, widthDp)
+        val (placement, count) = HaMasonry.place(placed.map { it.value }, widthDp, ::stateForBuild)
         val row = MasonryColumnsLayout(context, px(if (widthDp < 600) 600f else 500f)).apply { applyViewPadding(this, ctx) }
         val columns = (0 until count).map { cardColumn(ctx) }
         columns.forEach { row.addView(it, LinearLayout.LayoutParams(0, WRAP_CONTENT)) }
@@ -2388,6 +2464,10 @@ class VitroView(
     }
 
     companion object {
+        /** HA's `CONNECTION_LOST_TOAST_ID`, and how long a drop lasts before its toast shows. */
+        private const val CONNECTION_LOST_TOAST = "connection-lost"
+        private const val CONNECTION_LOST_DELAY_MS = 1_000L
+
         /** How long a rebuilt view keeps scrolling back to where it was while its islands report their heights. */
         private const val RESTORE_SCROLL_MS = 5_000L
 
@@ -2412,7 +2492,7 @@ class VitroView(
         /** A badge's text: `name · state` when the name shows, else the formatted state (`21.5 °C`, `Closed`). */
         fun badgeText(badge: CardConfig, s: EntityState?): String {
             val raw = badge.raw
-            val name = badge.name(s) ?: s?.friendlyName ?: badge.entity.orEmpty()
+            val name = badge.name(s) ?: s?.displayName ?: badge.entity.orEmpty()
             val showName = raw.optBoolean("show_name", badge.name(s) != null)
             val showState = raw.optBoolean("show_state", true)
             val state = s?.formattedState() ?: "…"
@@ -2431,7 +2511,7 @@ class VitroView(
             val raw = badge.raw
             val showName = raw.optBoolean("show_name", badge.name(s) != null)
             val showState = raw.optBoolean("show_state", true)
-            val name = if (showName) badge.name(s) ?: s?.friendlyName ?: badge.entity.orEmpty() else null
+            val name = if (showName) badge.name(s) ?: s?.displayName ?: badge.entity.orEmpty() else null
             // `show_state: false` hides the state even when no name shows (an icon-only badge).
             val state = if (showState) s?.formattedState() ?: "…" else null
             return name to state

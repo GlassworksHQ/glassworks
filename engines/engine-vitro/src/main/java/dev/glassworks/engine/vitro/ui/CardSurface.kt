@@ -167,6 +167,12 @@ class VitroCardContext(
      */
     val islandFailed: (card: CardConfig, reason: String) -> Unit = { _, _ -> },
     /**
+     * A native `custom:auto-entities` [card] matched a row (or card) Vitro doesn't draw natively ([reason] names it,
+     * [dev.glassworks.engine.vitro.compat.WebFallback.matchedReason]): its view goes to HA's frontend, as for
+     * [needsFrontend]. Main thread. The default (tests, no engine) does nothing.
+     */
+    val matchedNeedFrontend: (card: CardConfig, reason: String) -> Unit = { _, _ -> },
+    /**
      * Whether the page's connection to Home Assistant is up now: what a web island's `hass.connected` says. The
      * default (tests, no engine) is up.
      */
@@ -195,6 +201,22 @@ class VitroCardContext(
      * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
      */
     val pageStorage: () -> JSONObject? = { null },
+    /**
+     * HA's `showToast`: a toast over the page ([HaToast]), which outlives the card or sheet that showed it (an update
+     * that failed after its dialog closed). Main thread. The default (tests, no engine) shows nothing.
+     */
+    val showToast: (HaToast) -> Unit = {},
+    /**
+     * [navigate] for a `navigate` action with `navigation_replace: true` (HA's `navigate(path, {replace: true})`): the
+     * page it leaves is no step in the history. The default (tests, no engine) is [navigate].
+     */
+    val navigateReplace: (path: String) -> Unit = navigate,
+    /**
+     * Opens HA's own More Info dialog for an entity in HA's frontend, over the view on screen, on its `more-info-view`
+     * ([view], null for its default), for what only HA's frontend has ([reason]): a logbook entry's detail dialog.
+     * False when there's no page to open it in (tests, no engine): the caller does what it would without HA's frontend.
+     */
+    val moreInfoInFrontend: (entityId: String, view: String?, reason: String) -> Boolean = { _, _, _ -> false },
 ) {
     val dp: Float = context.resources.displayMetrics.density
     /** The main thread, for the card's own updates: one that throws is logged and dropped ([GuardedHandler]). */
@@ -258,11 +280,15 @@ class VitroCardContext(
         touch = touch,
         needsFrontend = needsFrontend,
         islandFailed = islandFailed,
+        matchedNeedFrontend = matchedNeedFrontend,
         haConnected = haConnected,
         haConnectionEpoch = haConnectionEpoch,
         watchConnection = watchConnection,
         watchConfig = watchConfig,
         pageStorage = pageStorage,
+        showToast = showToast,
+        navigateReplace = navigateReplace,
+        moreInfoInFrontend = moreInfoInFrontend,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout
@@ -312,21 +338,24 @@ class VitroCardContext(
     }
 
     private fun runAction(action: ActionConfig, defaultEntityId: String?) {
+        // HA's handleAction tells in a toast when an action has nothing to act on.
+        fun missing(key: String) = showToast(HaToast(HaText.ui(key)))
         when (action.action) {
             "none" -> Unit
-            "toggle" -> defaultEntityId?.let(::toggleEntity)
+            "toggle" -> defaultEntityId?.let(::toggleEntity) ?: missing("ui.panel.lovelace.cards.actions.no_entity_toggle")
             // HA's handleAction: the action's own `entity`, else the card's.
-            "more-info" -> (action.entity ?: defaultEntityId)?.let(openMoreInfo)
-            "navigate" -> action.navigationPath?.let(navigate)
+            "more-info" -> (action.entity ?: defaultEntityId)?.let(openMoreInfo) ?: missing("ui.panel.lovelace.cards.actions.no_entity_more_info")
+            "navigate" -> action.navigationPath?.takeIf { it.isNotEmpty() }?.let(if (action.replace) navigateReplace else navigate)
+                ?: missing("ui.panel.lovelace.cards.actions.no_navigation_path")
             "call-service", "perform-action" -> {
-                val svc = action.service ?: return
+                val svc = action.service?.takeIf { it.isNotEmpty() } ?: return missing("ui.panel.lovelace.cards.actions.no_action")
                 val domain = svc.substringBefore('.', "")
                 val name = svc.substringAfter('.', "")
                 if (domain.isNotEmpty() && name.isNotEmpty()) {
                     callService(domain, name, action.serviceData, action.target)
                 }
             }
-            "url" -> action.urlPath?.let(navigate)
+            "url" -> action.urlPath?.takeIf { it.isNotEmpty() }?.let(navigate) ?: missing("ui.panel.lovelace.cards.actions.no_url")
         }
     }
 

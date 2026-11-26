@@ -351,9 +351,14 @@ internal class MoreInfoHistoryView(
         var drawn: View? = null
         if (history.timeline.isNotEmpty()) {
             val rows = history.timeline
+            // HA's timeline takes its states' colors as its data arrives, before the Activity rows under it draw: a
+            // state with no color of its own (a button's press time) gets the next graph color in the timeline's order,
+            // which the Activity's dots then share (`computeTimeLineGenericColor`'s one map). The chart draws later, at
+            // its first layout, so its states claim theirs here.
+            for (r in rows) for (st in r.data) HaTimelineChart.stateColor(ctx, r.entityId, st.state)
             val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = HaTimelineChart.height(rows.size) }
             chart.setScene { w -> HaTimelineChart.scene(rows, emptyMap(), start, end, padding, w, ctx, false) }
-            charts.addView(historyEntry(ctx, chart, timeline = true, first = index++ == 0))
+            charts.addView(historyEntry(ctx, chart, timeline = true, first = index++ == 0, timelineTopMargin = 0f))
             drawn = chart
         }
         for (spec in specs) {

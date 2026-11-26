@@ -1,0 +1,95 @@
+{
+ "title": "More Info of an input_select (the house mode): its state row with the options' menu, then the timeline and the Activity section, a change an automation made",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "input_select.house_mode"
+ },
+ "more_info": "input_select.house_mode",
+ "expect": {
+  "input_select.house_mode": "Evening"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "input_select.house_mode": {
+    "state": "Evening",
+    "last_changed": -7200,
+    "attributes": {
+     "options": [
+      "Day",
+      "Evening",
+      "Night",
+      "Away"
+     ],
+     "editable": true,
+     "icon": "mdi:home",
+     "friendly_name": "House mode"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "input_select.house_mode",
+    "pl": "input_select",
+    "en": "House mode"
+   }
+  ],
+  "history": {
+   "input_select.house_mode": {
+    "steps": [
+     [
+      "-30h",
+      "Evening"
+     ],
+     [
+      "-26h",
+      "Night"
+     ],
+     [
+      "-16h",
+      "Day"
+     ],
+     [
+      "-2h",
+      "Evening"
+     ]
+    ]
+   }
+  },
+  "logbook": [
+   {
+    "entity_id": "input_select.house_mode",
+    "state": "Night",
+    "when": "-26h"
+   },
+   {
+    "entity_id": "input_select.house_mode",
+    "state": "Day",
+    "when": "-16h"
+   },
+   {
+    "entity_id": "input_select.house_mode",
+    "state": "Evening",
+    "when": "-2h",
+    "context_event_type": "automation_triggered",
+    "context_entity_id": "automation.evening_mode",
+    "context_name": "Evening mode",
+    "context_domain": "automation",
+    "context_source": "time"
+   }
+  ]
+ }
+}

@@ -91,7 +91,8 @@ class WS:
                 if m["type"] == "result":
                     result = m
                     if not m.get("success") or not msg["type"].startswith(
-                            ("subscribe", "frontend/subscribe", "persistent_notification/subscribe", "labs/subscribe", "history/stream")):
+                            ("subscribe", "frontend/subscribe", "persistent_notification/subscribe", "labs/subscribe", "history/stream",
+                             "logbook/event_stream")):
                         return result, events
                 elif m["type"] == "event":
                     events.append(m)
@@ -190,6 +191,19 @@ class FakeHA(unittest.TestCase):
         self.assertEqual(len(pts), 96)
         self.assertTrue(all(float(p["s"]) and p["lu"] > 0 for p in pts))
         self.assertNotIn("history/history_during_period", fakeha.Handler.hub.unknown)
+
+    def test_logbook_stream_as_more_info_subscribes(self):
+        """The Activity section of a More Info dialog (HA's and Vitro's) subscribes to `logbook/event_stream`: the fixed
+        home logs nothing, so its first message is an empty history (HA's "No activity found"), never an unknown command."""
+        ws = self.connect()
+        start = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - 86400))
+        end = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() + 365 * 86400))
+        res, ev = ws.call({"type": "logbook/event_stream", "start_time": start, "end_time": end,
+                           "entity_ids": ["binary_sensor.clarity_door"]})
+        self.assertTrue(res["success"])
+        self.assertEqual(ev[0]["event"]["events"], [])
+        self.assertTrue(ev[0]["event"]["partial"])
+        self.assertNotIn("logbook/event_stream", fakeha.Handler.hub.unknown)
 
     def test_statistics_metadata_as_the_recorder_answers_it(self):
         """A sensor's More Info that asks the recorder (Vitro's, HA's with `recorder` loaded) gets its metadata: one

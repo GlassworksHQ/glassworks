@@ -230,7 +230,8 @@ internal class AdjustableAccess(
     }
 
     fun onInitialize(info: AccessibilityNodeInfo) {
-        val v = value()
+        // Inside the range TalkBack is given, even when HA narrowed it under a value that was shown.
+        val v = value().coerceIn(min(), maxOf(min(), max()))
         info.className = "android.widget.SeekBar"
         info.rangeInfo = AccessibilityNodeInfo.RangeInfo.obtain(
             AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_INT, min().toFloat(), max().toFloat(), v.toFloat(),

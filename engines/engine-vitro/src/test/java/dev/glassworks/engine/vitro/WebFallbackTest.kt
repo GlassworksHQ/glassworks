@@ -127,6 +127,48 @@ class WebFallbackTest {
         assertTrue("Vitro signals no ready of its own: the fallback page does", host.messages("ready").isEmpty())
     }
 
+    @Test fun anIframeOfAHomeAssistantPageAtItsFullAddressShowsInHomeAssistantsFrontend() {
+        // #799 review: HA's X-Frame-Options: SAMEORIGIN refuses its own page in a loopback island, whether the card
+        // names it by path or by its full address.
+        server.dashboardConfig = views(living, """{"title": "Plan", "path": "plan", "cards": [
+            {"type": "vertical-stack", "cards": [{"type": "iframe", "url": "$base/local/plan.html"}]}]}""")
+        val p = page()
+        p.load("$base/wall-test/living")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertNull("the native view needs no fallback", pageFallback())
+
+        p.load("$base/wall-test/plan")
+        idle()
+        assertEquals(listOf("$base/wall-test/plan"), pageFallback()!!.loads)
+        assertEquals(View.GONE, vitroView(p).visibility)
+        assertEquals("no island for the frame HA would refuse", 0, islandOpens())
+    }
+
+    @Test fun anIframeUrlIsHomeAssistantsWhenItIsOnItsOrigin() {
+        val ha = "https://homeassistant.local:8123"
+        assertTrue(WebFallback.sameOriginIframe("/local/plan.html", ha))
+        assertTrue(WebFallback.sameOriginIframe("plan.html", ha))
+        assertTrue(WebFallback.sameOriginIframe("https://homeassistant.local:8123/local/plan.html", ha))
+        assertTrue("the scheme and host are case-insensitive", WebFallback.sameOriginIframe("HTTPS://HomeAssistant.local:8123/x", ha))
+        assertTrue("scheme-relative takes HA's scheme", WebFallback.sameOriginIframe("//homeassistant.local:8123/x", ha))
+        assertTrue("the default port is the same origin", WebFallback.sameOriginIframe("https://192.0.2.10/x", "https://192.0.2.10:443"))
+        assertFalse("another port", WebFallback.sameOriginIframe("https://homeassistant.local/x", ha))
+        assertFalse("another scheme", WebFallback.sameOriginIframe("http://homeassistant.local:8123/x", ha))
+        assertFalse("another host", WebFallback.sameOriginIframe("https://example.com/", ha))
+        assertFalse(WebFallback.sameOriginIframe("//example.com/x", ha))
+        // Without HA's origin, only what HA resolves itself is its own (as the view's own reason reads it).
+        assertTrue(WebFallback.sameOriginIframe("/local/plan.html"))
+        assertFalse(WebFallback.sameOriginIframe("https://homeassistant.local:8123/local/plan.html"))
+
+        fun reason(card: String) = WebFallback.haIframeReason(LovelaceParser.parseView(0, JSONObject("""{"cards": [$card]}""")), ha)
+        assertEquals("an `iframe` card of a Home Assistant page", reason("""{"type": "iframe", "url": "$ha/local/plan.html"}"""))
+        assertEquals("inside a stack too", "an `iframe` card of a Home Assistant page",
+            reason("""{"type": "horizontal-stack", "cards": [{"type": "iframe", "url": "$ha/local/plan.html"}]}"""))
+        assertNull(reason("""{"type": "iframe", "url": "https://example.com/"}"""))
+        assertNull("no origin known: nothing to compare", WebFallback.haIframeReason(
+            LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "iframe", "url": "$ha/x"}]}""")), null))
+    }
+
     @Test fun aDashboardWithAStrategyIgnoresItsViews() {
         // HA generates a dashboard from its strategy whatever else the config holds.
         server.dashboardConfig = JSONObject("""{"strategy": {"type": "custom:my-strategy"}, "views": [$living]}""")
@@ -640,6 +682,117 @@ class WebFallbackTest {
         assertNotNull(WebFallback.viewReason(LovelaceParser.parseView(0, JSONObject(
             """{"cards": [{"type": "entity-filter", "entities": ["light.a"], "card": {"type": "map"}}]}""",
         ))))
+    }
+
+    // ---- auto-entities' matches, checked at run time ----
+
+    private fun autoEntitiesView(filter: String) =
+        views("""{"title": "Auto", "path": "auto", "cards": [{"type": "custom:auto-entities", "filter": {"include": [$filter]}}]}""")
+
+    private fun withEntity(id: String, state: String) {
+        server.initialEntities = JSONObject(server.initialEntities.toString())
+            .put(id, JSONObject("""{"s": "$state", "a": {"friendly_name": "Garage"}, "lc": 1700000000.0, "lu": 1700000000.0}"""))
+    }
+
+    @Test fun autoEntitiesMatchingOnlyRowsVitroDrawsStaysNative() {
+        // A cover in the home, but the filter matches the lights only: every row is one Vitro draws.
+        withEntity("cover.garage", "closed")
+        server.dashboardConfig = autoEntitiesView("""{"domain": "light"}""")
+        val p = page()
+        p.load("$base/wall-test/auto")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        idle()
+        assertNull("no fallback page", pageFallback())
+        assertEquals(View.VISIBLE, vitroView(p).visibility)
+        assertTrue(hasText(vitroView(p), "Lounge Lamp"))
+    }
+
+    @Test fun autoEntitiesMatchingARowVitroDoesntDrawOpensTheViewInHomeAssistantsFrontend() {
+        // The config passes the strict rule, but what it matches (a cover row, which HA draws with its buttons) doesn't.
+        withEntity("cover.garage", "closed")
+        server.dashboardConfig = autoEntitiesView("""{"domain": "cover"}""")
+        assertNull("the config alone is native", WebFallback.viewReason(LovelaceParser.parseView(0, server.dashboardConfig.getJSONArray("views").getJSONObject(0))))
+        page().load("$base/wall-test/auto")
+        awaitMain("fallback") { pageFallback() != null }
+        assertEquals(listOf("$base/wall-test/auto"), pageFallback()!!.loads)
+    }
+
+    @Test fun anEntityThatAppearsAndMatchesARowVitroDoesntDrawSendsTheViewOnScreenToHomeAssistantsFrontend() {
+        server.dashboardConfig = autoEntitiesView("""{"entity_id": "/^(light|cover)\\./"}""")
+        val p = page()
+        p.load("$base/wall-test/auto")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        idle()
+        assertNull("only the lamp matches yet: native", pageFallback())
+
+        // A cover joins Home Assistant: the filter matches it, and its row is one Vitro doesn't draw.
+        server.pushEvent(server.lastId("subscribe_entities")!!, JSONObject().put("a", JSONObject().put(
+            "cover.garage", JSONObject("""{"s": "open", "a": {"friendly_name": "Garage"}, "lc": 1700000000.0, "lu": 1700000000.0}"""),
+        )))
+        awaitMain("fallback") { pageFallback() != null }
+        assertEquals(listOf("$base/wall-test/auto"), pageFallback()!!.loads)
+    }
+
+    @Test fun theMatchedRowsAreDecidedFromTheStatesOfNow() {
+        val view = LovelaceParser.parseView(0, JSONObject(
+            """{"cards": [{"type": "vertical-stack", "cards": [{"type": "custom:auto-entities", "filter": {"include": [{"domain": "/^(light|cover)$/"}]}}]}]}""",
+        ))
+        val lamp = EntityState("light.lamp", "on", mapOf("friendly_name" to "Lamp"))
+        val garage = EntityState("cover.garage", "closed", mapOf("friendly_name" to "Garage"))
+        fun reason(vararg states: EntityState) = WebFallback.matchedRowsReason(view, IslandScripts.ANY, states.toList()) { id -> states.firstOrNull { it.entityId == id } }
+        assertNull(reason(lamp))
+        assertEquals(
+            "a row `custom:auto-entities` matched: `entities` `entities[0]` (a `cover` entity) isn't drawn natively: HA draws this domain's row with its own control or picture",
+            reason(lamp, garage),
+        )
+        // The cover gone again: native again (nothing is remembered).
+        assertNull(reason(lamp))
+        // Under `card_param: cards` a matched card is checked with its entity: a tile of any domain is drawn.
+        val tiles = LovelaceParser.parseView(0, JSONObject(
+            """{"cards": [{"type": "custom:auto-entities", "card_param": "cards", "card": {"type": "grid"}, "filter": {"include": [{"domain": "cover"}]}}]}""",
+        ))
+        assertNull(WebFallback.matchedRowsReason(tiles, IslandScripts.ANY, listOf(garage)) { garage.takeIf { g -> g.entityId == it } })
+        // A rule's own `options` are what the config can't check: a double tap on a matched row goes to HA's frontend.
+        val options = LovelaceParser.parseView(0, JSONObject(
+            """{"cards": [{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light", "options": {"double_tap_action": {"action": "toggle"}}}]}}]}""",
+        ))
+        assertNull(WebFallback.viewReason(options))
+        assertNotNull(WebFallback.matchedRowsReason(options, IslandScripts.ANY, listOf(lamp)) { lamp.takeIf { l -> l.entityId == it } })
+        // A view without auto-entities isn't walked.
+        assertNull(WebFallback.matchedRowsReason(LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "tile", "entity": "cover.garage"}]}""")),
+            IslandScripts.ANY, listOf(garage)) { null })
+    }
+
+    @Test fun aNestedAutoEntitiesHasItsOwnMatchesCheckedToo() {
+        // The outer card matches lights; its `card:` is another auto-entities that adds covers to the lights it's given.
+        val view = LovelaceParser.parseView(0, JSONObject(
+            """{"cards": [{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]},
+                "card": {"type": "custom:auto-entities", "filter": {"include": [{"domain": "cover"}]}}}]}""",
+        ))
+        val lamp = EntityState("light.lamp", "on", mapOf("friendly_name" to "Lamp"))
+        val garage = EntityState("cover.garage", "closed", mapOf("friendly_name" to "Garage"))
+        fun reason(v: dev.glassworks.engine.vitro.model.ViewConfig, vararg states: EntityState) =
+            WebFallback.matchedRowsReason(v, IslandScripts.ANY, states.toList()) { id -> states.firstOrNull { it.entityId == id } }
+        assertNull(reason(view, lamp))
+        assertEquals(
+            "a row `custom:auto-entities` matched: `entities` `entities[1]` (a `cover` entity) isn't drawn natively: HA draws this domain's row with its own control or picture",
+            reason(view, lamp, garage),
+        )
+        // Two levels down, inside a stack: the innermost one's cover is found as well.
+        val deep = LovelaceParser.parseView(0, JSONObject(
+            """{"cards": [{"type": "vertical-stack", "cards": [{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]},
+                "card": {"type": "custom:auto-entities", "filter": {"include": [{"domain": "switch"}]},
+                  "card": {"type": "custom:auto-entities", "filter": {"include": [{"domain": "cover"}]}}}}]}]}""",
+        ))
+        assertNull(reason(deep, lamp))
+        assertNotNull(reason(deep, lamp, garage))
+    }
+
+    @Test fun theReportSaysAnAutoEntitiesViewIsNativeIfItsMatchedRowsAre() {
+        val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]}}]}"""))
+        val report = CompatChecker.check(view)
+        assertTrue(report.format(), report.notes.any { it.second == WebFallback.MATCHED_ROWS_NOTE })
+        assertTrue(report.format(), WebFallback.MATCHED_ROWS_NOTE in report.format())
     }
 
     // ---- View layouts ----

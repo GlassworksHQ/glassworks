@@ -78,6 +78,18 @@ data class DashboardConfig(
         path.toIntOrNull()?.takeIf { it in views.indices }?.let { return it }
         return 0
     }
+
+    /**
+     * [viewIndex] for the signed-in user [userId] (null: not known): with no path HA's `hui-root` opens the first view
+     * [ViewConfig.visibleTo] them (`views.findIndex(_isVisible)`), not the first one. A path opens its view, hidden or not.
+     */
+    fun viewIndex(path: String?, userId: String?): Int {
+        if (views.isEmpty()) return 0
+        if (path.isNullOrBlank()) return views.indexOfFirst { it.visibleTo(userId) }.coerceAtLeast(0)
+        views.indexOfFirst { it.path == path }.takeIf { it >= 0 }?.let { return it }
+        path.toIntOrNull()?.takeIf { it in views.indices }?.let { return it }
+        return 0
+    }
 }
 
 data class ViewConfig(
@@ -104,6 +116,81 @@ data class ViewConfig(
 
     /** Why this view goes to HA's own frontend instead of being drawn ([WebFallback.viewReason]), or null. */
     val webFallbackReason: String? by lazy { WebFallback.viewReason(this) }
+
+    /**
+     * True when a card the view builds is (or holds) `custom:auto-entities`, whose matches are checked at run time
+     * ([WebFallback.matchedRowsReason]).
+     */
+    internal val hasAutoEntities: Boolean by lazy {
+        fun walk(c: CardConfig): Boolean =
+            c.type == "custom:auto-entities" || CardRouter.producedCards(c, perEntity = false).any { walk(it.value) }
+        CardRouter.viewRoots(this).any { walk(it.card) }
+    }
+
+    /**
+     * What HA's `hui-root` puts in this view's tab (frontend 20261028.5): a view with an icon shows the icon alone, or
+     * the icon and its title when the view sets `show_icon_and_title` and has a title; a view with no icon shows its
+     * title, or [unnamed] (HA's "Unnamed view") when it has none.
+     */
+    fun tab(unnamed: () -> String): ViewTab {
+        val title = raw.optString("title", "").ifEmpty { null }
+        val both = icon != null && title != null && truthy(raw.opt("show_icon_and_title"))
+        return when {
+            both -> ViewTab(icon, title, title)
+            icon != null -> ViewTab(icon, null, title)
+            else -> ViewTab(null, title ?: unnamed(), title)
+        }
+    }
+
+    /**
+     * HA's `hui-root` `_isVisible` (outside edit mode): a view with no `visible`, `visible: true`, or a list of
+     * `{user: id}` that holds [userId]. Which view a dashboard opens on reads it ([DashboardConfig.viewIndex]).
+     */
+    fun visibleTo(userId: String?): Boolean {
+        if (!raw.has("visible")) return true
+        return when (val v = raw.opt("visible")) {
+            true -> true
+            is JSONArray -> listedFor(v, userId)
+            else -> false
+        }
+    }
+
+    /**
+     * HA's `hui-root` `_isTabHiddenForUser`: `visible: false`, or a list of `{user: id}` without [userId]. Such a
+     * view, as a subview, has no tab unless it's the view on screen.
+     */
+    fun tabHiddenFor(userId: String?): Boolean {
+        if (!raw.has("visible")) return false
+        return when (val v = raw.opt("visible")) {
+            false -> true
+            is JSONArray -> !listedFor(v, userId)
+            else -> false
+        }
+    }
+
+    /**
+     * `visible.some((e) => e.user === hass.user?.id)`, strictly: an entry with no `user` matches only when no user is
+     * known (`undefined === undefined`), and a `user: null` never does.
+     */
+    private fun listedFor(list: JSONArray, userId: String?): Boolean = (0 until list.length()).any { i ->
+        val entry = list.opt(i)
+        val user: Any? = if (entry is JSONObject && entry.has("user")) entry.opt("user") else null
+        if (userId == null) user == null else user == userId
+    }
+}
+
+/**
+ * A view's tab ([ViewConfig.tab]): its [icon], its [text] (null: the icon alone, HA's `icon-only` tab), and its
+ * [label], HA's `aria-label` and the icon's tooltip (the view's own title, null when it has none).
+ */
+data class ViewTab(val icon: String?, val text: String?, val label: String?)
+
+/** JavaScript's truthiness, for a config value HA tests with `&&` (`show_icon_and_title`). */
+internal fun truthy(v: Any?): Boolean = when (v) {
+    null, JSONObject.NULL, false -> false
+    is Number -> v.toDouble().let { it != 0.0 && !it.isNaN() }
+    is String -> v.isNotEmpty()
+    else -> true
 }
 
 /** The view types layout-card registers (`masonry-layout`, ...), as a view's `type`. */
@@ -134,6 +221,8 @@ data class ActionConfig(
     val confirmation: String? = null,
     /** A `more-info` action's own `entity`, which HA's `handleAction` opens before the card's. */
     val entity: String? = null,
+    /** A `navigate` action's `navigation_replace`: HA's `navigate(path, {replace: true})`, no step in the history. */
+    val replace: Boolean = false,
 ) {
     companion object {
         private const val DEFAULT_CONFIRMATION = "Are you sure?"
@@ -178,6 +267,7 @@ data class ActionConfig(
                 urlPath = raw.optString("url_path", "").ifEmpty { null },
                 confirmation = parseConfirmation(raw),
                 entity = (raw.opt("entity") as? String)?.trim()?.ifEmpty { null },
+                replace = raw.optBoolean("navigation_replace", false),
             )
         }
     }
@@ -1011,17 +1101,27 @@ object CardRouter {
         }
         // An action's own `entity` (HA's handleAction: a more-info or toggle of another entity than the card's): the
         // More Info sheet it opens reads that entity from the store.
+        // Trimmed as ActionConfig.parse reads it, so " light.hall " subscribes the entity the tap opens.
         fun actionTargets(raw: JSONObject?) {
             if (raw == null) return
             for (key in ACTION_KEYS) {
-                raw.optJSONObject(key)?.optString("entity", "")?.takeIf { isEntityId(it) }?.let { out += it }
+                (raw.optJSONObject(key)?.opt("entity") as? String)?.trim()?.takeIf { isEntityId(it) }?.let { out += it }
+            }
+        }
+        // A row's actions, and those of the rows inside it: a conditional row's `row`, a buttons row's `entities`.
+        fun rowTargets(row: JSONObject?, depth: Int = 0) {
+            if (row == null || depth > 8) return
+            actionTargets(row)
+            rowTargets(row.optJSONObject("row"), depth + 1)
+            if (row.optString("type", "") == "buttons") {
+                row.optJSONArray("entities")?.let { arr -> for (i in 0 until arr.length()) rowTargets(arr.optJSONObject(i), depth + 1) }
             }
         }
         fun walkCard(c: CardConfig) {
             c.entity?.let { out += it }
             c.entities().forEach { it.referencedEntities(out) }
             actionTargets(c.raw)
-            c.raw.optJSONArray("entities")?.let { rows -> for (i in 0 until rows.length()) actionTargets(rows.optJSONObject(i)) }
+            c.raw.optJSONArray("entities")?.let { rows -> for (i in 0 until rows.length()) rowTargets(rows.optJSONObject(i)) }
             c.visibility.forEach { it.referencedEntities(out) }
             VisibilityCondition.parseList(c.raw.optJSONArray("conditions")).forEach { it.referencedEntities(out) }
             // Deep-scan custom cards (e.g. room arrays, sleep/outside/camera objects) so the entity
@@ -1224,10 +1324,21 @@ object EntityFilterConfig {
  * A card's size in HA's `getCardSize` units (about 50 px each), as HA's masonry view and layout-card's masonry columns
  * weigh them: each built-in card's own `getCardSize` in frontend 20261028, else 1 (`computeCardSize`'s answer for a
  * card that has none or doesn't answer in time). Stacks add up (vertical) or take the largest (horizontal) of their
- * cards; a conditional card is its card's size, shown or not.
+ * cards; a conditional card is its card's size, shown or not. [state] is a card's entity state where its size depends
+ * on it (a Mushroom card's controls); null reads as Mushroom's "any option on".
  */
 object HaCardSize {
-    fun of(card: CardConfig): Double {
+    /** Mushroom's cards that extend `MushroomBaseCard` and keep its `getCardSize` (v5.3.0; the cover card says 1). */
+    private val MUSHROOM_BASE_CARDS = setOf(
+        "custom:mushroom-entity-card", "custom:mushroom-light-card", "custom:mushroom-fan-card",
+        "custom:mushroom-person-card", "custom:mushroom-update-card", "custom:mushroom-lock-card",
+        "custom:mushroom-media-player-card", "custom:mushroom-climate-card", "custom:mushroom-vacuum-card",
+        "custom:mushroom-humidifier-card", "custom:mushroom-number-card", "custom:mushroom-select-card",
+        "custom:mushroom-alarm-control-panel-card",
+    )
+
+    fun of(card: CardConfig, state: (CardConfig) -> EntityState? = { null }): Double {
+        fun of(c: CardConfig): Double = of(c, state)
         val raw = card.raw
         fun has(key: String) = raw.has(key) && !raw.isNull(key)
         fun titled() = card.title != null
@@ -1249,8 +1360,21 @@ object HaCardSize {
             }
             "iframe" -> 1 + (raw.optString("aspect_ratio", "").replace("%", "").ifEmpty { "50" }.toDoubleOrNull() ?: 50.0) / 25
             "entity-filter" -> of(EntityFilterConfig.innerCard(card))
+            in MUSHROOM_BASE_CARDS -> mushroomSize(card, state(card)).toDouble()
             else -> intSize(card).toDouble()
         }
+    }
+
+    /**
+     * `MushroomBaseCard.getCardSize`: 1, one more for the vertical layout, one more for a row of controls (not in the
+     * horizontal layout, nor when they collapse).
+     */
+    private fun mushroomSize(card: CardConfig, s: EntityState?): Int {
+        val raw = card.raw
+        val layout = raw.optString("layout", "").ifEmpty { if (raw.optBoolean("vertical", false)) "vertical" else "default" }
+        val controls = layout != "horizontal" && !raw.optBoolean("collapsible_controls", false) &&
+            dev.glassworks.engine.vitro.ui.HaGridSize.mushroomHasControls(card.type, raw, s)
+        return 1 + (if (layout == "vertical") 1 else 0) + (if (controls) 1 else 0)
     }
 
     private fun intSize(card: CardConfig): Int {

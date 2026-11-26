@@ -14,18 +14,16 @@ line of each version is what Home Assistant shows on the update card. A change o
 ### Added
 - **Vitro, an experimental native dashboard renderer, in a new Labs section.** Turn on *Vitro renderer* under
   *Settings → Labs*, on the panel or the Manage page, and after the app restarts your Home Assistant dashboard is drawn
-  with the device's own views instead of a browser. Cards it can't draw yet show in a small browser view, and a view it
-  can't draw, such as one with a map, opens as Home Assistant draws it. It's off by default; while it's off, the app
-  shows your dashboard in its browser as it always has. If the app keeps crashing, freezing or
-  closing right after it starts with Vitro on, a crash inside a native library included, it turns Vitro off by itself
-  after two tries in a row, and Labs and the Manage page say why. A reboot, an update or Android closing the app to
-  free memory doesn't count. A factory reset also clears what Vitro kept from
-  Home Assistant's pages. In both builds; the legacy build (Android 6 and 7, the Mirror included) has seen the least
-  testing so far.
+  with the device's own views instead of a browser. Vitro draws a card natively only when it can match Home Assistant's
+  look: a custom card it can't draw shows in a small browser view, and a view it can't draw, such as one with a map,
+  opens as Home Assistant draws it. It's off by default, and while it's off the app shows your dashboard in its browser
+  as it always has. If the app keeps crashing or freezing right after it starts with Vitro on, it turns Vitro off by
+  itself, and Labs and the Manage page say why. In both builds; the legacy build (Android 6 and 7, the Mirror
+  included) has seen the least testing so far.
 - **Vitro plays cameras over WebRTC, as Home Assistant does.** With Vitro on, a camera that Home Assistant streams
   over WebRTC (through go2rtc, Nest and other integrations) plays that way, with low delay and hardware decoding
-  where the device has it. Cameras without WebRTC, or where it doesn't connect, play HLS or MJPEG as before. Nothing
-  changes in Home Assistant.
+  where the device has it. Cameras without WebRTC, or where it doesn't connect, play HLS or MJPEG as before, and a
+  camera goes back to WebRTC once Home Assistant is back after a restart. Nothing changes in Home Assistant.
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
   with a mute switch. It is Android's media volume, so the device's volume buttons move it too. Home Assistant's

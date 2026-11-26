@@ -1,0 +1,64 @@
+{
+ "title": "More Info of an alert that's firing: its state row's toggle (on, a tap acknowledges it), then the timeline and the Activity section",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "alert.freezer_door"
+ },
+ "more_info": "alert.freezer_door",
+ "expect": {
+  "alert.freezer_door": "on"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "alert.freezer_door": {
+    "state": "on",
+    "last_changed": -900,
+    "attributes": {
+     "friendly_name": "Freezer door open"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alert.freezer_door",
+    "pl": "alert",
+    "en": "Freezer door open"
+   }
+  ],
+  "history": {
+   "alert.freezer_door": {
+    "steps": [
+     [
+      "-30h",
+      "idle"
+     ],
+     [
+      "-15m",
+      "on"
+     ]
+    ]
+   }
+  },
+  "logbook": [
+   {
+    "entity_id": "alert.freezer_door",
+    "state": "on",
+    "when": "-15m"
+   }
+  ]
+ }
+}

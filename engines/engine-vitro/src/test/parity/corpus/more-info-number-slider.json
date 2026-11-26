@@ -1,0 +1,100 @@
+{
+ "title": "More Info of a number in slider mode, now Vitro's: the state row with its slider and value, the history, then the Activity section with the user who set it (their initials)",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "number.kitchen_speaker_volume"
+ },
+ "more_info": "number.kitchen_speaker_volume",
+ "expect": {
+  "number.kitchen_speaker_volume": "60"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "number.kitchen_speaker_volume": {
+    "state": "60",
+    "last_changed": -7200,
+    "attributes": {
+     "min": 0,
+     "max": 100,
+     "step": 1,
+     "mode": "slider",
+     "unit_of_measurement": "%",
+     "friendly_name": "Kitchen Speaker Volume"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "number.kitchen_speaker_volume",
+    "pl": "esphome",
+    "di": "dev-kitchen-speaker",
+    "en": "Volume",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen-speaker",
+    "name": "Kitchen Speaker"
+   }
+  ],
+  "history": {
+   "number.kitchen_speaker_volume": {
+    "steps": [
+     [
+      "-30h",
+      "30"
+     ],
+     [
+      "-6h",
+      "45"
+     ],
+     [
+      "-2h",
+      "60"
+     ]
+    ]
+   }
+  },
+  "logbook": [
+   {
+    "entity_id": "number.kitchen_speaker_volume",
+    "state": "45",
+    "when": "-6h",
+    "context_user_id": "user-robin",
+    "context_event_type": "call_service",
+    "context_domain": "number",
+    "context_service": "set_value"
+   },
+   {
+    "entity_id": "number.kitchen_speaker_volume",
+    "state": "60",
+    "when": "-2h",
+    "context_user_id": "user-robin",
+    "context_event_type": "call_service",
+    "context_domain": "number",
+    "context_service": "set_value"
+   }
+  ],
+  "users": [
+   {
+    "id": "user-robin",
+    "name": "Robin"
+   }
+  ]
+ }
+}

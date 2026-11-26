@@ -436,6 +436,18 @@ def _history_stream(c, m):
                       "start_time": m.get("start_time"), "end_time": m.get("end_time")})
 
 
+def _logbook_stream(c, m):
+    """logbook/event_stream (homeassistant/components/logbook/websocket_api.py), as HA's More Info Activity section and
+    logbook card subscribe: the window's history first (`partial`: more may follow), then an empty message that ends the
+    history, after which only live rows would come. The home's own rows (`D.logbook(entity_ids, start, end)`) if it has
+    any; the fixed home has none, so HA's "No activity found"."""
+    c.result(m["id"])
+    rows = getattr(D, "logbook", None)
+    events = rows(m.get("entity_ids") or [], m.get("start_time"), m.get("end_time")) if rows else []
+    c.event(m["id"], {"events": events, "start_time": m.get("start_time"), "end_time": m.get("end_time"), "partial": True})
+    c.event(m["id"], {"events": [], "start_time": m.get("start_time"), "end_time": m.get("end_time")})
+
+
 def _history_during_period(c, m):
     """history/history_during_period (HA's recorder API, compressed as with minimal_response: {entity: [{s, lu}]}): the
     same seeded points as history/stream. Vitro's native more-info graph asks this way (VitroClarity, docs/perf.md
@@ -573,6 +585,7 @@ HANDLERS = {
     "call_service": _call_service,
     "history/stream": _history_stream,
     "history/history_during_period": _history_during_period,
+    "logbook/event_stream": _logbook_stream,
     "recorder/get_statistics_metadata": lambda c, m: c.result(m["id"], D.statistics_metadata(m.get("statistic_ids"))),
     "recorder/statistics_during_period": lambda c, m: c.result(m["id"], D.statistics(
         m.get("statistic_ids"), m.get("start_time"), m.get("end_time"), m.get("period"))),

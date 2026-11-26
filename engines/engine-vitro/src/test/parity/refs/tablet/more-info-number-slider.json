@@ -1,0 +1,426 @@
+{
+ "case": "more-info-number-slider",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 342,
+  "y": 32,
+  "width": 596,
+  "height": 693
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 350,
+   "y": 40,
+   "w": 580,
+   "h": 676.39,
+   "type": "ha-more-info-dialog",
+   "mode": "dialog"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Kitchen Speaker",
+   "x": 60,
+   "y": 18,
+   "w": 100.7,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Volume",
+   "x": 60,
+   "y": 34,
+   "w": 68.23,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Volume",
+   "x": 72,
+   "y": 92.41,
+   "w": 47.39,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2 hours ago",
+   "x": 72,
+   "y": 112.2,
+   "w": 73.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "60%",
+   "x": 530.02,
+   "y": 103.8,
+   "w": 25.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "History",
+   "x": 24,
+   "y": 152,
+   "w": 64.33,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 485.72,
+   "y": 155.8,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Activity",
+   "x": 24,
+   "y": 482,
+   "w": 66.94,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 485.72,
+   "y": 485.8,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Today · November 12, 2026",
+   "x": 24,
+   "y": 537,
+   "w": 170.61,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "60%",
+   "x": 60,
+   "y": 567.69,
+   "w": 26,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "R",
+   "x": 431.22,
+   "y": 570.67,
+   "w": 5.55,
+   "h": 10,
+   "size": 9,
+   "weight": 400,
+   "color": "rgb(33, 33, 33)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "8:08:00 AM",
+   "x": 463.2,
+   "y": 568.88,
+   "w": 60.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "45%",
+   "x": 60,
+   "y": 608.19,
+   "w": 26,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "R",
+   "x": 431.22,
+   "y": 611.17,
+   "w": 5.55,
+   "h": 10,
+   "size": 9,
+   "weight": 400,
+   "color": "rgb(33, 33, 33)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "4:08:00 AM",
+   "x": 463.2,
+   "y": 609.38,
+   "w": 60.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "number.kitchen_speaker_volume": {
+   "s": "60",
+   "a": {
+    "min": 0,
+    "max": 100,
+    "step": 1,
+    "mode": "slider",
+    "unit_of_measurement": "%",
+    "friendly_name": "Kitchen Speaker Volume"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "number.kitchen_speaker_volume",
+    "pl": "esphome",
+    "di": "device-1",
+    "en": "Volume",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Kitchen Speaker"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "number"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "number": {
+     "_": {
+      "default": "mdi:ray-vertex"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.number.entity_component._.state_attributes.max.name": "Maximum",
+    "component.number.entity_component._.state_attributes.min.name": "Minimum",
+    "component.number.entity_component._.state_attributes.mode.name": "Mode",
+    "component.number.entity_component._.state_attributes.mode.state.auto": "Automatic",
+    "component.number.entity_component._.state_attributes.mode.state.box": "Input field",
+    "component.number.entity_component._.state_attributes.mode.state.slider": "Slider",
+    "component.number.entity_component._.state_attributes.step.name": "Step"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "history/stream",
+    "entity_ids": [
+     "number.kitchen_speaker_volume"
+    ],
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "minimal_response": true,
+    "significant_changes_only": true,
+    "no_attributes": true
+   },
+   "events": [
+    {
+     "states": {
+      "number.kitchen_speaker_volume": [
+       {
+        "s": "30",
+        "lu": 1794413280
+       },
+       {
+        "s": "45",
+        "lu": 1794478080
+       },
+       {
+        "s": "60",
+        "lu": 1794492480
+       }
+      ]
+     },
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  },
+  {
+   "request": {
+    "type": "config/auth/list"
+   },
+   "events": [],
+   "result": [
+    {
+     "id": "parity-user",
+     "name": "Sam",
+     "is_owner": true,
+     "is_admin": true,
+     "credentials": [
+      {
+       "auth_provider_type": "homeassistant",
+       "auth_provider_id": null
+      }
+     ],
+     "mfa_modules": [],
+     "system_generated": false,
+     "group_ids": [
+      "system-admin"
+     ],
+     "username": "parity",
+     "is_active": true,
+     "local_only": false
+    },
+    {
+     "is_owner": false,
+     "is_admin": false,
+     "system_generated": false,
+     "group_ids": [
+      "system-users"
+     ],
+     "credentials": [],
+     "username": null,
+     "is_active": true,
+     "local_only": false,
+     "id": "user-robin",
+     "name": "Robin"
+    }
+   ]
+  },
+  {
+   "request": {
+    "type": "logbook/event_stream",
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "end_time": "2027-11-12T16:08:00.000Z",
+    "entity_ids": [
+     "number.kitchen_speaker_volume"
+    ]
+   },
+   "events": [
+    {
+     "events": [
+      {
+       "entity_id": "number.kitchen_speaker_volume",
+       "state": "45",
+       "context_user_id": "user-robin",
+       "context_event_type": "call_service",
+       "context_domain": "number",
+       "context_service": "set_value",
+       "when": 1794478080
+      },
+      {
+       "entity_id": "number.kitchen_speaker_volume",
+       "state": "60",
+       "context_user_id": "user-robin",
+       "context_event_type": "call_service",
+       "context_domain": "number",
+       "context_service": "set_value",
+       "when": 1794492480
+      }
+     ],
+     "start_time": 1794413280,
+     "end_time": 1794499680,
+     "partial": true
+    },
+    {
+     "events": [],
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  }
+ ]
+}

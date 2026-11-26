@@ -249,6 +249,10 @@ class MediaControlCardTest {
         assertTrue(bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MOVE_END)))
         store.putLocal(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 100, "media_position" to 10)))
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        // TalkBack reads the clamped value meanwhile, never one past the new end.
+        val held = bar.createAccessibilityNodeInfo().rangeInfo
+        assertEquals(100f, held.max, 0f)
+        assertEquals(100f, held.current, 0f)
         bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_MOVE_END))
         assertTrue(calls.toString(), calls.single().contains("\"seek_position\":100"))
     }

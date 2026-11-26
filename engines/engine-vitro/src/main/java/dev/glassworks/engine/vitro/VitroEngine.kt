@@ -443,8 +443,11 @@ class VitroEngine(
             val (dash, view) = LovelaceParser.parseRoute(url)
             if (displayedDashboard != (OAuth.origin(url) to dash)) return false
             val d = vitroView.dashboard ?: return false
-            return d.views.getOrNull(d.viewIndex(view))?.let { vitroView.fallbackReason(it) } != null
+            return d.views.getOrNull(d.viewIndex(view, currentUserId()))?.let { vitroView.fallbackReason(it) } != null
         }
+
+        /** The signed-in Home Assistant user's id, or null while it isn't known. */
+        private fun currentUserId(): String? = client?.currentUser?.optString("id", "")?.ifEmpty { null }
 
         /** The dashboard the panel is set to, when it's one Vitro draws. */
         private fun configuredDashboard(): String? =
@@ -815,13 +818,14 @@ class VitroEngine(
                     }
                 }
             }
-            vitroView.onMoreInfoInFrontend = { v, entityId, reason ->
+            vitroView.onMoreInfoInFrontend = { v, entityId, reason, moreInfoView ->
                 // As onWebView, with HA's own More Info dialog open over the view (its `more-info-entity-id`). When the
                 // dialog closes, HA drops the parameter, and the plain view hands the page back (handsBack).
                 if (!disposed && nativeActive && displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)) {
                     val url = buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString())
                     if (url != null) {
-                        val withDialog = "$url?more-info-entity-id=${java.net.URLEncoder.encode(entityId, "UTF-8")}"
+                        val withDialog = "$url?more-info-entity-id=${java.net.URLEncoder.encode(entityId, "UTF-8")}" +
+                            (moreInfoView?.let { "&more-info-view=${java.net.URLEncoder.encode(it, "UTF-8")}" } ?: "")
                         Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows ${forLog(url)} with its dialog")
                         leaveNativeDashboard()
                         // Back from HA's dialog comes back to this view; closing it does too, in place ([moreInfoReturn]).
@@ -836,6 +840,8 @@ class VitroEngine(
             vitroView.onTabNavigation = { currentUrl?.let(::remember) }
             vitroView.pageBack = { backInHistory() }
             vitroView.onThemeResolved = { theme -> reportThemeToHost(theme) }
+            vitroView.currentUserId = { currentUserId() }
+            vitroView.haOrigin = { currentOrigin }
             vitroView.contextFactory = { theme ->
                 val haBase = currentOrigin.orEmpty()
                 // The view being built: the context is made for its cards.
@@ -871,6 +877,7 @@ class VitroEngine(
                         if (c != null) c.callWs(msg, done) else done(false, null, null)
                     },
                     navigate = { path -> navigateInPlace(path) },
+                    navigateReplace = { path -> navigateInPlace(path, replace = true) },
                     openMoreInfo = { entityId -> vitroView.openMoreInfo(entityId) },
                     fetchHistory = { ids, hours, done -> client?.fetchHistory(ids, hours, done) },
                     subscribeForecast = { id, kind, onForecast -> client?.subscribeForecast(id, kind, onForecast) ?: {} },
@@ -905,6 +912,7 @@ class VitroEngine(
                     touch = touchScreen,
                     needsFrontend = { card, tags, owners -> vitroView.cardNeedsFrontend(card, tags, owners, resources) },
                     islandFailed = { card, reason -> vitroView.cardFailedInIsland(card, reason, resources) },
+                    matchedNeedFrontend = { card, reason -> vitroView.matchedNeedFrontend(card, reason) },
                     haConnected = { haConnected },
                     haConnectionEpoch = { connectionEpoch },
                     watchConnection = { onChange ->
@@ -916,6 +924,8 @@ class VitroEngine(
                         ({ configWatchers -= onChange })
                     },
                     pageStorage = { HaPageStorage.of(activity).items(haBase.ifEmpty { null }) },
+                    showToast = { toast -> vitroView.showToast(toast) },
+                    moreInfoInFrontend = { entityId, view, reason -> vitroView.moreInfoInFrontend(entityId, view, reason) },
                 )
             }
             main.post { host.onConnect(port) }
@@ -1169,14 +1179,19 @@ class VitroEngine(
             }
         }
 
-        private fun navigateInPlace(path: String) {
-            if (path.startsWith("http://") || path.startsWith("https://")) {
-                load(path)
-                return
+        /**
+         * Opens [path] (a card's `navigate` or `url` action) on this page. [replace]: HA's `navigate(path, {replace:
+         * true})` (`navigation_replace`), so the page it leaves is no step in the history and back skips it.
+         */
+        private fun navigateInPlace(path: String, replace: Boolean = false) {
+            val url = if (path.startsWith("http://") || path.startsWith("https://")) {
+                path
+            } else {
+                val origin = currentOrigin ?: return
+                origin + if (path.startsWith("/")) path else "/$path"
             }
-            val origin = currentOrigin ?: return
-            val normalized = if (path.startsWith("/")) path else "/$path"
-            load(origin + normalized)
+            if (replace) currentUrl = null // the page left isn't a step to come back to
+            load(url)
         }
 
         /**
@@ -1363,6 +1378,8 @@ class VitroEngine(
             // The islands' hass.user follows it as it arrives, which may be after the token (and after their connect).
             override fun onCurrentUser(user: JSONObject) {
                 if (generation == clientGeneration) tokenWatchers.forEach { runCatching { it() } }
+                // A view's `visible` follows the user: which tabs show.
+                if (generation == clientGeneration) post { vitroView.userChanged() }
             }
 
             // The islands' hass.config follows it: a page made before it arrived has none.

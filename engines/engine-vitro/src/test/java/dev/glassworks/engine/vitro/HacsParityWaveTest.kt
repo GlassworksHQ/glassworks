@@ -673,6 +673,26 @@ class HacsParityWaveTest {
     }
 
     @Test
+    fun mushroomCardsWeighTheirLayoutAndControlsInMasonry() {
+        // MushroomBaseCard.getCardSize (v5.3.0): 1, +1 vertical, +1 for a row of controls unless horizontal or collapsible.
+        fun size(json: String, s: EntityState? = null) = dev.glassworks.engine.vitro.model.HaCardSize.of(card(json)) { s }.toInt()
+        assertEquals(1, size("""{"type": "custom:mushroom-entity-card", "entity": "light.a"}"""))
+        assertEquals(2, size("""{"type": "custom:mushroom-entity-card", "entity": "light.a", "vertical": true}"""))
+        val dims = EntityState("light.a", "on", mapOf("supported_color_modes" to listOf("brightness")))
+        val onOff = EntityState("light.a", "on", mapOf("supported_color_modes" to listOf("onoff")))
+        val bright = """{"type": "custom:mushroom-light-card", "entity": "light.a", "show_brightness_control": true}"""
+        assertEquals(2, size(bright, dims))
+        // A light that can't dim draws no control, so it stays 1, as Mushroom's _controls reads the state.
+        assertEquals(1, size(bright, onOff))
+        assertEquals(3, size("""{"type": "custom:mushroom-light-card", "entity": "light.a", "show_brightness_control": true, "layout": "vertical"}""", dims))
+        assertEquals(1, size("""{"type": "custom:mushroom-light-card", "entity": "light.a", "show_brightness_control": true, "layout": "horizontal"}""", dims))
+        assertEquals(1, size("""{"type": "custom:mushroom-light-card", "entity": "light.a", "show_brightness_control": true, "collapsible_controls": true}""", dims))
+        assertEquals(2, size("""{"type": "custom:mushroom-select-card", "entity": "select.a"}"""))
+        // The cover card overrides getCardSize with 1.
+        assertEquals(1, size("""{"type": "custom:mushroom-cover-card", "entity": "cover.a", "show_position_control": true}"""))
+    }
+
+    @Test
     fun layoutCardLaysOutAGridWithSpans() {
         val st = store()
         val cfg = card(

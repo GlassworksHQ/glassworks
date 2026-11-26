@@ -138,9 +138,16 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         }
         lineBox(valueView, 28f)
         lineBox(unitView, 16f)
+        // `ha-card`: a column with `justify-content: space-between` over the header, `.info` and `.footer` (an empty
+        // div without one), so a card taller than its content (a sections slot, `height: 100%`) splits the rest into
+        // the two gaps: the value line sits lower than right under the header. With a pinned footer
+        // (`.with-fixed-footer`) it's `flex-start`. The gaps only grow when the card has an exact height.
+        val spaced = !fixedFooter
+        if (spaced) col.addView(View(ctx.context), LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
         col.addView(info, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = -ctx.px(4f) })
+        if (spaced) col.addView(View(ctx.context), LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
         if (footer != null && !fixedFooter) col.addView(footer, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        addView(col, LayoutParams(MATCH_PARENT, if (spaced) MATCH_PARENT else WRAP_CONTENT))
         if (footer != null && fixedFooter) addView(footer, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
 
         val eid = config.entity
@@ -820,7 +827,8 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     }
 
     private fun render(s: EntityState?) {
-        titleView.text = config.name(s) ?: s?.friendlyName ?: "Alarm"
+        // HA's hui-alarm-panel-card: formatEntityName, the device and entity names when no `name` is set.
+        titleView.text = config.name(s) ?: s?.displayName ?: "Alarm"
         val state = s?.state ?: "unknown"
         chipLabel.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it != state } ?: stateLabel(state)
         chipIcon.setIcon(stateIcon(state), 0xFFFFFFFF.toInt())
@@ -2088,6 +2096,12 @@ data class LogbookEntry(
     val contextName: String? = null,
     val contextState: String? = null,
     val contextMessage: String? = null,
+    /** Who made the change (`context_user_id`): HA's cause names the user from its users and persons. */
+    val contextUserId: String? = null,
+    /** The entry's own icon (`icon`), for the timeline's glyph. */
+    val icon: String? = null,
+    /** An event entity's `attributes.event_type`: what its row says (`localizeStateMessage`). */
+    val eventType: String? = null,
 )
 
 /**
@@ -2274,7 +2288,8 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
             orientation = LinearLayout.HORIZONTAL
             setPadding(ctx.px(16f), 0, ctx.px(16f), 0)
             isClickable = true
-            e.entityId?.let { eid -> setOnClickListener { ctx.openMoreInfo(eid) } }
+            // HA opens its logbook detail dialog, which only its frontend has (HaLogbook.openEntryDetail).
+            e.entityId?.let { eid -> setOnClickListener { HaLogbook.openEntryDetail(ctx, eid) } }
         }
         row.addView(LogbookNode(ctx.context, color, ctx.theme.dividerColor, ThemeResolver.parseColor(ctx.theme.vars["disabled-color"]) ?: if (ctx.theme.dark) 0xFF464646.toInt() else 0xFFBDBDBD.toInt(), unavailable, firstOfDay, lastOfDay),
             LinearLayout.LayoutParams(ctx.px(28f), MATCH_PARENT).apply { marginEnd = ctx.px(8f) })
@@ -2382,8 +2397,8 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
         fun isoMillis(ms: Long): String = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT)
             .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
 
-        /** The stream's rows, newest first. */
-        fun parseEntries(arr: JSONArray?): List<LogbookEntry> {
+        /** The stream's rows in the order HA sent them (oldest first). */
+        fun parseInOrder(arr: JSONArray?): List<LogbookEntry> {
             if (arr == null) return emptyList()
             val out = ArrayList<LogbookEntry>(arr.length())
             for (i in 0 until arr.length()) {
@@ -2395,10 +2410,15 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
                     contextEventType = str("context_event_type"), contextDomain = str("context_domain"),
                     contextEntityId = str("context_entity_id"), contextEntityIdName = str("context_entity_id_name"),
                     contextName = str("context_name"), contextState = str("context_state"), contextMessage = str("context_message"),
+                    contextUserId = str("context_user_id"), icon = str("icon"),
+                    eventType = o.optJSONObject("attributes")?.let { a -> if (a.has("event_type") && !a.isNull("event_type")) a.opt("event_type")?.toString() else null },
                 )
             }
-            return out.sortedByDescending { it.whenSec }
+            return out
         }
+
+        /** The stream's rows, newest first. */
+        fun parseEntries(arr: JSONArray?): List<LogbookEntry> = parseInOrder(arr).sortedByDescending { it.whenSec }
 
         /** `formatTimeWithSeconds`: "12:06:51 AM". */
         fun timeText(ms: Long): String = HaFormat.formatTimeWithSeconds(ms)
@@ -2424,7 +2444,7 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
 }
 
 /** `.node`: the logbook's rail (2 px, the divider color, 9 px clear of the dot) and its 10 px dot. */
-private class LogbookNode(
+internal class LogbookNode(
     context: Context,
     private val color: Int,
     private val rail: Int,
