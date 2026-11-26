@@ -55,9 +55,11 @@ class CameraHubTest {
 
     /** Each hub's thread ends with its test, so none touches Robolectric's camera (its callbacks are static) in the next. */
     @After fun release() {
+        // Read before release(): a HandlerThread's looper is null once the thread has quit (a test may release its hub itself).
+        val threads = hubs.mapNotNull { it.looper?.thread }
         hubs.forEach { it.release() }
         // A hub thread still running here would keep its availability callback registered into the next test.
-        val stuck = hubs.map { it.looper.thread }.onEach { it.join(5_000) }.filter { it.isAlive }
+        val stuck = threads.onEach { it.join(5_000) }.filter { it.isAlive }
         ShadowMediaCodecList.reset()
         check(stuck.isEmpty()) { "${stuck.size} hub thread(s) didn't end within 5 s of release()" }
     }
