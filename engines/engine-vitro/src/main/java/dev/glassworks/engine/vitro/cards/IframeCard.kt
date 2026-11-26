@@ -100,6 +100,7 @@ class IframeCardView(
     /** The page an earlier build of this very card gave up ([handOff]), taken instead of opening a new one. */
     private val adopted: WebIslandCardView.Island? = null,
 ) : CardSurface(ctx), IslandCard {
+    override val islandConfig: CardConfig get() = config
     private val raw = config.raw
     /** The frame's address, resolved as HA's page resolves it: against the dashboard's own URL (else HA's origin). */
     internal val url: String = absolute(raw.optString("url", ""), ctx.pageUrl() ?: ctx.haBase)

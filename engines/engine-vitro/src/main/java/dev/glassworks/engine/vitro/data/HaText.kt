@@ -58,6 +58,9 @@ object HaText {
         version++
     }
 
+    /** Every string installed now ([install]), keyed as HA's `localize` reads them: what a web island's page gets. */
+    fun installed(): Map<String, String> = strings
+
     /** Forgets the installed strings (a new server, or tests). */
     fun reset() {
         strings = emptyMap()

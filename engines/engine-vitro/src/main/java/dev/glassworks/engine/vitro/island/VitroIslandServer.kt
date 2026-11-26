@@ -27,6 +27,7 @@ import java.util.concurrent.CopyOnWriteArraySet
  * Keeps Tier 3 100% GeckoView-consistent (zero `android.webkit.WebView`) across Android 6, 10,
  * and 15 while bypassing Home Assistant's 10+ MB frontend SPA:
  * - `GET /__vitro/island/<id>` serves the ~5 KB Micro-Host HTML (theme CSS vars + custom card JS).
+ * - `GET /__vitro/strings/<hash>.json` serves HA's strings for the islands' `hass.localize` ([IslandStrings]).
  * - `GET /__vitro/ws/<id>` upgrades to a loopback WebSocket bridging `hass.states` (Proxy-filtered),
  *   `hass.callWS`, `hass.callService`, `hass-more-info`, and auto-resize straight to Kotlin.
  * - Every other path the islands load (`/local/...`, `/hacsfiles/...`, `/api/...`, the dashboard's own Lovelace
@@ -75,6 +76,13 @@ class VitroIslandServer(
     private val keepAliveMs: Long = KEEPALIVE_MS,
     /** A monotonic clock in ms, for the pings. */
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
+    /**
+     * Asks for the session again after Home Assistant refused its token (a 401): a forced refresh
+     * (`VitroEngine.renewIslandSession`), whose result is given to `done` on any thread. Null (tests) never renews.
+     */
+    private val renewSession: ((done: (Pair<String?, String?>) -> Unit) -> Unit)? = null,
+    /** How long a proxied request waits for [renewSession] before it answers with the 401 it got. */
+    private val renewTimeoutMs: Long = RENEW_TIMEOUT_MS,
 ) {
     constructor(haBase: () -> String?, accessToken: () -> String?, log: (String) -> Unit = {}) :
         this({ haBase() to accessToken() }, log)
@@ -231,6 +239,18 @@ class VitroIslandServer(
             val svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="$d"/></svg>"""
             return HttpResponse(200, mapOf("Content-Type" to "image/svg+xml; charset=utf-8", "Cache-Control" to "max-age=86400"), svg.toByteArray(Charsets.UTF_8))
         }
+        if (path.startsWith(IslandStrings.PREFIX)) {
+            // HA's strings for the islands' `hass.localize` (nothing secret: HA serves them to anyone). The address
+            // names their content, so the browser keeps them.
+            // A set it no longer has is a 404: the page's localize then misses (""), never reads another language's.
+            val hash = path.removePrefix(IslandStrings.PREFIX).removeSuffix(".json")
+            val strings = IslandStrings.byHash(hash) ?: return HttpResponse.text(404, "Not found")
+            return HttpResponse(
+                200,
+                mapOf("Content-Type" to "application/json; charset=utf-8", "Cache-Control" to "public, max-age=31536000, immutable"),
+                strings.body,
+            )
+        }
         if (path.startsWith("/__vitro/ws/")) {
             val id = path.removePrefix("/__vitro/ws/")
             val slot = slots[id] ?: return HttpResponse.text(404, "Unknown island slot")
@@ -331,7 +351,8 @@ class VitroIslandServer(
             return HttpResponse.text(403, "Not allowed")
         }
         // Only what the islands load: anything else isn't forwarded with the panel's token.
-        val (origin, token) = session()
+        val (origin, firstToken) = session()
+        var token = firstToken
         if (!proxied(req.path) && !underResource(req.path, origin)) {
             log("refused: not a proxied path (${req.method} ${firstSegment(req.path)})")
             return HttpResponse.text(404, "Not found")
@@ -342,6 +363,8 @@ class VitroIslandServer(
         val held = IntArray(1)
         // Set once a response carries the permits: the server releases them after writing it (its onDone).
         var handedOff = false
+        // Retried once, with a renewed token, after Home Assistant refused this one.
+        var renewed = false
         return try { runCatching {
             var hops = 0
             while (true) {
@@ -364,6 +387,19 @@ class VitroIslandServer(
                         }
                     }
                     val code = conn.responseCode
+                    // A token that expired under the island: the same request once more with a renewed one, if it is
+                    // for the same Home Assistant. Its answer, whatever it is, goes to the page.
+                    if (code == 401 && !renewed && !token.isNullOrEmpty()) {
+                        renewed = true
+                        val fresh = renewedSession(token)
+                        if (fresh != null && sameBase(fresh.first, base) && !fresh.second.isNullOrEmpty() && fresh.second != token) {
+                            log("retrying a request Home Assistant refused, with a renewed token (${firstSegment(req.path)})")
+                            token = fresh.second
+                            targetUrl = base + req.target
+                            hops = 0
+                            continue
+                        }
+                    }
                     val location = conn.getHeaderField("Location")
                     if (code in REDIRECTS && location != null && (req.method == "GET" || req.method == "HEAD")) {
                         val next = sameOriginRedirect(base, targetUrl, location)
@@ -409,6 +445,22 @@ class VitroIslandServer(
         }
     }
 
+    /**
+     * The session to retry with after Home Assistant refused [refused]: the current one when another request renewed
+     * it already, else what [renewSession] gives within [renewTimeoutMs]. Null when nothing renews it.
+     */
+    private fun renewedSession(refused: String?): Pair<String?, String?>? {
+        session().takeIf { it.second != null && it.second != refused }?.let { return it }
+        val renew = renewSession ?: return null
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val got = java.util.concurrent.atomic.AtomicReference<Pair<String?, String?>?>(null)
+        runCatching { renew { s -> got.set(s); latch.countDown() } }.onFailure { return null }
+        return if (latch.await(renewTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) got.get() else null
+    }
+
+    /** Whether [origin] is the Home Assistant [base] a request went to. */
+    private fun sameBase(origin: String?, base: String): Boolean = origin?.trimEnd('/') == base
+
     /** True when [path] is one of the dashboard's Lovelace resources or under its folder ([resourcePaths]). */
     private fun underResource(path: String, haOrigin: String?): Boolean {
         if (!safePath(path)) return false
@@ -439,6 +491,9 @@ class VitroIslandServer(
 
         /** How often a bridge is pinged: four pings fit in [BRIDGE_IDLE_MS]. */
         internal const val KEEPALIVE_MS = 30_000L
+
+        /** How long a refused request waits for a renewed token: well inside the request's own read timeout. */
+        internal const val RENEW_TIMEOUT_MS = 10_000L
 
         /** Ports a remembered one may be. */
         private val VALID_PORTS = 1024..65535
