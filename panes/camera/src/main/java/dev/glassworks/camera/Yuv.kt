@@ -47,10 +47,12 @@ fun stillRotation(sensorDegrees: Int, displayDegrees: Int, front: Boolean): Int 
  * Y mean of 4 to 5 and no row all zero) and chroma near 128, so it is never blank.
  *
  * Samples [BLANK_ROWS] rows of Y and half as many of each chroma plane, [BLANK_COLUMNS] points a row: blank when at
- * least [BLANK_SHARE] of the sampled rows are all zero in Y and in both chroma planes. No picture has such a row (black
- * still has chroma near 128), so a quarter of them is already a session gone wrong, however much streaky picture the
- * rest holds: on the Mirror (2026-11-25) a bad session's frames were two thirds zero under a streaky third, in the
- * stream and in stills alike. A few thousand reads a frame. Absolute reads: the buffers' positions don't move.
+ * least [BLANK_SHARE] of the sampled rows are dead in Y and in both chroma planes. A dead row reads zero at every
+ * point, or the green that zero becomes once a LEGACY camera has drawn it ([GREEN_Y], [GREEN_U], [GREEN_V]). No
+ * picture has such a row (black still has chroma near 128), so a quarter of them is already a session gone wrong,
+ * however much streaky picture the rest holds: on the Mirror (2026-11-25) a bad session's frames were two thirds dead
+ * under a streaky third, in the stream and in stills alike. A few thousand reads a frame. Absolute reads: the
+ * buffers' positions don't move.
  */
 fun blankYuv(
     width: Int, height: Int,
@@ -58,29 +60,34 @@ fun blankYuv(
     u: ByteBuffer, v: ByteBuffer, uvRowStride: Int, uvPixelStride: Int,
 ): Boolean {
     if (width <= 0 || height <= 0) return false
-    if (!mostRowsZero(y, width, height, yRowStride, 1, BLANK_ROWS)) return false
+    if (!mostRowsDead(y, width, height, yRowStride, 1, BLANK_ROWS, GREEN_Y)) return false
     val rows = maxOf(1, BLANK_ROWS / 2)
-    return mostRowsZero(u, width / 2, height / 2, uvRowStride, uvPixelStride, rows) &&
-        mostRowsZero(v, width / 2, height / 2, uvRowStride, uvPixelStride, rows)
+    return mostRowsDead(u, width / 2, height / 2, uvRowStride, uvPixelStride, rows, GREEN_U) &&
+        mostRowsDead(v, width / 2, height / 2, uvRowStride, uvPixelStride, rows, GREEN_V)
 }
 
-/** Whether at least [BLANK_SHARE] of [rows] evenly spread rows of a plane are zero at [BLANK_COLUMNS] evenly spread points. */
-private fun mostRowsZero(plane: ByteBuffer, width: Int, height: Int, rowStride: Int, pixelStride: Int, rows: Int): Boolean {
+/**
+ * Whether at least [BLANK_SHARE] of [rows] evenly spread rows of a plane are dead at [BLANK_COLUMNS] evenly spread
+ * points: every point zero, or within [GREEN_SLACK] of [green], this plane's value of a drawn zero.
+ */
+private fun mostRowsDead(plane: ByteBuffer, width: Int, height: Int, rowStride: Int, pixelStride: Int, rows: Int, green: Int): Boolean {
     if (width <= 0 || height <= 0) return true
     val sampled = minOf(rows, height)
     val columns = minOf(BLANK_COLUMNS, width)
-    var zero = 0
+    var dead = 0
     for (r in 0 until sampled) {
         val row = ((2L * r + 1) * height / (2L * sampled)).toInt()
-        var allZero = true
+        var allDead = true
         for (c in 0 until columns) {
             val x = ((2L * c + 1) * width / (2L * columns)).toInt()
             val i = row * rowStride + x * pixelStride
-            if (i >= plane.limit() || plane.get(i).toInt() != 0) { allZero = false; break }
+            if (i >= plane.limit()) { allDead = false; break }
+            val b = plane.get(i).toInt() and 0xFF
+            if (b != 0 && Math.abs(b - green) > GREEN_SLACK) { allDead = false; break }
         }
-        if (allZero) zero++
+        if (allDead) dead++
     }
-    return zero >= Math.ceil(sampled * BLANK_SHARE).toInt()
+    return dead >= Math.ceil(sampled * BLANK_SHARE).toInt()
 }
 
 /** Rows of Y [blankYuv] samples; each chroma plane gets half. */
@@ -90,7 +97,20 @@ internal const val BLANK_ROWS = 24
 internal const val BLANK_COLUMNS = 64
 
 /**
- * The share of sampled rows that must be all zero for a plane to count as blank. A quarter: the Mirror's bad sessions
- * had two thirds of their rows zero, which the first threshold (90%) let through.
+ * The share of sampled rows that must be dead for a plane to count as blank. A quarter: the Mirror's bad sessions
+ * had two thirds of their rows dead, which the first threshold (90%) let through.
  */
 internal const val BLANK_SHARE = 0.25
+
+/**
+ * A zero frame as a LEGACY camera hands it to an `ImageReader`. Android 6's camera shim draws each preview frame
+ * through the GPU (as RGB) and converts it back to YUV for the reader and the encoder, so zero YUV comes out as RGB
+ * (0, 135, 0) and then, in full range, Y 79, U 83, V 71: what the Mirror's reader frames read on 2026-11-25, while
+ * an exact zero test let them through. Real pictures don't hold that saturated green flat across a whole row.
+ */
+internal const val GREEN_Y = 79
+internal const val GREEN_U = 83
+internal const val GREEN_V = 71
+
+/** How far a point may be from [GREEN_Y], [GREEN_U] or [GREEN_V] and still read as a drawn zero. */
+internal const val GREEN_SLACK = 4

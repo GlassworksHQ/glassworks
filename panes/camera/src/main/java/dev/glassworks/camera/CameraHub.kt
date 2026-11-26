@@ -44,7 +44,7 @@ import java.util.concurrent.TimeUnit
  * A session that sends no frame for [SILENT_MS] is closed and the camera opened again ([ReopenBackoff]): a
  * LEGACY camera's first session can start and never deliver (the Mirror, 2026-11-19, #599). The first frame of a
  * session gets [FIRST_FRAME_MS]: the same camera can also take more than 5 s to start (#674). A blank frame
- * ([blankYuv]: every plane zero, Home Assistant's solid green) counts as no frame: the Mirror's stock camera starts
+ * ([blankYuv]: rows that are zero in every plane, or the green zero turns into, Home Assistant's solid green) counts as no frame: the Mirror's stock camera starts
  * about one session in three that way (2026-11-25), and that session is reopened like a silent one.
  *
  * A camera that won't open (another app has it, an error) is tried again after [ConnectBackoff]'s wait, or sooner
@@ -465,7 +465,7 @@ class CameraHub(
      */
     internal fun onFrame(now: Long, blank: Boolean, luma: () -> LumaFrame, jpeg: () -> ByteArray) {
         if (blank) {
-            if (++blanks == 1) log("camera: blank frame (every plane zero); not used")
+            if (++blanks == 1) log("camera: blank frame (zero or drawn-green rows); not used")
             return
         }
         blanks = 0

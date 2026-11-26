@@ -122,11 +122,30 @@ series of connects from another crashed `mediaserver`.
    The same run measured the stream's rate with the reader in one request of five: `ffprobe -count_packets
    -read_intervals %+5` read 103 packets in 5 s, against 6.9 fps with the reader in every request (attempt 2).
 
+5. **Why the quarter threshold still missed** (2026-11-25, verified, test build `test-build/mirror-wifi-902-923` at
+   `4d28332e0`, which carries attempt 4). The same bad session came back after the update: Home Assistant's still
+   two thirds green, the stream the same, and the log had no `blank frame` line and no reopen. So the reader's frames
+   passed the check. Reading the values rather than the colors explained it. Decoding Home Assistant's still to its
+   own YCbCr (`ffmpeg -i still.jpg -f rawvideo -pix_fmt yuvj420p`) gave Y 79, Cb 83, Cr 71 across the green part,
+   and the dark strip beside it Y 0 to 6 with chroma 126: the user's dark room. Decoding the stream
+   (`-pix_fmt yuv420p`, no RGB step) gave a flat Y 84, U 89, V 79 below a third of picture.
+
+   Both are RGB (0, 135, 0), the color all-zero YUV turns into, converted back to YUV: in full range for the
+   reader (79, 83, 71) and in limited range for the encoder (84, 89, 79). Android 6's camera shim draws a LEGACY
+   camera's preview through the GPU and converts it to YUV again for each output, so a zero region reaches the
+   reader as that green, never as zero. The first green stills, from the old reader path, were zero; these weren't.
+   The check now counts a row as dead when every sampled point is zero or within 4 of (79, 83, 71) in its plane. A
+   flat grey wall (chroma 128) and a green scene with a real picture's spread still pass.
+
+   The strip itself also says what goes wrong: in the stream it is a third of the height, 240 of 720 rows, and its
+   picture repeats in vertical streaks. 640×480 is exactly a third of 1280×720, so a bad session most likely fills
+   the buffer with a 640×480 preview laid out at the wrong size (**untested**: the preview size isn't logged).
+
 ## Result
 
 | Problem | Cause | What the camera pane does now |
 |---|---|---|
-| Green stills | About a third of sessions deliver all-zero frames, and a frame was a frame | A frame whose sampled rows are (nearly) all zero in Y and both chroma planes counts as no frame: it doesn't reach presence, doesn't answer a still, and the session is reopened by the existing silence watchdog and backoff. A dark room is never blank: its Y has noise and its chroma is near 128 |
+| Green stills | About a third of sessions deliver all-zero frames, and a frame was a frame | A frame with a quarter of its sampled rows dead (zero in Y and both chroma planes, or the green a LEGACY camera draws zero as) counts as no frame: it doesn't reach presence, doesn't answer a still, and the session is reopened by the existing silence watchdog and backoff. A dark room is never blank: its Y has noise and its chroma is near 128 |
 | No pictures in the stream | The same blank or empty sessions | The reopen above. The reader stays in a few of the stream's requests, so the check still sees the stream's session |
 | Stream at 7 fps | The shim reads back every frame the reader gets | On a LEGACY camera the repeating request is a burst: the encoder gets every frame, the reader one in five at the Mirror's steady 15 fps (3 fps), enough for presence and stills. The interval comes from the slowest rate the camera may run at, so the reader keeps at least 3 fps; a camera that may run slower than 6 fps keeps the reader in every request. Other cameras are unchanged |
 | `mediaserver` crashes | Bursts of connects while another app held the camera | A failed open waits 5 s, then 10, 20, 40, up to 60 s, and nothing else tries in the meantime. When Android reports that camera free again, it's tried at once, but never within 2 s of the last failure |
@@ -143,7 +162,7 @@ To see the pane's handling on a Mirror running Glassworks with the camera pane:
 
 1. Turn on the camera pane with *Presence and snapshots* and look at the camera entity in Home Assistant.
 2. Toggle camera privacy on and off a few times, waiting about 20 s each time. Each toggle closes the camera and
-   opens a new session. On a blank session the app's log shows `camera: blank frame (every plane zero); not used`
+   opens a new session. On a blank session the app's log shows `camera: blank frame (zero or drawn-green rows); not used`
    and a `reopen` line, and Home Assistant gets no green still.
 3. To see the connect pacing, start the spike while the pane holds the camera. The log shows `try N failed; next
    in …` with growing waits, and `is free again; opening now` when the spike closes the camera.

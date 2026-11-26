@@ -97,6 +97,32 @@ class CameraPartsTest {
         assertTrue(Yuv(yAt = { _, r -> if (r < 240) 20 + noise.nextInt(200) else 0 }, uvAt = { _, r -> if (r < 120) 100 + noise.nextInt(60) else 0 }).blank())
     }
 
+    /**
+     * The same frame as the Mirror's reader got it on the next test build (2026-11-25): Android 6's camera shim draws
+     * through the GPU, so the zero two thirds come out green (Y 79, U 83, V 71, give or take a step), not zero.
+     */
+    @Test fun twoThirdsDrawnGreenUnderAStreakyThirdIsBlank() {
+        val noise = java.util.Random(5)
+        assertTrue(Yuv(
+            yAt = { _, r -> if (r < 240) 20 + noise.nextInt(200) else 78 + noise.nextInt(3) },
+            uvAt = { x, r -> if (r < 120) 100 + noise.nextInt(60) else if (x % 2 == 0) 83 else 71 },
+        ).blank())
+    }
+
+    /** A flat grey wall reads Y 79 across whole rows, but its chroma is grey: not blank. */
+    @Test fun aFlatGreyWallIsNotBlank() {
+        assertFalse(Yuv(yAt = { _, _ -> 79 }, uvAt = { _, _ -> 128 }).blank())
+    }
+
+    /** A green scene near the drawn green, but with a real picture's spread across the row: not blank. */
+    @Test fun aGreenSceneIsNotBlank() {
+        val noise = java.util.Random(6)
+        assertFalse(Yuv(
+            yAt = { _, _ -> 70 + noise.nextInt(20) },
+            uvAt = { x, _ -> (if (x % 2 == 0) 83 else 71) - 10 + noise.nextInt(21) },
+        ).blank())
+    }
+
     /** A fifth of zero rows (under the threshold) with a real picture above: not blank. */
     @Test fun aFewZeroRowsUnderAPictureAreNotBlank() {
         val noise = java.util.Random(4)
