@@ -1378,6 +1378,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     private fun updateBadge(s: EntityState?, active: Boolean) {
         val domain = s?.domain ?: config.entity?.substringBefore('.').orEmpty()
         val iconName = MdiIcons.resolveIconName(config.icon, s)
+        if (config.type.startsWith("custom:mushroom-") && config.type != MUSHROOM_TEMPLATE) {
+            // Mushroom's shape always shows, in its own colors (not HA's tile colors).
+            val inset = ctx.px(6f)
+            iconWrap.setPadding(inset, inset, inset, inset)
+            iconBadge.setIcon(iconName, iconBadge.tintColor)
+            tintBadge(mushroomIconColor(config.type, config.raw, s, ctx.theme) ?: mushroomDisabled)
+            return
+        }
         if (domain in BARE_ICON_DOMAINS) {
             val bare = ctx.px(6f)
             iconWrap.setPadding(bare, bare, bare, bare)

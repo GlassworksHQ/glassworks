@@ -810,6 +810,38 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
 /** Mushroom's state separator in a secondary line ("Open ⸱ 100%"). */
 private const val MUSH_SEPARATOR = " \u2E31 "
 
+/** Mushroom 5.3.0's `isActive` (`qo`): what its cards draw in color rather than with the disabled look. */
+internal fun mushroomActive(s: EntityState): Boolean {
+    if (s.domain in setOf("button", "input_button", "scene")) return s.state != "unavailable"
+    if (s.state in setOf("unavailable", "unknown", "off")) return false
+    return when (s.domain) {
+        "cover", "valve" -> s.state != "closed" && s.state != "closing"
+        "device_tracker", "person" -> s.state != "not_home"
+        "media_player" -> s.state != "standby"
+        "vacuum" -> s.state !in setOf("idle", "docked", "paused")
+        "plant" -> s.state == "problem"
+        else -> true
+    }
+}
+
+/**
+ * The icon color of Mushroom 5.3.0's entity, light, fan and cover cards (their `renderIcon`), or null for Mushroom's
+ * `--rgb-disabled`: the entity card `--rgb-state-entity` (blue) while active, the light card `--rgb-state-light`
+ * (orange, or the light's own color with `use_light_color`) while on, the fan card `--rgb-state-fan` (green) while on,
+ * the cover card `--rgb-state-cover-open` (blue) while open or opening.
+ */
+internal fun mushroomIconColor(type: String, raw: org.json.JSONObject, s: EntityState?, theme: dev.glassworks.engine.vitro.theme.ResolvedTheme): Int? {
+    if (s == null) return null
+    fun named(name: String, fallback: Long) = MushroomColors.parse(name, theme) ?: fallback.toInt()
+    return when (type) {
+        "custom:mushroom-cover-card" -> if (s.state == "open" || s.state == "opening") named("blue", 0xFF2196F3) else null
+        "custom:mushroom-light-card" -> if (!mushroomActive(s)) null
+            else (if (raw.optBoolean("use_light_color", false)) s.lightTintColor() else null) ?: named("orange", 0xFFFF9800)
+        "custom:mushroom-fan-card" -> if (mushroomActive(s)) named("green", 0xFF4CAF50) else null
+        else -> if (mushroomActive(s)) named("blue", 0xFF2196F3) else null
+    }
+}
+
 /**
  * The state line Mushroom 5.3.0 writes under a card's name: HA's `formatEntityState` (no tile extras), except that
  * its light card shows the brightness whenever the light reports one, its fan card the percentage of a fan that is
@@ -1016,9 +1048,10 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
     }
 
     override fun render(s: EntityState?) {
-        val open = s != null && s.state != "closed" && !s.isUnavailable
+        // Mushroom: blue while open or opening, the disabled color otherwise; the controls collapse unless active.
+        val open = s != null && mushroomActive(s)
         val icon = MdiIcons.resolveIconName(null, s)
-        if (open) setShape(icon, BLUE, true) else setShapeDisabled(icon)
+        if (mushroomIconColor(config.type, config.raw, s, ctx.theme) != null) setShape(icon, BLUE, true) else setShapeDisabled(icon)
         val pos = (s?.attributes?.get("current_position") as? Number)?.toInt()
         // Mushroom: HA's state label, then a position that isn't 0 ("Open ⸱ 100%").
         setSecondary(s?.let { mushroomStateLine(config.type, it) } ?: "…")

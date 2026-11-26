@@ -190,7 +190,8 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     private fun render(s: EntityState?) {
         nameView.text = config.name ?: s?.displayName ?: config.entity.orEmpty()
         val color = if (colored(s)) stateColor(s) else null
-        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color ?: ctx.theme.stateIconColor)
+        // HA's `filter: stateColorBrightness`: a colored light's icon dims with its brightness.
+        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color?.let { stateColorBrightness(s, it) } ?: ctx.theme.stateIconColor)
         val (value, unit) = valueAndUnit(config.raw, s)
         valueView.text = value
         unitView.text = unit

@@ -227,6 +227,22 @@ class PlainConfigParityTest {
         assertTrue(texts(c).toString(), "—" in texts(c))
     }
 
+    @Test fun mushroomCardsOnTheTilePathTakeMushroomsIconColors() {
+        // Mushroom 5.3.0's renderIcon (HA's references: mushroom-cover-closing, mushroom-entity-timestamp).
+        val theme = ThemeResolver.resolve(ThemeCatalog(), true)
+        fun color(type: String, s: EntityState, raw: String = "{}") =
+            dev.glassworks.engine.vitro.cards.mushroomIconColor(type, JSONObject(raw), s, theme)
+        val blue = 0xFF2196F3.toInt()
+        assertNull("a closing cover is grey", color("custom:mushroom-cover-card", EntityState("cover.b", "closing", emptyMap())))
+        assertEquals(blue, color("custom:mushroom-cover-card", EntityState("cover.b", "opening", emptyMap())))
+        assertEquals("the entity card: blue for any active entity", blue, color("custom:mushroom-entity-card", EntityState("sensor.t", "21", emptyMap())))
+        assertEquals(blue, color("custom:mushroom-entity-card", EntityState("light.l", "on", emptyMap())))
+        assertNull(color("custom:mushroom-entity-card", EntityState("light.l", "off", emptyMap())))
+        assertEquals(0xFFFF9800.toInt(), color("custom:mushroom-light-card", EntityState("light.l", "on", mapOf("rgb_color" to listOf(255, 0, 0)))))
+        assertEquals(0xFFFF0000.toInt(), color("custom:mushroom-light-card", EntityState("light.l", "on", mapOf("rgb_color" to listOf(255, 0, 0))), """{"use_light_color": true}"""))
+        assertEquals(0xFF4CAF50.toInt(), color("custom:mushroom-fan-card", EntityState("fan.f", "on", emptyMap())))
+    }
+
     // ---- 4. Mushroom's alarm card ----
 
     @Test fun mushroomsAlarmCardHasNoButtonsWithoutStates() {
