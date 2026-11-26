@@ -770,6 +770,26 @@ class HaDashboardClient(
         }
     }
 
+    /** The connection whose floors native names follow ([followFloorsIfNeeded]); -1 for none. */
+    @Volatile private var floorsFollowedGen = -1
+
+    /**
+     * Floor names, for a card `name` that names its entity's floor (HA's name picker): read and followed on connection
+     * [gen] once an area is on a floor (at startup, or when an area update puts one there), never otherwise. A floor's
+     * change reads them again ([refetchRegistry]).
+     */
+    private fun followFloorsIfNeeded(gen: Int) {
+        if (HaDisplay.areas.values.none { it.floorId != null }) return
+        synchronized(registryLock) {
+            if (gen != connectionGen.get() || floorsFollowedGen == gen) return
+            floorsFollowedGen = gen
+            subscribe(JSONObject().put("type", "subscribe_events").put("event_type", HassRegistries.Kind.FLOORS.event)) {
+                refetchRegistry(HassRegistries.Kind.FLOORS, gen)
+            }
+            fetchRegistry(HassRegistries.Kind.FLOORS, gen, -1, display = true)
+        }
+    }
+
     /** Stops the feed and forgets the registries: nobody watches. Under [registryLock]. */
     private fun stopRegistries() {
         if (registryGen == connectionGen.get()) registrySubs.forEach(::unsubscribe)
@@ -794,9 +814,11 @@ class HaDashboardClient(
                         HassRegistries.Kind.ENTITIES -> res.optJSONObject("result")?.let(HaDisplay::applyRegistry)
                         HassRegistries.Kind.DEVICES -> res.optJSONArray("result")?.let(HaDisplay::applyDevices)
                         HassRegistries.Kind.AREAS -> res.optJSONArray("result")?.let(HaDisplay::applyAreas)
-                        HassRegistries.Kind.FLOORS -> Unit
+                        HassRegistries.Kind.FLOORS -> res.optJSONArray("result")?.let(HaDisplay::applyFloors)
                     }
                 }
+                // An area put on a floor: its name needs the floors, read now if they aren't followed yet.
+                if (kind == HassRegistries.Kind.AREAS) followFloorsIfNeeded(gen)
                 // A new entity may be of an integration whose icons and state words aren't in yet.
                 if (kind == HassRegistries.Kind.ENTITIES) loadDisplayFor(displayIds())
                 settleDisplay()
@@ -831,7 +853,7 @@ class HaDashboardClient(
             synchronized(registryLock) {
                 if (gen != connectionGen.get()) return@synchronized
                 val epoch = if (registryGen == gen) registryEpoch else -1
-                val display = kind in DISPLAY_REGISTRIES
+                val display = kind in DISPLAY_REGISTRIES || (kind == HassRegistries.Kind.FLOORS && floorsFollowedGen == gen)
                 if (epoch >= 0 || display) fetchRegistry(kind, gen, epoch, display)
             }
         }
@@ -934,15 +956,19 @@ class HaDashboardClient(
      */
     private fun failOutstanding() {
         val orphaned: List<Int>
-        synchronized(queueLock) {
-            // The display requests of this connection settle no more: their callbacks (below, or a late send_failed)
-            // see an older generation than the next connection's.
-            connectionGen.incrementAndGet()
-            authenticated = false
-            socket = null
-            entitySubId = null
-            orphaned = pending.keys.toList()
-            subscriptions.clear()
+        // Under registryLock too (registry, then queue, as a registry refetch takes them): a refetch that checked the
+        // generation has counted and sent its request before this ends the generation, and one after sees the new one.
+        synchronized(registryLock) {
+            synchronized(queueLock) {
+                // The display requests of this connection settle no more: their callbacks (below, or a late
+                // send_failed) see an older generation than the next connection's.
+                connectionGen.incrementAndGet()
+                authenticated = false
+                socket = null
+                entitySubId = null
+                orphaned = pending.keys.toList()
+                subscriptions.clear()
+            }
         }
         for (id in orphaned) {
             // Claimed with remove: the writer's send_failed path may have taken it already, and only one may call it.
@@ -955,10 +981,12 @@ class HaDashboardClient(
             }
         }
         // After the callbacks (display requests among them decrement the counter): the next connection asks for its
-        // display data afresh.
-        displayRequested.clear()
-        displayPending.set(0)
-        displayChanged.set(false)
+        // display data afresh. Under registryLock, so no refetch counts a request in between.
+        synchronized(registryLock) {
+            displayRequested.clear()
+            displayPending.set(0)
+            displayChanged.set(false)
+        }
     }
 
     /** When the reader last got a message from Home Assistant ([System.nanoTime]). */
@@ -1263,17 +1291,7 @@ class HaDashboardClient(
         request(JSONObject().put("type", "config/area_registry/list")) { res ->
             if (gen != connectionGen.get()) return@request
             if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyAreas(r) } }
-            // Floor names, for a card `name` that names its entity's floor (HA's name picker), when an area is on one.
-            if (HaDisplay.areas.values.any { it.floorId != null }) {
-                displayPending.incrementAndGet()
-                request(JSONObject().put("type", "config/floor_registry/list")) { floors ->
-                    if (gen != connectionGen.get()) return@request
-                    if (floors.optBoolean("success", false)) {
-                        floors.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyFloors(r) } }
-                    }
-                    settleDisplay()
-                }
-            }
+            followFloorsIfNeeded(gen)
             settleDisplay()
         }
         // ... and each of the three read again when it changes.

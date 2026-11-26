@@ -52,11 +52,15 @@ class VitroParityHarnessTest {
         val badCases = roots.flatMap { (_, root) -> ParityCase.loadAll(root) }.mapNotNull { c ->
             c.unknownFrames(allFrames.map { it.id }.toSet()).takeIf { it.isNotEmpty() }?.let { "case ${c.id} lists unknown frame(s) $it" }
         }
-        // An open.json entry for a case or frame that no longer exists would never be checked again.
+        // An open.json entry for a case or frame that no longer exists, or a frame its case doesn't run on (checked
+        // against every frame, whatever this run selects), would never be checked again.
         val staleOpen = roots.flatMap { (_, root) ->
-            val ids = ParityCase.loadAll(root).map { it.id }.toSet()
-            ParityOpen(File(root, "open.json")).keys.filter { k -> k.substringBefore('/') !in allFrames.map { it.id } || k.substringAfter('/') !in ids }
-                .map { "open.json lists $it, which isn't a frame/case of the corpus" }
+            val cases = ParityCase.loadAll(root).associateBy { it.id }
+            ParityOpen(File(root, "open.json")).keys.filter { k ->
+                val frame = allFrames.firstOrNull { it.id == k.substringBefore('/') }
+                val case = cases[k.substringAfter('/')]
+                frame == null || case == null || !case.runsOn(frame)
+            }.map { "open.json lists $it, which isn't a frame/case pair the corpus runs" }
         }
         if (unknown.isNotEmpty() || badCases.isNotEmpty() || staleOpen.isNotEmpty()) fail("Vitro parity: " + (unknown + badCases + staleOpen).joinToString("; "))
         val frames = allFrames.filter { ParityFiles.onlyFrames == null || it.id in ParityFiles.onlyFrames!! }

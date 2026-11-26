@@ -28,7 +28,11 @@ export function applyEntityEvent(states, ev, first) {
  * `id: wanted, got` strings: a refresh must not write an "on" case's reference while the light is off.
  */
 export function unmetExpectations(expect, states) {
+  // `expect` names a served state that doesn't move with the clock: an "@" time marker never matches (the fake serves
+  // it resolved), and says so, as the corpus test does.
   return Object.entries(expect || {})
-    .filter(([id, want]) => states[id]?.s !== want)
-    .map(([id, want]) => `${id}: expected ${want}, got ${states[id]?.s ?? 'no state'}`);
+    .filter(([id, want]) => String(want).startsWith('@') || states[id]?.s !== want)
+    .map(([id, want]) => String(want).startsWith('@')
+      ? `${id}: expects the time marker ${want}, not a state HA serves`
+      : `${id}: expected ${want}, got ${states[id]?.s ?? 'no state'}`);
 }

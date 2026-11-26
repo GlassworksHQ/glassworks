@@ -591,6 +591,12 @@ def main(argv=None):
         print("\n".join(cases))
         return 0
     have = generated_on_disk()
+    # A hand-written case with a generated case's name: never overwritten. Checked before anything is written.
+    taken = sorted(cid for cid in cases if cid not in have and os.path.exists(os.path.join(CORPUS, cid + ".json")))
+    if taken:
+        print(f"matrix.py: {len(taken)} generated id(s) name hand-written cases, which it won't overwrite: "
+              f"{', '.join(taken)}. Rename the generated case or the hand-written one.", file=sys.stderr)
+        return 1
     stale = sorted(set(have) - set(cases))
     changed = sorted(cid for cid, c in cases.items() if have.get(cid) != dump(c))
     if a.check:
@@ -606,6 +612,10 @@ def main(argv=None):
         with open(os.path.join(CORPUS, cid + ".json"), "w", encoding="utf-8") as fh:
             fh.write(dump(cases[cid]))
     print(f"matrix.py: {len(cases)} cases ({len(changed)} written, {len(stale)} removed)")
+    if stale:
+        # The harness refuses an open.json entry (or a baseline.json one) for a case that no longer exists.
+        print(f"matrix.py: retired {', '.join(stale)}: remove their entries from open.json and baseline.json "
+              f"(and their refs) before refreshing the other cases.")
     return 0
 
 

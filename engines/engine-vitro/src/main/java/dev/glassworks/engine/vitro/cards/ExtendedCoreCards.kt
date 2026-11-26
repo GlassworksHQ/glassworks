@@ -607,7 +607,7 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
      * alarm supports (`supported_features`), as hui-alarm-panel-card filters them.
      */
     private fun shownArmStates(s: EntityState?): List<String> =
-        if (config.raw.has("states")) armStates else DEFAULT_STATES.filter { supports(s, it) }
+        if (config.raw.optJSONArray("states") != null) armStates else DEFAULT_STATES.filter { supports(s, it) }
 
     init {
         val col = LinearLayout(ctx.context).apply {
@@ -770,9 +770,10 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
         /** HA's default `states` for the alarm panel card. */
         val DEFAULT_STATES = listOf("arm_home", "arm_away")
 
+        /** The card's `states`, as HA uses them: an empty list shows no arm buttons; no `states`, HA's defaults. */
         fun readStates(arr: JSONArray?): List<String> {
-            if (arr == null || arr.length() == 0) return DEFAULT_STATES
-            return (0 until arr.length()).mapNotNull { arr.optString(it, "").ifEmpty { null } }.ifEmpty { DEFAULT_STATES }
+            if (arr == null) return DEFAULT_STATES
+            return (0 until arr.length()).mapNotNull { arr.optString(it, "").ifEmpty { null } }
         }
 
         /** HA's AlarmControlPanelEntityFeature bit for each arm action. */

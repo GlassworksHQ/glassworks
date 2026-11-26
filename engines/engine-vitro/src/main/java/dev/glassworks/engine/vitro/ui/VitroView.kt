@@ -630,6 +630,7 @@ class VitroView(
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
+        moreInfoRequest++
         drawnLocale = Triple(HaLocale.current, HaLocale.timeZone().id, HaText.version)
         holding?.cancel?.invoke()
         holding = null
@@ -700,7 +701,14 @@ class VitroView(
         LiveCameraFeed.connectionRestored(store)
     }
 
+    /**
+     * Counts More Info requests: a script's fields lookup ([openMoreInfo]) acts only if no newer request came, nor a
+     * close or a new dashboard, meanwhile.
+     */
+    private var moreInfoRequest = 0
+
     fun closeMoreInfo(): Boolean {
+        moreInfoRequest++
         val sheet = moreInfo ?: return false
         moreInfo = null
         sheet.dismiss()
@@ -735,7 +743,10 @@ class VitroView(
         // A script with fields (its `get_services` entry): its form is in HA's dialog alone (#926's Run finds the same).
         if (inFrontend != null && entityId.substringBefore('.') == "script") {
             val ctx = contextFactory?.invoke(ThemeResolver.resolve(themeCatalog, darkMode, userThemeName)) ?: return
+            val request = ++moreInfoRequest
             dev.glassworks.engine.vitro.cards.EntityRowControls.scriptHasFields(ctx, entityId) { fields ->
+                // Another entity's More Info, a close or a new dashboard since: this answer is stale.
+                if (request != moreInfoRequest) return@scriptHasFields
                 val shown = dashboard?.views?.getOrNull(currentViewIndex)
                 if (fields == true && shown != null) {
                     closeMoreInfo()

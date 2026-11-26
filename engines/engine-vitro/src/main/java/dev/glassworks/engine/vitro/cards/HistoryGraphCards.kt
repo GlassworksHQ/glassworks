@@ -1351,7 +1351,9 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         val end = max(ctx.now(), ceil(newest).toLong())
         val start = (end - hours * HaGraph.HOUR_MS).toLong()
 
-        val lineSpecs = history.line.map { u -> lineSpec(u, start, end) }
+        // The names once per render: the shared axis is sized with the names it draws.
+        val names = this.names
+        val lineSpecs = history.line.map { u -> lineSpec(u, start, end, names) }
         // The charts share the widest y axis (paddingYAxis).
         val padding = max(
             lineSpecs.maxOfOrNull { HaLineChart.yAxis(it.first).third } ?: 0f,
@@ -1390,7 +1392,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
 
     private fun entry(child: View, timeline: Boolean, first: Boolean): View = historyEntry(ctx, child, timeline, first)
 
-    private fun lineSpec(u: LineUnit, start: Long, end: Long): Pair<LineChartSpec, List<LegendItem>> =
+    private fun lineSpec(u: LineUnit, start: Long, end: Long, names: Map<String, String>): Pair<LineChartSpec, List<LegendItem>> =
         stateHistoryLineSpec(ctx, u, start, end, chartWidthCss(), names, colors, showNames, temperatureUnit(),
             config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() }, config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() },
             config.raw.optBoolean("fit_y_data", false))

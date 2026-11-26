@@ -8,6 +8,7 @@ import android.os.Handler
 import android.view.View
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.EntityState
+import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 
 /**
@@ -19,8 +20,11 @@ import java.util.WeakHashMap
  * go through [show] with their own relative form.
  */
 internal object TimestampText {
-    /** The ticker of each text that shows a timestamp now. */
-    private val tickers = WeakHashMap<TextView, Ticker>()
+    /**
+     * The ticker of each text that shows a timestamp now. A ticker holds its text, so the map holds tickers weakly: a
+     * strong value would keep its weak key alive. The text's attach listener holds the ticker while it ticks.
+     */
+    private val tickers = WeakHashMap<TextView, WeakReference<Ticker>>()
 
     /**
      * Shows [s]'s state in [view]: as `hui-timestamp-display` draws it when it's a timestamp
@@ -53,7 +57,7 @@ internal object TimestampText {
         val ts = s?.let { relative(it, now()) }
         val text = ts ?: otherwise
         if (view.text?.toString() != text) view.text = text
-        val old = tickers[view]
+        val old = tickers[view]?.get()
         if (ts == null || s == null) {
             old?.stop()
             tickers.remove(view)
@@ -61,7 +65,7 @@ internal object TimestampText {
         }
         if (old != null && old.entityId == s.entityId && old.relative === relative) return
         old?.stop()
-        tickers[view] = Ticker(view, s.entityId, relative, now, current, main).also { it.start() }
+        tickers[view] = WeakReference(Ticker(view, s.entityId, relative, now, current, main).also { it.start() })
     }
 
     private val ROWS: (EntityState, Long) -> String? = { s, now -> s.timestampDisplay(now) }
@@ -83,7 +87,7 @@ internal object TimestampText {
     private val MUSHROOM_DOMAINS = setOf("button", "input_button", "scene")
 
     /** Whether [view] keeps a relative time current (for tests). */
-    fun isTicking(view: TextView): Boolean = tickers[view] != null
+    fun isTicking(view: TextView): Boolean = tickers[view]?.get() != null
 
     private class Ticker(
         val view: TextView,

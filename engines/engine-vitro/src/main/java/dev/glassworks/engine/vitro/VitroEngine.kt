@@ -292,6 +292,7 @@ class VitroEngine(
             override fun onFirstPaint() { if (fallbackInFront()) host.onFirstPaint() }
             override fun onLocationChange(url: String?) {
                 if (!fallbackInFront()) return
+                if (url != null) fallbackLocation = url
                 if (url != null && handsBack(url)) {
                     Log.i(logTag, "Home Assistant's frontend went to a dashboard Vitro draws: ${forLog(url)}")
                     pendingHandBack = url
@@ -372,6 +373,9 @@ class VitroEngine(
          * [webDashboards] they are Vitro's again on the next connection or Reload dashboard.
          */
         private val failedDashboards = HashSet<Pair<String?, String?>>()
+
+        /** The fallback page's latest location: where it was opened, then where Home Assistant's frontend went. */
+        private var fallbackLocation: String? = null
 
         /** False until the fallback page shows a page: then the next one starts it over, without that page's history. */
         private var fallbackFresh = true
@@ -997,6 +1001,8 @@ class VitroEngine(
         /** Loads the previous entry of the page's history; false when there is none. */
         private fun backInHistory(): Boolean {
             if (history.isEmpty()) return false
+            // Back leaves a fallback dialog's visit: a later return to that view (a sidebar tap) isn't the dialog closing.
+            moreInfoReturn = null
             val prev = history.removeLast()
             currentUrl = null // don't push onto history again
             load(prev)
@@ -1136,6 +1142,7 @@ class VitroEngine(
          */
         private fun openInFallback(url: String) {
             Log.i(logTag, "Routing non-dashboard URL to fallback engine: ${forLog(url)}")
+            fallbackLocation = url
             val fp = fallbackPage ?: fallback.open(activity, fallbackHost, backgroundColor).also { created ->
                 fallbackPage = created
                 container.addView(created.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -1202,7 +1209,8 @@ class VitroEngine(
                 post {
                     // A new connection tries again the dashboards whose config failed to read on the last one. The one
                     // HA's frontend shows for that reason now goes back to the native view; other fallback pages stay.
-                    val retry = currentUrl?.takeIf { url ->
+                    // Where HA's page is now: the user may have moved on from the failed dashboard inside it.
+                    val retry = (fallbackLocation ?: currentUrl)?.takeIf { url ->
                         fallbackInFront() && (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in failedDashboards
                     }
                     failedDashboards.clear()

@@ -153,6 +153,16 @@ A refresh from the fake HA is deterministic: the same fixtures, frontend and car
 
 A case over its threshold is a **known drift** if `baseline.json` lists it and it hasn't got worse, with 2% pixels, 1 px bounds and 0.5 px font of slack. Otherwise it's a **regression** and the test fails. A listed case that comes back within its threshold gets a note to drop it from the baseline. The parity audit works through the baseline until each case either matches or carries a reason.
 
+### Open bugs: `open.json`
+
+The baseline is for drift that's accepted, such as sub-pixel text. A case Vitro draws wrong, whose fix someone owns, goes in the corpus's `open.json` instead, keyed `frame/case` with its `owner` (the PR that fixes it, or `#799` for one filed on the exp/vitro list with no fixer yet) and a `reason` that says what's wrong:
+
+- **Over its threshold, listed in `open.json`:** the run reports it as **open**, not as a regression, and doesn't fail on it.
+- **Back within its threshold, still listed:** the run **fails** with "matches HA now: drop it from open.json". The fix's PR removes the entry, and from then on the case guards the fix.
+- **Listed in both files**, or listed for a frame or case the corpus doesn't run: the run fails. An open bug is never drift, and `--update-baseline` never records an open case.
+
+When `matrix.py` retires a generated case, it names it: remove its `open.json` and `baseline.json` entries (and its refs) before refreshing the rest.
+
 ## Privacy
 
 The committed corpus is made up: its fixtures name no real person, room, device or media, and its pictures are drawn by `fixture_images.py`. Committed files hold no tokens, origins, IPs (except RFC 5737), MACs, serials, locations or media lists; for a real HA (a local corpus) `lib/scrub.mjs` drops them before anything is written. Every output is also checked against a local denylist (`~/.t3/glassworks-m1/vitro-parity/deny.txt`, one name per line, never committed), and `ParityHarnessSelfTest` scans the committed JSON in CI. Real dashboards stay in the local corpus.

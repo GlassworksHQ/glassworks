@@ -818,8 +818,11 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         ctx.callService("fan", "set_percentage", data().put("percentage", v), null)
                     }
                     val slider = HaHorizontalSliderView(ctx, ctx.theme.activeColor("fan"), haGeometry = true) { frac ->
-                        // ha-control-slider's steppedValue: snapped to the step, then kept in 0..100.
-                        val st = step(ctx.store[entityId])
+                        // ha-control-slider's steppedValue: snapped to the step, then kept in 0..100. A fan that went
+                        // unavailable during the drag gets nothing, as HA's disabled slider sends nothing.
+                        val cur = ctx.store[entityId]
+                        if (cur == null || cur.state == "unavailable") return@HaHorizontalSliderView
+                        val st = step(cur)
                         setPercentage((Math.round(frac * 100.0 / st) * st).coerceIn(0.0, 100.0))
                     }
                     val select = HaControlSelect(ctx)
@@ -840,13 +843,20 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                             val speeds = FanSpeeds.speeds(step(s))
                             slider.visibility = if (speeds == null) VISIBLE else GONE
                             select.visibility = if (speeds == null) GONE else VISIBLE
+                            // HA disables both while the fan is unavailable (off, it still sets a speed).
+                            slider.isEnabled = s.state != "unavailable"
                             if (speeds != null) {
                                 if (speeds != shownSpeeds) {
                                     shownSpeeds = speeds
                                     select.setOptions(speeds.map { sp ->
                                         HaControlSelect.Option(sp, FanSpeeds.icon(sp, speeds), if (FanSpeeds.numbered(sp)) HaFormat.formatNumber(sp) else null,
                                             FanSpeeds.label(s, sp)) { v ->
-                                            setPercentage(FanSpeeds.toPercentage(v, speeds, step(ctx.store[entityId])).toDouble())
+                                            // One state for the whole tap: the option means a speed of the steps it was
+                                            // built for. A step changed since (the buttons not redrawn yet) sends nothing.
+                                            val cur = ctx.store[entityId] ?: return@Option
+                                            val st = step(cur)
+                                            if (cur.state == "unavailable" || FanSpeeds.speeds(st) != speeds) return@Option
+                                            setPercentage(FanSpeeds.toPercentage(v, speeds, st).toDouble())
                                         }
                                     })
                                 }
@@ -1518,6 +1528,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             s.state == "unavailable" -> show("mdi:exclamation-thick", HaStateColor.property(ctx, "orange-color") ?: 0xFFFF9800.toInt())
             !isTile -> unavailableBadge.visibility = GONE
             s.domain == "person" || s.domain == "device_tracker" -> {
+                followZones(s)
                 val zone = if (s.state == "home" || s.state == "not_home") null else zoneOf(s)
                 val icon = (zone?.attributes?.get("icon") as? String)?.takeIf { it.isNotEmpty() }
                     ?: if (s.state == "not_home") "mdi:home-export-outline" else "mdi:home"
@@ -1534,6 +1545,24 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 unavailableBadge.contentDescription = HaDisplay.attributeLabel(s, attribute, action) ?: action
             }
             else -> unavailableBadge.visibility = GONE
+        }
+    }
+
+    /** The zones this tile follows for its badge ([followZones]). */
+    private val followedZones = HashSet<String>()
+
+    /**
+     * A person's or device tracker's badge reads its zone's state (`getZone`): the tile follows the zones it may be
+     * in, its `in_zones` and the registry's zones, each asked of HA on its own ([VitroCardContext.watchEntity]), never
+     * every entity. A zone's change draws the badge again.
+     */
+    private fun followZones(s: EntityState) {
+        val ids = ((s.attributes["in_zones"] as? List<*>)?.mapNotNull { it as? String }.orEmpty()) +
+            HaDisplay.registry.keys.filter { it.startsWith("zone.") }
+        for (id in ids) {
+            if (!followedZones.add(id)) continue
+            ctx.watchEntity(id)
+            observe(id) { _ -> config.entity?.let { e -> ctx.store[e] }?.let { renderTileBadge(it) } }
         }
     }
 
@@ -1562,7 +1591,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         showPicture(false)
         if (url == null) return
         ctx.loadImage(url, this) { bmp ->
-            if (pictureUrl != url || bmp == null) return@loadImage
+            if (pictureUrl != url) return@loadImage
+            // A failed load (HA's image server down) isn't remembered: the next draw with this picture asks again.
+            if (bmp == null) { pictureUrl = null; return@loadImage }
             val radius = when (s?.domain) {
                 "update" -> 0f
                 "media_player" -> 4f
@@ -2036,6 +2067,8 @@ internal class HaHorizontalSliderView(
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Disabled (an unavailable entity): no drag and nothing sent.
+        if (!isEnabled) return false
         val w = width.toFloat().coerceAtLeast(1f)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {

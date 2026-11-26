@@ -29,6 +29,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -183,6 +184,28 @@ class EntityRowControlsTest {
         assertTrue(calls.isEmpty())
     }
 
+    @Test fun anUntouchedBoxSendsNothingWhenLeftAfterHaChangedTheValue() {
+        put("input_number.away", "20", "min" to 10, "max" to 25, "step" to 1, "mode" to "box", "friendly_name" to "Away")
+        val c = entities("\"input_number.away\"")
+        layout(c, 500)
+        val input = all(c).filterIsInstance<EditText>().single()
+        input.requestFocus()
+        put("input_number.away", "25", "min" to 10, "max" to 25, "step" to 1, "mode" to "box", "friendly_name" to "Away")
+        idle()
+        assertEquals("the focused field keeps what it showed", "20", input.text.toString())
+        input.clearFocus()
+        idle()
+        assertTrue("an untouched field writes nothing back", calls.isEmpty())
+        assertEquals("25", input.text.toString())
+        // A real edit still sends once.
+        input.requestFocus()
+        input.setText("12")
+        input.clearFocus()
+        idle()
+        assertEquals(listOf("input_number.set_value"), calls())
+        assertEquals(12L, calls[0].third!!.get("value"))
+    }
+
     @Test fun numberModesAndBoxWidthsFollowHa() {
         fun n(domain: String, vararg a: Pair<String, Any?>) = EntityState("$domain.x", "1", mapOf(*a))
         assertTrue(EntityRowControls.showsSlider(n("input_number", "mode" to "slider")))
@@ -260,6 +283,23 @@ class EntityRowControlsTest {
         assertEquals(1, calls.size)
     }
 
+    @Test fun aScriptReloadedWithFieldsIsNeverRunOnAnOlderNoFieldsAnswer() {
+        put("script.greet", "off", "mode" to "single", "current" to 0, "friendly_name" to "Greet")
+        services = JSONObject("""{"script": {"greet": {"fields": {}}}}""")
+        val c = entities("\"script.greet\"")
+        layout(c, 500)
+        button(c, "Run").performClick()
+        idle()
+        assertEquals(listOf("script.turn_on"), calls())
+        // HA reloads the script with a field, within the cache's minute: "no fields" is asked again, never reused.
+        services = JSONObject("""{"script": {"greet": {"fields": {"who": {"required": true}}}}}""")
+        button(c, "Run").performClick()
+        idle()
+        assertEquals(2, ws.count { it.getString("type") == "get_services" })
+        assertEquals("no second turn_on: the form opens", 1, calls.size)
+        assertEquals(listOf("script.greet"), moreInfo)
+    }
+
     @Test fun aScriptWhoseFieldsAreUnknownNeverRunsFromItsRow() {
         put("script.greet", "off", "mode" to "single", "current" to 0, "friendly_name" to "Greet")
         wsAnswers = false
@@ -281,6 +321,20 @@ class EntityRowControlsTest {
         activity.setContentView(vv)
         idle()
         return vv
+    }
+
+    @Test fun aScriptLookupAnsweredAfterANewerMoreInfoDoesNothing() {
+        put("script.greet", "off", "mode" to "single", "current" to 0, "friendly_name" to "Greet")
+        put("script.goodnight", "off", "mode" to "single", "current" to 0, "friendly_name" to "Goodnight")
+        services = JSONObject("""{"script": {"goodnight": {}, "greet": {"fields": {"who": {"required": true}}}}}""")
+        val handedOff = ArrayList<String>()
+        val vv = dashboardView { handedOff += it }
+        // The greet lookup is still on its way when the user opens goodnight's More Info instead.
+        vv.openMoreInfo("script.greet")
+        vv.openMoreInfo("script.goodnight")
+        idle()
+        assertTrue("greet's late answer doesn't replace the newer choice", handedOff.isEmpty())
+        assertNotNull("goodnight's sheet", vv.openSheet)
     }
 
     @Test fun moreInfoForAScriptWithFieldsIsHasOwnDialog() {

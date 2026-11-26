@@ -55,7 +55,7 @@ class TileNativeOptionsTest {
 
     private var haBase = FakeHaServer.BASE
 
-    private fun context(store: EntityStore) = VitroCardContext(
+    private fun context(store: EntityStore, watchEntity: (String) -> Unit = {}) = VitroCardContext(
         context = activity, haBase = haBase, store = store,
         theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
         accessToken = { FakeHaServer.TOKEN },
@@ -63,6 +63,7 @@ class TileNativeOptionsTest {
         navigate = { opened += "navigate $it" }, openMoreInfo = { opened += "more-info $it" }, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
         now = { now },
         haConfig = { JSONObject("""{"unit_system": {"temperature": "°C", "length": "km"}}""") },
+        watchEntity = watchEntity,
     )
 
     private fun tile(json: String, vararg states: EntityState): TileCardView {
@@ -281,12 +282,25 @@ class TileNativeOptionsTest {
     }
 
     @Test
-    fun aPersonTileFollowsEveryEntityForItsZone() {
+    fun aPersonTileFollowsItsZonesNotEveryEntity() {
         fun view(entity: String) = dev.glassworks.engine.vitro.model.LovelaceParser.parseDashboard(JSONObject(
             """{"views": [{"cards": [{"type": "tile", "entity": "$entity"}]}]}""")).views.single()
-        assertTrue(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("person.sam")))
-        assertTrue(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("device_tracker.phone")))
-        assertFalse(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("light.desk")))
+        assertFalse(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("person.sam")))
+        assertFalse(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("device_tracker.phone")))
+        // The tile asks HA for the zones it may be in, and draws the zone's icon once it arrives.
+        val store = EntityStore().also { it.putLocal(EntityState("person.sam", "Work", mapOf("friendly_name" to "Sam", "in_zones" to listOf("zone.work")))) }
+        val watched = ArrayList<String>()
+        val raw = JSONObject("""{"type": "tile", "entity": "person.sam"}""")
+        val view = TileCardView(context(store) { watched += it }, CardConfig("tile", raw))
+        val host = FrameLayout(activity)
+        activity.setContentView(host)
+        host.addView(view, FrameLayout.LayoutParams(800, ViewGroup.LayoutParams.WRAP_CONTENT))
+        ShadowLooper.idleMainLooper()
+        assertEquals(listOf("zone.work"), watched)
+        assertFalse(view.icons().any { "briefcase" in it.icon && it.isShown })
+        store.putLocal(EntityState("zone.work", "1", mapOf("friendly_name" to "Work", "icon" to "mdi:briefcase")))
+        ShadowLooper.idleMainLooper()
+        assertTrue(view.icons().any { "briefcase" in it.icon && it.isShown })
     }
 
     @Test

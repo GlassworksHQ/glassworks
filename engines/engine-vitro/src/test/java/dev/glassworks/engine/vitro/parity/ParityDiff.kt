@@ -172,13 +172,10 @@ object ParityDiff {
         val sa = listOf(sat(a, w, h, Color::red), sat(a, w, h, Color::green), sat(a, w, h, Color::blue))
         val sb = listOf(sat(b, w, h, Color::red), sat(b, w, h, Color::green), sat(b, w, h, Color::blue))
         val area = (REGION * REGION).toLong()
-        fun mean(t: List<LongArray>, x: Int, y: Int): Int {
-            val c = t.map { s ->
-                val v = s[(y + REGION) * (w + 1) + x + REGION] - s[y * (w + 1) + x + REGION] - s[(y + REGION) * (w + 1) + x] + s[y * (w + 1) + x]
-                (v / area).toInt()
-            }
-            return Color.rgb(c[0], c[1], c[2])
-        }
+        fun channel(s: LongArray, x: Int, y: Int): Int =
+            ((s[(y + REGION) * (w + 1) + x + REGION] - s[y * (w + 1) + x + REGION] - s[(y + REGION) * (w + 1) + x] + s[y * (w + 1) + x]) / area).toInt()
+        // No list per call: this runs some 700,000 times for one S1 render.
+        fun mean(t: List<LongArray>, x: Int, y: Int): Int = Color.rgb(channel(t[0], x, y), channel(t[1], x, y), channel(t[2], x, y))
         var worst = 0.0
         var at: Rect? = null
         val xs = (0..w - REGION step REGION_STEP).toMutableList().apply { if (last() != w - REGION) add(w - REGION) }
@@ -191,9 +188,12 @@ object ParityDiff {
             for (dy in -REGION_SHIFT..REGION_SHIFT) for (dx in -REGION_SHIFT..REGION_SHIFT) {
                 val xx = x + dx; val yy = y + dy
                 if (xx < 0 || yy < 0 || xx > w - REGION || yy > h - REGION) continue
+                // Vitro's square may not reach into a mask either: masked pixels never excuse an unmasked difference.
+                if (masked.isNotEmpty() && masked.any { Rect.intersects(it, Rect(xx, yy, xx + REGION, yy + REGION)) }) continue
                 best = min(best, yiq(ma, mean(sb, xx, yy)))
                 if (best == 0.0) break
             }
+            if (best == Double.MAX_VALUE) continue
             val d = Math.sqrt(best)
             if (d > worst) { worst = d; at = r }
         }

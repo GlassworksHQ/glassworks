@@ -376,6 +376,9 @@ test('unmetExpectations names the entities not in the state a case expects', asy
   assert.deepEqual(unmetExpectations({ 'light.a': 'on' }, states), []);
   assert.deepEqual(unmetExpectations({ 'light.a': 'on', 'light.b': 'on', 'light.c': 'off' }, states),
     ['light.b: expected on, got off', 'light.c: expected off, got no state']);
+  // A time marker is never a served state: refused, whatever the state.
+  assert.deepEqual(unmetExpectations({ 'light.a': '@+3h' }, { 'light.a': { s: '@+3h', a: {} } }),
+    ['light.a: expects the time marker @+3h, not a state HA serves']);
 });
 
 test('pendingOneShots lists the one-shot graph calls still unanswered, never a stream', async () => {

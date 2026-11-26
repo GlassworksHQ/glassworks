@@ -21,9 +21,29 @@ class MatrixTest(unittest.TestCase):
     def test_every_generated_case_has_its_references(self):
         with open(os.path.join(PARITY, "frames.json"), encoding="utf-8") as f:
             frames = [fr["id"] for fr in json.load(f)["frames"]]
-        missing = [f"{fr}/{cid}" for cid, case in M.all_cases().items() for fr in case.get("frames", frames)
-                   if not os.path.isfile(os.path.join(PARITY, "refs", fr, cid + ".png"))]
+        # ParityReference.find needs both the PNG and its JSON.
+        missing = [f"{fr}/{cid}{ext}" for cid, case in M.all_cases().items() for fr in case.get("frames", frames)
+                   for ext in (".png", ".json")
+                   if not os.path.isfile(os.path.join(PARITY, "refs", fr, cid + ext))]
         self.assertEqual(missing, [], "tools/vitro-parity/run.sh --refresh --cases <ids>")
+
+    def test_a_hand_written_case_with_a_generated_name_is_never_overwritten(self):
+        import tempfile
+        cid = next(iter(M.all_cases()))
+        with tempfile.TemporaryDirectory() as d:
+            hand = os.path.join(d, cid + ".json")
+            with open(hand, "w", encoding="utf-8") as f:
+                f.write('{"id": "hand-written"}\n')
+            saved = M.CORPUS
+            M.CORPUS = d
+            try:
+                self.assertEqual(M.main([]), 1)
+                self.assertEqual(M.main(["--check"]), 1)
+            finally:
+                M.CORPUS = saved
+            with open(hand, encoding="utf-8") as f:
+                self.assertEqual(f.read(), '{"id": "hand-written"}\n')
+            self.assertEqual(os.listdir(d), [cid + ".json"], "nothing else written")
 
     def test_the_states_that_hid_bugs_are_in_the_matrix(self):
         cases = M.all_cases()

@@ -76,6 +76,20 @@ class Home(unittest.TestCase):
         self.assertEqual((st["state"], st["last_changed"], st["last_updated"]), ("on", H.NOW - 3600, H.NOW - 3600))
         self.assertEqual(st["attributes"], {"friendly_name": "A"})
 
+    def test_a_state_starting_with_at_is_text_unless_it_is_a_time(self):
+        self.case({"states": {"sensor.mode": {"state": "@standby", "attributes": {}},
+                              "sensor.next": {"state": "@+3h", "attributes": {"device_class": "timestamp"}}}})
+        sts = H.states()
+        self.assertEqual(sts["sensor.mode"]["state"], "@standby")
+        self.assertEqual(sts["sensor.next"]["state"], H.iso(H.NOW + 3 * 3600))
+
+    def test_a_history_points_time_state_is_served_resolved(self):
+        self.case({"states": {"sensor.next": {"state": "@+3h", "attributes": {"device_class": "timestamp"}}},
+                   "history": {"sensor.next": {"points": [["-2h", "@+5h"], ["-1h", "@+3h"]]}}})
+        self.assertEqual(H.states()["sensor.next"]["state"], H.iso(H.NOW + 3 * 3600))
+        rows = H.history(["sensor.next"], H.iso(H.NOW - 86400), None)["sensor.next"]
+        self.assertTrue(all(not r["s"].startswith("@") for r in rows), rows)
+
     def test_history_starts_at_the_window_and_ends_in_the_current_state(self):
         self.case({"states": {"binary_sensor.m": {"state": "off", "last_changed": "-10m", "attributes": {}}},
                    "history": {"binary_sensor.m": {"steps": [["-30h", "off"], ["-3h", "on"], ["-10m", "off"]]}}})
@@ -383,6 +397,11 @@ class Corpus(unittest.TestCase):
             for e in sorted(set(doc.get("expect") or {}) - set(fx.get("states") or {})):
                 missing.append(f"{cid}: expects {e}, which has no state")
             for e, want in (doc.get("expect") or {}).items():
+                # `expect` names a served state that doesn't move with the clock ("on"); an "@" time is served
+                # resolved, so neither this check nor capture's (unmetExpectations) could ever match it.
+                if str(want).startswith("@"):
+                    missing.append(f"{cid}: expects {e} {want}: a time marker, not a state HA serves")
+                    continue
                 got = (fx.get("states") or {}).get(e, {}).get("state")
                 if got is not None and got != want:
                     missing.append(f"{cid}: expects {e} {want}, the fixture says {got}")

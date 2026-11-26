@@ -505,10 +505,12 @@ internal class LiveCameraFeed(
      */
     private fun sendCapabilities(answer: (Boolean, Any?) -> Unit) {
         ctx.callWs(JSONObject().put("type", "camera/capabilities").put("entity_id", entityId)) { ok, result, _ ->
-            // Where the answer lands (the socket's thread): libwebrtc gets ready now, while the view still builds on
-            // the main thread, rather than once the build lets the answer through.
-            if (ok) prewarmFor(CameraStreamChoice.kindsOf(result))
-            ctx.main.post { answer(ok, result) }
+            // On the main thread, as CameraStreamFactory.prewarm() asks: the factory starts its own background work,
+            // first thing when the answer comes through, before the players that need it.
+            ctx.main.post {
+                if (ok) prewarmFor(CameraStreamChoice.kindsOf(result))
+                answer(ok, result)
+            }
         }
     }
 
@@ -519,8 +521,8 @@ internal class LiveCameraFeed(
     }
 
     /**
-     * HA offers WebRTC for the camera: its player gets ready while the rest of the view builds. Any thread: the prewarm
-     * runs on a thread of its own.
+     * HA offers WebRTC for the camera: its player gets ready while the rest of the view builds. Main thread: the
+     * factory's prewarm runs its work on a thread of its own.
      */
     private fun prewarmFor(kinds: List<CameraStreamKind>) {
         if (CameraStreamKind.WEB_RTC !in kinds) return

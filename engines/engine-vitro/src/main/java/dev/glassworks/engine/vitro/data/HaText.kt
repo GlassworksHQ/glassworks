@@ -19,13 +19,17 @@ package dev.glassworks.engine.vitro.data
 object HaText {
     /**
      * The only English Vitro carries itself: what it must be able to show on a very first start, before any of HA's
-     * translation files has been fetched or cached (a state it can't read, a connection it lost). Everything else
-     * comes from HA.
+     * translation files has been fetched or cached (a state it can't read, a connection it lost), and the names
+     * TalkBack reads for icon-only buttons, which would otherwise have none until then. Everything else comes from HA.
      */
     private val BUILT_IN = mapOf(
         "state.default.unavailable" to "Unavailable",
         "state.default.unknown" to "Unknown",
         "ui.notification_toast.connection_lost" to "Connection lost. Reconnecting…",
+        // The tile's cover-open-close buttons (HA's own English for these keys).
+        "ui.card.cover.open_cover" to "Open cover",
+        "ui.card.cover.stop_cover" to "Stop cover",
+        "ui.card.cover.close_cover" to "Close cover",
     )
 
     /**
