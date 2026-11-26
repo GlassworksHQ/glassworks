@@ -229,6 +229,12 @@ internal class LiveCameraFeed(
     val shownKind: CameraStreamKind?
         get() = slots.entries.firstOrNull { (_, s) -> s.hasFrame && s.frame.alpha > 0f }?.key
 
+    /**
+     * A live camera whose capabilities this connection already knows (another picture of it asked, on this view or
+     * another): it can start before its card is on screen, its players getting ready while the view builds.
+     */
+    val capabilitiesKnown: Boolean get() = stream && knowledge.capabilities(entityId) != null
+
     fun start() {
         if (running) return
         running = true
@@ -499,6 +505,8 @@ internal class LiveCameraFeed(
      */
     private fun sendCapabilities(answer: (Boolean, Any?) -> Unit) {
         ctx.callWs(JSONObject().put("type", "camera/capabilities").put("entity_id", entityId)) { ok, result, _ ->
+            // On the main thread, as CameraStreamFactory.prewarm() asks: the factory starts its own background work,
+            // first thing when the answer comes through, before the players that need it.
             ctx.main.post {
                 if (ok) prewarmFor(CameraStreamChoice.kindsOf(result))
                 answer(ok, result)
@@ -512,7 +520,10 @@ internal class LiveCameraFeed(
         knowledge.ask(entityId, ::sendCapabilities) { _, _ -> }
     }
 
-    /** HA offers WebRTC for the camera: its player gets ready while the rest of the view builds. */
+    /**
+     * HA offers WebRTC for the camera: its player gets ready while the rest of the view builds. Main thread: the
+     * factory's prewarm runs its work on a thread of its own.
+     */
     private fun prewarmFor(kinds: List<CameraStreamKind>) {
         if (CameraStreamKind.WEB_RTC !in kinds) return
         val players = ctx.cameraPlayers ?: return

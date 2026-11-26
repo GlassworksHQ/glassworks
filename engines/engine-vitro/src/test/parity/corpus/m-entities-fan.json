@@ -1,0 +1,99 @@
+{
+ "title": "entities: every fan state (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "fan.fan_on_speed": "on",
+  "fan.fan_on_no_speed": "on",
+  "fan.fan_off": "off",
+  "fan.fan_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "entities",
+  "entities": [
+   "fan.fan_on_speed",
+   "fan.fan_on_no_speed",
+   "fan.fan_off",
+   "fan.fan_unavailable"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "fan.fan_on_speed": {
+    "state": "on",
+    "last_changed": "-25m",
+    "attributes": {
+     "percentage": 67,
+     "percentage_step": 33.333333333333336,
+     "supported_features": 49,
+     "friendly_name": "Bedroom Ceiling Fan"
+    }
+   },
+   "fan.fan_on_no_speed": {
+    "state": "on",
+    "last_changed": "-25m",
+    "attributes": {
+     "supported_features": 48,
+     "friendly_name": "Bedroom Ceiling Fan"
+    }
+   },
+   "fan.fan_off": {
+    "state": "off",
+    "last_changed": "-2h",
+    "attributes": {
+     "percentage": 0,
+     "percentage_step": 33.333333333333336,
+     "supported_features": 49,
+     "friendly_name": "Bedroom Ceiling Fan"
+    }
+   },
+   "fan.fan_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "restored": true,
+     "supported_features": 49,
+     "friendly_name": "Bedroom Ceiling Fan"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "fan.fan_on_speed",
+    "pl": "demo",
+    "di": "dev-bedroom",
+    "en": "Ceiling Fan",
+    "np": "device"
+   },
+   {
+    "ei": "fan.fan_on_no_speed",
+    "pl": "demo",
+    "di": "dev-bedroom",
+    "en": "Ceiling Fan",
+    "np": "device"
+   },
+   {
+    "ei": "fan.fan_off",
+    "pl": "demo",
+    "di": "dev-bedroom",
+    "en": "Ceiling Fan",
+    "np": "device"
+   },
+   {
+    "ei": "fan.fan_unavailable",
+    "pl": "demo",
+    "di": "dev-bedroom",
+    "en": "Ceiling Fan",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-bedroom",
+    "name": "Bedroom"
+   }
+  ]
+ }
+}

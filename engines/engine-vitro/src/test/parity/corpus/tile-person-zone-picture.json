@@ -1,0 +1,55 @@
+{
+ "title": "Tile: a person in a zone, with their picture and the zone's icon",
+ "expect": {
+  "person.sam": "Work",
+  "zone.work": "1"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "person.sam",
+  "show_entity_picture": true
+ },
+ "fixture": {
+  "states": {
+   "person.sam": {
+    "state": "Work",
+    "last_changed": "-2h05m",
+    "attributes": {
+     "editable": true,
+     "id": "sam",
+     "device_trackers": [
+      "device_tracker.sam_phone"
+     ],
+     "source": "device_tracker.sam_phone",
+     "user_id": "parity-user",
+     "entity_picture": "/local/vitro-harness-fixtures/images/person.png",
+     "friendly_name": "Sam",
+     "in_zones": [
+      "zone.work"
+     ]
+    }
+   },
+   "zone.work": {
+    "state": "1",
+    "last_changed": "-2h05m",
+    "attributes": {
+     "radius": 100,
+     "passive": false,
+     "persons": [
+      "person.sam"
+     ],
+     "editable": true,
+     "icon": "mdi:briefcase",
+     "friendly_name": "Work"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "person.sam",
+    "pl": "person",
+    "en": "Sam"
+   }
+  ]
+ }
+}

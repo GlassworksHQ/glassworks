@@ -193,13 +193,13 @@ class LovelaceModelTest {
     fun cardAccessorsReadTheCommonKeys() {
         val c = card("""{"type": "tile", "entity": "light.lounge_lamp", "name": "Lamp", "title": "T", "icon": "mdi:lamp", "theme": "glass_night"}""")
         assertEquals("light.lounge_lamp", c.entity)
-        assertEquals("Lamp", c.name)
+        assertEquals("Lamp", c.name(null))
         assertEquals("T", c.title)
         assertEquals("mdi:lamp", c.icon)
         assertEquals("glass_night", c.theme)
         val bare = card("""{"type": "tile"}""")
         assertNull(bare.entity)
-        assertNull(bare.name)
+        assertNull(bare.name(null))
         assertNull(bare.theme)
     }
 
@@ -719,6 +719,8 @@ class LovelaceModelTest {
     fun alarmPanelStatesAndServices() {
         assertEquals(listOf("arm_home", "arm_away"), AlarmPanelCardView.readStates(null))
         assertEquals(listOf("arm_night"), AlarmPanelCardView.readStates(JSONArray("""["arm_night"]""")))
+        // `states: []` is kept: HA shows no arm buttons then.
+        assertEquals(emptyList<String>(), AlarmPanelCardView.readStates(JSONArray("[]")))
         assertEquals("alarm_arm_away", AlarmPanelCardView.serviceFor("arm_away"))
         assertEquals("alarm_disarm", AlarmPanelCardView.serviceFor("disarm"))
         assertEquals("Armed home", AlarmPanelCardView.stateLabel("armed_home"))

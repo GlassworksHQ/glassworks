@@ -1,0 +1,45 @@
+{
+ "title": "tile: select option (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "select.select_option": "Eco"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "select.select_option"
+ },
+ "fixture": {
+  "states": {
+   "select.select_option": {
+    "state": "Eco",
+    "last_changed": "-1h",
+    "attributes": {
+     "options": [
+      "Comfort",
+      "Eco",
+      "Away"
+     ],
+     "friendly_name": "Heat Pump Mode"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "select.select_option",
+    "pl": "demo",
+    "di": "dev-heat-pump",
+    "en": "Mode",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-heat-pump",
+    "name": "Heat Pump"
+   }
+  ]
+ }
+}

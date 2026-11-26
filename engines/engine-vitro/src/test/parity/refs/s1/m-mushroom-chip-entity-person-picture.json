@@ -1,0 +1,97 @@
+{
+ "case": "m-mushroom-chip-entity-person-picture",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 54
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 38,
+   "type": "mushroom-chips-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Home",
+   "x": 33.39,
+   "y": 11.59,
+   "w": 28.94,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "person.picture": {
+   "s": "home",
+   "a": {
+    "editable": true,
+    "id": "robin",
+    "device_trackers": [],
+    "entity_picture": "/local/vitro-harness-fixtures/images/person.png",
+    "friendly_name": "Robin"
+   },
+   "lc": 1794488880,
+   "lu": 1794488880
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "person.picture",
+    "pl": "person"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "person"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "person": {
+     "_": {
+      "default": "mdi:account",
+      "state": {
+       "not_home": "mdi:account-arrow-right"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.person.entity_component._.state.home": "Home",
+    "component.person.entity_component._.state.not_home": "Away"
+   },
+   "entity": {}
+  }
+ }
+}

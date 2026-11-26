@@ -1,0 +1,51 @@
+{
+ "title": "mushroom-vacuum: vacuum returning (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "vacuum.vacuum_returning": "returning"
+ },
+ "card": {
+  "type": "custom:mushroom-vacuum-card",
+  "entity": "vacuum.vacuum_returning",
+  "commands": [
+   "start_pause",
+   "return_home"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "vacuum.vacuum_returning": {
+    "state": "returning",
+    "last_changed": "-1m",
+    "attributes": {
+     "fan_speed_list": [
+      "silent",
+      "standard"
+     ],
+     "fan_speed": "standard",
+     "battery_level": 22,
+     "supported_features": 14204,
+     "friendly_name": "Ground Floor Robot"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "vacuum.vacuum_returning",
+    "pl": "demo",
+    "di": "dev-ground-floor",
+    "en": "Robot",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-ground-floor",
+    "name": "Ground Floor"
+   }
+  ]
+ }
+}

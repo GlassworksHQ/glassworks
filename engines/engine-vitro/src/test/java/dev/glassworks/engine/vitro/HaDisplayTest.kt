@@ -92,4 +92,21 @@ class HaDisplayTest {
         // The card's icon and the state's own icon still come first.
         assertEquals("mdi:star", MdiIcons.resolveIconName("mdi:star", EntityState("select.pipeline", "preferred", emptyMap())))
     }
+
+    @Test
+    fun aNewConnectionToTheSameHomeAssistantKeepsItsDataButAsksForTheWordsAgain() {
+        // A8: names stay on screen across a reconnect; another Home Assistant's never carry over.
+        HaDisplay.connectionTo("http://homeassistant.local:8123")
+        HaDisplay.applyDevices(org.json.JSONArray("""[{"id": "d1", "name": "Ball Lamp"}]"""))
+        HaDisplay.applyTranslations(JSONObject("""{"resources": {"component.light.entity_component._.state.on": "An"}}"""), true, listOf("light"))
+        HaDisplay.applyIcons(JSONObject("{}"), true, listOf("light"))
+        assertEquals(setOf<String>(), HaDisplay.missingFor(listOf("light.lamp")).first)
+
+        HaDisplay.connectionTo("http://homeassistant.local:8123")
+        assertEquals("Ball Lamp", HaDisplay.deviceName("d1"))
+        assertEquals("asked for again", setOf("light"), HaDisplay.missingFor(listOf("light.lamp")).first)
+
+        HaDisplay.connectionTo("http://192.0.2.20:8123")
+        assertNull(HaDisplay.deviceName("d1"))
+    }
 }

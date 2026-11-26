@@ -200,6 +200,60 @@ class VitroFallbackReturnTest {
         assertNative(page, fp)
     }
 
+    // ---- Home Assistant's own More Info dialog ----
+
+    @Test fun aDialogTheSheetDoesntDrawOpensInHomeAssistantsFrontendAndClosingItComesBack() {
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        val vv = vitroView(page)
+        // A timer's dialog (its controls and presets) is HA's own: its frontend shows the view with it open.
+        vv.openMoreInfo("timer.tea")
+        idle()
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        assertEquals(listOf("$living?more-info-entity-id=timer.tea"), fp.loads.toList())
+        assertEquals("no sheet of Vitro's", null, vv.openSheet)
+
+        // HA's page reports the dialog's URL: no hand-back while it's open.
+        val fpHost = fb.fallbackOpen().host
+        fpHost.onLocationChange("$living?more-info-entity-id=timer.tea")
+        idle()
+        assertFallback(page, fp)
+
+        // The dialog closes (HA drops the parameter): the native view again, with no step back to the dialog.
+        fpHost.onLocationChange(living)
+        idle()
+        assertNative(page, fp)
+        assertEquals(living, host.locations.last())
+        assertFalse("Back doesn't open the dialog again", page.canGoBack)
+    }
+
+    @Test fun backFromHomeAssistantsDialogReturnsToTheViewItOpenedOver() {
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        page.load(wall)
+        idle()
+        vitroView(page).openMoreInfo("weather.home")
+        idle()
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        page.goBack()
+        idle()
+        assertNative(page, fp)
+        assertEquals(1, vitroView(page).currentViewIndex)
+        assertEquals(wall, host.locations.last())
+    }
+
+    @Test fun aDialogTheSheetDrawsStaysNative() {
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        val vv = vitroView(page)
+        vv.openMoreInfo("sensor.outdoor_temperature")
+        idle()
+        assertNotNull(vv.openSheet)
+        assertTrue("no fallback page", fb.opens.none { it.background == Color.BLACK })
+    }
+
     // ---- Reload dashboard ----
 
     @Test fun reloadDashboardOnAFallbackPageReturnsToTheNativeView() {
@@ -357,6 +411,7 @@ class VitroFallbackReturnTest {
         listOf(
             "https://example.com/lovelace/0", // another origin
             "$living?edit=1", // HA's edit mode
+            "$living?more-info-entity-id=script.greet", // HA's More Info dialog over a view (a script's fields)
             "$base/?auth_callback=1&code=abc", // a sign-in coming back
             "about:blank",
         ).forEach { fpHost.onLocationChange(it); idle() }
@@ -501,6 +556,136 @@ class VitroFallbackReturnTest {
     }
 
     // ---- No half-native states ----
+
+    @Test fun aContentProcessLostBehindTheNativeViewRestartsOnlyTheHiddenPage() {
+        // A5: the native dashboard doesn't run in Gecko. A content process lost while the fallback page hides behind it
+        // restarts that page alone, not the activity's page (which would close the native connection and draw again).
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        page.load("$base/energy")
+        val fp = fb.fallbackPage()
+        val fpHost = fb.fallbackOpen().host
+        page.goBack()
+        idle()
+        assertNative(page, fp)
+        val restarts = fp.restarts
+        val connections = server.connectUrls.size
+        fpHost.onContentGone(killed = true)
+        idle()
+        assertTrue("the activity isn't told: ${host.contentGone}", host.contentGone.isEmpty())
+        assertEquals("the hidden page starts over", restarts + 1, fp.restarts)
+        assertNative(page, fp)
+        Thread.sleep(200)
+        idle()
+        assertEquals("the native dashboard keeps its connection", connections, server.connectUrls.size)
+
+        // In front, it's the page the user sees: the activity is told, as for any page.
+        page.load("$base/energy")
+        idle()
+        assertFallback(page, fp)
+        fpHost.onContentGone(killed = false)
+        assertEquals(listOf(false), host.contentGone.toList())
+    }
+
+    @Test fun aDashboardWhoseConfigFailsToReadIsVitrosAgainOnReload() {
+        // A12: an error other than config_not_found is asked again; once the retries are spent HA's frontend shows its
+        // error, but only for now: Reload dashboard (or the next connection) gives it back to Vitro.
+        server.configError = "error"
+        val fb = RecordingEngine()
+        val e = engine(fb).also { it.configRetryMs = longArrayOf(20, 20) }
+        val page = page(e)
+        page.load(living)
+        awaitMain("fallback") { fb.opens.isNotEmpty() && fb.fallbackPage().view.visibility == View.VISIBLE }
+        val fp = fb.fallbackPage()
+        assertEquals("the first ask and two retries", 3, server.commands("lovelace/config").size)
+        // HA's frontend says where it is: no hand-back to a dashboard whose config just failed.
+        fb.fallbackOpen().host.onLocationChange(living)
+        idle()
+        assertFallback(page, fp)
+
+        server.configError = null
+        page.reload()
+        awaitMain("native") { host.messages("ready").isNotEmpty() }
+        assertNative(page, fp)
+        assertEquals("not a reload of HA's page", 0, fp.reloads)
+    }
+
+    @Test fun aPageSentToTheFallbackRightAfterAHiddenLossStartsOverFirst() {
+        // The posted restart hasn't run yet when a page goes to the fallback: it restarts before it loads.
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        page.load("$base/energy")
+        val fp = fb.fallbackPage()
+        val fpHost = fb.fallbackOpen().host
+        page.goBack()
+        idle()
+        val restarts = fp.restarts
+        val loads = fp.loads.size
+        fpHost.onContentGone(killed = true)
+        page.load("$base/history") // before the main looper runs the posted restart
+        assertEquals("restarted before the load", restarts + 1, fp.restarts)
+        assertEquals(loads + 1, fp.loads.size)
+        idle()
+        assertEquals("and not again once it shows", restarts + 1, fp.restarts)
+        assertTrue(host.contentGone.isEmpty())
+    }
+
+    @Test fun aDashboardWhoseConfigFailedIsVitrosAgainOnTheNextConnection() {
+        server.configError = "error"
+        val fb = RecordingEngine()
+        val e = engine(fb).also { it.configRetryMs = longArrayOf(20, 20) }
+        val page = page(e)
+        page.load(living)
+        awaitMain("fallback") { fb.opens.isNotEmpty() && fb.fallbackPage().view.visibility == View.VISIBLE }
+        val fp = fb.fallbackPage()
+        server.configError = null
+        server.dropConnection()
+        awaitMain("native again") { host.messages("ready").isNotEmpty() }
+        assertNative(page, fp)
+    }
+
+    @Test fun aFailedDashboardIsntRetriedOverWhereTheUserWentInHomeAssistantsPage() {
+        server.configError = "error"
+        val fb = RecordingEngine()
+        val e = engine(fb).also { it.configRetryMs = longArrayOf(20, 20) }
+        val page = page(e)
+        page.load(living)
+        awaitMain("fallback") { fb.opens.isNotEmpty() && fb.fallbackPage().view.visibility == View.VISIBLE }
+        val fp = fb.fallbackPage()
+        // In HA's page, the user goes on to the energy dashboard.
+        fb.fallbackOpen().host.onLocationChange("$base/energy")
+        server.configError = null
+        val connections = server.connectUrls.size
+        server.dropConnection()
+        awaitMain("reconnected") { server.connectUrls.size > connections && server.received.count { it.optString("type") == "auth" } > connections }
+        repeat(10) { Thread.sleep(20); idle() }
+        assertFallback(page, fp)
+        assertTrue("no ready: the energy page stays", host.messages("ready").isEmpty())
+    }
+
+    @Test fun backFromADialogThenASidebarTapToItsViewKeepsTheWayBack() {
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        vitroView(page).openMoreInfo("timer.tea")
+        idle()
+        val fp = fb.fallbackPage()
+        page.goBack()
+        idle()
+        assertNative(page, fp)
+        // Later: another HA page, then HA's sidebar back to the view the dialog once opened over.
+        page.load("$base/energy")
+        idle()
+        val fpHost = fb.fallbackOpen().host
+        fpHost.onLocationChange("$base/energy")
+        fpHost.onLocationChange(living)
+        idle()
+        assertNative(page, fp)
+        assertTrue("Back goes to the energy page, not lost as a closed dialog's", page.canGoBack)
+        page.goBack()
+        idle()
+        assertFallback(page, fp)
+        assertEquals("$base/energy", fp.loads.last())
+    }
 
     @Test fun aFallbackPageBehindTheNativeViewReportsNothing() {
         val fb = RecordingEngine()

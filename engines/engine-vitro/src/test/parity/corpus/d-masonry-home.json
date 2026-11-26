@@ -1,0 +1,643 @@
+{
+ "title": "Whole dashboard: a masonry view of a home (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "view_config": {
+  "title": "Home",
+  "cards": [
+   {
+    "type": "entities",
+    "title": "Lights",
+    "entities": [
+     "light.light_on_dimmed",
+     "light.light_on_color",
+     "light.light_off",
+     "light.light_unavailable",
+     "switch.switch_on"
+    ]
+   },
+   {
+    "type": "thermostat",
+    "entity": "climate.climate_heat"
+   },
+   {
+    "type": "weather-forecast",
+    "entity": "weather.sunny",
+    "show_forecast": true,
+    "forecast_type": "daily"
+   },
+   {
+    "type": "horizontal-stack",
+    "cards": [
+     {
+      "type": "button",
+      "entity": "light.light_on_color"
+     },
+     {
+      "type": "button",
+      "entity": "lock.lock_locked"
+     },
+     {
+      "type": "button",
+      "entity": "switch.switch_off"
+     }
+    ]
+   },
+   {
+    "type": "glance",
+    "title": "Sensors",
+    "entities": [
+     "sensor.sensor_temperature",
+     "sensor.sensor_power",
+     "binary_sensor.binary_sensor_door_open",
+     "binary_sensor.binary_sensor_motion"
+    ]
+   },
+   {
+    "type": "light",
+    "entity": "light.light_on_dimmed"
+   },
+   {
+    "type": "media-control",
+    "entity": "media_player.media_player_playing"
+   },
+   {
+    "type": "vertical-stack",
+    "cards": [
+     {
+      "type": "tile",
+      "entity": "cover.cover_open_position"
+     },
+     {
+      "type": "tile",
+      "entity": "cover.cover_closed_position"
+     },
+     {
+      "type": "tile",
+      "entity": "fan.fan_on_speed"
+     }
+    ]
+   },
+   {
+    "type": "alarm-panel",
+    "entity": "alarm_control_panel.alarm_control_panel_disarmed"
+   },
+   {
+    "type": "gauge",
+    "entity": "sensor.sensor_battery_low"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.light_on_dimmed": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 40,
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_on_color": {
+    "state": "on",
+    "last_changed": "-12m",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "color_mode": "hs",
+     "brightness": 204,
+     "hs_color": [
+      24.0,
+      84.0
+     ],
+     "rgb_color": [
+      255,
+      129,
+      40
+     ],
+     "xy_color": [
+      0.594,
+      0.371
+     ],
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_on_ct": {
+    "state": "on",
+    "last_changed": "-50m",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "color_mode": "color_temp",
+     "brightness": 128,
+     "color_temp_kelvin": 2702,
+     "color_temp": 370,
+     "hs_color": [
+      28.874,
+      72.522
+     ],
+     "rgb_color": [
+      255,
+      167,
+      70
+     ],
+     "xy_color": [
+      0.536,
+      0.389
+     ],
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_off": {
+    "state": "off",
+    "last_changed": "-3h",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "restored": true,
+     "supported_features": 40,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "switch.switch_on": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "friendly_name": "Patio Heater"
+    }
+   },
+   "switch.switch_off": {
+    "state": "off",
+    "last_changed": "-2h",
+    "attributes": {
+     "friendly_name": "Patio Heater"
+    }
+   },
+   "switch.switch_outlet_on": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "device_class": "outlet",
+     "friendly_name": "Patio Heater"
+    }
+   },
+   "sensor.sensor_temperature": {
+    "state": "21.42",
+    "last_changed": "-2m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Temperature"
+    }
+   },
+   "sensor.sensor_power": {
+    "state": "1234.5",
+    "last_changed": "-2m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "W",
+     "device_class": "power",
+     "friendly_name": "Living Room Temperature"
+    }
+   },
+   "sensor.sensor_battery_low": {
+    "state": "12",
+    "last_changed": "-2h",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "%",
+     "device_class": "battery",
+     "friendly_name": "Living Room Temperature"
+    }
+   },
+   "sensor.sensor_no_unit": {
+    "state": "Washing",
+    "last_changed": "-15m",
+    "attributes": {
+     "friendly_name": "Living Room Temperature"
+    }
+   },
+   "binary_sensor.binary_sensor_door_open": {
+    "state": "on",
+    "last_changed": "-4m",
+    "attributes": {
+     "device_class": "door",
+     "friendly_name": "Back Door"
+    }
+   },
+   "binary_sensor.binary_sensor_motion": {
+    "state": "on",
+    "last_changed": "-30s",
+    "attributes": {
+     "device_class": "motion",
+     "friendly_name": "Back Door"
+    }
+   },
+   "cover.cover_open_position": {
+    "state": "open",
+    "last_changed": "-1h",
+    "attributes": {
+     "current_position": 40,
+     "device_class": "blind",
+     "supported_features": 15,
+     "friendly_name": "Office Blind"
+    }
+   },
+   "cover.cover_closed_position": {
+    "state": "closed",
+    "last_changed": "-5h",
+    "attributes": {
+     "current_position": 0,
+     "device_class": "blind",
+     "supported_features": 15,
+     "friendly_name": "Office Blind"
+    }
+   },
+   "climate.climate_heat": {
+    "state": "heat",
+    "last_changed": "-3h",
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat"
+     ],
+     "min_temp": 7,
+     "max_temp": 30,
+     "target_temp_step": 0.5,
+     "current_temperature": 19.5,
+     "temperature": 21,
+     "hvac_action": "heating",
+     "supported_features": 385,
+     "friendly_name": "Hallway Thermostat"
+    }
+   },
+   "lock.lock_locked": {
+    "state": "locked",
+    "last_changed": "-2h",
+    "attributes": {
+     "supported_features": 0,
+     "friendly_name": "Front Door Lock"
+    }
+   },
+   "media_player.media_player_playing": {
+    "state": "playing",
+    "last_changed": "-4m",
+    "attributes": {
+     "volume_level": 0.31,
+     "is_volume_muted": false,
+     "media_content_type": "music",
+     "media_duration": 245,
+     "media_position": 92,
+     "media_position_updated_at": "@-60s",
+     "media_title": "Evening Tide",
+     "media_artist": "The Placeholder Trio",
+     "entity_picture": "/local/vitro-harness-fixtures/images/album.png",
+     "device_class": "speaker",
+     "supported_features": 152511,
+     "friendly_name": "Den Speaker"
+    }
+   },
+   "weather.sunny": {
+    "state": "sunny",
+    "last_changed": "-40m",
+    "attributes": {
+     "dew_point": 7.8,
+     "temperature_unit": "°C",
+     "humidity": 82,
+     "cloud_coverage": 40.0,
+     "uv_index": 1.2,
+     "pressure": 1018.2,
+     "pressure_unit": "hPa",
+     "wind_bearing": 210.0,
+     "wind_speed": 12.4,
+     "wind_speed_unit": "km/h",
+     "visibility_unit": "km",
+     "precipitation_unit": "mm",
+     "supported_features": 1,
+     "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute.",
+     "temperature": 14.2,
+     "friendly_name": "Home"
+    }
+   },
+   "fan.fan_on_speed": {
+    "state": "on",
+    "last_changed": "-25m",
+    "attributes": {
+     "percentage": 67,
+     "percentage_step": 33.333333333333336,
+     "supported_features": 49,
+     "friendly_name": "Bedroom Ceiling Fan"
+    }
+   },
+   "alarm_control_panel.alarm_control_panel_disarmed": {
+    "state": "disarmed",
+    "last_changed": "-2h",
+    "attributes": {
+     "code_format": "number",
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.light_on_dimmed",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_color",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_ct",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_off",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_unavailable",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_on",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_off",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_outlet_on",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_temperature",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device",
+    "dp": 1
+   },
+   {
+    "ei": "sensor.sensor_power",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device",
+    "dp": 0
+   },
+   {
+    "ei": "sensor.sensor_battery_low",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_no_unit",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "binary_sensor.binary_sensor_door_open",
+    "pl": "zha",
+    "di": "dev-back",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "binary_sensor.binary_sensor_motion",
+    "pl": "zha",
+    "di": "dev-back",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "cover.cover_open_position",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   },
+   {
+    "ei": "cover.cover_closed_position",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   },
+   {
+    "ei": "climate.climate_heat",
+    "pl": "demo",
+    "di": "dev-hallway",
+    "en": "Thermostat",
+    "np": "device"
+   },
+   {
+    "ei": "lock.lock_locked",
+    "pl": "demo",
+    "di": "dev-front",
+    "en": "Door Lock",
+    "np": "device"
+   },
+   {
+    "ei": "media_player.media_player_playing",
+    "pl": "demo",
+    "di": "dev-den",
+    "en": "Speaker",
+    "np": "device"
+   },
+   {
+    "ei": "weather.sunny",
+    "pl": "met"
+   },
+   {
+    "ei": "fan.fan_on_speed",
+    "pl": "demo",
+    "di": "dev-bedroom",
+    "en": "Ceiling Fan",
+    "np": "device"
+   },
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_disarmed",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   },
+   {
+    "id": "dev-patio",
+    "name": "Patio"
+   },
+   {
+    "id": "dev-living-room",
+    "name": "Living Room"
+   },
+   {
+    "id": "dev-back",
+    "name": "Back"
+   },
+   {
+    "id": "dev-office",
+    "name": "Office"
+   },
+   {
+    "id": "dev-hallway",
+    "name": "Hallway"
+   },
+   {
+    "id": "dev-front",
+    "name": "Front"
+   },
+   {
+    "id": "dev-den",
+    "name": "Den"
+   },
+   {
+    "id": "dev-bedroom",
+    "name": "Bedroom"
+   },
+   {
+    "id": "dev-house",
+    "name": "House"
+   }
+  ],
+  "forecast": {
+   "weather.sunny": {
+    "daily": [
+     {
+      "condition": "partlycloudy",
+      "datetime": "@D+0 12:00",
+      "temperature": 14.7,
+      "templow": 9.1,
+      "precipitation": 0.4,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     },
+     {
+      "condition": "rainy",
+      "datetime": "@D+1 12:00",
+      "temperature": 12.5,
+      "templow": 8.7,
+      "precipitation": 6.1,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     },
+     {
+      "condition": "cloudy",
+      "datetime": "@D+2 12:00",
+      "temperature": 11.2,
+      "templow": 6.4,
+      "precipitation": 0.8,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     },
+     {
+      "condition": "sunny",
+      "datetime": "@D+3 12:00",
+      "temperature": 13.9,
+      "templow": 4.2,
+      "precipitation": 0,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     },
+     {
+      "condition": "partlycloudy",
+      "datetime": "@D+4 12:00",
+      "temperature": 15.3,
+      "templow": 7.0,
+      "precipitation": 0.1,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     },
+     {
+      "condition": "fog",
+      "datetime": "@D+5 12:00",
+      "temperature": 10.8,
+      "templow": 7.9,
+      "precipitation": 0.2,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     }
+    ]
+   }
+  }
+ }
+}

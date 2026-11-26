@@ -47,7 +47,27 @@ class MdNode(val tag: String, val attrs: Map<String, String> = emptyMap(), val t
  * wrapped in a `<div>`. The result goes through [MdHtml.parse], which applies HA's `xss` whitelist.
  */
 object MarkedLite {
-    fun toHtml(markdown: String): String {
+    /**
+     * [breaks]: `marked`'s option, as `ha-markdown`'s `breaks` passes it (the markdown card sets it; HA's other uses,
+     * an update's release notes say, leave it off). Off, a newline inside a paragraph is a space, and only a hard
+     * break (two spaces or a backslash before it) is a `<br>`.
+     */
+    fun toHtml(markdown: String, breaks: Boolean = true): String {
+        val before = hardBreaksOnly.get()
+        hardBreaksOnly.set(!breaks)
+        try {
+            return blocksOf(markdown)
+        } finally {
+            hardBreaksOnly.set(before)
+        }
+    }
+
+    /** The current [toHtml]'s `breaks` off, for the inline pass deep under it (any thread). */
+    private val hardBreaksOnly = object : ThreadLocal<Boolean>() {
+        override fun initialValue() = false
+    }
+
+    private fun blocksOf(markdown: String): String {
         val lines = markdown.replace("\r\n", "\n").replace('\r', '\n').replace("\t", "    ").split('\n')
         val out = StringBuilder()
         blocks(lines, out, tight = false)
@@ -255,7 +275,8 @@ object MarkedLite {
                     if (interruptsParagraph(lines[j])) break
                     if ('|' in lines[j] && j + 1 < n && TABLE_DELIM.matches(lines[j + 1])) break
                 }
-                para += lines[j].trim()
+                // Leading spaces go; trailing ones stay for the inline pass (two before a newline are a hard break).
+                para += lines[j].trimStart()
                 j++
             }
             val text = para.joinToString("\n").trimEnd()
@@ -303,7 +324,7 @@ object MarkedLite {
                     continue
                 }
                 if (!sawBlank && !interruptsParagraph(l) && BULLET.find(l) == null && ORDERED.find(l) == null) {
-                    item += l.trim() // lazy continuation
+                    item += l.trimStart() // lazy continuation
                     i++
                     continue
                 }
@@ -371,9 +392,11 @@ object MarkedLite {
                 c == '\\' && i + 1 < to && s[i + 1] in PUNCT -> { sb.append(escapeText(s[i + 1].toString())); i += 2 }
                 c == '\\' && i + 1 < to && s[i + 1] == '\n' -> { sb.append("<br>"); i += 2 }
                 c == '\n' -> {
-                    // `breaks: true`: every newline is a hard break; trailing spaces before it go.
-                    while (sb.endsWith(" ")) sb.setLength(sb.length - 1)
-                    sb.append("<br>")
+                    // `breaks: true`: every newline is a hard break; trailing spaces before it go. Without it, only
+                    // two or more trailing spaces make one; else the newline stays, a space once laid out.
+                    var spaces = 0
+                    while (sb.endsWith(" ")) { sb.setLength(sb.length - 1); spaces++ }
+                    sb.append(if (!hardBreaksOnly.get() || spaces >= 2) "<br>" else "\n")
                     i++
                     while (i < to && s[i] == ' ') i++
                 }
@@ -616,7 +639,7 @@ object MdHtml {
     private val COMMENT = Regex("""<!--[\s\S]*?(?:-->|$)""")
 
     /** Markdown (already template-rendered) to a sanitized DOM rooted at `ha-markdown-element`. */
-    fun fromMarkdown(markdown: String): MdNode = parse(MarkedLite.toHtml(markdown))
+    fun fromMarkdown(markdown: String, breaks: Boolean = true): MdNode = parse(MarkedLite.toHtml(markdown, breaks))
 
     /** Parses [html] into a sanitized DOM rooted at `ha-markdown-element`. */
     fun parse(html: String): MdNode {

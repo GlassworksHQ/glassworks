@@ -377,8 +377,17 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
             // A More Info case (#885): the sheet opens over the view, as a tap on the card opens it, at the panel's size
             // (HA's dialog is shot in the window as it shows it). Its surface is the one slot.
             case.moreInfo?.let { id ->
-                view.openMoreInfo(id)
-                settle(view, ref, w, h)
+                // HA's dialog is captured with `prefers-reduced-motion: reduce` (capture.mjs): Android's equivalent,
+                // "Remove animations", while the sheet draws (a vacuum's robot stands still, as HA's does).
+                val resolver = activity.contentResolver
+                val scale = android.provider.Settings.Global.getFloat(resolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+                android.provider.Settings.Global.putFloat(resolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
+                try {
+                    view.openMoreInfo(id)
+                    settle(view, ref, w, h)
+                } finally {
+                    android.provider.Settings.Global.putFloat(resolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, scale)
+                }
                 val sheet = view.openSheet ?: error("${case.id}: the More Info sheet didn't open")
                 val surface = sheet.surface
                 val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)

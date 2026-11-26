@@ -1,0 +1,456 @@
+{
+ "case": "entities-secondary-info",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 412
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 395.47,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Porch at dusk",
+   "x": 73,
+   "y": 20,
+   "w": 85.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "3 hours ago",
+   "x": 73,
+   "y": 42.39,
+   "w": 73.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Goodnight",
+   "x": 73,
+   "y": 72.78,
+   "w": 64.67,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 73,
+   "y": 95.17,
+   "w": 19.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Run",
+   "x": 452.52,
+   "y": 84.17,
+   "w": 24.31,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Coffee maker",
+   "x": 73,
+   "y": 125.56,
+   "w": 83.95,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "switch.coffee_maker",
+   "x": 73,
+   "y": 147.95,
+   "w": 129.45,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Desk lamp",
+   "x": 73,
+   "y": 178.34,
+   "w": 65.52,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "65%",
+   "x": 73,
+   "y": 200.73,
+   "w": 25.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Porch",
+   "x": 73,
+   "y": 231.13,
+   "w": 36.38,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 73,
+   "y": 253.52,
+   "w": 19.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Outdoor temperature",
+   "x": 73,
+   "y": 283.91,
+   "w": 129.92,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12.4 °C",
+   "x": 73,
+   "y": 306.3,
+   "w": 45.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12.4 °C",
+   "x": 437.92,
+   "y": 295.09,
+   "w": 45.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Guest mode",
+   "x": 73,
+   "y": 336.69,
+   "w": 75.5,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 73,
+   "y": 359.08,
+   "w": 19.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "automation.porch_at_dusk": {
+   "s": "on",
+   "a": {
+    "id": "1700000000001",
+    "last_triggered": "2026-11-12T13:03:00+00:00",
+    "mode": "single",
+    "current": 0,
+    "friendly_name": "Porch at dusk"
+   },
+   "lc": 1794319680,
+   "lu": 1794319680
+  },
+  "input_boolean.guest_mode": {
+   "s": "off",
+   "a": {
+    "editable": true,
+    "icon": "mdi:account-multiple",
+    "friendly_name": "Guest mode"
+   },
+   "lc": 1794413280,
+   "lu": 1794413280
+  },
+  "light.desk_lamp": {
+   "s": "on",
+   "a": {
+    "brightness": 166,
+    "color_mode": "brightness",
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "supported_features": 0,
+    "friendly_name": "Desk lamp"
+   },
+   "lc": 1794497580,
+   "lu": 1794497580
+  },
+  "light.porch": {
+   "s": "off",
+   "a": {
+    "brightness": null,
+    "color_mode": null,
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "supported_features": 0,
+    "friendly_name": "Porch"
+   },
+   "lc": 1794487680,
+   "lu": 1794487680
+  },
+  "script.goodnight": {
+   "s": "off",
+   "a": {
+    "last_triggered": null,
+    "mode": "single",
+    "current": 0,
+    "icon": "mdi:weather-night",
+    "friendly_name": "Goodnight"
+   },
+   "lc": 1794463680,
+   "lu": 1794463680
+  },
+  "sensor.outdoor_temperature": {
+   "s": "12.4",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Outdoor temperature"
+   },
+   "lc": 1794499440,
+   "lu": 1794499440
+  },
+  "switch.coffee_maker": {
+   "s": "off",
+   "a": {
+    "friendly_name": "Coffee maker"
+   },
+   "lc": 1794496980,
+   "lu": 1794496980
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "automation.porch_at_dusk",
+    "pl": "automation",
+    "en": "Porch at dusk"
+   },
+   {
+    "ei": "input_boolean.guest_mode",
+    "pl": "input_boolean",
+    "en": "Guest mode"
+   },
+   {
+    "ei": "light.desk_lamp",
+    "pl": "demo",
+    "en": "Desk lamp"
+   },
+   {
+    "ei": "light.porch",
+    "pl": "demo",
+    "en": "Porch"
+   },
+   {
+    "ei": "script.goodnight",
+    "pl": "script",
+    "en": "Goodnight"
+   },
+   {
+    "ei": "sensor.outdoor_temperature",
+    "pl": "demo",
+    "en": "Outdoor temperature"
+   },
+   {
+    "ei": "switch.coffee_maker",
+    "pl": "demo",
+    "en": "Coffee maker"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "automation",
+    "input_boolean",
+    "light",
+    "script",
+    "sensor",
+    "switch"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "automation": {
+     "_": {
+      "default": "mdi:robot",
+      "state": {
+       "off": "mdi:robot-off",
+       "unavailable": "mdi:robot-confused"
+      }
+     }
+    },
+    "input_boolean": {
+     "_": {
+      "default": "mdi:check-circle-outline",
+      "state": {
+       "off": "mdi:close-circle-outline"
+      }
+     }
+    },
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "script": {
+     "_": {
+      "default": "mdi:script-text",
+      "state": {
+       "on": "mdi:script-text-play"
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    },
+    "switch": {
+     "_": {
+      "default": "mdi:toggle-switch-variant",
+      "state": {
+       "off": "mdi:toggle-switch-variant-off"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.automation.entity_component._.state.off": "Off",
+    "component.automation.entity_component._.state.on": "On",
+    "component.input_boolean.entity_component._.state.off": "Off",
+    "component.input_boolean.entity_component._.state.on": "On",
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.script.entity_component._.state.off": "Off",
+    "component.script.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On",
+    "component.switch.entity_component._.state.off": "Off",
+    "component.switch.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

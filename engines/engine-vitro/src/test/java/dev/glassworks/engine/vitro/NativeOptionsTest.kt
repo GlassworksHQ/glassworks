@@ -129,8 +129,8 @@ class NativeOptionsTest {
         val reasons = NativeOptions.cardReasons("tile", card)
         assertTrue(reasons.toString(), reasons.size >= 3)
         for (r in reasons) for (secret in listOf("secret", "example.test", "token", "{{")) assertFalse(r, secret in r)
-        val rows = NativeOptions.cardReasons("entities", JSONObject("""{"type": "entities", "entities": ["lock.secret_door"]}"""))
-        assertTrue(rows.toString(), rows.single().contains("`lock` entity") && "secret" !in rows.single())
+        val rows = NativeOptions.cardReasons("entities", JSONObject("""{"type": "entities", "entities": ["timer.secret_door"]}"""))
+        assertTrue(rows.toString(), rows.single().contains("`timer` entity") && "secret" !in rows.single())
     }
 
     @Test

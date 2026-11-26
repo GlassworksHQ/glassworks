@@ -123,6 +123,12 @@ internal object HaStateColor {
         "state-water_heater-eco-color" to "green", "state-water_heater-electric-color" to "orange", "state-water_heater-gas-color" to "orange",
         "state-water_heater-heat_pump-color" to "orange", "state-water_heater-high_demand-color" to "deep-orange",
         "state-water_heater-performance-color" to "deep-orange",
+        "state-weather-clear_night-color" to "deep-purple", "state-weather-cloudy-color" to "light-grey",
+        "state-weather-exceptional-color" to "red", "state-weather-fog-color" to "grey", "state-weather-hail-color" to "cyan",
+        "state-weather-lightning-color" to "yellow", "state-weather-lightning_rainy-color" to "lime",
+        "state-weather-partlycloudy-color" to "blue-grey", "state-weather-pouring-color" to "indigo",
+        "state-weather-rainy-color" to "blue", "state-weather-snowy_rainy-color" to "light-blue",
+        "state-weather-sunny-color" to "amber", "state-weather-windy-color" to "green", "state-weather-windy_variant-color" to "green",
     )
 
     /** A `--<name>` custom property's color: the theme's, else HA's default. */
@@ -146,8 +152,11 @@ internal object HaStateColor {
         return MarkdownInline.parseCssColor(v) ?: ThemeResolver.parseColor(v)
     }
 
-    /** `stateColorCss(stateObj, state)`, or null where HA gives none. */
-    fun of(ctx: VitroCardContext, s: EntityState, state: String = s.state): Int? {
+    /**
+     * `stateColorCss(stateObj, state)`, or null where HA gives none. Without [inactiveDefault] the chain stops short of
+     * `--state-inactive-color`, as under a heading badge's `--state-inactive-color: initial`.
+     */
+    fun of(ctx: VitroCardContext, s: EntityState, state: String = s.state, inactiveDefault: Boolean = true): Int? {
         if (state == "unavailable") return ctx.theme.disabledTextColor
         val domain = s.domain
         val dc = s.deviceClass
@@ -162,14 +171,14 @@ internal object HaStateColor {
             }
         }
         if (domain !in STATE_COLORED) return null
-        val active = s.copy(state = state).isActive
+        val active = HaStateActive.of(s, state)
         val key = state.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "_")
         val activeKey = if (active) "active" else "inactive"
         val props = buildList {
             if (dc != null) add("state-$domain-$dc-$key-color")
             add("state-$domain-$key-color")
             add("state-$domain-$activeKey-color")
-            add("state-$activeKey-color")
+            if (active || inactiveDefault) add("state-$activeKey-color")
         }
         for (p in props) property(ctx, p)?.let { return it }
         return null
@@ -415,7 +424,7 @@ class AlertCardView(ctx: VitroCardContext, private val config: CardConfig) :
         pulsing = active && raw.optBoolean("pulse", false) && color != null
         if (color != null) wash.setColor(color) else wash.setColor(Color.TRANSPARENT)
         updatePulse()
-        val name = config.name ?: s.displayName
+        val name = config.name(s) ?: s.displayName
         val area = HaDisplay.areaOf(entityId)?.let { HaDisplay.areaName(it) }
         val second = if (raw.optBoolean("hide_state", false)) null else buildString {
             append(s.formattedState())
@@ -767,7 +776,7 @@ class StatisticCardView(ctx: VitroCardContext, private val config: CardConfig) :
 
     private fun render() {
         val s = if (external) null else ctx.store[statisticId]
-        nameView.text = config.name
+        nameView.text = config.nameFor(statisticId, s)
             ?: s?.displayName
             ?: metadata?.optString("name", "")?.takeIf { it.isNotEmpty() && metadata?.isNull("name") == false }
             ?: statisticId
@@ -844,7 +853,7 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
 
     /** A rebuild key: what decides the card's layout (readings, picture, name, problems), not the values. */
     private fun key(s: EntityState?): String = if (s == null) "missing" else listOf(
-        ATTRIBUTES.filter { it in s.attributes }.joinToString(","), s.entityPicture.orEmpty(), config.name ?: s.displayName,
+        ATTRIBUTES.filter { it in s.attributes }.joinToString(","), s.entityPicture.orEmpty(), config.name(s) ?: s.displayName,
         s.attributes["problem"]?.toString().orEmpty(), s.attributes["unit_of_measurement_dict"]?.toString().orEmpty(),
     ).joinToString("|")
 
@@ -909,7 +918,7 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
         val banner = FrameLayout(ctx.context)
         val header = smallText(ctx, if (hasPicture) 16f else 24f, if (hasPicture) Color.WHITE else ctx.theme.primaryTextColor,
             if (hasPicture) Inter.MEDIUM else Inter.REGULAR).apply {
-            text = config.name ?: s.displayName
+            text = config.name(s) ?: s.displayName
             gravity = Gravity.CENTER_VERTICAL
             if (hasPicture) {
                 val p = ctx.px(16f)

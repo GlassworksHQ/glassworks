@@ -458,9 +458,14 @@ class WebFallbackTest {
         assertEquals("`entities` `entities[1].row.type: attribute` isn't drawn natively: a row type Vitro doesn't draw as HA does (section, attribute, cast, an explicit *-entity type or a custom row)", reason(
             """{"type": "conditional", "conditions": [], "row": {"type": "attribute", "entity": "sun.sun", "attribute": "elevation"}}""",
         ))
-        // A plain row of a domain HA draws with a control Vitro doesn't have (a slider, a dropdown, Run, Lock).
-        for (domain in listOf("input_number", "input_select", "script", "scene", "button", "lock", "climate", "cover")) {
+        // A plain row of a domain HA draws with a control Vitro doesn't have (target temperatures, cover buttons, a
+        // date picker, a timer, media controls).
+        for (domain in listOf("climate", "cover", "input_datetime", "timer", "media_player", "input_text")) {
             assertTrue(domain, reason("\"$domain.x\"")!!.contains("(a `$domain` entity) isn't drawn natively"))
+        }
+        // The rows EntityRowControls draws: a slider or a box, a dropdown, Run, Activate, Press, Lock.
+        for (domain in listOf("input_number", "number", "input_select", "select", "script", "scene", "button", "input_button", "lock")) {
+            assertNull(domain, reason("\"$domain.x\""))
         }
         for (row in listOf(
             """{"type": "divider"}""", """{"entity": "light.b"}""", "\"light.b\"", "\"sensor.b\"", "\"input_boolean.b\"",

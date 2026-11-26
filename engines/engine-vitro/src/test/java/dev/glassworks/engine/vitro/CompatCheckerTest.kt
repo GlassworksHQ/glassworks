@@ -297,9 +297,11 @@ class CompatCheckerTest {
     fun tileFeaturesAreNativeOnlyWhereVitroDrawsThemAsHaDoes() {
         assertNull(dev.glassworks.engine.vitro.compat.WebFallback.cardReason(card("""{"type": "tile", "entity": "light.desk", "features": [{"type": "light-brightness"}]}""")))
         assertNull(dev.glassworks.engine.vitro.compat.WebFallback.cardReason(card("""{"type": "tile", "entity": "input_select.a", "features": [{"type": "select-options"}]}""")))
-        // Inline features aren't compared with HA yet, and fan-speed draws a slider where HA draws buttons for a few speeds.
+        // fan-speed draws HA's slider or its speed buttons, as the fan's step decides (tile-fan, tile-fan-speeds).
+        assertNull(dev.glassworks.engine.vitro.compat.WebFallback.cardReason(card("""{"type": "tile", "entity": "fan.a", "features": [{"type": "fan-speed"}, {"type": "toggle"}]}""")))
+        // Inline features aren't compared with HA yet, and alarm-modes isn't drawn.
         assertFrontend("""{"type": "tile", "entity": "light.desk", "features_position": "inline", "features": [{"type": "light-brightness"}]}""", "`features_position: inline`")
-        assertFrontend("""{"type": "tile", "entity": "fan.a", "features": [{"type": "fan-speed"}, {"type": "toggle"}]}""", "`features[0].type: fan-speed`")
+        assertFrontend("""{"type": "tile", "entity": "alarm_control_panel.a", "features": [{"type": "alarm-modes"}, {"type": "toggle"}]}""", "`features[0].type: alarm-modes`")
     }
 
     @Test

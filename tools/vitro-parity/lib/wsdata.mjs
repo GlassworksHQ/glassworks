@@ -27,6 +27,8 @@ export const RECORDED_TYPES = new Set([
   // Which streams a live camera offers (`camera_view: live`, ha-camera-stream): Vitro picks its player from the same
   // answer. The stream itself (`camera/stream`, the video) isn't recorded: the video is masked out of the comparison.
   'camera/capabilities',
+  // An update's release notes (`more-info-update`): Vitro's sheet draws the same Markdown.
+  'update/release_notes',
 ]);
 
 /**
@@ -86,8 +88,8 @@ export function wsRecorder() {
   };
 }
 
-/** The commands answered by one result (everything recorded but `history/stream`, a subscription). */
-const ONE_SHOT = new Set(['history/history_during_period', 'recorder/statistics_during_period', 'recorder/statistic_during_period', 'recorder/get_statistics_metadata', 'rest/history/period', 'config/auth/list']);
+/** The commands answered by one result (everything recorded but the subscriptions). */
+const ONE_SHOT = new Set(['history/history_during_period', 'recorder/statistics_during_period', 'recorder/statistic_during_period', 'recorder/get_statistics_metadata', 'rest/history/period', 'config/auth/list', 'update/release_notes']);
 
 /**
  * Whether a recorded call belongs in a reference: the user list only from the fake HA ([fake]) and only for a case

@@ -1,0 +1,62 @@
+{
+ "title": "Entity filter: one of three lights passes, so its entities card has one row and no header toggle",
+ "expect": {
+  "light.porch": "on",
+  "light.garden": "off",
+  "light.garage": "off"
+ },
+ "card": {
+  "type": "entity-filter",
+  "entities": [
+   "light.porch",
+   "light.garden",
+   "light.garage"
+  ],
+  "state_filter": [
+   "on"
+  ],
+  "card": {
+   "title": "Lights on"
+  }
+ },
+ "fixture": {
+  "states": {
+   "light.porch": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": "onoff",
+     "friendly_name": "Porch",
+     "supported_features": 0
+    }
+   },
+   "light.garden": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": null,
+     "friendly_name": "Garden",
+     "supported_features": 0
+    }
+   },
+   "light.garage": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": null,
+     "friendly_name": "Garage",
+     "supported_features": 0
+    }
+   }
+  }
+ }
+}

@@ -261,8 +261,8 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
             "custom:mushroom-vacuum-card" -> (raw.optJSONArray("commands")?.length() ?: 0) > 0
             "custom:mushroom-media-player-card" -> (raw.optJSONArray("media_controls")?.length() ?: 0) > 0 || (raw.optJSONArray("volume_controls")?.length() ?: 0) > 0
             "custom:mushroom-number-card", "custom:mushroom-select-card", "custom:mushroom-lock-card" -> true
-            // Without `states`, Mushroom's alarm card shows arm home and arm away.
-            "custom:mushroom-alarm-control-panel-card" -> raw.optJSONArray("states")?.length() != 0
+            // Mushroom's `hasControls`: `Boolean(config.states?.length)`; without `states` the card has no buttons.
+            "custom:mushroom-alarm-control-panel-card" -> (raw.optJSONArray("states")?.length() ?: 0) > 0
             else -> false
         }
 

@@ -43,6 +43,7 @@ object HaDisplay {
         val picture: String?,
         val temperatureEntityId: String?,
         val humidityEntityId: String?,
+        val floorId: String? = null,
     )
 
     /** Device id to its name (`name_by_user`, else `name`), from `config/device_registry/list`. */
@@ -53,8 +54,16 @@ object HaDisplay {
     @Volatile var deviceAreas: Map<String, String> = emptyMap()
         private set
 
+    /** Device id to its parent device's id (`parent_device_id`), from `config/device_registry/list`. */
+    @Volatile var deviceParents: Map<String, String> = emptyMap()
+        private set
+
     /** Area id to the area, from `config/area_registry/list`. */
     @Volatile var areas: Map<String, Area> = emptyMap()
+        private set
+
+    /** Floor id to its name, from `config/floor_registry/list`. */
+    @Volatile var floors: Map<String, String> = emptyMap()
         private set
 
     /** The registry in HA's order (an area card's sensors and camera follow it). */
@@ -69,12 +78,35 @@ object HaDisplay {
     private val iconDomains = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val iconPlatforms = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
-    /** Forgets everything (a new connection, or tests). */
+    /** The Home Assistant (its origin) whose data this holds, set by [connectionTo]. */
+    @Volatile private var origin: String? = null
+
+    /**
+     * A connection to Home Assistant at [origin] begins. Another Home Assistant's data goes at once ([reset]). The same
+     * one's stays, so cards keep their names, precision and translated states while the new connection's entity
+     * snapshot draws them, and the connection's answers replace it as they arrive: only what was loaded is forgotten,
+     * so every domain's and integration's icons and words are asked for again.
+     */
+    @Synchronized
+    fun connectionTo(origin: String?) {
+        if (origin == null || origin != this.origin) {
+            reset()
+            this.origin = origin
+            return
+        }
+        translatedDomains.clear(); translatedPlatforms.clear(); iconDomains.clear(); iconPlatforms.clear()
+    }
+
+    /** Forgets everything (a new Home Assistant, or tests). */
+    @Synchronized
     fun reset() {
+        origin = null
         registry = emptyMap()
         devices = emptyMap()
         deviceAreas = emptyMap()
+        deviceParents = emptyMap()
         areas = emptyMap()
+        floors = emptyMap()
         componentIcons.clear(); platformIcons.clear(); stateLabels.clear()
         labelRevision++
         translatedDomains.clear(); translatedPlatforms.clear(); iconDomains.clear(); iconPlatforms.clear()
@@ -117,15 +149,20 @@ object HaDisplay {
     fun applyDevices(result: org.json.JSONArray) {
         val out = HashMap<String, String>(result.length() * 2)
         val inArea = HashMap<String, String>()
+        val parents = HashMap<String, String>()
         for (i in 0 until result.length()) {
             val d = result.optJSONObject(i) ?: continue
             if (!d.isNull("area_id")) d.optString("area_id").takeIf { it.isNotEmpty() }?.let { inArea[d.optString("id")] = it }
+            if (d.has("parent_device_id") && !d.isNull("parent_device_id")) {
+                d.optString("parent_device_id").takeIf { it.isNotEmpty() }?.let { parents[d.optString("id")] = it }
+            }
             val name = d.optString("name_by_user").takeIf { it.isNotEmpty() && !d.isNull("name_by_user") }
                 ?: d.optString("name").takeIf { it.isNotEmpty() && !d.isNull("name") } ?: continue
             out[d.optString("id")] = name
         }
         devices = out
         deviceAreas = inArea
+        deviceParents = parents
     }
 
     /** Reads `config/area_registry/list`'s result. */
@@ -135,9 +172,24 @@ object HaDisplay {
         for (i in 0 until result.length()) {
             val a = result.optJSONObject(i) ?: continue
             val id = a.str("area_id") ?: continue
-            out[id] = Area(a.str("name") ?: id, a.str("icon"), a.str("picture"), a.str("temperature_entity_id"), a.str("humidity_entity_id"))
+            out[id] = Area(
+                a.str("name") ?: id, a.str("icon"), a.str("picture"), a.str("temperature_entity_id"), a.str("humidity_entity_id"),
+                a.str("floor_id"),
+            )
         }
         areas = out
+    }
+
+    /** Reads `config/floor_registry/list`'s result, keeping each floor's name. */
+    fun applyFloors(result: org.json.JSONArray) {
+        val out = HashMap<String, String>(result.length() * 2)
+        for (i in 0 until result.length()) {
+            val f = result.optJSONObject(i) ?: continue
+            val id = f.optString("floor_id").ifEmpty { continue }
+            if (f.isNull("name")) continue
+            f.optString("name").takeIf { it.isNotEmpty() }?.let { out[id] = it }
+        }
+        floors = out
     }
 
     /** [areaId]'s name, or null before the area registry is in (or for an unknown area). */
@@ -219,13 +271,18 @@ object HaDisplay {
         if (component) iconDomains += requested else iconPlatforms += requested
     }
 
-    /** `frontend/get_translations` for `entity_component` or `entity`: only the `.state.` labels are kept. */
+    /**
+     * `frontend/get_translations` for `entity_component` or `entity`: only the `.state.` labels and the attributes'
+     * names (`.state_attributes.<name>.name`) are kept.
+     */
     fun applyTranslations(result: JSONObject, component: Boolean, requested: Collection<String>) {
         val res = result.optJSONObject("resources") ?: JSONObject()
         val keys = res.keys()
         while (keys.hasNext()) {
             val k = keys.next()
-            if (".state." in k) res.optString(k).takeIf { it.isNotEmpty() }?.let { if (stateLabels.put(k, it) != it) labelRevision++ }
+            if (".state." in k || (".state_attributes." in k && k.endsWith(".name"))) {
+                res.optString(k).takeIf { it.isNotEmpty() }?.let { if (stateLabels.put(k, it) != it) labelRevision++ }
+            }
         }
         if (component) translatedDomains += requested else translatedPlatforms += requested
     }
@@ -239,10 +296,62 @@ object HaDisplay {
             platformIcons[entry.platform]?.optJSONObject(domain)?.optJSONObject(entry.translationKey)
                 ?.let { fromTranslations(it, s) }?.let { return it }
         }
+        stateIcon(s)?.let { return it }
         val comp = componentIcons[domain] ?: return null
         val byClass = s.deviceClass?.let { comp.optJSONObject(it) } ?: comp.optJSONObject("_") ?: return null
         return fromTranslations(byClass, s)
     }
+
+    /**
+     * HA's `stateIcon` (`common/entity/state_icon.ts`), between the integration's icons and the domain's: an update
+     * installing, a device tracker by how it's tracked, the sun, a date-only or time-only input_datetime.
+     */
+    internal fun stateIcon(s: EntityState): String? {
+        val a = s.attributes
+        return when (s.domain) {
+            "update" -> when {
+                a["in_progress"].let { it != null && it != false && it != 0 && it != "" } -> "mdi:package-down"
+                s.state == "on" -> "mdi:package-up"
+                else -> "mdi:package"
+            }
+            "device_tracker" -> when (a["source_type"]) {
+                "router" -> if (s.state == "home") "mdi:lan-connect" else "mdi:lan-disconnect"
+                "bluetooth", "bluetooth_le" -> if (s.state == "home") "mdi:bluetooth-connect" else "mdi:bluetooth"
+                else -> if (s.state == "not_home") "mdi:account-arrow-right" else "mdi:account"
+            }
+            "sun" -> if (s.state == "above_horizon") "mdi:white-balance-sunny" else "mdi:weather-night"
+            "input_datetime" -> when {
+                a["has_date"].let { it == null || it == false } -> "mdi:clock"
+                a["has_time"].let { it == null || it == false } -> "mdi:calendar"
+                else -> null
+            }
+            else -> null
+        }
+    }
+
+    /**
+     * HA's `attributeIcon` (`data/icons.ts`): the icon of [attribute]'s [value] (a climate's `hvac_action`), from the
+     * integration's icons for the entity's translation key, else the domain's for its device class or its default.
+     * Null until HA's icons are loaded, or when none is set.
+     */
+    fun attributeIcon(s: EntityState, attribute: String, value: String): String? {
+        val entry = registry[s.entityId]
+        val domain = s.domain
+        if (entry?.translationKey != null && entry.platform != null) {
+            platformIcons[entry.platform]?.optJSONObject(domain)?.optJSONObject(entry.translationKey)
+                ?.optJSONObject("state_attributes")?.optJSONObject(attribute)
+                ?.let { fromAttributeTranslations(it, value) }?.let { return it }
+        }
+        val comp = componentIcons[domain] ?: return null
+        val t = s.deviceClass?.let { comp.optJSONObject(it)?.optJSONObject("state_attributes")?.optJSONObject(attribute) }
+            ?: comp.optJSONObject("_")?.optJSONObject("state_attributes")?.optJSONObject(attribute)
+            ?: return null
+        return fromAttributeTranslations(t, value)
+    }
+
+    /** HA's `getIconFromTranslations` for an attribute value: its `state` match, else `default`. */
+    private fun fromAttributeTranslations(t: JSONObject, value: String): String? =
+        t.optJSONObject("state")?.optString(value)?.takeIf { it.isNotEmpty() } ?: t.optString("default").takeIf { it.isNotEmpty() }
 
     /** The domain's own icon for [s]'s state and device class, skipping the entity's and its integration's. */
     fun domainIcon(s: EntityState): String? {
@@ -301,6 +410,23 @@ object HaDisplay {
     }
 
     /** The domain's own word for [state] (`component.<domain>.entity_component._.state.<state>`), when loaded. */
+    /**
+     * HA's `formatEntityAttributeName` ([attribute] `fan_speed` = "Fan speed"): the integration's name for it, the
+     * device class's, the domain's, else the attribute's own words, capitalized, as `computeAttributeNameDisplay`.
+     */
+    fun attributeName(s: EntityState, attribute: String): String {
+        val entry = registry[s.entityId]
+        val domain = s.domain
+        if (entry?.translationKey != null && entry.platform != null) {
+            stateLabels["component.${entry.platform}.entity.$domain.${entry.translationKey}.state_attributes.$attribute.name"]?.let { return it }
+        }
+        s.deviceClass?.let { dc -> stateLabels["component.$domain.entity_component.$dc.state_attributes.$attribute.name"]?.let { return it } }
+        stateLabels["component.$domain.entity_component._.state_attributes.$attribute.name"]?.let { return it }
+        return attribute.replace('_', ' ').replace(Regex("""\bid\b"""), "ID").replace(Regex("""\bip\b"""), "IP")
+            .replace(Regex("""\bmac\b"""), "MAC").replace(Regex("""\bgps\b"""), "GPS")
+            .replaceFirstChar { it.titlecase(java.util.Locale.ROOT) }
+    }
+
     /**
      * Every state label read so far (`component.<domain>.entity_component.<class>.state.<state>`, and an
      * integration's `component.<platform>.entity.…`), keyed as HA's `localize` reads them: for web islands.

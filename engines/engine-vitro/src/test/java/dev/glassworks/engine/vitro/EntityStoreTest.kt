@@ -451,7 +451,9 @@ class EntityStoreTest {
     fun lightFormatsBrightnessWhenOn() {
         assertEquals("50%", entity("light.a", "on", "brightness" to 128).formattedState())
         assertEquals("On", entity("light.a", "on").formattedState())
-        assertEquals("Off", entity("light.a", "off", "brightness" to 128).formattedState())
+        assertEquals("Off", entity("light.a", "off", "brightness" to null).formattedState())
+        // HA's state-display reads the attribute, not the state: a brightness an integration keeps while off shows.
+        assertEquals("50%", entity("light.a", "off", "brightness" to 128).formattedState())
     }
 
     @Test

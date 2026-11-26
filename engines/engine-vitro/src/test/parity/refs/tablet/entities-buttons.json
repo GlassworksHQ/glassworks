@@ -1,0 +1,347 @@
+{
+ "case": "entities-buttons",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 330
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 314,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Goodnight",
+   "x": 73,
+   "y": 28.8,
+   "w": 64.67,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Run",
+   "x": 452.52,
+   "y": 29,
+   "w": 24.31,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Water garden",
+   "x": 73,
+   "y": 76.8,
+   "w": 83.13,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Cancel",
+   "x": 433.91,
+   "y": 77,
+   "w": 42.92,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(243, 103, 108)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Chime",
+   "x": 73,
+   "y": 124.8,
+   "w": 39.92,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Cancel 2",
+   "x": 372.16,
+   "y": 125,
+   "w": 54.36,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(243, 103, 108)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Run",
+   "x": 452.52,
+   "y": 125,
+   "w": 24.31,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Movie night",
+   "x": 73,
+   "y": 172.8,
+   "w": 72.44,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Start",
+   "x": 446.22,
+   "y": 173,
+   "w": 30.61,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Ring doorbell",
+   "x": 73,
+   "y": 220.8,
+   "w": 81.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Press",
+   "x": 441.11,
+   "y": 221,
+   "w": 35.72,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hub Restart",
+   "x": 73,
+   "y": 268.8,
+   "w": 74.13,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Press",
+   "x": 441.11,
+   "y": 269,
+   "w": 35.72,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(94, 94, 94)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "button.reboot_hub": {
+   "s": "unavailable",
+   "a": {
+    "device_class": "restart",
+    "friendly_name": "Hub Restart"
+   },
+   "lc": 1794498780,
+   "lu": 1794498780
+  },
+  "input_button.ring_doorbell": {
+   "s": "unknown",
+   "a": {
+    "editable": true,
+    "icon": "mdi:doorbell",
+    "friendly_name": "Ring doorbell"
+   },
+   "lc": 1794445680,
+   "lu": 1794445680
+  },
+  "scene.movie_night": {
+   "s": "unknown",
+   "a": {
+    "entity_id": [
+     "light.hallway_ceiling_ring"
+    ],
+    "id": "movie_night",
+    "icon": "mdi:movie",
+    "friendly_name": "Movie night"
+   },
+   "lc": 1794457680,
+   "lu": 1794457680
+  },
+  "script.chime": {
+   "s": "on",
+   "a": {
+    "last_triggered": "2026-11-12T16:07:00+00:00",
+    "mode": "queued",
+    "current": 2,
+    "max": 10,
+    "icon": "mdi:bell-ring",
+    "friendly_name": "Chime"
+   },
+   "lc": 1794499620,
+   "lu": 1794499620
+  },
+  "script.goodnight": {
+   "s": "off",
+   "a": {
+    "last_triggered": null,
+    "mode": "single",
+    "current": 0,
+    "icon": "mdi:weather-night",
+    "friendly_name": "Goodnight"
+   },
+   "lc": 1794463680,
+   "lu": 1794463680
+  },
+  "script.water_garden": {
+   "s": "on",
+   "a": {
+    "last_triggered": "2026-11-12T16:06:00+00:00",
+    "mode": "single",
+    "current": 1,
+    "icon": "mdi:sprinkler",
+    "friendly_name": "Water garden"
+   },
+   "lc": 1794499560,
+   "lu": 1794499560
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "button.reboot_hub",
+    "pl": "demo",
+    "en": "Hub Restart"
+   },
+   {
+    "ei": "input_button.ring_doorbell",
+    "pl": "input_button",
+    "en": "Ring doorbell"
+   },
+   {
+    "ei": "scene.movie_night",
+    "pl": "homeassistant",
+    "en": "Movie night"
+   },
+   {
+    "ei": "script.chime",
+    "pl": "script",
+    "en": "Chime"
+   },
+   {
+    "ei": "script.goodnight",
+    "pl": "script",
+    "en": "Goodnight"
+   },
+   {
+    "ei": "script.water_garden",
+    "pl": "script",
+    "en": "Water garden"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "button",
+    "input_button",
+    "scene",
+    "script"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "button": {
+     "_": {
+      "default": "mdi:button-pointer"
+     },
+     "restart": {
+      "default": "mdi:restart"
+     }
+    },
+    "script": {
+     "_": {
+      "default": "mdi:script-text",
+      "state": {
+       "on": "mdi:script-text-play"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.script.entity_component._.state.off": "Off",
+    "component.script.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

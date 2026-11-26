@@ -1,0 +1,55 @@
+{
+ "title": "More Info of an update whose latest version was skipped: its release summary, Clear skipped, Update enabled for the skipped version",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "markdown",
+  "content": "Hallway Display firmware"
+ },
+ "more_info": "update.hallway_display_firmware",
+ "expect": {
+  "update.hallway_display_firmware": "off"
+ },
+ "fixture": {
+  "admin": false,
+  "states": {
+   "update.hallway_display_firmware": {
+    "state": "off",
+    "last_changed": -7200,
+    "attributes": {
+     "friendly_name": "Hallway Display Firmware",
+     "title": "Hallway Display",
+     "auto_update": false,
+     "display_precision": 0,
+     "in_progress": false,
+     "update_percentage": null,
+     "skipped_version": "2026.11.0",
+     "release_summary": "Fixes the **backlight** flicker.",
+     "release_url": null,
+     "entity_picture": null,
+     "supported_features": 1,
+     "installed_version": "2026.10.1",
+     "latest_version": "2026.11.0"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "update.hallway_display_firmware",
+    "pl": "esphome",
+    "di": "dev-hallway-display",
+    "en": "Firmware",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway-display",
+    "name": "Hallway Display"
+   }
+  ]
+ }
+}

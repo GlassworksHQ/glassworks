@@ -1,0 +1,120 @@
+{
+ "title": "Entities rows HA draws as controls: a slider, a dropdown, Run, Activate, Press, Unlock",
+ "card": {
+  "type": "entities",
+  "title": "Evening",
+  "entities": [
+   "input_number.target_temperature",
+   "input_select.house_mode",
+   "script.goodnight",
+   "scene.movie_night",
+   "button.restart_router",
+   "lock.garden_gate"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "input_number.target_temperature": {
+    "state": "21.5",
+    "last_changed": "-40m",
+    "attributes": {
+     "initial": null,
+     "editable": true,
+     "min": 15,
+     "max": 25,
+     "step": 0.5,
+     "mode": "slider",
+     "unit_of_measurement": "°C",
+     "icon": "mdi:thermometer",
+     "friendly_name": "Target temperature"
+    }
+   },
+   "input_select.house_mode": {
+    "state": "Evening",
+    "last_changed": "-90m",
+    "attributes": {
+     "options": [
+      "Day",
+      "Evening",
+      "Night",
+      "Away"
+     ],
+     "editable": true,
+     "icon": "mdi:home",
+     "friendly_name": "House mode"
+    }
+   },
+   "script.goodnight": {
+    "state": "off",
+    "last_changed": "-600m",
+    "attributes": {
+     "last_triggered": null,
+     "mode": "single",
+     "current": 0,
+     "icon": "mdi:weather-night",
+     "friendly_name": "Goodnight"
+    }
+   },
+   "scene.movie_night": {
+    "state": "unknown",
+    "last_changed": "-700m",
+    "attributes": {
+     "entity_id": [
+      "light.hallway_ceiling_ring"
+     ],
+     "id": "movie_night",
+     "icon": "mdi:movie",
+     "friendly_name": "Movie night"
+    }
+   },
+   "button.restart_router": {
+    "state": "unknown",
+    "last_changed": "-800m",
+    "attributes": {
+     "device_class": "restart",
+     "friendly_name": "Router Restart"
+    }
+   },
+   "lock.garden_gate": {
+    "state": "locked",
+    "last_changed": "-120m",
+    "attributes": {
+     "friendly_name": "Garden gate",
+     "supported_features": 0
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "input_number.target_temperature",
+    "pl": "input_number",
+    "en": "Target temperature"
+   },
+   {
+    "ei": "input_select.house_mode",
+    "pl": "input_select",
+    "en": "House mode"
+   },
+   {
+    "ei": "script.goodnight",
+    "pl": "script",
+    "en": "Goodnight"
+   },
+   {
+    "ei": "scene.movie_night",
+    "pl": "homeassistant",
+    "en": "Movie night"
+   },
+   {
+    "ei": "button.restart_router",
+    "pl": "demo",
+    "en": "Router Restart"
+   },
+   {
+    "ei": "lock.garden_gate",
+    "pl": "demo",
+    "en": "Garden gate"
+   }
+  ]
+ }
+}

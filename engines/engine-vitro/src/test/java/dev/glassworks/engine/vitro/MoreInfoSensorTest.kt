@@ -264,6 +264,46 @@ class MoreInfoSensorTest {
     }
 
     @Test
+    fun aSlowAnswerToAnEarlierRefreshDoesntReplaceANewerChart() {
+        // D40: statistics are fetched again every minute, all in one generation. The newest refresh's answer is drawn; a
+        // late answer to an earlier one is dropped instead of putting older data over it.
+        val sheet = open(sensor(mapOf("state_class" to "measurement")))
+        val history = all(sheet).filterIsInstance<MoreInfoHistoryView>().single()
+        val shown = MoreInfoHistoryView::class.java.getDeclaredField("statistics").apply { isAccessible = true }
+        fun answer(at: Int, mean: Double) {
+            val start = (now - 3_600_000L).toDouble()
+            val row = JSONObject().put("start", start).put("end", start + 300_000).put("mean", mean).put("min", mean).put("max", mean).put("state", mean)
+            answers.subList(at, at + 2).forEach { (msg, done) ->
+                if (msg.getString("type") == "recorder/get_statistics_metadata") {
+                    done(true, JSONArray().put(JSONObject().put("statistic_id", SENSOR).put("statistics_unit_of_measurement", "lx")), null)
+                } else {
+                    done(true, JSONObject().put(SENSOR, JSONArray().put(row)), null)
+                }
+            }
+            idle()
+        }
+        fun mean() = (shown.get(history) as JSONObject).getJSONArray(SENSOR).getJSONObject(0).getDouble("mean")
+        answer(0, 1.0)
+        assertEquals(1.0, mean(), 0.0)
+        // Two refreshes go out, a minute apart, before either is answered.
+        ShadowLooper.idleMainLooper(MoreInfoHistoryView.MINUTE_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        ShadowLooper.idleMainLooper(MoreInfoHistoryView.MINUTE_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(6, answers.size)
+        answer(4, 3.0) // the newest
+        answer(2, 2.0) // the one before it, late
+        assertEquals("the newest refresh's data stays", 3.0, mean(), 0.0)
+        // Every answer slower than a minute: a refresh goes out before the last one is answered, and the late answer
+        // still draws, as no newer one has.
+        ShadowLooper.idleMainLooper(MoreInfoHistoryView.MINUTE_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        ShadowLooper.idleMainLooper(MoreInfoHistoryView.MINUTE_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(10, answers.size)
+        answer(6, 4.0)
+        assertEquals("a slow answer still draws when nothing newer has", 4.0, mean(), 0.0)
+        answer(8, 5.0)
+        assertEquals(5.0, mean(), 0.0)
+    }
+
+    @Test
     fun aReconnectLeavesALiveStateHistoryStreamToTheClient() {
         // The client sends a held subscription again on the new connection (HaDashboardClientTest): the sheet asking
         // for another one would only double it.

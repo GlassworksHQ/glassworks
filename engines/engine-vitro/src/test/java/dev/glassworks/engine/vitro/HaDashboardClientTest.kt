@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro
 import dev.glassworks.auth.HaSocket
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
+import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.DashboardSummary
@@ -77,6 +78,8 @@ class HaDashboardClientTest {
     fun tearDown() {
         clients.forEach { it.close() }
         server.shutdown()
+        HaDisplay.reset()
+        VitroFailures.listener = null
     }
 
     /** Wraps a [FakeHaServer] socket to watch (and, with [after], answer or fail) each message the client writes. */
@@ -106,6 +109,7 @@ class HaDashboardClientTest {
         authTimeoutMs: Long = HaDashboardClient.AUTH_TIMEOUT_MS,
         keepAliveMs: Long = HaDashboardClient.KEEP_ALIVE_MS,
         pongTimeoutMs: Long = HaDashboardClient.PONG_TIMEOUT_MS,
+        configRetryMs: LongArray = HaDashboardClient.CONFIG_RETRY_MS,
     ): HaDashboardClient {
         val c = HaDashboardClient(
             haBase = haBase,
@@ -116,6 +120,7 @@ class HaDashboardClientTest {
             authTimeoutMs = authTimeoutMs,
             keepAliveMs = keepAliveMs,
             pongTimeoutMs = pongTimeoutMs,
+            configRetryMs = configRetryMs,
         )
         clients += c
         return c
@@ -125,8 +130,12 @@ class HaDashboardClientTest {
      * A started client with the whole startup sequence done (the first entity subscription is on the wire). Its view
      * follows every entity, picked before the start, as a reconnect finds it.
      */
-    private fun connected(dashboardPath: String? = null, connect: (String) -> HaSocket = server::connect): HaDashboardClient {
-        val c = newClient(connect = connect)
+    private fun connected(
+        dashboardPath: String? = null,
+        connect: (String) -> HaSocket = server::connect,
+        configRetryMs: LongArray = HaDashboardClient.CONFIG_RETRY_MS,
+    ): HaDashboardClient {
+        val c = newClient(connect = connect, configRetryMs = configRetryMs)
         c.subscribeViewEntities(emptySet())
         c.start(dashboardPath)
         awaitCondition("startup sequence") {
@@ -178,8 +187,10 @@ class HaDashboardClientTest {
         // After the user's: their panels (what HA's frontend opens for them), and HA's changes to them.
         assertEquals(listOf("get_panels", "subscribe_events"), sent.drop(12).take(2).map { it.getString("type") })
         assertEquals("panels_updated", sent[13].getString("event_type"))
+        // Then the registries native cards draw with, followed on every connection.
+        awaitCondition("registry events subscribed") { server.eventSubscriptionId("area_registry_updated") != null }
         assertEquals(
-            listOf("themes_updated", "lovelace_updated", "panels_updated"),
+            listOf("themes_updated", "lovelace_updated", "panels_updated", "entity_registry_updated", "device_registry_updated", "area_registry_updated"),
             server.commands("subscribe_events").map { it.getString("event_type") },
         )
     }
@@ -970,9 +981,12 @@ class HaDashboardClientTest {
         // FIFO: ids go out in the order the calls were made, across the reader's and the caller's requests.
         val ids = server.received.drop(1).map { it.getInt("id") }
         assertEquals(ids.sorted(), ids)
-        // Display data (registry, icons, translations) can interleave: it isn't what this test orders.
+        // Display data (registry, icons, translations, the registries' update events) can interleave: it isn't what
+        // this test orders.
         val display = setOf("config/entity_registry/list_for_display", "config/device_registry/list", "config/area_registry/list", "frontend/get_icons", "frontend/get_translations")
-        val after = server.received.drop(1).filter { it.getInt("id") > 14 && it.getString("type") !in display }.map {
+        val after = server.received.drop(1).filter {
+            it.getInt("id") > 14 && it.getString("type") !in display && !it.optString("event_type").endsWith("_registry_updated")
+        }.map {
             if (it.getString("type") == "call_service") it.getString("service") else it.getString("type")
         }
         assertEquals(listOf("turn_on", "turn_off", "history/history_during_period", "toggle"), after.take(4))
@@ -1338,6 +1352,63 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun aConfigErrorThatMayPassIsAskedAgainBeforeAnythingIsReported() {
+        // A12: HA still starting answers `unknown_command` until Lovelace is loaded. Only `config_not_found` means HA
+        // has no config; anything else is asked again, and the config that comes is drawn.
+        server.configFailures += listOf("unknown_command", "home_assistant_error")
+        connected(dashboardPath = "wall-test", configRetryMs = longArrayOf(50, 50, 50))
+        assertEquals("wall-test", listener.configs.single().first)
+        assertTrue(listener.failedConfigs.toString(), listener.failedConfigs.isEmpty())
+        assertEquals(3, server.commands("lovelace/config").size)
+    }
+
+    @Test
+    fun aConfigErrorThatLastsIsReportedOnceItsRetriesAreSpent() {
+        server.configError = "error" // a YAML dashboard that doesn't load
+        val c = newClient(configRetryMs = longArrayOf(50, 50))
+        c.start("wall-test")
+        awaitCondition("failure reported") { listener.failedConfigs.isNotEmpty() }
+        Thread.sleep(300)
+        assertEquals(listOf<Pair<String?, String>>("wall-test" to "error"), listener.failedConfigs.toList())
+        assertEquals("the first ask and two retries", 3, server.commands("lovelace/config").size)
+        assertTrue(listener.configs.isEmpty())
+    }
+
+    @Test
+    fun aNewerFetchEndsTheRetriesOfAnOlderOne() {
+        server.configError = "unknown_command"
+        val c = newClient(configRetryMs = longArrayOf(300, 300, 300))
+        c.start("wall-test")
+        awaitCondition("the first answer") { server.commands("lovelace/config").isNotEmpty() }
+        server.configError = null
+        c.fetchDashboard("other")
+        awaitCondition("the other config") { listener.configs.any { it.first == "other" } }
+        Thread.sleep(1_200)
+        assertEquals("wall-test is never asked again after the move", 1, server.commands("lovelace/config").count { it.optString("url_path") == "wall-test" })
+        assertTrue(listener.failedConfigs.isEmpty())
+    }
+
+    @Test
+    fun aCallbackThatThrowsLeavesTheConnectionUp() {
+        // A13: a throw in a result or event callback is that callback's alone, not a lost connection.
+        val contained = CopyOnWriteArrayList<String>()
+        VitroFailures.listener = { where, _, _ -> contained += where }
+        val c = connected()
+        c.callWs(JSONObject().put("type", "config/area_registry/list")) { _, _, _ -> throw IllegalStateException("a card's callback") }
+        val templates = AtomicInteger(0)
+        c.subscribeTemplate("{{ 1 }}") { templates.incrementAndGet(); throw IllegalStateException("a card's template callback") }
+        awaitCondition("both contained") { contained.size >= 2 }
+        // The same connection still answers.
+        val done = CompletableFuture<Boolean>()
+        c.callWs(JSONObject().put("type", "config/area_registry/list")) { ok, _, _ -> done.complete(ok) }
+        assertTrue(done.get(10, TimeUnit.SECONDS))
+        assertTrue(listener.disconnected.toString(), listener.disconnected.isEmpty())
+        assertEquals(1, listener.connected.size)
+        assertEquals(1, server.connectUrls.size)
+        assertTrue(contained.toString(), contained.containsAll(listOf("socket result", "socket event")))
+    }
+
+    @Test
     fun aNewEntitySubscriptionDropsEntitiesThatAreGone() {
         val c = connected()
         awaitCondition("snapshot applied") { store["binary_sensor.front_door"] != null }
@@ -1404,9 +1475,11 @@ class HaDashboardClientTest {
         withRegistries()
         val c = connected()
         Thread.sleep(200)
-        // The startup reads no floors and subscribes to no registry event: only islands need those.
+        // The startup reads no floors and doesn't follow them: only islands need those. The entity, device and area
+        // registries are followed on every connection, for the native cards.
         assertTrue(server.commands("config/floor_registry/list").isEmpty())
-        assertNull(server.eventSubscriptionId("device_registry_updated"))
+        assertNull(server.eventSubscriptionId("floor_registry_updated"))
+        assertNotNull(server.eventSubscriptionId("device_registry_updated"))
 
         val sets = CopyOnWriteArrayList<JSONObject>()
         val release = c.watchRegistries { sets += it }
@@ -1418,7 +1491,8 @@ class HaDashboardClientTest {
         assertEquals("Ball Lamp", set.getJSONObject("devices").getJSONObject("dev-1").getString("name"))
         assertEquals("Lounge", set.getJSONObject("areas").getJSONObject("lounge").getString("name"))
         assertEquals(0, set.getJSONObject("floors").getJSONObject("ground").getInt("level"))
-        val registrySubs = listOf("entity_registry_updated", "device_registry_updated", "area_registry_updated", "floor_registry_updated")
+        // The islands' own: the floors. The other three are the native cards' too, and stay.
+        val registrySubs = listOf("floor_registry_updated")
             .map { event -> server.eventSubscriptionId(event).also { assertNotNull(event, it) }!! }
         fun cancelled() = server.commands("unsubscribe_events").map { it.getInt("subscription") }.filter { it in registrySubs }
 
@@ -1464,14 +1538,139 @@ class HaDashboardClientTest {
         val sets = CopyOnWriteArrayList<JSONObject>()
         val release = c.watchRegistries { sets += it }
         awaitCondition("the registries") { sets.size == 1 }
-        val devicesAsked = server.commands("config/device_registry/list").size
-        val sub = server.eventSubscriptionId("device_registry_updated")!!
-        server.pushEvent(sub, JSONObject().put("event_type", "device_registry_updated").put("data", JSONObject()))
+        val floorsAsked = server.commands("config/floor_registry/list").size
+        val sub = server.eventSubscriptionId("floor_registry_updated")!!
+        server.pushEvent(sub, JSONObject().put("event_type", "floor_registry_updated").put("data", JSONObject()))
         awaitCondition("the event is in") { c.javaClass.getDeclaredField("registryDue").apply { isAccessible = true }.let { (it.get(c) as Set<*>).isNotEmpty() } }
         release()
         Thread.sleep(HaDashboardClient.REGISTRY_DEBOUNCE_MS + 300)
-        assertEquals(devicesAsked, server.commands("config/device_registry/list").size)
+        assertEquals(floorsAsked, server.commands("config/floor_registry/list").size)
         assertEquals(1, sets.size)
+    }
+
+    @Test
+    fun aDeviceRenamedInHomeAssistantRedrawsTheNativeCardsWithoutAReconnect() {
+        // A6: HA's frontend follows the entity, device and area registries all the time; so do the native cards.
+        withRegistries()
+        server.entityRegistryDisplay = JSONObject(
+            """{"entities": [{"ei": "light.lounge_lamp", "di": "dev-1", "en": "Light"}, {"ei": "sensor.kitchen_temp", "dp": 1}]}""",
+        )
+        val c = connected()
+        awaitCondition("the display data") { HaDisplay.deviceName("dev-1") == "Ball Lamp" && HaDisplay.areaName("lounge") == "Lounge" }
+        val woken = AtomicInteger(0)
+        store.subscribe("light.lounge_lamp") { woken.incrementAndGet() }
+
+        // The device is renamed: one read of the device list for the burst, and every card draws again.
+        server.deviceRegistry = JSONArray("""[{"id": "dev-1", "name": "Ball Lamp", "name_by_user": "Desk Lamp", "area_id": "lounge"}]""")
+        val devicesAsked = server.commands("config/device_registry/list").size
+        val devices = server.eventSubscriptionId("device_registry_updated")
+        assertNotNull("the device registry is followed without any island", devices)
+        repeat(3) { server.pushEvent(devices!!, JSONObject().put("event_type", "device_registry_updated").put("data", JSONObject())) }
+        awaitCondition("the new name") { HaDisplay.deviceEntityName("light.lounge_lamp") == "Desk Lamp Light" }
+        awaitCondition("the cards draw again") { woken.get() >= 1 }
+        assertEquals("one read for the burst", devicesAsked + 1, server.commands("config/device_registry/list").size)
+
+        // The sensor's display precision changes, and an area is renamed.
+        server.entityRegistryDisplay = JSONObject(
+            """{"entities": [{"ei": "light.lounge_lamp", "di": "dev-1", "en": "Light"}, {"ei": "sensor.kitchen_temp", "dp": 2}]}""",
+        )
+        server.pushEvent(server.eventSubscriptionId("entity_registry_updated")!!, JSONObject().put("event_type", "entity_registry_updated").put("data", JSONObject()))
+        awaitCondition("the new precision") { HaDisplay.displayPrecision("sensor.kitchen_temp") == 2 }
+        server.areaRegistry = JSONArray("""[{"area_id": "lounge", "name": "Living room"}]""")
+        server.pushEvent(server.eventSubscriptionId("area_registry_updated")!!, JSONObject().put("event_type", "area_registry_updated").put("data", JSONObject()))
+        awaitCondition("the new area name") { HaDisplay.areaName("lounge") == "Living room" }
+        // Nobody asked for floors: the native cards don't draw them.
+        assertTrue(server.commands("config/floor_registry/list").isEmpty())
+        assertTrue(listener.disconnected.isEmpty())
+        c.close()
+    }
+
+    @Test
+    fun anAreaPutOnAFloorLoadsItsNameAndFollowsTheFloors() {
+        withRegistries()
+        val c = connected()
+        awaitCondition("the areas") { HaDisplay.areaName("lounge") == "Lounge" }
+        assertTrue("no area on a floor: no floors", server.commands("config/floor_registry/list").isEmpty())
+        // The area is put on a floor in HA: an area event, no floor event.
+        server.areaRegistry = JSONArray("""[{"area_id": "lounge", "name": "Lounge", "floor_id": "ground"}]""")
+        server.pushEvent(server.eventSubscriptionId("area_registry_updated")!!, JSONObject().put("event_type", "area_registry_updated").put("data", JSONObject()))
+        awaitCondition("the floor's name") { HaDisplay.floors["ground"] == "Ground floor" }
+        // The floor is renamed: followed natively, with no island watching.
+        val floors = server.eventSubscriptionId("floor_registry_updated")
+        assertNotNull("the floors are followed once a name needs them", floors)
+        server.floorRegistry = JSONArray("""[{"floor_id": "ground", "name": "Downstairs", "level": 0}]""")
+        server.pushEvent(floors!!, JSONObject().put("event_type", "floor_registry_updated").put("data", JSONObject()))
+        awaitCondition("the new floor name") { HaDisplay.floors["ground"] == "Downstairs" }
+        c.close()
+    }
+
+    @Test
+    fun aReconnectKeepsTheDisplayDataUntilTheNewConnectionsAnswersReplaceIt() {
+        // A8: the new connection's entity snapshot draws every card before its registry answers are in. Until they
+        // are, the cards keep the device names they had, not the plain friendly names.
+        withRegistries()
+        val atSnapshot = CopyOnWriteArrayList<String>()
+        connected(connect = { url ->
+            SpySocket(server.connect(url), before = { m ->
+                if (m.optString("type") == "subscribe_entities") atSnapshot += HaDisplay.deviceName("dev-1") ?: "(none)"
+            })
+        })
+        awaitCondition("the display data") { HaDisplay.deviceName("dev-1") == "Ball Lamp" }
+        server.deviceRegistry = JSONArray("""[{"id": "dev-1", "name": "Ceiling Lamp"}]""")
+        server.dropConnection()
+        awaitCondition("the second snapshot", timeoutMs = 15_000) { atSnapshot.size == 2 }
+        assertEquals("the same Home Assistant's names stay while the snapshot draws", "Ball Lamp", atSnapshot[1])
+        // Then the new connection's answer replaces them.
+        awaitCondition("the new name") { HaDisplay.deviceName("dev-1") == "Ceiling Lamp" }
+    }
+
+    /**
+     * A socket whose reader waits while [open] is false: answers pile up, to be read in one go. [atGate] says the reader
+     * is waiting there; a close lets it through.
+     */
+    private class GatedSocket(private val inner: HaSocket) : HaSocket {
+        @Volatile var open = true
+        @Volatile var atGate = false
+        @Volatile private var closed = false
+        override fun send(text: String) = inner.send(text)
+        override fun receive(): String? {
+            while (!open && !closed) {
+                atGate = true
+                Thread.sleep(5)
+            }
+            atGate = false
+            return inner.receive()
+        }
+        override fun close() {
+            closed = true
+            inner.close()
+        }
+    }
+
+    @Test
+    fun aFeedStartedAgainOnTheSameConnectionTakesNoReadOfTheOneBefore() {
+        // D12: the islands' feed stops and starts again on one connection while the first feed's reads are on their way.
+        // Their answers belong to the stopped feed: the new one's first set is its own reads', with today's devices.
+        withRegistries()
+        val sockets = CopyOnWriteArrayList<GatedSocket>()
+        val c = connected(connect = { url -> GatedSocket(server.connect(url)).also { sockets += it } })
+        awaitCondition("the startup's display data") { HaDisplay.deviceName("dev-1") == "Ball Lamp" }
+        val gate = sockets.last()
+        gate.open = false
+        // The reader may be inside a read already: one answer more gets it out, and it then waits at the gate. (If it
+        // is at the gate already, the answer waits there too, and is read with the rest.)
+        c.callWs(JSONObject().put("type", "ping")) { _, _, _ -> }
+        awaitCondition("the reader at the gate") { gate.atGate }
+        val first = c.watchRegistries {}
+        first() // stopped before any of its reads is answered
+        server.deviceRegistry = JSONArray("""[{"id": "dev-1", "name": "Floor Lamp", "area_id": "lounge"}]""")
+        val sets = CopyOnWriteArrayList<JSONObject>()
+        c.watchRegistries { sets += it }
+        gate.open = true
+        awaitCondition("the new feed's set") { sets.isNotEmpty() }
+        Thread.sleep(300)
+        assertEquals("one set, from the new feed's reads", 1, sets.size)
+        assertEquals("Floor Lamp", sets[0].getJSONObject("devices").getJSONObject("dev-1").getString("name"))
     }
 
     @Test

@@ -1,0 +1,71 @@
+{
+ "title": "Entities: dropdown rows (input_select, select), one renamed, one unavailable",
+ "card": {
+  "type": "entities",
+  "title": "Modes",
+  "entities": [
+   "input_select.house_mode",
+   {
+    "entity": "select.dryer_program",
+    "name": "Dryer"
+   },
+   "input_select.guest_scene"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "input_select.house_mode": {
+    "state": "Evening",
+    "last_changed": "-90m",
+    "attributes": {
+     "options": [
+      "Day",
+      "Evening",
+      "Night",
+      "Away"
+     ],
+     "editable": true,
+     "icon": "mdi:home",
+     "friendly_name": "House mode"
+    }
+   },
+   "select.dryer_program": {
+    "state": "Cotton",
+    "last_changed": "-30m",
+    "attributes": {
+     "options": [
+      "Cotton",
+      "Synthetics",
+      "Wool",
+      "Quick"
+     ],
+     "friendly_name": "Dryer Program"
+    }
+   },
+   "input_select.guest_scene": {
+    "state": "unavailable",
+    "last_changed": "-10m",
+    "attributes": {
+     "friendly_name": "Guest scene"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "input_select.house_mode",
+    "pl": "input_select",
+    "en": "House mode"
+   },
+   {
+    "ei": "select.dryer_program",
+    "pl": "demo",
+    "en": "Dryer Program"
+   },
+   {
+    "ei": "input_select.guest_scene",
+    "pl": "input_select",
+    "en": "Guest scene"
+   }
+  ]
+ }
+}

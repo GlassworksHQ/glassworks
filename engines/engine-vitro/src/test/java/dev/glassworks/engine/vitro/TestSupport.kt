@@ -139,6 +139,15 @@ class FakeHaServer {
 
     /** Dashboards HA has no saved config for: `lovelace/config` answers `config_not_found`. */
     @Volatile var missingDashboards: Set<String> = setOf("missing")
+
+    /**
+     * Error codes the next `lovelace/config` requests answer with, one per request, before the config (HA still
+     * starting answers `unknown_command`). Empty: every request is answered as usual.
+     */
+    val configFailures = java.util.concurrent.ConcurrentLinkedQueue<String>()
+
+    /** `lovelace/config` answers every request with this error code; null answers as usual. */
+    @Volatile var configError: String? = null
     @Volatile var initialEntities: JSONObject = JSONObject(ENTITIES_JSON)
     @Volatile var history: JSONObject = JSONObject("""{"states": {}}""")
     /** `history/history_during_period` answers with an error. */
@@ -205,11 +214,21 @@ class FakeHaServer {
     /** `auth/current_user` goes unanswered, for a test to answer it later (on [sockets]). */
     @Volatile var holdCurrentUser: Boolean = false
 
+    /**
+     * `subscribe_entities` is acknowledged but its first event (the snapshot) never comes, as from a Home Assistant
+     * still gathering it: a view's first build keeps waiting for its states. (An empty snapshot ends that wait at once:
+     * every entity is then known not to exist.)
+     */
+    @Volatile var holdEntitySnapshot: Boolean = false
+
     /** `config/entity_registry/list_for_display`'s answer; null refuses it (`unknown_command`). */
     @Volatile var entityRegistryDisplay: JSONObject? = null
 
     /** `config/device_registry/list`'s answer; null refuses it. */
     @Volatile var deviceRegistry: org.json.JSONArray? = null
+
+    /** `config/area_registry/list`'s answer. */
+    @Volatile var areaRegistry: org.json.JSONArray = org.json.JSONArray("""[{"area_id": "lounge", "name": "Lounge"}]""")
 
     /** `config/floor_registry/list`'s answer; null refuses it, as a Home Assistant without floors does. */
     @Volatile var floorRegistry: org.json.JSONArray? = null
@@ -316,10 +335,16 @@ class FakeHaServer {
             "auth/current_user" -> if (!holdCurrentUser) currentUser?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
             "lovelace/resources" -> ok(sock, id, resources)
             "lovelace/config" -> {
-                if (m.optString("url_path") in missingDashboards) fail(sock, id, "config_not_found") else ok(sock, id, dashboardConfig)
+                val error = configError ?: configFailures.poll()
+                when {
+                    m.optString("url_path") in missingDashboards -> fail(sock, id, "config_not_found")
+                    error != null -> fail(sock, id, error)
+                    else -> ok(sock, id, dashboardConfig)
+                }
             }
             "subscribe_entities" -> {
                 ok(sock, id, JSONObject.NULL)
+                if (holdEntitySnapshot) return
                 val wanted = m.optJSONArray("entity_ids")?.let { arr -> (0 until arr.length()).map { arr.getString(it) }.toSet() }
                 val initial = JSONObject()
                 val keys = initialEntities.keys()
@@ -345,8 +370,7 @@ class FakeHaServer {
                 ok(sock, id, JSONObject.NULL)
                 event(sock, id, JSONObject().put("result", templateResult))
             }
-            "config/area_registry/list" ->
-                ok(sock, id, org.json.JSONArray("""[{"area_id": "lounge", "name": "Lounge"}]"""))
+            "config/area_registry/list" -> ok(sock, id, areaRegistry)
             "config/entity_registry/list_for_display" ->
                 entityRegistryDisplay?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
             "config/device_registry/list" -> deviceRegistry?.let { ok(sock, id, it) } ?: fail(sock, id, "unknown_command")
@@ -386,7 +410,9 @@ class RecordingHost : PageHost {
     override fun onFirstPaint() { firstPaints.incrementAndGet() }
     override fun onLocationChange(url: String?) { locations += url }
     override fun redirect(url: String): String? = redirectTo(url)
-    override fun onContentGone(killed: Boolean) {}
+    /** Every [onContentGone] the host was told of. */
+    val contentGone = CopyOnWriteArrayList<Boolean>()
+    override fun onContentGone(killed: Boolean) { contentGone += killed }
     /** Which pages may have the microphone and camera without a prompt (#847). None, unless a test says so. */
     @Volatile var trust: (String) -> Boolean = { false }
     override fun trusts(url: String): Boolean = trust(url)

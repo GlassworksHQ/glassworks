@@ -1,0 +1,45 @@
+{
+ "title": "light: light unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "light.light_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "light",
+  "entity": "light.light_unavailable"
+ },
+ "fixture": {
+  "states": {
+   "light.light_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "restored": true,
+     "supported_features": 40,
+     "friendly_name": "Kitchen Pendant"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.light_unavailable",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   }
+  ]
+ }
+}

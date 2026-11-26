@@ -56,6 +56,16 @@ internal class MoreInfoHistoryView(
     /** This shows the state history (not statistics), whether or not its subscription is up now: [reconnected]. */
     private var historyMode = false
 
+    /**
+     * Counts the statistics fetches ([fetchStatistics]): every minute's refresh is one, all in the same [generation].
+     * An answer draws only if it is newer than the last one drawn ([statsApplied]), so a slow answer to an earlier
+     * refresh can't put older data over a newer chart, and answers slower than a minute still draw.
+     */
+    private var statsAttempt = 0
+
+    /** The attempt whose answer the chart shows now. */
+    private var statsApplied = 0
+
     /** The first statistics attempt's deadline ([fetchStatistics]), until it settles. */
     private var pendingDeadline: Runnable? = null
 
@@ -168,6 +178,7 @@ internal class MoreInfoHistoryView(
      * without metadata are no statistics: the first time, the state history is drawn instead.
      */
     private fun fetchStatistics(gen: Int, first: Boolean = false) {
+        val attempt = ++statsAttempt
         var meta: Any? = null
         var stats: JSONObject? = null
         var answers = 0
@@ -184,8 +195,9 @@ internal class MoreInfoHistoryView(
             ctx.main.postDelayed(deadline, FIRST_ANSWER_MS)
         }
         val done = {
-            if (++answers == 2 && gen == generation && !settled) {
+            if (++answers == 2 && gen == generation && attempt > statsApplied && !settled) {
                 settled = true
+                statsApplied = attempt
                 ctx.main.removeCallbacks(deadline)
                 val m = (meta as? JSONArray)?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } }.orEmpty()
                 val s = stats

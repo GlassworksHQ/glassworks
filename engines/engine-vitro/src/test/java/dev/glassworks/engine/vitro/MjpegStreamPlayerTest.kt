@@ -221,19 +221,19 @@ class MjpegStreamPlayerTest {
         )
         attach(card)
 
-        val icons = card.find(MdiIconView::class.java)
-        assertEquals(2, icons.size)
-        assertEquals(0xFFA9A9A9.toInt(), icons[0].tintColor) // off: HA's #a9a9a9
-        (icons[0].parent as View).performClick()
+        // HA's two rows: the sensor's icon (opens More Info) first, then the light's (toggles).
+        val (sensor, light) = card.find(MdiIconView::class.java).also { assertEquals(2, it.size) }
+        assertEquals(0xFFA9A9A9.toInt(), light.tintColor) // off: HA's #a9a9a9
+        (light.parent as View).performClick()
         assertEquals("light.toggle light.porch", calls.single())
         ShadowLooper.idleMainLooper()
         // The optimistic flip turns it white, HA's on color for a picture-glance icon.
-        assertEquals(android.graphics.Color.WHITE, icons[0].tintColor)
+        assertEquals(android.graphics.Color.WHITE, light.tintColor)
 
-        (icons[1].parent as View).performClick()
+        (sensor.parent as View).performClick()
         assertEquals("more-info sensor.porch_temp", calls.last())
         val before = calls.size
-        (icons[1].parent as View).performLongClick()
+        (sensor.parent as View).performLongClick()
         // The hold added its own call (the click's would still be last otherwise).
         assertEquals(before + 1, calls.size)
         assertEquals("more-info sensor.porch_temp", calls.last())

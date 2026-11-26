@@ -1,0 +1,358 @@
+{
+ "case": "m-glance-sensor",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 264
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 247.56,
+   "type": "hui-glance-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "Living Room Temperature",
+   "x": 21,
+   "y": 20,
+   "w": 159.25,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "21.4 °C",
+   "x": 41.05,
+   "y": 98.39,
+   "w": 45.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "Living Room Temperature",
+   "x": 114.19,
+   "y": 20,
+   "w": 159.25,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "1,235 W",
+   "x": 131.73,
+   "y": 98.39,
+   "w": 50.09,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "Living Room Temperature",
+   "x": 207.38,
+   "y": 20,
+   "w": 159.25,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12%",
+   "x": 236.97,
+   "y": 98.39,
+   "w": 25.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "Living Room Temperature",
+   "x": 300.56,
+   "y": 20,
+   "w": 159.25,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Washing",
+   "x": 316.3,
+   "y": 98.39,
+   "w": 53.72,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "Living Room Temperature",
+   "x": 393.75,
+   "y": 20,
+   "w": 159.25,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Unknown",
+   "x": 407.41,
+   "y": 98.39,
+   "w": 57.86,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "Living Room Temperature",
+   "x": 21,
+   "y": 132.78,
+   "w": 159.25,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Unavailable",
+   "x": 27.73,
+   "y": 211.17,
+   "w": 71.7,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.sensor_battery_low": {
+   "s": "12",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "%",
+    "device_class": "battery",
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "sensor.sensor_no_unit": {
+   "s": "Washing",
+   "a": {
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794498780,
+   "lu": 1794498780
+  },
+  "sensor.sensor_power": {
+   "s": "1234.5",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794499560,
+   "lu": 1794499560
+  },
+  "sensor.sensor_temperature": {
+   "s": "21.42",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794499560,
+   "lu": 1794499560
+  },
+  "sensor.sensor_unavailable": {
+   "s": "unavailable",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "restored": true,
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  },
+  "sensor.sensor_unknown": {
+   "s": "unknown",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794499560,
+   "lu": 1794499560
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.sensor_battery_low",
+    "pl": "esphome",
+    "di": "device-1",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_no_unit",
+    "pl": "esphome",
+    "di": "device-1",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_power",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-1",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_unavailable",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_unknown",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Temperature",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Living Room"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "battery": {
+      "default": "mdi:battery-unknown",
+      "range": {
+       "0": "mdi:battery-alert",
+       "10": "mdi:battery-10",
+       "20": "mdi:battery-20",
+       "30": "mdi:battery-30",
+       "40": "mdi:battery-40",
+       "50": "mdi:battery-50",
+       "60": "mdi:battery-60",
+       "70": "mdi:battery-70",
+       "80": "mdi:battery-80",
+       "90": "mdi:battery-90",
+       "100": "mdi:battery"
+      }
+     },
+     "power": {
+      "default": "mdi:flash"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

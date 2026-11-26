@@ -1,0 +1,117 @@
+{
+ "case": "tile-timer",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Laundry",
+   "x": 56,
+   "y": 12.61,
+   "w": 51.19,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12:34",
+   "x": 56,
+   "y": 32,
+   "w": 31.86,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "timer.laundry": {
+   "s": "active",
+   "a": {
+    "duration": "0:30:00",
+    "remaining": "0:30:00",
+    "finishes_at": "2026-11-12T16:20:34+00:00",
+    "editable": true,
+    "friendly_name": "Laundry",
+    "icon": "mdi:washing-machine"
+   },
+   "lc": 1794498634,
+   "lu": 1794498634
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "timer.laundry",
+    "pl": "timer",
+    "en": "Laundry"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "timer"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.timer.entity_component._.state.active": "Active",
+    "component.timer.entity_component._.state.idle": "Idle",
+    "component.timer.entity_component._.state.paused": "Paused",
+    "component.timer.entity_component._.state_attributes.duration.name": "Duration",
+    "component.timer.entity_component._.state_attributes.editable.name": "Managed via UI",
+    "component.timer.entity_component._.state_attributes.editable.state.false": "No",
+    "component.timer.entity_component._.state_attributes.editable.state.true": "Yes",
+    "component.timer.entity_component._.state_attributes.finishes_at.name": "Finishes at",
+    "component.timer.entity_component._.state_attributes.last_transition.name": "Last transition",
+    "component.timer.entity_component._.state_attributes.last_transition.state.cancelled": "Cancelled",
+    "component.timer.entity_component._.state_attributes.last_transition.state.finished": "Finished",
+    "component.timer.entity_component._.state_attributes.last_transition.state.paused": "Paused",
+    "component.timer.entity_component._.state_attributes.last_transition.state.restarted": "Restarted",
+    "component.timer.entity_component._.state_attributes.last_transition.state.started": "Started",
+    "component.timer.entity_component._.state_attributes.remaining.name": "Remaining",
+    "component.timer.entity_component._.state_attributes.restore.name": "Restore"
+   },
+   "entity": {}
+  }
+ }
+}

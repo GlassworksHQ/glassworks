@@ -83,6 +83,21 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun aMaskedStripNeverExcusesAnUnmaskedRegion() {
+        // 18 x 16: HA all grey; Vitro's first two columns red. The last two columns are masked. Vitro's square shifted
+        // two px right would match HA's, but it reaches into the mask: it may not excuse the red.
+        val w = 18
+        val h = 16
+        val grey = Color.rgb(128, 128, 128)
+        val a = IntArray(w * h) { grey }
+        val b = IntArray(w * h) { i -> if (i % w < 2) Color.RED else grey }
+        val (unmasked, _) = ParityDiff.worstRegion(a, b, w, h)
+        val (masked, _) = ParityDiff.worstRegion(a, b, w, h, listOf(android.graphics.Rect(16, 0, 18, 16)))
+        assertTrue("the red still counts: $masked", masked > 0.0)
+        assertEquals("unmasked, the shift excuses it", 0.0, unmasked, 0.0)
+    }
+
+    @Test
     fun cropOutsideTheRenderIsFilledNotStretched() {
         val b = Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLUE) }
         val c = ParityDiff.crop(b, 5, 5, 10, 10)
@@ -139,6 +154,37 @@ class ParityHarnessSelfTest {
         // A finite baseline still catches a card that disappears.
         f.writeText(JSONObject().put("s1/c", entry(0.5, 3)).toString())
         assertTrue(ParityBaseline(f).worse("s1/c", gone).isNotEmpty())
+    }
+
+    @Test
+    fun anOpenBugIsReportedNotFailedAndFailsOnceItMatches() {
+        val f = File.createTempFile("open", ".json")
+        f.writeText(JSONObject().put("s1/c", JSONObject().put("owner", "#928").put("reason", "the brightness bar is a square")).toString())
+        val open = ParityOpen(f)
+        assertEquals(null, open.judge("s1/other", listOf("pixels 30%"), false))
+        val (still, why) = open.judge("s1/c", listOf("pixels 30% > 2%"), false)!!
+        assertEquals(ParityStatus.OPEN, still)
+        assertTrue(why.toString(), why.any { "#928" in it && "square" in it })
+        assertTrue(fatalResults(listOf(result(still, measure(pixel = 0.3))), acceptDrift = false).isEmpty())
+        // Fixed: the entry must go, so the case guards the fix from then on.
+        assertEquals(ParityStatus.ERROR, open.judge("s1/c", emptyList(), false)!!.first)
+        // An open bug is never drift as well.
+        assertEquals(ParityStatus.ERROR, open.judge("s1/c", listOf("pixels 30% > 2%"), true)!!.first)
+    }
+
+    @Test
+    fun aBaselineUpdateNeverRecordsAnOpenBugAsDrift() {
+        val f = File.createTempFile("baseline", ".json")
+        f.writeText("{}")
+        ParityBaseline(f).write(listOf(result(ParityStatus.OPEN, measure(pixel = 0.3))))
+        assertFalse(JSONObject(f.readText()).has("s1/c"))
+    }
+
+    @Test
+    fun anOpenEntryNamesItsOwnerPr() {
+        val f = File.createTempFile("open", ".json")
+        f.writeText(JSONObject().put("s1/c", JSONObject().put("owner", "someone").put("reason", "x")).toString())
+        assertTrue(runCatching { ParityOpen(f).judge("s1/c", listOf("x"), false) }.isFailure)
     }
 
     @Test

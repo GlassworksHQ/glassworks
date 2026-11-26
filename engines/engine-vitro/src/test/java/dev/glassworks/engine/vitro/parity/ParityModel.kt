@@ -75,12 +75,20 @@ data class ParityFrame(
 }
 
 /** How far a case may drift before it counts. Pixel is the share of the crop that differs (0..1). */
-data class Threshold(val pixel: Double = 0.02, val bounds: Double = 2.0, val font: Double = 1.0, val missingText: Int = 0) {
+data class Threshold(
+    val pixel: Double = 0.02, val bounds: Double = 2.0, val font: Double = 1.0, val missingText: Int = 0,
+    /** The worst small region's color distance ([PixelDiff.region], 0..1). */
+    val region: Double = REGION,
+) {
     companion object {
+        /** The default [region]: see [PixelDiff.region]; set where antialiasing and sub-pixel text stay under it. */
+        const val REGION = 0.1
+
         fun parse(o: JSONObject?): Threshold {
             val d = Threshold()
             if (o == null) return d
-            return Threshold(o.optDouble("pixel", d.pixel), o.optDouble("bounds", d.bounds), o.optDouble("font", d.font), o.optInt("missingText", d.missingText))
+            return Threshold(o.optDouble("pixel", d.pixel), o.optDouble("bounds", d.bounds), o.optDouble("font", d.font), o.optInt("missingText", d.missingText),
+                o.optDouble("region", d.region))
         }
     }
 }

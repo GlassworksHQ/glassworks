@@ -1,0 +1,83 @@
+{
+ "title": "Mushroom chips: conditional-hidden (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "person.home": "home",
+  "lock.lock_locked": "locked"
+ },
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "conditional",
+    "conditions": [
+     {
+      "condition": "state",
+      "entity": "lock.lock_locked",
+      "state": "unlocked"
+     }
+    ],
+    "chip": {
+     "type": "entity",
+     "entity": "lock.lock_locked"
+    }
+   },
+   {
+    "type": "entity",
+    "entity": "person.home"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "person.home": {
+    "state": "home",
+    "last_changed": "-3h",
+    "attributes": {
+     "editable": true,
+     "id": "robin",
+     "device_trackers": [],
+     "friendly_name": "Robin"
+    }
+   },
+   "lock.lock_locked": {
+    "state": "locked",
+    "last_changed": "-2h",
+    "attributes": {
+     "supported_features": 0,
+     "friendly_name": "Front Door Lock"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "person.home",
+    "pl": "person"
+   },
+   {
+    "ei": "lock.lock_locked",
+    "pl": "demo",
+    "di": "dev-front",
+    "en": "Door Lock",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-front",
+    "name": "Front"
+   }
+  ],
+  "persons": [
+   {
+    "id": "robin",
+    "name": "Robin",
+    "user_id": null,
+    "device_trackers": []
+   }
+  ]
+ }
+}

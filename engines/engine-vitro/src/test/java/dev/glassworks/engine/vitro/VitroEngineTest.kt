@@ -535,8 +535,8 @@ class VitroEngineTest {
 
     @Test
     fun aViewStillWaitingForItsStatesSignalsNothingOnceTheFallbackHasThePage() {
-        // No states ever come: the first build waits its whole second.
-        server.initialEntities = JSONObject()
+        // HA never answers for the view's entities: the first build waits its whole second.
+        server.holdEntitySnapshot = true
         val page = openPage(vitro())
         page.load("$base/wall-test/living")
         awaitMain("dashboard shown") { vitroView(page).dashboard != null }
@@ -553,7 +553,8 @@ class VitroEngineTest {
 
     @Test
     fun aDisposedPageBuildsNothingWhenItsWaitEnds() {
-        server.initialEntities = JSONObject()
+        // HA hasn't answered for the view's entities yet, so the first build waits.
+        server.holdEntitySnapshot = true
         val engine = vitro()
         val page = openPage(engine)
         page.load("$base/wall-test/living")

@@ -1,0 +1,33 @@
+{
+ "title": "Tile: a running timer counting down",
+ "expect": {
+  "timer.laundry": "active"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "timer.laundry"
+ },
+ "fixture": {
+  "states": {
+   "timer.laundry": {
+    "state": "active",
+    "last_changed": "-17m26s",
+    "attributes": {
+     "duration": "0:30:00",
+     "remaining": "0:30:00",
+     "finishes_at": "@+12m34s",
+     "editable": true,
+     "friendly_name": "Laundry",
+     "icon": "mdi:washing-machine"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "timer.laundry",
+    "pl": "timer",
+    "en": "Laundry"
+   }
+  ]
+ }
+}

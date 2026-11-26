@@ -1,0 +1,319 @@
+{
+ "case": "entities-number",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 426
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 410,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Speaker volume",
+   "x": 73,
+   "y": 28.8,
+   "w": 99.25,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "35",
+   "x": 467.27,
+   "y": 28.8,
+   "w": 15.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Ceiling fan Speed",
+   "x": 73,
+   "y": 76.8,
+   "w": 108.33,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "3",
+   "x": 475.13,
+   "y": 76.8,
+   "w": 7.88,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Away target",
+   "x": 73,
+   "y": 136.8,
+   "w": 73.67,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°C",
+   "x": 452.66,
+   "y": 132.59,
+   "w": 14.34,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(204, 204, 204)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Boiler Offset",
+   "x": 73,
+   "y": 208.8,
+   "w": 77.67,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "min",
+   "x": 443.59,
+   "y": 204.59,
+   "w": 23.41,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(204, 204, 204)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Counter limit",
+   "x": 73,
+   "y": 280.8,
+   "w": 79.78,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Sensor Calibration",
+   "x": 73,
+   "y": 352.8,
+   "w": 114,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°C",
+   "x": 452.66,
+   "y": 348.59,
+   "w": 14.34,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(204, 204, 204)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "input_number.away_target": {
+   "s": "16.5",
+   "a": {
+    "initial": null,
+    "editable": true,
+    "min": 10,
+    "max": 25,
+    "step": 0.5,
+    "mode": "box",
+    "unit_of_measurement": "°C",
+    "icon": "mdi:thermometer-low",
+    "friendly_name": "Away target"
+   },
+   "lc": 1794481680,
+   "lu": 1794481680
+  },
+  "input_number.counter_limit": {
+   "s": "250.0",
+   "a": {
+    "initial": null,
+    "editable": true,
+    "min": 0,
+    "max": 1000,
+    "step": 1,
+    "mode": "box",
+    "icon": "mdi:counter",
+    "friendly_name": "Counter limit"
+   },
+   "lc": 1794496080,
+   "lu": 1794496080
+  },
+  "input_number.speaker_volume": {
+   "s": "35.0",
+   "a": {
+    "initial": null,
+    "editable": true,
+    "min": 0,
+    "max": 100,
+    "step": 1,
+    "mode": "slider",
+    "icon": "mdi:volume-high",
+    "friendly_name": "Speaker volume"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  },
+  "number.boiler_offset": {
+   "s": "15",
+   "a": {
+    "min": 0,
+    "max": 120,
+    "step": 5,
+    "mode": "box",
+    "unit_of_measurement": "min",
+    "friendly_name": "Boiler Offset"
+   },
+   "lc": 1794494280,
+   "lu": 1794494280
+  },
+  "number.calibration": {
+   "s": "-1.25",
+   "a": {
+    "min": -10,
+    "max": 10,
+    "step": 0.25,
+    "mode": "box",
+    "unit_of_measurement": "°C",
+    "friendly_name": "Sensor Calibration"
+   },
+   "lc": 1794495480,
+   "lu": 1794495480
+  },
+  "number.fan_speed": {
+   "s": "3",
+   "a": {
+    "min": 1,
+    "max": 5,
+    "step": 1,
+    "mode": "auto",
+    "friendly_name": "Ceiling fan Speed"
+   },
+   "lc": 1794496680,
+   "lu": 1794496680
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "input_number.away_target",
+    "pl": "input_number",
+    "en": "Away target"
+   },
+   {
+    "ei": "input_number.counter_limit",
+    "pl": "input_number",
+    "en": "Counter limit"
+   },
+   {
+    "ei": "input_number.speaker_volume",
+    "pl": "input_number",
+    "en": "Speaker volume"
+   },
+   {
+    "ei": "number.boiler_offset",
+    "pl": "demo",
+    "en": "Boiler Offset"
+   },
+   {
+    "ei": "number.calibration",
+    "pl": "demo",
+    "en": "Sensor Calibration"
+   },
+   {
+    "ei": "number.fan_speed",
+    "pl": "demo",
+    "en": "Ceiling fan Speed"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "input_number",
+    "number"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "number": {
+     "_": {
+      "default": "mdi:ray-vertex"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ }
+}

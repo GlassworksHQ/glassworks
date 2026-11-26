@@ -1,0 +1,45 @@
+{
+ "title": "mushroom-number: number value (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "number.number_value": "40"
+ },
+ "card": {
+  "type": "custom:mushroom-number-card",
+  "entity": "number.number_value"
+ },
+ "fixture": {
+  "states": {
+   "number.number_value": {
+    "state": "40",
+    "last_changed": "-1h",
+    "attributes": {
+     "min": 0,
+     "max": 100,
+     "step": 1,
+     "mode": "slider",
+     "unit_of_measurement": "%",
+     "friendly_name": "Aquarium Light Level"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "number.number_value",
+    "pl": "demo",
+    "di": "dev-aquarium",
+    "en": "Light Level",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-aquarium",
+    "name": "Aquarium"
+   }
+  ]
+ }
+}

@@ -60,6 +60,7 @@ A fixture uses HA's own shapes, so a new case is mostly copied from another:
 | `history` | Entity id → `wave` (`min`, `max`, `period`, `step`, `decimals`, `quantum`, `phase`: a value sampled at each step), or `points`/`steps` (`[[time, state]]` or `[[time, state, attributes]]`). One timeline: the entity's live state, last change, last update (and a series' own attributes) come from the series at now, and statistics are computed from the same series for entities with a state class. After editing a series, run `python3 tools/vitro-parity/fakehome.py sync` so the fixture's `states` say the same (a test checks it) |
 | `todo`, `forecast`, `calendar` | Entity id → items; → `{daily: [...]}`; → events (`summary`, `start`, `end`) |
 | `logbook` | Entries as HA's `logbook/event_stream` sends them, with `when` as a time |
+| `release_notes` | Entity id → an update entity's release notes in Markdown, as `update/release_notes` answers |
 | `user_data` | The signed-in user's frontend profile, by key: `{"language": {"language": "de", "number_format": "decimal_comma", "time_format": "24"}}` (HA's `frontend/get_user_data`, which the page subscribes to). The fake answers translations in that language, with English for every key it lacks, as HA core does (German and French are in `hacore-<version>.json`: `LANGUAGES` in `hacore.py`). The reference records the profile as `locale`, and Vitro draws the case with it. Without it the user has no profile: English and HA's defaults |
 | `admin` | `false` signs the page in as a user who isn't an administrator (the same user, `is_admin` off), for what HA shows such a user: its error and warning cards' icon alone. The reference records it as `user`, and Vitro draws the case for the same user. Without it the user is the home's owner and an administrator |
 | `templates` | Not needed: the fake renders templates itself |
@@ -151,6 +152,16 @@ A refresh from the fake HA is deterministic: the same fixtures, frontend and car
 > **An update records whatever drifts now, regressions included.** `--update-baseline` rewrites the entry of every case it measures: a real regression becomes "known drift", and the next run stops reporting it. Before you commit `baseline.json`, read its diff: every entry that got worse must be a change you mean to accept, not a Vitro bug. Keep the entry of a case with an open regression as it is (run the update with `--cases` for the others).
 
 A case over its threshold is a **known drift** if `baseline.json` lists it and it hasn't got worse, with 2% pixels, 1 px bounds and 0.5 px font of slack. Otherwise it's a **regression** and the test fails. A listed case that comes back within its threshold gets a note to drop it from the baseline. The parity audit works through the baseline until each case either matches or carries a reason.
+
+### Open bugs: `open.json`
+
+The baseline is for drift that's accepted, such as sub-pixel text. A case Vitro draws wrong, whose fix someone owns, goes in the corpus's `open.json` instead, keyed `frame/case` with its `owner` (the PR that fixes it, or `#799` for one filed on the exp/vitro list with no fixer yet) and a `reason` that says what's wrong:
+
+- **Over its threshold, listed in `open.json`:** the run reports it as **open**, not as a regression, and doesn't fail on it.
+- **Back within its threshold, still listed:** the run **fails** with "matches HA now: drop it from open.json". The fix's PR removes the entry, and from then on the case guards the fix.
+- **Listed in both files**, or listed for a frame or case the corpus doesn't run: the run fails. An open bug is never drift, and `--update-baseline` never records an open case.
+
+When `matrix.py` retires a generated case, it names it: remove its `open.json` and `baseline.json` entries (and its refs) before refreshing the rest.
 
 ## Privacy
 

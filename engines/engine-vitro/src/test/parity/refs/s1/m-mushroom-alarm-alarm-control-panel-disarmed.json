@@ -1,0 +1,133 @@
+{
+ "case": "m-mushroom-alarm-alarm-control-panel-disarmed",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "mushroom-alarm-control-panel-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "House Alarm",
+   "x": 56,
+   "y": 17,
+   "w": 82.59,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Disarmed",
+   "x": 56,
+   "y": 36,
+   "w": 54.41,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "alarm_control_panel.alarm_control_panel_disarmed": {
+   "s": "disarmed",
+   "a": {
+    "code_format": "number",
+    "code_arm_required": false,
+    "supported_features": 63,
+    "friendly_name": "House Alarm"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_disarmed",
+    "pl": "manual",
+    "di": "device-1",
+    "en": "Alarm",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "House"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "alarm_control_panel"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "alarm_control_panel": {
+     "_": {
+      "default": "mdi:shield",
+      "state": {
+       "armed_away": "mdi:shield-lock",
+       "armed_custom_bypass": "mdi:security",
+       "armed_home": "mdi:shield-home",
+       "armed_night": "mdi:shield-moon",
+       "armed_vacation": "mdi:shield-airplane",
+       "disarmed": "mdi:shield-off",
+       "pending": "mdi:shield-outline",
+       "triggered": "mdi:bell-ring"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.alarm_control_panel.entity_component._.state.armed": "Armed",
+    "component.alarm_control_panel.entity_component._.state.armed_away": "Armed away",
+    "component.alarm_control_panel.entity_component._.state.armed_custom_bypass": "Armed custom bypass",
+    "component.alarm_control_panel.entity_component._.state.armed_home": "Armed home",
+    "component.alarm_control_panel.entity_component._.state.armed_night": "Armed night",
+    "component.alarm_control_panel.entity_component._.state.armed_vacation": "Armed vacation",
+    "component.alarm_control_panel.entity_component._.state.arming": "Arming",
+    "component.alarm_control_panel.entity_component._.state.disarmed": "Disarmed",
+    "component.alarm_control_panel.entity_component._.state.disarming": "Disarming",
+    "component.alarm_control_panel.entity_component._.state.pending": "Pending",
+    "component.alarm_control_panel.entity_component._.state.triggered": "Triggered"
+   },
+   "entity": {}
+  }
+ }
+}

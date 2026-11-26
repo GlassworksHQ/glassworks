@@ -1,0 +1,43 @@
+{
+ "title": "gauge: sensor battery-low (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "sensor.sensor_battery_low": "12"
+ },
+ "card": {
+  "type": "gauge",
+  "entity": "sensor.sensor_battery_low"
+ },
+ "fixture": {
+  "states": {
+   "sensor.sensor_battery_low": {
+    "state": "12",
+    "last_changed": "-2h",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "%",
+     "device_class": "battery",
+     "friendly_name": "Living Room Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.sensor_battery_low",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room",
+    "name": "Living Room"
+   }
+  ]
+ }
+}

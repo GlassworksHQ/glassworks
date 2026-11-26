@@ -69,6 +69,7 @@ import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.cards.MediaControlCardView
 import dev.glassworks.engine.vitro.cards.MushroomTitleCardView
 import dev.glassworks.engine.vitro.cards.ModernCircularGaugeCardView
+import dev.glassworks.engine.vitro.cards.MoreInfoRoute
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
 import dev.glassworks.engine.vitro.cards.MushroomClimateCardView
@@ -629,6 +630,7 @@ class VitroView(
     }
 
     fun setDashboard(config: DashboardConfig, initialViewPath: String?) {
+        moreInfoRequest++
         drawnLocale = Triple(HaLocale.current, HaLocale.timeZone().id, HaText.version)
         holding?.cancel?.invoke()
         holding = null
@@ -699,7 +701,14 @@ class VitroView(
         LiveCameraFeed.connectionRestored(store)
     }
 
+    /**
+     * Counts More Info requests: a script's fields lookup ([openMoreInfo]) acts only if no newer request came, nor a
+     * close or a new dashboard, meanwhile.
+     */
+    private var moreInfoRequest = 0
+
     fun closeMoreInfo(): Boolean {
+        moreInfoRequest++
         val sheet = moreInfo ?: return false
         moreInfo = null
         sheet.dismiss()
@@ -711,8 +720,47 @@ class VitroView(
 
     fun openMoreInfo(entityId: String) = openMoreInfo(entityId, null)
 
+    /**
+     * Opens More Info for an entity in Home Assistant's own frontend, over the view on screen (its URL's
+     * `more-info-entity-id`), with the reason Vitro's sheet can't show it as HA does ([MoreInfoRoute]), or a script
+     * with fields, whose form only HA's dialog has. Null (a view with no page): Vitro's sheet, for every entity, whose
+     * Run then never starts such a script.
+     */
+    var onMoreInfoInFrontend: ((ViewConfig, String, String) -> Unit)? = null
+
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
+        val inFrontend = onMoreInfoInFrontend
+        val view = dashboard?.views?.getOrNull(currentViewIndex)
+        // Clarity times the sheet itself; everyone else gets HA's dialog where the sheet would draw a different one.
+        if (inFrontend != null && trace == null && view != null) {
+            MoreInfoRoute.handOff(entityId, store[entityId])?.let { reason ->
+                closeMoreInfo()
+                inFrontend(view, entityId, "More Info: $reason")
+                return
+            }
+        }
+        // A script with fields (its `get_services` entry): its form is in HA's dialog alone (#926's Run finds the same).
+        if (inFrontend != null && entityId.substringBefore('.') == "script") {
+            val ctx = contextFactory?.invoke(ThemeResolver.resolve(themeCatalog, darkMode, userThemeName)) ?: return
+            val request = ++moreInfoRequest
+            dev.glassworks.engine.vitro.cards.EntityRowControls.scriptHasFields(ctx, entityId) { fields ->
+                // Another entity's More Info, a close or a new dashboard since: this answer is stale.
+                if (request != moreInfoRequest) return@scriptHasFields
+                val shown = dashboard?.views?.getOrNull(currentViewIndex)
+                if (fields == true && shown != null) {
+                    closeMoreInfo()
+                    inFrontend(shown, entityId, "More Info of a script with fields")
+                } else {
+                    showMoreInfo(entityId, trace)
+                }
+            }
+            return
+        }
+        showMoreInfo(entityId, trace)
+    }
+
+    private fun showMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         closeMoreInfo()
         moreInfoEntityId = entityId
         // HA's dialogs live outside the view: a view's `theme` never reaches them, the user's theme does (#885).
@@ -847,8 +895,10 @@ class VitroView(
     private val waited = HashSet<Int>()
 
     /**
-     * True when the first build of view [index] waits: none of its entities has a state yet. It's built when the
-     * first of them lands, or after [holdFirstBuildForStatesMs].
+     * True when the first build of view [index] waits: one of its entities isn't known yet (no state, and HA hasn't
+     * said it doesn't exist). Views share entities (a dashboard's header cards), so one known entity says little: a
+     * view built with most of its states missing renders, and lays out, every card again as they land. It's built
+     * once every entity is known (HA's first event for the view's subscription), or after [holdFirstBuildForStatesMs].
      */
     private fun holdForStates(index: Int, viewCfg: ViewConfig): Boolean {
         if (holdFirstBuildForStatesMs <= 0 || index in waited) return false
@@ -856,9 +906,9 @@ class VitroView(
         holding?.cancel?.invoke()
         holding = null
         val refs = CardRouter.referencedEntities(viewCfg)
-        if (refs.isEmpty() || refs.any { store[it] != null }) return false
+        fun known() = refs.all { store[it] != null || store.isMissing(it) }
+        if (refs.isEmpty() || known()) return false
         val config = dashboard
-        var unsub: (() -> Unit)? = null
         lateinit var timeout: Runnable
         lateinit var mine: Wait
         fun release() {
@@ -871,12 +921,26 @@ class VitroView(
             }
         }
         timeout = Runnable { release() }
-        unsub = store.subscribeAny { changed -> if (changed.any { it in refs }) mainHandler.post { release() } }
-        mine = Wait(index) { unsub?.invoke(); mainHandler.removeCallbacks(timeout) }
+        // One check queued at a time: a snapshot tells hundreds of entities at once, on the socket's thread.
+        val checkQueued = java.util.concurrent.atomic.AtomicBoolean(false)
+        val check = Runnable {
+            checkQueued.set(false)
+            if (known()) release()
+        }
+        fun queueCheck() {
+            if (checkQueued.compareAndSet(false, true)) mainHandler.post(check)
+        }
+        // Each unknown entity's listener hears its state land, and HA's answer that it doesn't exist (markSnapshot).
+        val unsubs = refs.filter { store[it] == null }.map { id -> store.subscribe(id) { queueCheck() } }
+        mine = Wait(index) {
+            unsubs.forEach { it() }
+            mainHandler.removeCallbacks(timeout)
+            mainHandler.removeCallbacks(check)
+        }
         holding = mine
         mainHandler.postDelayed(timeout, holdFirstBuildForStatesMs)
-        // States that landed between the check above and the listener (the store is written on another thread).
-        if (refs.any { store[it] != null }) mainHandler.post { release() }
+        // States that landed between the check above and the listeners (the store is written on another thread).
+        queueCheck()
         return true
     }
 
@@ -952,6 +1016,7 @@ class VitroView(
             for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
             for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE
             updateIslandsShown()
+            updateCardsHidden()
             return
         }
         val viewRoot = if (cached != null) {
@@ -1007,6 +1072,7 @@ class VitroView(
         // Islands the build didn't take back (their card is gone or changed) close; only this view's islands run.
         closePooledIslands()
         updateIslandsShown()
+        updateCardsHidden()
 
         val elapsed = SystemClock.elapsedRealtime() - t0
         // The report follows the tree on screen: a cached tree keeps the card-mod state it was built with.
@@ -1159,6 +1225,40 @@ class VitroView(
             val shown = onScreen && index == currentViewIndex && frame.visibility == VISIBLE
             islandsIn(frame).forEach { it.setShown(shown) }
         }
+    }
+
+    /** Each cached tree's hidden state as its cards last heard it ([updateCardsHidden]); a new tree's are shown. */
+    private val cardsHidden = java.util.WeakHashMap<View, Boolean>()
+
+    /**
+     * The cards of a cached view that isn't shown stop rendering live changes, as HA renders only the view on screen,
+     * and catch up as it shows again, before it draws ([CardSurface.setViewHidden]). Its pinned cards follow it.
+     * Only a tree whose state changed is walked.
+     */
+    private fun updateCardsHidden() {
+        fun follow(root: View) {
+            val hidden = root.visibility != VISIBLE
+            if ((cardsHidden[root] ?: false) == hidden) return
+            cardsHidden[root] = hidden
+            forEachCard(root) { it.setViewHidden(hidden) }
+        }
+        viewCache.values.forEach(::follow)
+        overlayFrames.values.forEach(::follow)
+    }
+
+    /**
+     * The live cameras of a card just built ([card], with its visibility conditions) start now, while the rest of the
+     * view builds, if the connection knows their capabilities ([PictureCardView.startEarly]). Only those the build
+     * shows, while the dashboard is on screen: a hidden card opens no stream, as in HA.
+     */
+    private fun startCamerasEarly(card: View) {
+        if (!dashboardShown || !activityShown || card.visibility != VISIBLE) return
+        forEachCard(card) { c -> if (c is PictureCardView && visibleWithin(c, card)) c.startEarly() }
+    }
+
+    private fun forEachCard(v: View, action: (CardSurface) -> Unit) {
+        if (v is CardSurface) action(v)
+        if (v is android.view.ViewGroup) for (i in 0 until v.childCount) forEachCard(v.getChildAt(i), action)
     }
 
     /**
@@ -1396,6 +1496,7 @@ class VitroView(
                     wrapVisibility(child, buildCard(child, ctx, false), ctx).also { v ->
                         // Clarity sees each card by its index in the view's config (a layout-break builds nothing).
                         clarity?.cardBuilt(buildingIndex, view.cards.indexOfFirst { it === child }, child, v)
+                        startCamerasEarly(v)
                     }
                 }
             }, widthDp)
@@ -1490,7 +1591,8 @@ class VitroView(
             val (name, state) = badgeLines(badge, s)
             nameView.text = name.orEmpty()
             nameView.visibility = if (name != null && state != null) VISIBLE else GONE
-            stateView.text = state ?: name.orEmpty()
+            // hui-entity-badge draws its state with state-display: a timestamp relative ("In 3 hours").
+            if (state != null) ctx.showTimestampOr(stateView, s, state, anyDomain = true) else stateView.text = name.orEmpty()
             // Neither line asked for: no text slot at all.
             texts.visibility = if (name == null && state == null) GONE else VISIBLE
             // An icon-only badge is still a button: named after its entity for TalkBack.
@@ -1596,7 +1698,8 @@ class VitroView(
             val size = HaGridSize.of(if (built is ErrorCardView) card.copy(type = ErrorCardView.TYPE) else card, stateForBuild(card))
             val cardView = wrapVisibility(card, built, ctx)
             slotCards[cardView] = card
-            cacheCardAsLayer(cardView, ctx)
+            cacheCardAsLayer(cardView, card, ctx)
+            startCamerasEarly(cardView)
             val fixed = size.rows?.let { r -> px(r * (rowHeight + rowGap) - rowGap) }
             grid.addView(cardView, HaGridLayout.LayoutParams(size.columns?.coerceAtMost(columns) ?: columns, fixed))
         }
@@ -1620,6 +1723,8 @@ class VitroView(
             val column = columns[placement[k]]
             val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
             clarity?.cardBuilt(buildingIndex, configIndex, card, v)
+            cacheCardAsLayer(v, card, ctx)
+            startCamerasEarly(v)
             column.addView(v, cardMarginParams(ctx, widthDp))
         }
         return row
@@ -1640,6 +1745,8 @@ class VitroView(
             val column = if (inSidebar) side else main
             val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
             clarity?.cardBuilt(buildingIndex, cardIndex, card, v)
+            cacheCardAsLayer(v, card, ctx)
+            startCamerasEarly(v)
             column.addView(v, cardMarginParams(ctx, widthDp))
         }
         if (!split) {
@@ -1699,10 +1806,11 @@ class VitroView(
      * one (about 11 MB more PSS than no layers on a 2 GB panel, the S1); with [CardLayers.BIG] only a big card (at least
      * [BIG_CARD_SHARE] of the dashboard's area), which holds most of what a frame draws, decided once the card has a
      * size and again when it changes. Never for a card that casts a shadow ([cardLayerWanted]), which the layer's
-     * bounds would clip.
+     * bounds would clip, nor for one that plays a live camera ([playsLiveVideo]): each video frame would draw its whole
+     * layer again. Sections, masonry and sidebar views alike.
      */
-    private fun cacheCardAsLayer(cardView: View, ctx: VitroCardContext) {
-        if (!cardLayerWanted(ctx.theme.cardElevationDp, cardView.elevation)) return
+    private fun cacheCardAsLayer(cardView: View, card: CardConfig, ctx: VitroCardContext) {
+        if (!cardLayerWanted(ctx.theme.cardElevationDp, cardView.elevation) || playsLiveVideo(card)) return
         if (cardLayers == CardLayers.ALL) {
             cardView.setLayerType(LAYER_TYPE_HARDWARE, null)
             return
@@ -2232,6 +2340,10 @@ class VitroView(
         internal fun cardLayerWanted(themeElevationDp: Float, viewElevation: Float): Boolean =
             themeElevationDp == 0f && viewElevation == 0f
 
+        /** [card] or a card inside it (a stack, a grid) plays a camera live (`camera_view: live`). */
+        internal fun playsLiveVideo(card: CardConfig): Boolean =
+            card.raw.optString("camera_view") == "live" || card.childCards.any(::playsLiveVideo)
+
         /** The share of the dashboard's area from which a card gets its own layer. */
         internal const val BIG_CARD_SHARE = 0.07f
 
@@ -2245,8 +2357,8 @@ class VitroView(
         /** A badge's text: `name · state` when the name shows, else the formatted state (`21.5 °C`, `Closed`). */
         fun badgeText(badge: CardConfig, s: EntityState?): String {
             val raw = badge.raw
-            val name = badge.name ?: s?.friendlyName ?: badge.entity.orEmpty()
-            val showName = raw.optBoolean("show_name", badge.name != null)
+            val name = badge.name(s) ?: s?.friendlyName ?: badge.entity.orEmpty()
+            val showName = raw.optBoolean("show_name", badge.name(s) != null)
             val showState = raw.optBoolean("show_state", true)
             val state = s?.formattedState() ?: "…"
             return when {
@@ -2262,9 +2374,9 @@ class VitroView(
          */
         fun badgeLines(badge: CardConfig, s: EntityState?): Pair<String?, String?> {
             val raw = badge.raw
-            val showName = raw.optBoolean("show_name", badge.name != null)
+            val showName = raw.optBoolean("show_name", badge.name(s) != null)
             val showState = raw.optBoolean("show_state", true)
-            val name = if (showName) badge.name ?: s?.friendlyName ?: badge.entity.orEmpty() else null
+            val name = if (showName) badge.name(s) ?: s?.friendlyName ?: badge.entity.orEmpty() else null
             // `show_state: false` hides the state even when no name shows (an icon-only badge).
             val state = if (showState) s?.formattedState() ?: "…" else null
             return name to state

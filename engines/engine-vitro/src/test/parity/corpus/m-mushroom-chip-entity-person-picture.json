@@ -1,0 +1,48 @@
+{
+ "title": "Mushroom chips: entity-person-picture (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "person.picture": "home"
+ },
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "entity",
+    "entity": "person.picture"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "person.picture": {
+    "state": "home",
+    "last_changed": "-3h",
+    "attributes": {
+     "editable": true,
+     "id": "robin",
+     "device_trackers": [],
+     "entity_picture": "/local/vitro-harness-fixtures/images/person.png",
+     "friendly_name": "Robin"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "person.picture",
+    "pl": "person"
+   }
+  ],
+  "persons": [
+   {
+    "id": "robin",
+    "name": "Robin",
+    "user_id": null,
+    "device_trackers": []
+   }
+  ]
+ }
+}

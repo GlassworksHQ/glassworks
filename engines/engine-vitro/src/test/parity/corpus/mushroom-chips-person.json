@@ -1,0 +1,47 @@
+{
+ "title": "Mushroom chips: entity chips of a person at home and a light that is on (the icons take the chip's text color)",
+ "expect": {
+  "person.alex": "home",
+  "light.living_room": "on"
+ },
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "entity",
+    "entity": "person.alex"
+   },
+   {
+    "type": "entity",
+    "entity": "light.living_room"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "person.alex": {
+    "state": "home",
+    "last_changed": "-2h",
+    "attributes": {
+     "friendly_name": "Alex",
+     "source": "device_tracker.alex_phone",
+     "id": "alex",
+     "user_id": "u-alex"
+    }
+   },
+   "light.living_room": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Living room",
+     "supported_features": 0
+    }
+   }
+  }
+ }
+}

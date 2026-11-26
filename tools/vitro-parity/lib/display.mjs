@@ -58,13 +58,16 @@ export function buildDisplay(ids, registry, devices, icons, translations, device
   }
   const componentLabels = {};
   for (const d of domains) {
-    const prefixes = [...classes(d)].map((c) => `component.${d}.entity_component.${c}.state.`);
+    // A state's labels, and its attributes' (a climate's hvac_action "Heating", as a tile's state_content shows it).
+    const prefixes = [...classes(d)].flatMap((c) => [`component.${d}.entity_component.${c}.state.`, `component.${d}.entity_component.${c}.state_attributes.`]);
     for (const [k, v] of Object.entries(translations('entity_component', d) || {})) if (prefixes.some((p) => k.startsWith(p))) componentLabels[k] = v;
   }
   const entityLabels = {};
   for (const e of keyed) {
-    const prefix = `component.${e.pl}.entity.${e.ei.split('.')[0]}.${e.tk}.state.`;
-    for (const [k, v] of Object.entries(translations('entity', e.pl) || {})) if (k.startsWith(prefix)) entityLabels[k] = v;
+    const prefix = `component.${e.pl}.entity.${e.ei.split('.')[0]}.${e.tk}.state`;
+    for (const [k, v] of Object.entries(translations('entity', e.pl) || {})) {
+      if (k.startsWith(prefix + '.') || k.startsWith(prefix + '_attributes.')) entityLabels[k] = v;
+    }
   }
   const areaList = [];
   // The areas the case's area cards name, and the ones its entities (or their devices) are in: an alert card and a

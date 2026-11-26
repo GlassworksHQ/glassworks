@@ -23,6 +23,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.accessibility.AccessibilityNodeInfo
@@ -188,9 +189,10 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     }
 
     private fun render(s: EntityState?) {
-        nameView.text = config.name ?: s?.displayName ?: config.entity.orEmpty()
+        nameView.text = config.name(s) ?: s?.displayName ?: config.entity.orEmpty()
         val color = if (colored(s)) stateColor(s) else null
-        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color ?: ctx.theme.stateIconColor)
+        // HA's `filter: stateColorBrightness`: a colored light's icon dims with its brightness.
+        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color?.let { stateColorBrightness(s, it) } ?: ctx.theme.stateIconColor)
         val (value, unit) = valueAndUnit(config.raw, s)
         valueView.text = value
         unitView.text = unit
@@ -218,7 +220,8 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
                 }
                 return (number ?: s.state) to unit
             }
-            return s.formattedState() to ""
+            // formatEntityStateToParts: HA's formatEntityState, without the tile's extras ("On", not "65%").
+            return s.plainState() to ""
         }
     }
 }
@@ -274,11 +277,13 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
             applyHaRipple(this, ctx.px(24f).toFloat(), ctx.theme.dark)
         }, LayoutParams(ctx.px(48f), ctx.px(48f), Gravity.TOP or Gravity.END))
 
-        labels.isClickable = true
-        labels.setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action"), "more-info"), eid) }
-        labels.bindHoldAction(ctx, ActionConfig.parse(config.raw.optJSONObject("hold_action"), "more-info"), eid)
+        // hui-light-card: the center button runs `tap_action` (toggle unless configured); the name and brightness
+        // under it take no taps (the ⋮ button opens More Info).
+        val tap = ActionConfig.parse(config.raw.optJSONObject("tap_action"), "toggle")
         if (eid != null) {
-            dial.onToggle = { ctx.toggleEntity(eid) }
+            dial.onToggle = { ctx.performAction(tap, eid) }
+            // The same button's hold: `hold_action`, more-info unless configured.
+            dial.bindHoldAction(ctx, ActionConfig.parse(config.raw.optJSONObject("hold_action"), "more-info"), eid)
             dial.onBrightness = { pct -> setBrightness(eid, pct) }
             observe(eid, ::render)
         } else {
@@ -297,7 +302,7 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     }
 
     private fun render(s: EntityState?) {
-        nameView.text = config.name ?: s?.displayName ?: config.entity.orEmpty()
+        nameView.text = config.name(s) ?: s?.displayName ?: config.entity.orEmpty()
         val on = s?.state == "on"
         val pct = s?.brightnessPct
         // HA's brightness line: the percentage while on, hidden (its place kept) otherwise.
@@ -351,6 +356,9 @@ internal class BrightnessDialView(
      */
     private var sentFraction: Float? = null
     private var touchMode = TOUCH_NONE
+    /** Whether the press on the light button became a hold ([performLongClick]), so its release isn't also a tap. */
+    private var held = false
+    private val holdCheck = Runnable { if (touchMode == TOUCH_TOGGLE) held = performLongClick() }
 
     var onToggle: (() -> Unit)? = null
     var onBrightness: ((Int) -> Unit)? = null
@@ -425,6 +433,9 @@ internal class BrightnessDialView(
                 }
                 if (touchMode == TOUCH_NONE) return false
                 parent?.requestDisallowInterceptTouchEvent(true)
+                held = false
+                // The light button's hold, timed as Android times a long press (its listener runs hold_action).
+                if (touchMode == TOUCH_TOGGLE) postDelayed(holdCheck, ViewConfiguration.getLongPressTimeout().toLong())
                 if (touchMode == TOUCH_DRAG) {
                     dragFraction = fractionAt(event.x, event.y)
                     invalidate()
@@ -434,8 +445,11 @@ internal class BrightnessDialView(
             MotionEvent.ACTION_MOVE -> if (touchMode == TOUCH_DRAG) {
                 dragFraction = fractionAt(event.x, event.y)
                 invalidate()
+            } else if (touchMode == TOUCH_TOGGLE && d > r * 0.6f) {
+                removeCallbacks(holdCheck)
             }
             MotionEvent.ACTION_UP -> {
+                removeCallbacks(holdCheck)
                 when (touchMode) {
                     TOUCH_DRAG -> dragFraction?.let {
                         val pct = (it * 100f).roundToInt()
@@ -446,7 +460,7 @@ internal class BrightnessDialView(
                         VitroAccess.valueChanged(this)
                     }
                     // One path for a tap, a keyboard and TalkBack: performClick toggles.
-                    TOUCH_TOGGLE -> if (d <= r * 0.6f) performClick()
+                    TOUCH_TOGGLE -> if (!held && d <= r * 0.6f) performClick()
                 }
                 dragFraction = null
                 touchMode = TOUCH_NONE
@@ -454,6 +468,7 @@ internal class BrightnessDialView(
                 invalidate()
             }
             MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(holdCheck)
                 dragFraction = null
                 touchMode = TOUCH_NONE
                 invalidate()
@@ -587,6 +602,13 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     private val code = StringBuilder()
     private val armStates: List<String> = readStates(config.raw.optJSONArray("states"))
 
+    /**
+     * The arm buttons: the card's `states` as written, or, without them, HA's defaults (arm home, arm away) that the
+     * alarm supports (`supported_features`), as hui-alarm-panel-card filters them.
+     */
+    private fun shownArmStates(s: EntityState?): List<String> =
+        if (config.raw.optJSONArray("states") != null) armStates else DEFAULT_STATES.filter { supports(s, it) }
+
     init {
         val col = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
@@ -668,7 +690,7 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     }
 
     private fun render(s: EntityState?) {
-        titleView.text = config.name ?: s?.friendlyName ?: "Alarm"
+        titleView.text = config.name(s) ?: s?.friendlyName ?: "Alarm"
         val state = s?.state ?: "unknown"
         chipLabel.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it != state } ?: stateLabel(state)
         chipIcon.setIcon(stateIcon(state), 0xFFFFFFFF.toInt())
@@ -682,7 +704,8 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
         renderCode()
 
         actionsRow.removeAllViews()
-        val buttons = if (state == "disarmed" || s == null || s.isUnavailable) armStates else listOf("disarm")
+        // hui-alarm-panel-card: the arm buttons only while disarmed, Disarm in any other state (unavailable too).
+        val buttons = if (state == "disarmed" || s == null) shownArmStates(s) else listOf("disarm")
         buttons.forEach { action ->
             // ha-button: a 32 px tonal pill, 14 px / 500, 12 px padding (disarm in HA's danger colors).
             val danger = action == "disarm"
@@ -747,9 +770,20 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
         /** HA's default `states` for the alarm panel card. */
         val DEFAULT_STATES = listOf("arm_home", "arm_away")
 
+        /** The card's `states`, as HA uses them: an empty list shows no arm buttons; no `states`, HA's defaults. */
         fun readStates(arr: JSONArray?): List<String> {
-            if (arr == null || arr.length() == 0) return DEFAULT_STATES
-            return (0 until arr.length()).mapNotNull { arr.optString(it, "").ifEmpty { null } }.ifEmpty { DEFAULT_STATES }
+            if (arr == null) return DEFAULT_STATES
+            return (0 until arr.length()).mapNotNull { arr.optString(it, "").ifEmpty { null } }
+        }
+
+        /** HA's AlarmControlPanelEntityFeature bit for each arm action. */
+        private val ARM_FEATURE = mapOf("arm_home" to 1, "arm_away" to 2, "arm_night" to 4, "arm_custom_bypass" to 16, "arm_vacation" to 32)
+
+        /** Whether [s] supports [action] (HA's `supportsFeature`); an entity without `supported_features` supports none. */
+        fun supports(s: EntityState?, action: String): Boolean {
+            val bits = (s?.attributes?.get("supported_features") as? Number)?.toInt() ?: return false
+            val bit = ARM_FEATURE[action] ?: return true
+            return bits and bit != 0
         }
 
         /** `arm_home` → `alarm_arm_home`, `disarm` → `alarm_disarm`. */
@@ -1414,7 +1448,7 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     private fun render() {
         val area = HaDisplay.areas[areaId]
-        nameView.text = config.name ?: area?.name ?: areaName(config)
+        nameView.text = config.name(null) ?: area?.name ?: areaName(config)
         val icon = area?.icon
         tileIcon.setIcon(icon ?: "mdi:texture-box", tileColor)
         headerIcon.visibility = if (icon != null) VISIBLE else GONE
@@ -1546,7 +1580,7 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
         /** The card's `name`, else the area id in words (`living_room` → `Living room`), until HA's registry is in. */
         fun areaName(config: CardConfig): String =
-            config.name ?: config.raw.optString("area", "").ifEmpty { "Area" }
+            config.name(null) ?: config.raw.optString("area", "").ifEmpty { "Area" }
                 .replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
 
         internal fun median(values: List<Double>): Double {
@@ -1693,7 +1727,8 @@ class PictureElementsCardView(ctx: VitroCardContext, private val config: CardCon
             addView(icon, LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
         }
         halo.layoutParams = LayoutParams(ctx.px(40f), ctx.px(40f))
-        bindActions(halo, el, if (VitroCardContext.isToggleable(el.entity)) "toggle" else "more-info")
+        // hui-state-icon-element: more-info on a tap, whatever the domain (it never toggles by default).
+        bindActions(halo, el, "more-info")
         val eid = el.entity
         if (eid != null) {
             observe(eid) { s -> icon.setIcon(MdiIcons.resolveIconName(el.icon, s), tintFor(s)) }
@@ -1997,7 +2032,7 @@ class HumidifierCardView(ctx: VitroCardContext, private val config: CardConfig) 
     }
 
     private fun render(s: EntityState?) {
-        titleView.text = config.name ?: s?.friendlyName ?: config.entity.orEmpty()
+        titleView.text = config.name(s) ?: s?.friendlyName ?: config.entity.orEmpty()
         val attrs = s?.attributes.orEmpty()
         val on = s?.state == "on"
         dial.bind(

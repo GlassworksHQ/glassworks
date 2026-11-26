@@ -1,0 +1,46 @@
+{
+ "title": "mushroom-select: select unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "select.select_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "custom:mushroom-select-card",
+  "entity": "select.select_unavailable"
+ },
+ "fixture": {
+  "states": {
+   "select.select_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "options": [
+      "Comfort",
+      "Eco",
+      "Away"
+     ],
+     "restored": true,
+     "friendly_name": "Heat Pump Mode"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "select.select_unavailable",
+    "pl": "demo",
+    "di": "dev-heat-pump",
+    "en": "Mode",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-heat-pump",
+    "name": "Heat Pump"
+   }
+  ]
+ }
+}

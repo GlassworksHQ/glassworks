@@ -1,0 +1,53 @@
+{
+ "title": "Tile: a weather entity's attributes as its state content, with their units",
+ "card": {
+  "type": "tile",
+  "entity": "weather.forecast_home",
+  "state_content": [
+   "state",
+   "temperature",
+   "humidity",
+   "pressure"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "weather.forecast_home": {
+    "state": "partlycloudy",
+    "last_changed": "-159m",
+    "attributes": {
+     "temperature": 12.2,
+     "dew_point": 8.1,
+     "temperature_unit": "°C",
+     "humidity": 76,
+     "cloud_coverage": 99.2,
+     "uv_index": 0.9,
+     "pressure": 1021.5,
+     "pressure_unit": "hPa",
+     "wind_bearing": 126.2,
+     "wind_speed": 15.1,
+     "wind_speed_unit": "km/h",
+     "visibility_unit": "km",
+     "precipitation_unit": "mm",
+     "friendly_name": "Home",
+     "supported_features": 3,
+     "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute."
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "weather.forecast_home",
+    "pl": "met",
+    "di": "dev-forecast-home",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-forecast-home",
+    "name": "Home"
+   }
+  ]
+ }
+}

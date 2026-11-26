@@ -1164,7 +1164,9 @@ object HaTimelineChart {
 class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
     private val entities = config.entities().filter { it.isEntity }
     private val entityIds = entities.map { it.entity }
-    private val names: Map<String, String> = entities.mapNotNull { e -> e.name?.let { e.entity to it } }.toMap()
+    /** The configured names, read when drawn: a name-picker `name` follows the registries and states. */
+    private val names: Map<String, String>
+        get() = entities.mapNotNull { e -> e.nameFor(ctx.store[e.entity])?.let { e.entity to it } }.toMap()
     private val colors: Map<String, Int> = entities.mapNotNull { e ->
         (config.raw.optJSONArray("entities")?.let { arr -> (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.firstOrNull { it.optString("entity") == e.entity } })
             ?.optString("color")?.takeIf { it.isNotEmpty() }?.let { c -> dev.glassworks.engine.vitro.theme.ThemeResolver.parseColor(c) }?.let { e.entity to it }
@@ -1349,7 +1351,9 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         val end = max(ctx.now(), ceil(newest).toLong())
         val start = (end - hours * HaGraph.HOUR_MS).toLong()
 
-        val lineSpecs = history.line.map { u -> lineSpec(u, start, end) }
+        // The names once per render: the shared axis is sized with the names it draws.
+        val names = this.names
+        val lineSpecs = history.line.map { u -> lineSpec(u, start, end, names) }
         // The charts share the widest y axis (paddingYAxis).
         val padding = max(
             lineSpecs.maxOfOrNull { HaLineChart.yAxis(it.first).third } ?: 0f,
@@ -1388,7 +1392,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
 
     private fun entry(child: View, timeline: Boolean, first: Boolean): View = historyEntry(ctx, child, timeline, first)
 
-    private fun lineSpec(u: LineUnit, start: Long, end: Long): Pair<LineChartSpec, List<LegendItem>> =
+    private fun lineSpec(u: LineUnit, start: Long, end: Long, names: Map<String, String>): Pair<LineChartSpec, List<LegendItem>> =
         stateHistoryLineSpec(ctx, u, start, end, chartWidthCss(), names, colors, showNames, temperatureUnit(),
             config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() }, config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() },
             config.raw.optBoolean("fit_y_data", false))
@@ -1702,7 +1706,7 @@ class StatisticsGraphCardView(ctx: VitroCardContext, private val config: CardCon
             result = result,
             statTypes = statTypes,
             hideLegend = hideLegend,
-            names = ids.associateWith { id -> config.entities().firstOrNull { it.entity == id }?.name ?: ctx.store[id]?.displayName ?: id },
+            names = ids.associateWith { id -> config.entities().firstOrNull { it.entity == id }?.nameFor(ctx.store[id]) ?: ctx.store[id]?.displayName ?: id },
             current = ids.associateWith { id -> ctx.store[id]?.state?.toDoubleOrNull()?.takeIf { it.isFinite() } },
             statUnits = ids.associateWith { id -> displayUnit(id, metadata[id]) },
             unit = unit,

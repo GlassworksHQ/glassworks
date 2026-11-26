@@ -1,0 +1,48 @@
+{
+ "title": "thermostat: climate unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "climate.climate_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "thermostat",
+  "entity": "climate.climate_unavailable"
+ },
+ "fixture": {
+  "states": {
+   "climate.climate_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat"
+     ],
+     "min_temp": 7,
+     "max_temp": 30,
+     "restored": true,
+     "supported_features": 385,
+     "friendly_name": "Hallway Thermostat"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "climate.climate_unavailable",
+    "pl": "demo",
+    "di": "dev-hallway",
+    "en": "Thermostat",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway",
+    "name": "Hallway"
+   }
+  ]
+ }
+}
