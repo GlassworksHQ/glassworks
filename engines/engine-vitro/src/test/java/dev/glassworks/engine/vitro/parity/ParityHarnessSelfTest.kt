@@ -83,6 +83,21 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun aMaskedStripNeverExcusesAnUnmaskedRegion() {
+        // 18 x 16: HA all grey; Vitro's first two columns red. The last two columns are masked. Vitro's square shifted
+        // two px right would match HA's, but it reaches into the mask: it may not excuse the red.
+        val w = 18
+        val h = 16
+        val grey = Color.rgb(128, 128, 128)
+        val a = IntArray(w * h) { grey }
+        val b = IntArray(w * h) { i -> if (i % w < 2) Color.RED else grey }
+        val (unmasked, _) = ParityDiff.worstRegion(a, b, w, h)
+        val (masked, _) = ParityDiff.worstRegion(a, b, w, h, listOf(android.graphics.Rect(16, 0, 18, 16)))
+        assertTrue("the red still counts: $masked", masked > 0.0)
+        assertEquals("unmasked, the shift excuses it", 0.0, unmasked, 0.0)
+    }
+
+    @Test
     fun cropOutsideTheRenderIsFilledNotStretched() {
         val b = Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLUE) }
         val c = ParityDiff.crop(b, 5, 5, 10, 10)

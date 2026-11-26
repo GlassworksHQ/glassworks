@@ -13,7 +13,8 @@ import dev.glassworks.engine.vitro.ui.VitroCardContext
 /**
  * HA's `showEnterCodeDialog` (frontend 20261028.5), as cards that need an alarm's code open it: a title, a masked
  * code field (digits for a `number` code format) and a submit button named like the title ("Arm", "Disarm").
- * [onCode] runs on submit only, so a cancelled dialog sends nothing.
+ * [onCode] runs on submit only, so a cancelled dialog sends nothing, and never with an empty code: submit stays
+ * disabled until something is typed, as HA would only refuse the call.
  */
 internal object HaCodeDialog {
     /** The last dialog shown, for tests. */
@@ -27,12 +28,22 @@ internal object HaCodeDialog {
             hint = HaText.ui("ui.card.alarm_control_panel.code").ifEmpty { "Code" }
         }
         runCatching {
-            lastShown = AlertDialog.Builder(ctx.context)
+            val dialog = AlertDialog.Builder(ctx.context)
                 .setTitle(title)
                 .setView(field)
                 .setNegativeButton(HaText.ui("ui.common.cancel").ifEmpty { "Cancel" }, null)
-                .setPositiveButton(title) { _, _ -> onCode(field.text?.toString().orEmpty()) }
+                .setPositiveButton(title) { _, _ ->
+                    field.text?.toString().orEmpty().takeIf { it.isNotEmpty() }?.let(onCode)
+                }
                 .show()
+            lastShown = dialog
+            val submit = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            submit?.isEnabled = false
+            field.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(t: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(t: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(e: android.text.Editable?) { submit?.isEnabled = !e.isNullOrEmpty() }
+            })
         }
     }
 }

@@ -33,6 +33,7 @@ import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.HaGridSize
 import dev.glassworks.engine.vitro.ui.TimestampText
+import dev.glassworks.engine.vitro.ui.showTimestampOr
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONObject
@@ -299,7 +300,13 @@ class PlainConfigParityTest {
         assertTrue("no call before the code", calls.isEmpty())
         val dialog = HaCodeDialog.lastShown
         assertNotNull("the code dialog", dialog)
-        all(dialog!!.window!!.decorView).filterIsInstance<EditText>().single().setText("1234")
+        // No code typed: submit can't be pressed, and pressing it anyway sends nothing.
+        assertFalse(dialog!!.getButton(DialogInterface.BUTTON_POSITIVE).isEnabled)
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        idle()
+        assertTrue("no empty code sent", calls.isEmpty())
+        all(dialog.window!!.decorView).filterIsInstance<EditText>().single().setText("1234")
+        assertTrue(dialog.getButton(DialogInterface.BUTTON_POSITIVE).isEnabled)
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
         idle()
         val (domain, service, data) = calls.single()
@@ -387,6 +394,20 @@ class PlainConfigParityTest {
         now = NOW + 60_000L
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_100))
         assertEquals("In 30 seconds", value.text.toString())
+    }
+
+    @Test fun aDiscardedTimestampTextIsntKeptByItsTicker() {
+        put("sensor.next_alarm", iso(NOW + 90_000L), "device_class" to "timestamp")
+        val c = ctx()
+        fun discarded(): java.lang.ref.WeakReference<TextView> {
+            val text = TextView(activity)
+            c.showTimestampOr(text, store["sensor.next_alarm"], "…")
+            assertTrue(TimestampText.isTicking(text))
+            return java.lang.ref.WeakReference(text)
+        }
+        val ref = discarded()
+        repeat(20) { if (ref.get() != null) { System.gc(); Thread.sleep(20) } }
+        assertNull("a text no one holds is collected, ticker and all", ref.get())
     }
 
     // ---- 6. String badges ----

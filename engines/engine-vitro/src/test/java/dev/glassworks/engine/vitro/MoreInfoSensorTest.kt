@@ -292,6 +292,15 @@ class MoreInfoSensorTest {
         answer(4, 3.0) // the newest
         answer(2, 2.0) // the one before it, late
         assertEquals("the newest refresh's data stays", 3.0, mean(), 0.0)
+        // Every answer slower than a minute: a refresh goes out before the last one is answered, and the late answer
+        // still draws, as no newer one has.
+        ShadowLooper.idleMainLooper(MoreInfoHistoryView.MINUTE_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        ShadowLooper.idleMainLooper(MoreInfoHistoryView.MINUTE_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(10, answers.size)
+        answer(6, 4.0)
+        assertEquals("a slow answer still draws when nothing newer has", 4.0, mean(), 0.0)
+        answer(8, 5.0)
+        assertEquals(5.0, mean(), 0.0)
     }
 
     @Test

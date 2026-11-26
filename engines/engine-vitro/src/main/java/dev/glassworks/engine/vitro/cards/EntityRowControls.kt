@@ -247,21 +247,24 @@ internal object EntityRowControls {
         }
     }
 
-    /** `get_services` answers by entity store (one per page), kept a minute: a script reload can add fields. */
+    /**
+     * `get_services` answers by entity store (one per page), kept a minute. Only a "has fields" answer is taken from
+     * it: a script reload can add fields, so "no fields", which runs the script directly, is always asked afresh.
+     */
     private val servicesCache = java.util.WeakHashMap<dev.glassworks.engine.vitro.data.EntityStore, Pair<Long, JSONObject>>()
     private const val SERVICES_TTL_MS = 60_000L
 
     /**
      * HA's `hasScriptFields`: whether `script.<object id>` declares `fields` in `get_services`, on the main thread:
-     * true or false, or null when Home Assistant didn't answer.
+     * true or false, or null when Home Assistant didn't answer. False always comes from a fresh answer.
      */
     internal fun scriptHasFields(ctx: VitroCardContext, entityId: String, answer: (Boolean?) -> Unit) {
         val objectId = entityId.substringAfter('.')
         fun read(services: JSONObject): Boolean =
             (services.optJSONObject("script")?.optJSONObject(objectId)?.optJSONObject("fields")?.length() ?: 0) > 0
         val cached = synchronized(servicesCache) { servicesCache[ctx.store] }
-        if (cached != null && System.currentTimeMillis() - cached.first < SERVICES_TTL_MS) {
-            answer(read(cached.second))
+        if (cached != null && System.currentTimeMillis() - cached.first < SERVICES_TTL_MS && read(cached.second)) {
+            answer(true)
             return
         }
         ctx.callWs(JSONObject().put("type", "get_services")) { ok, result, _ ->
@@ -734,6 +737,10 @@ internal object EntityRowControls {
         private var chars = 20
         private var shown = ""
 
+        /** The user typed in the field since it last showed [shown]: only then does leaving it send a value. */
+        private var edited = false
+        private var settingText = false
+
         init {
             setWillNotDraw(false)
             addView(input)
@@ -746,9 +753,29 @@ internal object EntityRowControls {
                 false
             }
             input.setOnFocusChangeListener { _, focused -> if (!focused) commit() }
+            input.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(t: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(t: CharSequence?, start: Int, before: Int, count: Int) { if (!settingText) edited = true }
+                override fun afterTextChanged(e: android.text.Editable?) = Unit
+            })
         }
 
+        private fun show(text: String) {
+            settingText = true
+            try { input.setText(text) } finally { settingText = false }
+            edited = false
+        }
+
+        /**
+         * Done, or the field left: a value the user typed is sent once. An untouched field sends nothing and shows the
+         * latest value (HA may have changed it while the field had focus).
+         */
         private fun commit() {
+            if (!edited) {
+                if (input.text?.toString() != shown) show(shown)
+                return
+            }
+            edited = false
             val typed = input.text?.toString()?.trim().orEmpty()
             val s = ctx.store[entityId] ?: return
             if (typed.isEmpty() || typed == shown) return
@@ -761,7 +788,7 @@ internal object EntityRowControls {
             unit.text = s?.unit.orEmpty()
             val disabled = s == null || s.state == "unavailable"
             shown = jsNumberText(s?.state?.toDoubleOrNull() ?: Double.NaN)
-            if (!input.hasFocus()) input.setText(shown)
+            if (!input.hasFocus()) show(shown)
             input.isEnabled = !disabled
             input.contentDescription = name()
             alpha = if (disabled) 0.5f else 1f

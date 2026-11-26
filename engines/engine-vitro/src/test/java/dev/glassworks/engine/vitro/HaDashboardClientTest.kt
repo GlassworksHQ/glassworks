@@ -1586,6 +1586,25 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun anAreaPutOnAFloorLoadsItsNameAndFollowsTheFloors() {
+        withRegistries()
+        val c = connected()
+        awaitCondition("the areas") { HaDisplay.areaName("lounge") == "Lounge" }
+        assertTrue("no area on a floor: no floors", server.commands("config/floor_registry/list").isEmpty())
+        // The area is put on a floor in HA: an area event, no floor event.
+        server.areaRegistry = JSONArray("""[{"area_id": "lounge", "name": "Lounge", "floor_id": "ground"}]""")
+        server.pushEvent(server.eventSubscriptionId("area_registry_updated")!!, JSONObject().put("event_type", "area_registry_updated").put("data", JSONObject()))
+        awaitCondition("the floor's name") { HaDisplay.floors["ground"] == "Ground floor" }
+        // The floor is renamed: followed natively, with no island watching.
+        val floors = server.eventSubscriptionId("floor_registry_updated")
+        assertNotNull("the floors are followed once a name needs them", floors)
+        server.floorRegistry = JSONArray("""[{"floor_id": "ground", "name": "Downstairs", "level": 0}]""")
+        server.pushEvent(floors!!, JSONObject().put("event_type", "floor_registry_updated").put("data", JSONObject()))
+        awaitCondition("the new floor name") { HaDisplay.floors["ground"] == "Downstairs" }
+        c.close()
+    }
+
+    @Test
     fun aReconnectKeepsTheDisplayDataUntilTheNewConnectionsAnswersReplaceIt() {
         // A8: the new connection's entity snapshot draws every card before its registry answers are in. Until they
         // are, the cards keep the device names they had, not the plain friendly names.

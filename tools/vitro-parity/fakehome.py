@@ -92,6 +92,17 @@ def iso(t):
     return datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat()
 
 
+def resolve_state(v):
+    """A fixture state: an "@" time ("@+3h", a timestamp sensor's) resolved as [resolve] does; any other text, one that
+    merely starts with "@" ("@standby") included, stays as written."""
+    if isinstance(v, str) and v.startswith("@"):
+        try:
+            return resolve(v)
+        except ValueError:
+            return v
+    return v
+
+
 def resolve(v):
     """A fixture value with its "@" times resolved: "@-2h" -> ISO UTC, "@D+1" -> local date, "@D+1 14:30" -> local ISO."""
     if isinstance(v, dict):
@@ -154,7 +165,7 @@ def states():
     for eid, st in (fixture().get("states") or {}).items():
         changed = at(st.get("last_changed", -3600))
         # A timestamp sensor's state may be an "@" time too ("@+3h"), resolved as attributes are.
-        state, attrs = str(resolve(st["state"])), resolve(st.get("attributes") or {})
+        state, attrs = str(resolve_state(st["state"])), resolve(st.get("attributes") or {})
         updated = at(st["last_updated"]) if "last_updated" in st else changed
         s = _series(eid)
         if s:
@@ -382,7 +393,8 @@ class Series:
             last = {}
             for p in pts:
                 last[at(p[0])] = p
-            self.changes = sorted((t, str(p[1])) for t, p in last.items())
+            # A point's state may be an "@" time too, served resolved as the live state is.
+            self.changes = sorted((t, str(resolve_state(p[1]))) for t, p in last.items())
             self.attrs = {t: resolve(p[2]) for t, p in last.items() if len(p) > 2}
 
     def attributes(self, t):

@@ -259,14 +259,16 @@ internal class HaControlSelectMenu(private val ctx: VitroCardContext, icon: Stri
     private fun open() {
         if (!isEnabled || options.isEmpty()) return
         val menu = PopupMenu(ctx.context, this)
-        options.forEachIndexed { i, (value, label) ->
+        // The options as the menu shows them: a pick means what the user saw, even if a bind changes them meanwhile.
+        val shown = options.toList()
+        shown.forEachIndexed { i, (value, label) ->
             menu.menu.add(0, i, i, label).apply {
                 isCheckable = true
                 isChecked = value == selected
             }
         }
         menu.setOnMenuItemClickListener { item ->
-            options.getOrNull(item.itemId)?.first?.let { v -> onPick?.invoke(v) }
+            shown.getOrNull(item.itemId)?.first?.let { v -> onPick?.invoke(v) }
             true
         }
         menu.show()

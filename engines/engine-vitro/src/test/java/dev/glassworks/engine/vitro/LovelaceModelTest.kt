@@ -718,6 +718,8 @@ class LovelaceModelTest {
     fun alarmPanelStatesAndServices() {
         assertEquals(listOf("arm_home", "arm_away"), AlarmPanelCardView.readStates(null))
         assertEquals(listOf("arm_night"), AlarmPanelCardView.readStates(JSONArray("""["arm_night"]""")))
+        // `states: []` is kept: HA shows no arm buttons then.
+        assertEquals(emptyList<String>(), AlarmPanelCardView.readStates(JSONArray("[]")))
         assertEquals("alarm_arm_away", AlarmPanelCardView.serviceFor("arm_away"))
         assertEquals("alarm_disarm", AlarmPanelCardView.serviceFor("disarm"))
         assertEquals("Armed home", AlarmPanelCardView.stateLabel("armed_home"))

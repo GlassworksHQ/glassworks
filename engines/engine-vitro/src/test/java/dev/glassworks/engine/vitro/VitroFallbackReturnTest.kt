@@ -644,6 +644,49 @@ class VitroFallbackReturnTest {
         assertNative(page, fp)
     }
 
+    @Test fun aFailedDashboardIsntRetriedOverWhereTheUserWentInHomeAssistantsPage() {
+        server.configError = "error"
+        val fb = RecordingEngine()
+        val e = engine(fb).also { it.configRetryMs = longArrayOf(20, 20) }
+        val page = page(e)
+        page.load(living)
+        awaitMain("fallback") { fb.opens.isNotEmpty() && fb.fallbackPage().view.visibility == View.VISIBLE }
+        val fp = fb.fallbackPage()
+        // In HA's page, the user goes on to the energy dashboard.
+        fb.fallbackOpen().host.onLocationChange("$base/energy")
+        server.configError = null
+        val connections = server.connectUrls.size
+        server.dropConnection()
+        awaitMain("reconnected") { server.connectUrls.size > connections && server.received.count { it.optString("type") == "auth" } > connections }
+        repeat(10) { Thread.sleep(20); idle() }
+        assertFallback(page, fp)
+        assertTrue("no ready: the energy page stays", host.messages("ready").isEmpty())
+    }
+
+    @Test fun backFromADialogThenASidebarTapToItsViewKeepsTheWayBack() {
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        vitroView(page).openMoreInfo("timer.tea")
+        idle()
+        val fp = fb.fallbackPage()
+        page.goBack()
+        idle()
+        assertNative(page, fp)
+        // Later: another HA page, then HA's sidebar back to the view the dialog once opened over.
+        page.load("$base/energy")
+        idle()
+        val fpHost = fb.fallbackOpen().host
+        fpHost.onLocationChange("$base/energy")
+        fpHost.onLocationChange(living)
+        idle()
+        assertNative(page, fp)
+        assertTrue("Back goes to the energy page, not lost as a closed dialog's", page.canGoBack)
+        page.goBack()
+        idle()
+        assertFallback(page, fp)
+        assertEquals("$base/energy", fp.loads.last())
+    }
+
     @Test fun aFallbackPageBehindTheNativeViewReportsNothing() {
         val fb = RecordingEngine()
         val page = readyPage(fb)

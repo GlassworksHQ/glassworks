@@ -110,6 +110,7 @@ class LiveCameraFeedTest {
 
     /** The kinds whose factory was asked to get ready, in order. */
     private val prewarmed = ArrayList<CameraStreamKind>()
+    private val prewarmThreads = ArrayList<Thread>()
 
     @Before
     fun setUp() = CameraVideoBudget.reset()
@@ -131,6 +132,7 @@ class LiveCameraFeedTest {
                 }
 
                 override fun prewarm() {
+                    prewarmThreads += Thread.currentThread()
                     prewarmed += it
                 }
             }
@@ -1198,15 +1200,19 @@ class LiveCameraFeedTest {
     }
 
     @Test
-    fun webRtcIsPrewarmedWhereTheAnswerLandsNotAfterTheBuild() {
-        // The answer comes on the socket's thread while the main thread is still busy building the view.
+    fun webRtcIsPrewarmedOnTheMainThreadWhenTheAnswerComesThrough() {
+        // The answer comes on the socket's thread; the factory's prewarm is a main-thread entry point (it starts its
+        // own background work), so it runs when the answer reaches the main thread, once.
         pendingCaps = ArrayList()
         feed(context(store()))
         val answer = pendingCaps!!.single()
-        answer(true, capabilities, null)
-        assertEquals("prewarmed before the main thread runs", listOf(WEB_RTC), prewarmed)
+        val worker = Thread { answer(true, capabilities, null) }
+        worker.start()
+        worker.join()
+        assertTrue("not on the socket's thread", prewarmed.isEmpty())
         idle()
         assertEquals(listOf(WEB_RTC), prewarmed)
+        assertEquals(android.os.Looper.getMainLooper().thread, prewarmThreads.single())
     }
 
     @Test
