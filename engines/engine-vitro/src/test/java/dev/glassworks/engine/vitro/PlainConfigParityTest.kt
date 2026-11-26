@@ -5,13 +5,10 @@
 package dev.glassworks.engine.vitro
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.Application
-import android.content.DialogInterface
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
 import dev.glassworks.engine.vitro.cards.GlanceCardView
@@ -322,20 +319,20 @@ class PlainConfigParityTest {
         idle()
         assertEquals("config/entity_registry/get", ws.single().getString("type"))
         assertTrue("no call before the code", calls.isEmpty())
-        val dialog = HaCodeDialog.lastShown
-        assertNotNull("the code dialog", dialog)
-        // No code typed: submit can't be pressed, and pressing it anyway sends nothing.
-        assertFalse(dialog!!.getButton(DialogInterface.BUTTON_POSITIVE).isEnabled)
-        dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
-        idle()
-        assertTrue("no empty code sent", calls.isEmpty())
-        all(dialog.window!!.decorView).filterIsInstance<EditText>().single().setText("1234")
-        assertTrue(dialog.getButton(DialogInterface.BUTTON_POSITIVE).isEnabled)
-        dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        assertNotNull("the code dialog", HaCodeDialog.lastShown)
+        val dialog = HaCodeDialog.lastView!!
+        // HA's dialog-enter-code for a number code: the keypad, titled and submitted with "Arm".
+        assertTrue(dialog.numeric)
+        assertTrue("Arm" in texts(dialog))
+        assertEquals("Arm", dialog.keys.getValue("submit").contentDescription)
+        "1234".forEach { dialog.keys.getValue(it.toString()).performClick() }
+        assertEquals("1234", dialog.code)
+        dialog.keys.getValue("submit").performClick()
         idle()
         val (domain, service, data) = calls.single()
         assertEquals("alarm_control_panel" to "alarm_arm_away", domain to service)
         assertEquals("1234", data!!.getString("code"))
+        assertFalse("the dialog closed", HaCodeDialog.lastShown!!.isShowing)
     }
 
     @Test fun aDefaultCodeOrNoCodeRequiredSkipsTheDialog() {

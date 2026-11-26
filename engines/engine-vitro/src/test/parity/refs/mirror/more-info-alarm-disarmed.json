@@ -1,0 +1,182 @@
+{
+ "case": "more-info-alarm-disarmed",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 0,
+  "y": 40,
+  "width": 720,
+  "height": 1240
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 0,
+   "y": 48,
+   "w": 720,
+   "h": 1232,
+   "type": "ha-more-info-dialog",
+   "mode": "bottom-sheet"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "House alarm",
+   "x": 60,
+   "y": 22,
+   "w": 113.94,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Disarmed",
+   "x": 283.19,
+   "y": 92,
+   "w": 153.61,
+   "h": 42,
+   "size": 36,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "45 minutes ago",
+   "x": 303.81,
+   "y": 142.19,
+   "w": 112.36,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Home",
+   "x": 341.19,
+   "y": 585.05,
+   "w": 37.63,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Away",
+   "x": 343.09,
+   "y": 690.38,
+   "w": 33.8,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Disarmed",
+   "x": 329.97,
+   "y": 795.7,
+   "w": 60.05,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(255, 255, 255)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "alarm_control_panel.house": {
+   "s": "disarmed",
+   "a": {
+    "supported_features": 3,
+    "code_format": "number",
+    "code_arm_required": true,
+    "friendly_name": "House alarm"
+   },
+   "lc": 1794496980,
+   "lu": 1794496980
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "alarm_control_panel"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "alarm_control_panel": {
+     "_": {
+      "default": "mdi:shield",
+      "state": {
+       "armed_away": "mdi:shield-lock",
+       "armed_custom_bypass": "mdi:security",
+       "armed_home": "mdi:shield-home",
+       "armed_night": "mdi:shield-moon",
+       "armed_vacation": "mdi:shield-airplane",
+       "disarmed": "mdi:shield-off",
+       "pending": "mdi:shield-outline",
+       "triggered": "mdi:bell-ring"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.alarm_control_panel.entity_component._.state.armed": "Armed",
+    "component.alarm_control_panel.entity_component._.state.armed_away": "Armed away",
+    "component.alarm_control_panel.entity_component._.state.armed_custom_bypass": "Armed custom bypass",
+    "component.alarm_control_panel.entity_component._.state.armed_home": "Armed home",
+    "component.alarm_control_panel.entity_component._.state.armed_night": "Armed night",
+    "component.alarm_control_panel.entity_component._.state.armed_vacation": "Armed vacation",
+    "component.alarm_control_panel.entity_component._.state.arming": "Arming",
+    "component.alarm_control_panel.entity_component._.state.disarmed": "Disarmed",
+    "component.alarm_control_panel.entity_component._.state.disarming": "Disarming",
+    "component.alarm_control_panel.entity_component._.state.pending": "Pending",
+    "component.alarm_control_panel.entity_component._.state.triggered": "Triggered",
+    "component.alarm_control_panel.entity_component._.state_attributes.changed_by.name": "Changed by",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_arm_required.name": "Code for arming",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_arm_required.state.false": "Not required",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_arm_required.state.true": "Required",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_format.name": "Code format",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_format.state.number": "Number",
+    "component.alarm_control_panel.entity_component._.state_attributes.code_format.state.text": "Text"
+   },
+   "entity": {}
+  }
+ },
+ "user": {
+  "is_admin": false
+ }
+}

@@ -302,21 +302,9 @@ internal object EntityRowControls {
     private fun lockLabel(service: String): String =
         if (service == "unlock") HaText.ui("ui.card.lock.unlock") else HaText.ui("ui.card.lock.lock")
 
-    private fun askCode(ctx: VitroCardContext, service: String, onCode: (String) -> Unit) {
-        val field = EditText(ctx.context).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setSingleLine(true)
-            hint = HaText.ui("ui.dialogs.enter_code.input_label")
-        }
-        runCatching {
-            android.app.AlertDialog.Builder(ctx.context)
-                .setTitle(lockLabel(service))
-                .setView(field)
-                .setNegativeButton(HaText.ui("ui.common.cancel"), null)
-                .setPositiveButton(lockLabel(service)) { _, _ -> onCode(field.text?.toString().orEmpty()) }
-                .show()
-        }
-    }
+    /** HA's `callProtectedLockService`: the code dialog's text version, titled and confirmed with the action. */
+    private fun askCode(ctx: VitroCardContext, service: String, onCode: (String) -> Unit) =
+        HaCodeDialog.ask(ctx, "text", lockLabel(service), lockLabel(service)) { onCode(it) }
 
     // ---- input_select / select: ha-select ----
 

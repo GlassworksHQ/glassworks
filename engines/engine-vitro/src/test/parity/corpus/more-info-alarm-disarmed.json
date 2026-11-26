@@ -1,0 +1,31 @@
+{
+ "title": "More Info of a disarmed alarm that needs a code to arm: HA's vertical modes select (Home, Away, Disarmed) with Disarmed filled, under the state header. Picking a mode opens HA's code dialog, which needs a tap this harness doesn't make, so the dialog's keypad is covered by HaCodeDialogTest",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "alarm_control_panel.house"
+ },
+ "more_info": "alarm_control_panel.house",
+ "expect": {
+  "alarm_control_panel.house": "disarmed"
+ },
+ "fixture": {
+  "admin": false,
+  "states": {
+   "alarm_control_panel.house": {
+    "state": "disarmed",
+    "last_changed": -2700,
+    "attributes": {
+     "supported_features": 3,
+     "code_format": "number",
+     "code_arm_required": true,
+     "friendly_name": "House alarm"
+    }
+   }
+  }
+ }
+}

@@ -12,6 +12,10 @@
   "owner": "#799",
   "reason": "Entities rows: an active automation's icon is drawn in Vitro's blue active color where HA's state-badge uses --state-active-color (amber); predates the batch (ThemeResolver.activeColor), found by the region check on #926's new case"
  },
+ "mirror/more-info-alarm-disarmed": {
+  "owner": "#799",
+  "reason": "Alarm More Info on the Mirror's tall sheet: HA centers the modes select in the sheet's height (`.controls` is flex: 1); Vitro puts it right under the state header, as for the vacuum's (s1 and tablet match)"
+ },
  "mirror/more-info-vacuum-cleaning": {
   "owner": "#799",
   "reason": "Vacuum More Info on the Mirror's tall sheet: HA centers the robot, its buttons and the fan speed in the sheet's height; Vitro puts them right under the header (found by the region check on #930's case)"

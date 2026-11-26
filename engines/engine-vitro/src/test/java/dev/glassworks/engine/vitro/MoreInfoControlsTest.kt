@@ -82,14 +82,18 @@ class MoreInfoControlsTest {
     }
 
     @Test
-    fun alarmButtonsFollowTheSupportedModes() {
+    fun alarmModesFollowTheSupportedFeatures() {
         fun alarm(features: Int?) = EntityState(
             "alarm_control_panel.home", "disarmed",
             if (features == null) emptyMap() else mapOf("supported_features" to features),
         )
-        assertEquals(listOf("alarm_arm_away", "alarm_arm_night", "alarm_disarm"), AlarmModes.actions(alarm(2 or 4)).map { it.second })
-        assertEquals(listOf("alarm_arm_home", "alarm_arm_away", "alarm_disarm"), AlarmModes.actions(alarm(null)).map { it.second })
-        assertEquals(listOf("alarm_disarm"), AlarmModes.actions(alarm(8)).map { it.second }) // trigger only: Disarm stays
+        // HA's supportedAlarmModes, in ALARM_MODES' order, Disarmed always last.
+        assertEquals(listOf("armed_away", "armed_night", "disarmed"), AlarmModes.supported(alarm(2 or 4)))
+        assertEquals(listOf("armed_home", "armed_away", "armed_night", "armed_vacation", "armed_custom_bypass", "disarmed"), AlarmModes.supported(alarm(63)))
+        // No supported_features: HA's supportsFeature is false for every arming mode.
+        assertEquals(listOf("disarmed"), AlarmModes.supported(alarm(null)))
+        assertEquals(listOf("disarmed"), AlarmModes.supported(alarm(8))) // trigger only
+        assertEquals("alarm_arm_custom_bypass", AlarmModes.service("armed_custom_bypass"))
     }
 
     @Test

@@ -167,7 +167,7 @@ The island server only serves islands. Its proxy forwards what a card loads (`/a
 | Mushroom person, lock and humidifier cards | Not yet | The reference Home Assistant has no entity to show |
 | Bubble Card | Not yet | Buttons (with their sub-buttons) and separators. A pop-up or any other card type goes to an island |
 | mini-graph-card, mini-media-player, clock-weather-card, modern-circular-gauge, bar-card | Not yet | Not installed on the reference Home Assistant |
-| auto-entities | Yes | Filters by domain, entity id, state, name, attributes and group, with `not`, `or`, `and` and `sort`. Other filter keys, such as `area` or `template`, match nothing yet |
+| auto-entities | Yes | Filters by domain, entity id, state, name, attributes and group, with `not`, `or`, `and` and `sort`. Other filter keys, such as `area` or `template`, match nothing yet. The rows it matches are checked as they're found: one Vitro doesn't draw natively opens the view in Home Assistant's frontend |
 | stack-in-card, layout-card | Yes | layout-card's masonry, horizontal, vertical and grid layouts. Any other layout goes to an island, unless a built-in card sits inside it |
 | vertical-stack-in-card | Not yet | Not installed on the reference Home Assistant |
 | button-card | Not yet | Drawn natively without JavaScript templates (`[[[ … ]]]`): its layouts, `state:` rules, colors, styles, actions and lock, with the dashboard's `button_card_templates` merged in. A config with JavaScript, a card or HTML in it, or a style outside the subset goes to an island (see [What Vitro draws natively](#what-vitro-draws-natively)) |
@@ -194,7 +194,7 @@ Its title names the entity on two lines, as Home Assistant does: the area and de
 | Sensor | Its icon, name, last change and state, then the last 24 hours: Home Assistant's 5-minute statistics for a sensor with a state class ("5-minute aggregated"), its state history otherwise, and "Show more", which opens the history page in Home Assistant's frontend (Back returns to the dashboard) |
 | Camera | A live stream, chosen as on the picture cards (WebRTC, then HLS and MJPEG) |
 | Switch | A toggle pill |
-| Alarm panel | A PIN pad |
+| Alarm panel | Its modes in a vertical selector, or while it's triggered, arming or pending, its pulsing status and Disarm. A mode that needs a code opens Home Assistant's code dialog: a keypad for a number code, a field for a text one |
 
 Tiles can also carry the inline features Home Assistant adds under the card: `climate-hvac-modes`, `target-temperature`, `fan-speed`, `cover-position`, `light-color-temp`, `media-player-volume-slider`, `toggle`, `media-player-playback`, `light-color-favorites`, `numeric-input` and `vacuum-commands`, next to the brightness, select and open/close controls.
 
@@ -320,7 +320,7 @@ To check your own dashboards without a panel, save each Lovelace config (`lovela
 VITRO_PARITY_DIR=/path/to/folder ./gradlew :engine-vitro:testDebugUnitTest --tests '*CompatCheckerLocal*' -i
 ```
 
-The report covers the cards in the dashboard config, auto-entities' own `card:` included. The cards `auto-entities` builds at runtime for each matched entity aren't in it, so an island one of them opens doesn't show in the counts or the log. This check reads only the exported configs, not the resource list, so it assumes every card's script and card-mod are Lovelace resources the islands can load. On the panel, a card that Vitro draws natively stays native when its script or card-mod isn't a resource, even though the check lists it as an island. A custom card Vitro has no native renderer for still goes to an island, and without its script that island has nothing to draw: a missing resource is never a native fallback for it.
+The report covers the cards in the dashboard config, auto-entities' own `card:` included. The cards `auto-entities` builds at runtime for each matched entity aren't in it, so an island one of them opens doesn't show in the counts or the log. Its notes say a view with auto-entities is native only if the rows it matches are: on the panel, Vitro checks those rows when it finds them, and a row it doesn't draw natively sends the view to Home Assistant's frontend. This check reads only the exported configs, not the resource list, so it assumes every card's script and card-mod are Lovelace resources the islands can load. On the panel, a card that Vitro draws natively stays native when its script or card-mod isn't a resource, even though the check lists it as an island. A custom card Vitro has no native renderer for still goes to an island, and without its script that island has nothing to draw: a missing resource is never a native fallback for it.
 
 ## Key optimizations
 
