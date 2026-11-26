@@ -26,4 +26,14 @@ class CompatTest {
         )
         for ((level, want) in expected) assertEquals("API $level", want, row(level))
     }
+
+    @Test fun theSavedNetworkListCountsInFullBeforeAndroid10OrForTheDeviceOwnerWithLocation() {
+        for (level in listOf(23, 25, 28)) for (owner in listOf(true, false)) for (loc in listOf(true, false))
+            assertEquals("API $level owner=$owner loc=$loc", true, CompatApi(level).listsSavedNetworks(owner, loc))
+        for (level in listOf(29, 33)) {
+            assertEquals(true, CompatApi(level).listsSavedNetworks(deviceOwner = true, locationAccess = true))
+            assertEquals(false, CompatApi(level).listsSavedNetworks(deviceOwner = true, locationAccess = false))
+            assertEquals(false, CompatApi(level).listsSavedNetworks(deviceOwner = false, locationAccess = true))
+        }
+    }
 }
