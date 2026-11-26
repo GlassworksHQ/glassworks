@@ -61,6 +61,8 @@ TRANSPORTS = {
 # (Vitro's websocket waits up to 10 s between tries, then the stream connects).
 DROP_S = 20
 RECOVER_S = 30
+# ha-webrtc's WebRtcRuntime.LINGER_MS: how long libwebrtc's shared parts outlive the last WebRTC player.
+WEBRTC_LINGER_S = 30
 SHARED_THREADS = re.compile(r"^(vitro-img|ExoPlayer:Backg|HwBinder[:_]|Binder[:_]|ConnectivityMan|ConnectivityThr)")
 
 
@@ -329,6 +331,8 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
                        budget_ms / 1000 + 5 if opened else 0.1)
     r["wall_to_first_frame_ms"] = round((time.monotonic() - t0) * 1000) if first else None
     r["opened"] = [(e.get("kind"), e.get("id")) for e in probe.events if e["event"] == "open" and e.get("entity") == cam]
+    # Detail: HLS loads beside WebRTC only when WebRTC has no video after its first moments (1.5 s).
+    r["hls_beside_webrtc"] = name == "webrtc" and any(k == "HLS" for k, _ in r["opened"])
     r["errors"] = [e for e in probe.events if e["event"] in ("error", "ended")]
     if first:
         r["first_frame_ms"] = int(first["since_start_ms"])
@@ -368,6 +372,10 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
         if not inactive:
             raise Fail(f"{name}: HOME didn't pause the stream (no setActive(false) or close)")
         r["hidden"] = inactive["event"] if inactive["event"] == "close" else "inactive"
+        # WebRTC's paused session is closed at once, so its player would keep only its threads and EGL surface: Vitro
+        # closes it, and opens a new one on show.
+        if name == "webrtc" and r["hidden"] != "close":
+            raise Fail("webrtc: hidden, the WebRTC player paused instead of closing")
     time.sleep(2.0)
     probe.poll()                # what came while it settled (a frame drawn just before the pause) isn't counted
     n_before = len(probe.events)
@@ -429,7 +437,14 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
         raise Fail(f"{name}: the fake still serves {cam} after the card went: {r['served_after_close']}")
     if any(s["idle_s"] < 3 for s in r["served_after_close"]["hls"]):
         raise Fail(f"{name}: HLS fetches for {cam} continue after the card went: {r['served_after_close']['hls']}")
-    leaked = sorted(t for t in (set(dev.threads()) - baseline) & set(stream_threads) if not SHARED_THREADS.search(t))
+    # libwebrtc's shared parts (its factory's threads, the EGL thread) stay WEBRTC_LINGER_S after the last WebRTC
+    # player, for one that comes soon after: they must be gone by then.
+    deadline = time.monotonic() + (WEBRTC_LINGER_S + 10 if name == "webrtc" else 0)
+    while True:
+        leaked = sorted(t for t in (set(dev.threads()) - baseline) & set(stream_threads) if not SHARED_THREADS.search(t))
+        if not leaked or time.monotonic() >= deadline:
+            break
+        time.sleep(2.0)
     r["threads_left"] = leaked
     if leaked:
         raise Fail(f"{name}: the stream's threads outlived it: {leaked}")

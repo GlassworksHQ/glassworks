@@ -25,6 +25,12 @@ import org.json.JSONObject
  *   after it, and nothing else may be called on the stream.
  * - [connectionRestored]: Home Assistant's connection ([CameraStreamHost]'s WebSocket) is back after it dropped. A
  *   stream that was waiting for it to reconnect tries now. Optional: a stream that doesn't wait ignores it.
+ * - [setRendering] false: the picture is off screen (its card scrolled out of sight). The stream keeps its
+ *   connection and decoder, so it shows again at once, but needn't draw meanwhile; true draws again. A stream that
+ *   hasn't shown its first picture yet draws it anyway, as that picture is its [Listener.onFirstFrame]. Optional.
+ * - [closeWhenHidden] true: a paused stream would keep only threads and buffers, as it connects afresh on resume
+ *   anyway (WebRTC's, whose session closes on pause): the card closes it instead of pausing it, and opens a new one
+ *   when it shows again.
  * - A stream reports through [listener]: [Listener.onFirstFrame] once per [start] or resume, when the first picture
  *   is on screen (HA's `streams` event with `hasVideo: true`); [Listener.onFrameRendered] for each later picture drawn
  *   (Clarity counts them); [Listener.onError] when it can't play or stops playing (HA's `hasVideo: false`: the choice
@@ -41,6 +47,10 @@ interface CameraStream {
     fun close()
 
     fun connectionRestored() {}
+
+    fun setRendering(rendering: Boolean) {}
+
+    val closeWhenHidden: Boolean get() = false
 
     var listener: Listener?
 
@@ -80,6 +90,12 @@ enum class CameraStreamKind { WEB_RTC, HLS, MJPEG }
  */
 interface CameraStreamFactory {
     fun create(entityId: String, kind: CameraStreamKind): CameraStream?
+
+    /**
+     * A camera that plays this kind is about to start: what every stream of the kind shares (libwebrtc's factory and
+     * EGL) may get ready off the main thread meanwhile. Optional; main thread.
+     */
+    fun prewarm() {}
 }
 
 /**
