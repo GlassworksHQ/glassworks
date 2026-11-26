@@ -93,7 +93,7 @@ class FakeHaServer {
           "title": "Test Home",
           "views": [
             {"title": "Living", "path": "living", "type": "sections", "sections": [
-              {"type": "grid", "title": "Lights", "cards": [
+              {"type": "grid", "cards": [
                 {"type": "tile", "entity": "light.lounge_lamp"},
                 {"type": "entities", "title": "Sensors", "entities": ["sensor.kitchen_temp", "binary_sensor.front_door"]},
                 {"type": "custom:mushroom-entity-card", "entity": "light.lounge_lamp"}

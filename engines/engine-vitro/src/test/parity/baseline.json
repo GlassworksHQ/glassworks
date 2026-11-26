@@ -21,20 +21,6 @@
   "missingText": 0,
   "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
  },
- "mirror/calendar-day": {
-  "pixel": 0.1138,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 1,
-  "reason": "the day view: HA's header is one row 'THURSDAY 12' (FullCalendar dayGridDay) and the all-day event sits right under it; Vitro draws the weekday with a round date badge below (the month grid's today marker), so the event bar is ~28 px lower (2026-11-25, fake HA)"
- },
- "mirror/calendar-list": {
-  "pixel": 0.0378,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "timed events in the list view: HA wraps '9:30 AM - 10:15 AM' to two lines in its 150 px time column; Vitro cuts the end ('9:30 AM - 10:15', '7:00 PM - 9:00', 'AM'/'PM' lost), so the rows below sit up to 24 px higher. All-day rows, headers and dates match (2026-11-25, fake HA)"
- },
  "mirror/calendar-month-bars": {
   "pixel": 0.0431,
   "bounds": 0,
@@ -189,20 +175,6 @@
   "missingText": 0,
   "reason": "the long name 'Hallway Ceiling Light Hallway Ceiling Ring' cut by an ellipsis in both; Vitro's text run sits 1 px higher and its cut lands 2 px earlier (s1/Mirror at 1.5x; the tablet matches) (2026-11-25, fake HA)"
  },
- "mirror/tile-water-heater": {
-  "pixel": 0.1028,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the tile's water-heater-operation-modes feature isn't drawn in Vitro (eco, electric, performance, off buttons); name and state match, the card is a feature row shorter (2026-11-25, fake HA)"
- },
- "mirror/vertical-stack-in-card": {
-  "pixel": 0.0603,
-  "bounds": 24.1,
-  "font": 8,
-  "missingText": 0,
-  "reason": "vertical-stack-in-card 1.1.4: HA's title is a 24 px card header with padding and the rows sit without dividers; Vitro's title is 16 px and it draws dividers between the tiles, so the card is ~24 px shorter (2026-11-25, fake HA)"
- },
  "mirror/weather-forecast": {
   "pixel": 0.0126,
   "bounds": 0,
@@ -230,20 +202,6 @@
   "font": 2,
   "missingText": 0,
   "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
- },
- "s1/calendar-day": {
-  "pixel": 0.1138,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 1,
-  "reason": "the day view: HA's header is one row 'THURSDAY 12' (FullCalendar dayGridDay) and the all-day event sits right under it; Vitro draws the weekday with a round date badge below (the month grid's today marker), so the event bar is ~28 px lower (2026-11-25, fake HA)"
- },
- "s1/calendar-list": {
-  "pixel": 0.0378,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "timed events in the list view: HA wraps '9:30 AM - 10:15 AM' to two lines in its 150 px time column; Vitro cuts the end ('9:30 AM - 10:15', '7:00 PM - 9:00', 'AM'/'PM' lost), so the rows below sit up to 24 px higher. All-day rows, headers and dates match (2026-11-25, fake HA)"
  },
  "s1/calendar-month-bars": {
   "pixel": 0.0987,
@@ -427,20 +385,6 @@
   "missingText": 0,
   "reason": "the long name 'Hallway Ceiling Light Hallway Ceiling Ring' cut by an ellipsis in both; Vitro's text run sits 1 px higher and its cut lands 2 px earlier (s1/Mirror at 1.5x; the tablet matches) (2026-11-25, fake HA)"
  },
- "s1/tile-water-heater": {
-  "pixel": 0.1028,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the tile's water-heater-operation-modes feature isn't drawn in Vitro (eco, electric, performance, off buttons); name and state match, the card is a feature row shorter (2026-11-25, fake HA)"
- },
- "s1/vertical-stack-in-card": {
-  "pixel": 0.0603,
-  "bounds": 24.1,
-  "font": 8,
-  "missingText": 0,
-  "reason": "vertical-stack-in-card 1.1.4: HA's title is a 24 px card header with padding and the rows sit without dividers; Vitro's title is 16 px and it draws dividers between the tiles, so the card is ~24 px shorter (2026-11-25, fake HA)"
- },
  "s1/weather-forecast": {
   "pixel": 0.0126,
   "bounds": 0,
@@ -468,20 +412,6 @@
   "font": 2,
   "missingText": 0,
   "reason": "Bubble Card's separator: HA's icon and name are larger (24 px icon, 18 px semi-bold name) and its line sits lower and thicker; Vitro's are 4 px smaller and its card ~9 px shorter (2026-11-25, fake HA)"
- },
- "tablet/calendar-day": {
-  "pixel": 0.1131,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 1,
-  "reason": "the day view: HA's header is one row 'THURSDAY 12' (FullCalendar dayGridDay) and the all-day event sits right under it; Vitro draws the weekday with a round date badge below (the month grid's today marker), so the event bar is ~28 px lower (2026-11-25, fake HA)"
- },
- "tablet/calendar-list": {
-  "pixel": 0.0303,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "timed events in the list view: HA wraps '9:30 AM - 10:15 AM' to two lines in its 150 px time column; Vitro cuts the end ('9:30 AM - 10:15', '7:00 PM - 9:00', 'AM'/'PM' lost), so the rows below sit up to 24 px higher. All-day rows, headers and dates match (2026-11-25, fake HA)"
  },
  "tablet/calendar-month-bars": {
   "pixel": 0.0926,
@@ -601,20 +531,6 @@
   "font": 0,
   "missingText": 3,
   "reason": "water heater on the thermostat card: HA labels the target 'Target' and 'Currently 48 °C' in green; Vitro shows the mode 'Eco' and '48.0 °C' in grey, and its handle and arc in grey (2026-11-25, fake HA)"
- },
- "tablet/tile-water-heater": {
-  "pixel": 0.0985,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the tile's water-heater-operation-modes feature isn't drawn in Vitro (eco, electric, performance, off buttons); name and state match, the card is a feature row shorter (2026-11-25, fake HA)"
- },
- "tablet/vertical-stack-in-card": {
-  "pixel": 0.0614,
-  "bounds": 23.8,
-  "font": 8,
-  "missingText": 0,
-  "reason": "vertical-stack-in-card 1.1.4: HA's title is a 24 px card header with padding and the rows sit without dividers; Vitro's title is 16 px and it draws dividers between the tiles, so the card is ~24 px shorter (2026-11-25, fake HA)"
  },
  "tablet/weather-forecast": {
   "pixel": 0.0137,

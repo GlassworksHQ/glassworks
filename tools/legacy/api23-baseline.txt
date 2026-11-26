@@ -47,8 +47,11 @@ dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOn
 dev/glassworks/platform/Platform.kt|TransportInfo
 dev/glassworks/platform/Platform.kt|android.app.ActivityManager#getHistoricalProcessExitReasons
 dev/glassworks/platform/Platform.kt|android.app.ActivityOptions#setPendingIntentCreatorBackgroundActivityStartMode
+dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getDescription
+dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getPid
 dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getProcessName
 dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getReason
+dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getTimestamp
 dev/glassworks/platform/Platform.kt|android.app.Service#startForeground
 dev/glassworks/platform/Platform.kt|android.content.Context#registerReceiver
 dev/glassworks/platform/Platform.kt|android.content.Intent#getParcelableExtra

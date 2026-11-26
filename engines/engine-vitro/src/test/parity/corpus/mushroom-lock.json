@@ -1,5 +1,6 @@
 {
  "title": "Mushroom lock card: locked",
+ "route": "island",
  "expect": {
   "lock.front_door": "locked"
  },
