@@ -8,7 +8,18 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 
 ## [Unreleased]
 
+### Added
+- **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
+  page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
+  with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel
+  down in Home Assistant quiets all of it, not only announcements. The Music page's slider is now called
+  **Music volume** and sets Music Assistant's level under it.
+- **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
+  when the panel is turned down or muted, and the volume goes back to where it was after each tone.
+
 ### Fixed
+- **App updates fail fast when Android blocks unknown-source installs, and S1 Plus setup allows them for fallback updates.** On a panel without the root update service, starting an update when "Install unknown apps" is off used to open a dead-end Android dialog and wait 10 minutes to time out. Glassworks now reports the missing permission right away, and both Kiln and `install.sh` allow "Install unknown apps" on the S1 Plus so fallback updates can show Android's confirmation screen.
+- **Radio firmware sensor says `none` instead of `v1` when no root helper is installed.** Panels without a root helper previously showed `(installed: v1)` in the Radio firmware sensor alongside the Radio helper sensor saying no helper was installed.
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
   you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in

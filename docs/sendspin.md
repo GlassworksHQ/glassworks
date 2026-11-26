@@ -18,7 +18,7 @@ You can control Sendspin from the panel's settings menu (**Settings → Panes �
 
 - **Enable or disable:** Toggle the switch in settings or use `switch.<device>_music_assistant_player_sendspin` in Home Assistant (on by default).
 - **Live status:** Check `sensor.<device>_music_assistant_player_status` in Home Assistant or the Sendspin settings page to see whether the player is paired, playing FLAC or PCM, or waiting for approval.
-- **Volume and group sync:** Sendspin saves its own volume, mute, and output delay separately from voice replies and announcements (Android's master media volume scales both). If your panel sounds slightly ahead of or behind another speaker in a group, adjust **Static delay** on the player's settings page in Music Assistant.
+- **Volume and group sync:** Sendspin keeps its own volume, mute, and output delay. That volume is Music Assistant's level for this player, shown as **Music volume** on the Sendspin settings page, and it sits under the panel's master volume on the **Sound** page. If your panel sounds slightly ahead of or behind another speaker in a group, adjust **Static delay** on the player's settings page in Music Assistant.
 
 *(Advanced overrides—such as setting a custom server address, disabling FLAC, or enabling guest mode—are also available via `adb` extras in the [Technical reference](#protocol-what-is-implemented-with-sources) below.)*
 

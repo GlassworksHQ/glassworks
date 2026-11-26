@@ -34,6 +34,7 @@ class PlatformTest {
         Triple("hasActivityManagerGetService", 26) { it.hasActivityManagerGetService },
         Triple("hasNotificationChannels", 26) { it.hasNotificationChannels },
         Triple("hasForegroundServiceStart", 26) { it.hasForegroundServiceStart },
+        Triple("hasPerAppUnknownSources", 26) { it.hasPerAppUnknownSources },
         Triple("hasDisplayCutoutMode", 28) { it.hasDisplayCutoutMode },
         Triple("hasSigningInfo", 28) { it.hasSigningInfo },
         Triple("hasLongVersionCode", 28) { it.hasLongVersionCode },

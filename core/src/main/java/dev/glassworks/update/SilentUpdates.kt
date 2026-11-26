@@ -137,5 +137,18 @@ sealed class SilentUpdates(
 
         fun deviceOwner(context: Context): Boolean =
             runCatching { context.getSystemService(DevicePolicyManager::class.java)?.isDeviceOwnerApp(context.packageName) == true }.getOrDefault(false)
+
+        /**
+         * Whether Android lets this app install an APK through a `PackageInstaller` session at all (with or without a
+         * confirmation tap). Privileged system apps (`INSTALL_PACKAGES`) and device owners bypass the unknown-sources
+         * check; on Android 8+ everyone else needs "Install unknown apps" (`canRequestPackageInstalls`) allowed, or
+         * Android blocks the install with a refusal dialog (on the S1 Plus, which has no Android Settings app, a
+         * buttonless dead end that times out after 10 minutes). Below Android 8 there is no per-app check.
+         */
+        fun canInstallPackages(context: Context, platform: PlatformApi = Platform): Boolean =
+            !platform.hasPerAppUnknownSources ||
+                context.checkSelfPermission(Manifest.permission.INSTALL_PACKAGES) == PackageManager.PERMISSION_GRANTED ||
+                deviceOwner(context) ||
+                runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false)
     }
 }

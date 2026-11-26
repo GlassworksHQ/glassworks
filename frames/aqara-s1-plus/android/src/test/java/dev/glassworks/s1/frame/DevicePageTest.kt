@@ -239,9 +239,10 @@ class DevicePageTest {
             val prefs = KioskPrefs(app)
             val panel = S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
             val ids = panel.sections.map { it.id }
-            // Screen, then Appearance (#691), then the frame's own page.
-            assertEquals("after Screen and Appearance", ids.indexOf("screen") + 2, ids.indexOf("device"))
-            assertEquals("appearance", ids[ids.indexOf("screen") + 1])
+            // Screen, then Sound (the master volume), then Appearance (#691), then the frame's own page.
+            assertEquals("after Screen, Sound and Appearance", ids.indexOf("screen") + 3, ids.indexOf("device"))
+            assertEquals("sound", ids[ids.indexOf("screen") + 1])
+            assertEquals("appearance", ids[ids.indexOf("screen") + 2])
             val manage = S1Manage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, prefs)
             val f = ManageFixture().apply { statusFn = { manage.status() } }
             val b = f.Browser().also { it.signInWithHa() }

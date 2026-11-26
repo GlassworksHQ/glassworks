@@ -10,6 +10,7 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
+import android.os.Handler
 import android.os.Looper
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -52,7 +53,14 @@ class CameraHubTest {
         )
     }
 
-    @After fun release() { hubs.forEach { it.release() }; ShadowMediaCodecList.reset() }
+    /** Each hub's thread ends with its test, so none touches Robolectric's camera (its callbacks are static) in the next. */
+    @After fun release() {
+        hubs.forEach { it.release() }
+        // A hub thread still running here would keep its availability callback registered into the next test.
+        val stuck = hubs.map { it.looper.thread }.onEach { it.join(5_000) }.filter { it.isAlive }
+        ShadowMediaCodecList.reset()
+        check(stuck.isEmpty()) { "${stuck.size} hub thread(s) didn't end within 5 s of release()" }
+    }
 
     private val logs = java.util.Collections.synchronizedList(mutableListOf<String>())
 
@@ -64,6 +72,16 @@ class CameraHubTest {
         val c = ShadowCameraCharacteristics.newCameraCharacteristics()
         Shadow.extract<ShadowCameraCharacteristics>(c).set(CameraCharacteristics.LENS_FACING, facing)
         cameras.addCamera(id, c)
+    }
+
+    /**
+     * Adds or removes a camera the way Android tells the hub: on the hub's thread, the handler it registered its
+     * availability callback with. Robolectric calls that callback on whatever thread changes the camera list, so from
+     * the test's thread it would race the hub's own work (closeCamera logs "camera closed" before it forgets openId).
+     */
+    private fun onHubThread(hub: CameraHub, change: () -> Unit) {
+        Handler(hub.looper).post(change)
+        settled(hub)
     }
 
     private fun eventually(what: String, check: () -> Boolean) {
@@ -86,7 +104,7 @@ class CameraHubTest {
     @Test fun aCameraThatAppearsAfterTheRefusalIsRead() {
         val hub = hub()
         assertEquals(StreamFit.Refused(CameraHub.NO_CAMERA), hub.streamFit)
-        camera("0", CameraCharacteristics.LENS_FACING_EXTERNAL)
+        onHubThread(hub) { camera("0", CameraCharacteristics.LENS_FACING_EXTERNAL) }
         eventually("the new camera is read") { hub.streamFit == StreamFit.Size(1280, 720) }
     }
 
@@ -103,9 +121,8 @@ class CameraHubTest {
     @Test fun aCameraUnpluggedWhileNobodyHoldsItIsReadAgain() {
         camera("1", CameraCharacteristics.LENS_FACING_EXTERNAL)
         val hub = hub()
-        settled(hub) // the hub registers for availability on its thread: unplug only once it has
         assertEquals(StreamFit.Size(1280, 720), hub.streamFit)
-        cameras.removeCamera("1")
+        onHubThread(hub) { cameras.removeCamera("1") } // after the hub registered for availability, on its thread too
         eventually("unplugged: no stream") { hub.streamFit == StreamFit.Refused(CameraHub.NO_CAMERA) }
     }
 
@@ -133,7 +150,7 @@ class CameraHubTest {
         assertEquals(StreamFit.Size(1280, 720), hub.streamFit)
         held.close()
         eventually("the camera closes") { synchronized(logs) { "camera closed" in logs } }
-        cameras.removeCamera("0")
+        onHubThread(hub) { cameras.removeCamera("0") }
         eventually("unplugged: no stream") { hub.streamFit == StreamFit.Refused(CameraHub.NO_CAMERA) }
     }
 

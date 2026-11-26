@@ -63,7 +63,7 @@ NAMES = {'site': 'glassworks.dev', 'kiln': 'Kiln', 'installer': 's1.edm.sh', 're
 # (kiln/workers, its own job below) don't go into it. The workflow and this picker redeploy it, to try a change to them.
 KILN = (
     'kiln', 'frames/*/installer', 'frames/*/design', 'packages', 'branding',
-    'frames/lululemon-mirror/overlay', 'frames/aqara-s1-plus/tools/root', 'frames/aqara-s1-plus/tools/radio',
+    'frames/lululemon-mirror/overlay', 'tools/mirror/stock-probe-app/prebuilt', 'frames/aqara-s1-plus/tools/root', 'frames/aqara-s1-plus/tools/radio',
     'frames/aqara-s1-plus/tools/install', 'docs/img/fel-button.jpg',  # the S1 recipe imports it
     'package.json', 'package-lock.json', 'tsconfig.base.json',
     '.github/workflows/web-deploy.yml', 'tools/ci/web_deploy.py',

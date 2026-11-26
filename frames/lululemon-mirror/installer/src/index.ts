@@ -15,7 +15,7 @@ export { ADB_KEY_LINE, GLASS_PANES_KEY_FINGERPRINT, IMAGE_OWNER_FINGERPRINT, SER
 export { KEPT_APPS, UNUSED_APPS, type UnusedApp } from './unused';
 export { APP_DIRS, GLASSWORKS, MIRROR_PROBE, PRIVILEGED, type MirrorApp } from './app';
 export { describeMirrorUpdates, isDeviceOwner, parseMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './updates';
-export { GLASSWORKS_IMAGE, GLASS_PANES_IMAGE, MIRROR_ACCESS, MIRROR_IMAGES } from './choices';
+export { GLASSWORKS_IMAGE, GLASSWORKS_IN_PLACE, GLASS_PANES_IMAGE, MIRROR_ACCESS, MIRROR_IMAGES } from './choices';
 export { ADB_KEYS, WIFI_CONF, WIFI_TEMPLATE, saveWifi, setAdbKeys, setImageKey } from './image';
 export { systemWithKey, userdataWithKey, userdataWithWifi, wifiOn, wifiTemplate, within } from './wifi';
 export {
@@ -23,5 +23,12 @@ export {
   STOCK_BUNDLE_MAGIC, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES, buildSurgicalSparseImage, decodeStockBundle,
   encodeStockBundle, hideStockBloat, padZipToExactLength, patchStockServicesJar, unhideStockBloat,
   type DecodedStockBundle, type DeviceOwnerPatch, type FiemapExtent, type PatchStockServicesJarOptions,
-  type PatchedServicesJar, type StockBloatChange, type StockBundleMeta,
+  type PatchedServicesJar, type StockApPatch, type StockBloatChange, type StockBundleMeta,
 } from './stock';
+export {
+  BundleRefused, ORIGINAL_JAR, RESTORE_SPARSE, STOCK_PROBE_BLE, STOCK_PROBE_LAN, bundleExtents, checkNotOdexed, installInPlace, mirrorInPlace,
+} from './inplace';
+export {
+  DEFAULT_PROBE_APP_PACKAGE, DEFAULT_PROBE_APP_UID, STAGE_SECRET_BYTES, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildPackagesXml, buildStageUserdata,
+  buildStockProbeUserdata, validateStockAdbKey, type ProbeAppPayload, type StockProbeUserdataOptions,
+} from './stage';

@@ -1,7 +1,7 @@
 // The browser-safe Stock-in-place core (src/stock.ts): the surgical sparse builder, the stock
-// services.jar patch (USB-ADB authorize + the two Device Owner fixes), the Stage 1 bundle, and the
-// stock-bloat `pm hide`/`pm unhide`. The Device Owner patch is checked on a real DEX built with
-// javac + d8 (skipped without an Android SDK) and disassembled with dexdump.
+// services.jar patch (USB-ADB authorize, the two Device Owner fixes, no stock onboarding hotspot),
+// the Stage 1 bundle, and the stock-bloat `pm hide`/`pm unhide`. The services.jar patches are checked
+// on a real DEX built with javac + d8 (skipped without an Android SDK) and disassembled with dexdump.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -19,115 +19,8 @@ import {
 import { GLASS_PANES_KEY_FINGERPRINT, adbFingerprint } from '../src/services';
 import { fakeAdbKey } from './fakes';
 
-// ---------------------------------------------------------------------------
-// Android SDK tool discovery (optional; the DEX tests skip without it)
-// ---------------------------------------------------------------------------
+import { DEXDUMP, HAS_D8, START_CONFIRMATION_LOG_STRING, buildSyntheticStockServicesJar } from './synthetic-services';
 
-function findTool(name: string): string | undefined {
-  for (const sdk of [process.env.ANDROID_HOME, process.env.ANDROID_SDK_ROOT, join(homedir(), 'Library/Android/sdk')]) {
-    if (!sdk || !existsSync(join(sdk, 'build-tools'))) continue;
-    const found = execFileSync('find', [join(sdk, 'build-tools'), '-name', name], { encoding: 'utf8' })
-      .split(/\r?\n/).filter(Boolean).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-    if (found.length) return found.at(-1);
-  }
-  return undefined;
-}
-
-const D8 = findTool('d8');
-const DEXDUMP = findTool('dexdump');
-const HAS_D8 = Boolean(D8);
-
-const START_CONFIRMATION_LOG_STRING =
-  'unable to start customAdbPublicKeyConfirmation[SecondaryUser]Component ';
-
-/**
- * Builds a real DEX 035 + ZIP `services.jar` with `UsbDebuggingManager` (so the startConfirmation
- * patch runs) AND `DevicePolicyManagerService` shaped like stock AOSP 6.0.1 (so both Device Owner
- * fixes run): `<init>` sets `mHasFeature` from `PackageManager.hasSystemFeature(device_admin)`, and
- * `setDeviceOwner` calls `IBackupManager.setBackupServiceActive(0, false)`. Android framework types
- * are provided as local stubs with the exact AOSP descriptors.
- */
-function buildSyntheticStockServicesJar(): Uint8Array {
-  if (!D8) throw new Error('buildSyntheticStockServicesJar requires d8 (guard call sites with it.skipIf(!HAS_D8))');
-  const dir = mkdtempSync(join(tmpdir(), 'gw-stock-dex-'));
-  try {
-    const write = (rel: string, src: string): void => {
-      const p = join(dir, 'src', rel);
-      execFileSync('mkdir', ['-p', p.slice(0, p.lastIndexOf('/'))]);
-      writeFileSync(p, src);
-    };
-    write('android/content/pm/PackageManager.java', `package android.content.pm;
-public class PackageManager { public boolean hasSystemFeature(String name) { return false; } }
-`);
-    write('android/content/Context.java', `package android.content;
-import android.content.pm.PackageManager;
-public class Context { public PackageManager getPackageManager() { return null; } }
-`);
-    write('android/app/backup/IBackupManager.java', `package android.app.backup;
-public interface IBackupManager { void setBackupServiceActive(int userHandle, boolean makeActive); }
-`);
-    write('com/android/server/usb/UsbDebuggingManager.java', `package com.android.server.usb;
-public class UsbDebuggingManager {
-  public boolean allowed;
-  public String allowedKey;
-  public boolean denied;
-  public String lastLog;
-  public void allowUsbDebugging(boolean alwaysAllow, String publicKey) { this.allowed = alwaysAllow; this.allowedKey = publicKey; }
-  public void denyUsbDebugging() { this.denied = true; }
-  private void startConfirmation(String key, String fingerprints) {
-    String msg = "${START_CONFIRMATION_LOG_STRING}";
-    String a = key.substring(0, 1);
-    String b = fingerprints.substring(0, 1);
-    if (a.equals(b)) { this.lastLog = msg + key + fingerprints + " padding padding padding padding"; }
-    else { this.lastLog = msg + fingerprints + key + " extra extra extra extra extra"; }
-    this.lastLog = this.lastLog + " more bytecode so insns_size exceeds 30 units " + a + b;
-  }
-}
-`);
-    write('com/android/server/devicepolicy/DevicePolicyManagerService.java', `package com.android.server.devicepolicy;
-import android.content.Context;
-import android.app.backup.IBackupManager;
-public class DevicePolicyManagerService {
-  public boolean mHasFeature;
-  IBackupManager mBackup;
-  String owner;
-  public DevicePolicyManagerService(Context context) {
-    this.mHasFeature = context.getPackageManager().hasSystemFeature("android.software.device_admin");
-  }
-  public boolean setDeviceOwner(String packageName, String ownerName) {
-    mBackup.setBackupServiceActive(0, false);
-    this.owner = packageName;
-    return true;
-  }
-}
-`);
-    const sources = [
-      'android/content/pm/PackageManager.java', 'android/content/Context.java',
-      'android/app/backup/IBackupManager.java', 'com/android/server/usb/UsbDebuggingManager.java',
-      'com/android/server/devicepolicy/DevicePolicyManagerService.java',
-    ].map((r) => join(dir, 'src', r));
-    const clsDir = join(dir, 'classes');
-    execFileSync('mkdir', ['-p', clsDir]);
-    execFileSync('javac', ['-source', '1.8', '-target', '1.8', '-d', clsDir, ...sources]);
-    const classFiles = execFileSync('find', [clsDir, '-name', '*.class'], { encoding: 'utf8' }).split(/\r?\n/).filter(Boolean);
-    const dexDir = join(dir, 'dex');
-    execFileSync('mkdir', ['-p', dexDir]);
-    execFileSync(D8, ['--min-api', '23', '--output', dexDir, ...classFiles]);
-    const jarOut = join(dir, 'services.jar');
-    execFileSync('python3', ['-I', '-c', `
-import zipfile, sys
-with zipfile.ZipFile(sys.argv[1], 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-    z.writestr('META-INF/MANIFEST.MF', 'Manifest-Version: 1.0\\r\\n\\r\\n')
-    z.write(sys.argv[2], 'classes.dex')
-    z.comment = b' ' * 512
-`, jarOut, join(dexDir, 'classes.dex')]);
-    return new Uint8Array(readFileSync(jarOut));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
-/** dexdump -d output for one class, from its `Class descriptor :` header to the next class or end. */
 function classBlock(disasm: string, descriptor: string): string {
   const needle = `Class descriptor  : '${descriptor}'`;
   const i = disasm.indexOf(needle);
@@ -146,6 +39,7 @@ function methodBlock(block: string, name: string): string {
 }
 
 const DPMS_DESC = 'Lcom/android/server/devicepolicy/DevicePolicyManagerService;';
+const MIRROR_AP_DESC = 'Lcom/android/server/MirrorApService;';
 
 // ---------------------------------------------------------------------------
 // buildSurgicalSparseImage
@@ -252,7 +146,7 @@ describe('patchStockServicesJar', () => {
   it.skipIf(!HAS_D8)('keeps the exact byte length, authorizes only our key, and applies both Device Owner fixes', async () => {
     const jar = buildSyntheticStockServicesJar();
     const key = fakeAdbKey(0x51, 'stock@glassworks');
-    const res = await patchStockServicesJar(jar, key); // default enableDeviceOwner: true
+    const res = await patchStockServicesJar(jar, key); // defaults: enableDeviceOwner and disableStockAp true
     expect(res.patched.length).toBe(jar.length);
     expect(res.fingerprint).not.toBe(GLASS_PANES_KEY_FINGERPRINT);
     expect(res.patchedCodeUnits).toBeGreaterThanOrEqual(24);
@@ -289,13 +183,24 @@ describe('patchStockServicesJar', () => {
         expect(sdo).not.toContain('setBackupServiceActive');
         expect(sdo).not.toContain('invoke-interface');
         expect(sdo).toContain('nop');
+
+        // MirrorApService.systemReady: one return-void, nops to the same size, nothing registered.
+        expect(res.stockAp).toBeDefined();
+        const ready = methodBlock(classBlock(dis, MIRROR_AP_DESC), 'systemReady');
+        expect(ready).toContain(`insns size    : ${res.stockAp!.insnsSize} 16-bit code units`);
+        expect(ready).toMatch(/\|0000: return-void/);
+        expect(ready).not.toContain('registerReceiver');
+        expect(ready).not.toContain('Thread;.start');
+        expect(ready).not.toContain('ACTION_START_HOST_APD');
+        // create() and the constructor are untouched: SystemServer still builds the object.
+        expect(methodBlock(classBlock(dis, MIRROR_AP_DESC), 'create')).toContain('invoke-direct');
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
     }
   }, 60_000);
 
-  it.skipIf(!HAS_D8)('with enableDeviceOwner:false patches only startConfirmation (no Device Owner fields)', async () => {
+  it.skipIf(!HAS_D8)('with enableDeviceOwner:false leaves the Device Owner code alone (no Device Owner fields)', async () => {
     const jar = buildSyntheticStockServicesJar();
     const res = await patchStockServicesJar(jar, fakeAdbKey(0x52), { enableDeviceOwner: false });
     expect(res.patched.length).toBe(jar.length);
@@ -313,6 +218,46 @@ describe('patchStockServicesJar', () => {
         rmSync(dir, { recursive: true, force: true });
       }
     }
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('with disableStockAp:false leaves MirrorApService.systemReady as it was', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const res = await patchStockServicesJar(jar, fakeAdbKey(0x53), { disableStockAp: false });
+    expect(res.patched.length).toBe(jar.length);
+    expect(res.stockAp).toBeUndefined();
+    expect(res.deviceOwner).toBeDefined(); // the other default still applies
+    if (DEXDUMP) {
+      const dir = mkdtempSync(join(tmpdir(), 'gw-stock-noAp-'));
+      try {
+        const p = join(dir, 'patched.jar');
+        writeFileSync(p, res.patched);
+        const dis = execFileSync(DEXDUMP, ['-d', p], { encoding: 'utf8', maxBuffer: 1 << 30 });
+        const ready = methodBlock(classBlock(dis, MIRROR_AP_DESC), 'systemReady');
+        expect(ready).toContain('registerReceiver');
+        expect(ready).toContain('com.mirror.framework.ACTION_START_HOST_APD');
+        expect(ready).toContain('Thread;.start');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('refuses a services.jar without MirrorApService unless disableStockAp is false', async () => {
+    const jar = buildSyntheticStockServicesJar({ mirrorAp: 'none' });
+    const key = fakeAdbKey(0x54);
+    // On by default and asked for explicitly: not the stock software it was checked against, so no guess.
+    await expect(patchStockServicesJar(jar, key)).rejects.toThrow(/stock hotspot patch: services\.jar has no Lcom\/android\/server\/MirrorApService;\.systemReady\(\)V/);
+    await expect(patchStockServicesJar(jar, key, { disableStockAp: true })).rejects.toThrow(/disableStockAp: false/);
+    // Off: the rest of the patch goes ahead.
+    const res = await patchStockServicesJar(jar, key, { disableStockAp: false });
+    expect(res.patched.length).toBe(jar.length);
+    expect(res.stockAp).toBeUndefined();
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('refuses a systemReady that does not register ACTION_START_HOST_APD', async () => {
+    // Same class and method, another body: not what was read from stock, so it isn't emptied on a guess.
+    const jar = buildSyntheticStockServicesJar({ mirrorAp: 'unexpected' });
+    await expect(patchStockServicesJar(jar, fakeAdbKey(0x55))).rejects.toThrow(/does not load "com\.mirror\.framework\.ACTION_START_HOST_APD"/);
   }, 60_000);
 });
 
