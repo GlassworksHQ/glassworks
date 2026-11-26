@@ -56,6 +56,7 @@ class MoreInfoActivityTest {
     private val calls = ArrayList<Pair<JSONObject, (Boolean, Any?, JSONObject?) -> Unit>>()
     private val handedOff = ArrayList<Triple<String, String, String>>()
     private val navigated = ArrayList<String>()
+    private val watched = ArrayList<String>()
 
     @After fun tearDown() = HaDisplay.reset()
 
@@ -65,6 +66,7 @@ class MoreInfoActivityTest {
         navigate = { navigated += it }, openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
         haConfig = { if (components == null) JSONObject() else JSONObject().put("components", JSONArray(components)) },
         haUser = { JSONObject().put("is_admin", admin) },
+        watchEntity = { watched += it },
         callWs = { msg, done -> calls += msg to done },
         subscribeWsFresh = { message, onEvent, onError ->
             val sub = Sub(message, onEvent, onError)
@@ -313,6 +315,31 @@ class MoreInfoActivityTest {
         assertEquals("mdi:state-machine", HaLogbook.causeIcon(state))
         // No cause at all.
         assertNull(cause(LogbookEntry(DOOR, null, null, "on", nowSec)))
+    }
+
+    @Test
+    fun aNonAdminSeesThePersonsNameEvenWhenNoCardFollowsThePerson() {
+        // HA's frontend names the user from `hass.states`, which holds every person; the dashboard follows only the
+        // door. The section follows the persons HA's registry lists, and names the row once Robin's state lands.
+        HaDisplay.applyRegistry(JSONObject().put("entities", JSONArray()
+            .put(JSONObject().put("ei", "person.robin"))
+            .put(JSONObject().put("ei", DOOR))))
+        val s = store(door())
+        val sheet = open(s, DOOR)
+        assertEquals(listOf("person.robin"), watched)
+        logbook().onEvent(message(row(DOOR, "on", 60.0, "context_user_id" to "u1", "context_event_type" to "call_service",
+            "context_domain" to "cover", "context_service" to "open_cover")), true)
+        idle()
+        // No user known yet: the row has no cause badge.
+        assertFalse(texts(sheet.activityView()).toString(), "R" in texts(sheet.activityView()))
+        s.putLocal(EntityState("person.robin", "home", mapOf("user_id" to "u1", "friendly_name" to "Robin")))
+        idle()
+        // Robin's `ha-user-badge`: their initials.
+        assertTrue(texts(sheet.activityView()).toString(), "R" in texts(sheet.activityView()))
+        // HA's registry again (its display data re-sent): a person followed already isn't asked for twice.
+        s.renotifyAll()
+        idle()
+        assertEquals(listOf("person.robin"), watched)
     }
 
     @Test

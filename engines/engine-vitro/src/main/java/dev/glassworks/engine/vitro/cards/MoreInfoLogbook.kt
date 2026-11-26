@@ -19,6 +19,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.EntityState
+import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.HaLocale
 import dev.glassworks.engine.vitro.data.HaText
@@ -78,6 +80,10 @@ internal class MoreInfoLogbookView(
     private var started = false
     private var handedOff = false
 
+    /** The persons followed for the users' names ([watchPersons]), and their store listeners' handles. */
+    private val watchedPersons = HashSet<String>()
+    private val personWatches = ArrayList<() -> Unit>()
+
     /** The day the headers were last written on: a new day renames "Today" and "Yesterday". */
     private var renderedDay = -1L
 
@@ -126,6 +132,9 @@ internal class MoreInfoLogbookView(
         generation++
         unsubscribe?.invoke()
         unsubscribe = null
+        personWatches.forEach { it() }
+        personWatches.clear()
+        watchedPersons.clear()
     }
 
     /**
@@ -139,6 +148,9 @@ internal class MoreInfoLogbookView(
         entries = null
         error = null
         refreshUsers()
+        watchPersons(gen)
+        // HA's registry can land after the dialog opened: the persons it lists are followed then.
+        personWatches += ctx.store.subscribe(EntityStore.DISPLAY_KEY) { ctx.main.post { if (gen == generation) watchPersons(gen) } }
         if (ctx.haUser().optBoolean("is_admin", false)) {
             ctx.callWs(JSONObject().put("type", "config/auth/list")) { ok, result, _ ->
                 ctx.main.post {
@@ -172,8 +184,28 @@ internal class MoreInfoLogbookView(
         })
     }
 
-    private fun refreshUsers() {
-        users = HaLogbook.Users.of(ctx.store.all().values, authList)
+    /** Names the users again from the persons in the store; true when that changed who's who. */
+    private fun refreshUsers(): Boolean {
+        val next = HaLogbook.Users.of(ctx.store.all().values, authList)
+        val changed = next.names != users.names || next.persons != users.persons || next.system != users.system
+        users = next
+        return changed
+    }
+
+    /**
+     * `_getLogBookData` names an entry's user from every person in `hass.states`, which HA's frontend always holds;
+     * the dashboard's store has only the entities it follows (a non-admin has no `config/auth/list` to fall back on).
+     * So every person HA's entity registry lists is followed while the section shows, as an island's runtime read is
+     * ([VitroCardContext.watchEntity]), and the rows are named again when one lands or changes its user.
+     */
+    private fun watchPersons(gen: Int) {
+        for (id in HaDisplay.registry.keys) {
+            if (!id.startsWith("person.") || !watchedPersons.add(id)) continue
+            personWatches += ctx.store.subscribe(id) { _ ->
+                ctx.main.post { if (gen == generation && refreshUsers()) render() }
+            }
+            if (ctx.store[id] == null) ctx.watchEntity(id)
+        }
     }
 
     /** "Today" and "Yesterday" follow the clock: the sheet's ticker calls this. */
