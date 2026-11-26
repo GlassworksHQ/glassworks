@@ -12,16 +12,20 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
+import android.os.Bundle
 import android.text.InputType
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -39,9 +43,12 @@ import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.AreaCardConfig
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.ui.A11yRole
+import dev.glassworks.engine.vitro.ui.AdjustableAccess
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
+import dev.glassworks.engine.vitro.ui.VitroAccess
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
 import dev.glassworks.engine.vitro.theme.ThemeResolver
@@ -423,7 +430,11 @@ internal class BrightnessDialView(
             }
             MotionEvent.ACTION_UP -> {
                 when (touchMode) {
-                    TOUCH_DRAG -> dragFraction?.let { onBrightness?.invoke((it * 100f).roundToInt()) }
+                    TOUCH_DRAG -> dragFraction?.let {
+                        onBrightness?.invoke((it * 100f).roundToInt())
+                        // TalkBack reads the brightness the drag left, as it does a SeekBar's.
+                        VitroAccess.valueChanged(this)
+                    }
                     // One path for a tap, a keyboard and TalkBack: performClick toggles.
                     TOUCH_TOGGLE -> if (d <= r * 0.6f) performClick()
                 }
@@ -450,6 +461,50 @@ internal class BrightnessDialView(
         super.performClick()
         onToggle?.invoke()
         return true
+    }
+
+    /**
+     * TalkBack and keys, for a light that dims: HA's `role="slider"` (0–100 %), whose click still toggles. A key edit
+     * is sent when its key comes up, as a drag is when it's let go; TalkBack's steps are sent at once. An on/off light
+     * stays a button.
+     */
+    private val access = AdjustableAccess(
+        min = { 0 }, max = { 100 }, step = { 1 },
+        value = { ((dragFraction ?: fraction) * 100f).roundToInt() },
+        preview = { v ->
+            dragFraction = v / 100f
+            invalidate()
+            VitroAccess.valueChanged(this)
+        },
+        commit = { v ->
+            onBrightness?.invoke(v)
+            dragFraction = null
+            invalidate()
+        },
+        // A cancelled key or focus gone mid-edit: back to HA's brightness, nothing sent.
+        restore = {
+            dragFraction = null
+            invalidate()
+        },
+    )
+
+    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        if (dims) access.onInitialize(info) else info.className = A11yRole.BUTTON.className
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean =
+        (if (dims) access.perform(action, arguments) else null) ?: super.performAccessibilityAction(action, arguments)
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        (dims && access.keyDown(keyCode)) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus) access.cancel()
     }
 
     companion object {
@@ -2021,6 +2076,57 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
 
     var onCommit: (Int) -> Unit = {}
 
+    init {
+        isFocusable = true
+    }
+
+    /**
+     * TalkBack and keys: HA's `role="slider"` for the target humidity, in whole percents. A key edit is sent when its
+     * key comes up, as a drag is when it's let go; TalkBack's steps are sent at once. Nothing while there's no target.
+     */
+    private val access = AdjustableAccess(
+        min = { kotlin.math.ceil(min).toInt() }, max = { kotlin.math.floor(max).toInt() }, step = { 1 },
+        value = { (dragTarget ?: target ?: min).roundToInt() },
+        preview = { v ->
+            dragTarget = v.toDouble()
+            describe()
+            invalidate()
+            VitroAccess.valueChanged(this)
+        },
+        commit = { v ->
+            target = v.toDouble()
+            dragTarget = null
+            describe()
+            invalidate()
+            onCommit(v)
+        },
+        // A cancelled key or focus gone mid-edit: back to HA's target, nothing sent.
+        restore = {
+            dragTarget = null
+            describe()
+            invalidate()
+        },
+    )
+
+    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        if (target != null) access.onInitialize(info)
+    }
+
+    override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean =
+        (if (target != null) access.perform(action, arguments) else null) ?: super.performAccessibilityAction(action, arguments)
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        (target != null && access.keyDown(keyCode)) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus) access.cancel()
+    }
+
     fun bind(min: Double, max: Double, current: Double?, target: Double?, on: Boolean, status: String) {
         this.min = min
         this.max = if (max > min) max else min + 1.0
@@ -2040,6 +2146,7 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
         describe()
         invalidate()
         onCommit(next)
+        VitroAccess.valueChanged(this)
     }
 
     private val radius: Float get() = (minOf(width, height) / 2f - strokeW).coerceAtLeast(8f * dp)
@@ -2131,6 +2238,8 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
                     target = t
                     performClick()
                     onCommit(t.roundToInt())
+                    // TalkBack reads the target the drag left, as it does a SeekBar's.
+                    VitroAccess.valueChanged(this)
                 }
                 dragTarget = null
                 parent?.requestDisallowInterceptTouchEvent(false)

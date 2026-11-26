@@ -153,6 +153,9 @@ class CanvasTextDescriptionTest {
         assertEquals(true, slider.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null))
         assertEquals(0.6f, committed.last(), 0.001f)
         slider.onKeyDown(android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_LEFT))
+        // A key edit is sent when its key comes up, as a drag is when it's let go.
+        assertEquals(1, committed.size)
+        slider.onKeyUp(android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_LEFT))
         assertEquals(0.59f, committed.last(), 0.001f)
 
         val kelvins = ArrayList<Int>()

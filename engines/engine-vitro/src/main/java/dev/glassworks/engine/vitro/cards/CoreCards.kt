@@ -1557,38 +1557,13 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 }
 
 /**
- * What a canvas slider tells TalkBack and does for a keyboard (API 23 and up): a seek bar with its range and value,
- * scroll forward and back, the arrow keys and page keys. Each step commits as a drag's release does.
+ * A canvas slider TalkBack and keys reach (API 23 and up). What it tells them and how keys move it is
+ * [dev.glassworks.engine.vitro.ui.AdjustableAccess], as for More Info's sliders.
  */
 internal object SliderAccess {
     fun install(view: View) {
         view.isFocusable = true
         view.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
-    }
-
-    fun describe(info: android.view.accessibility.AccessibilityNodeInfo, min: Float, max: Float, current: Float, percent: Boolean = true) {
-        info.className = android.widget.SeekBar::class.java.name
-        val type = if (percent) android.view.accessibility.AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_PERCENT
-        else android.view.accessibility.AccessibilityNodeInfo.RangeInfo.RANGE_TYPE_INT
-        info.rangeInfo = android.view.accessibility.AccessibilityNodeInfo.RangeInfo.obtain(type, min, max, current)
-        if (current < max) info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)
-        if (current > min) info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD)
-    }
-
-    /** +1 / -1 for TalkBack's scroll forward / back, else null. */
-    fun stepOf(action: Int): Int? = when (action) {
-        android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> 1
-        android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> -1
-        else -> null
-    }
-
-    /** Steps for a key: an arrow one, a page key ten, else null. */
-    fun keyStep(keyCode: Int): Int? = when (keyCode) {
-        android.view.KeyEvent.KEYCODE_DPAD_RIGHT, android.view.KeyEvent.KEYCODE_DPAD_UP -> 1
-        android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_DOWN -> -1
-        android.view.KeyEvent.KEYCODE_PAGE_UP -> 10
-        android.view.KeyEvent.KEYCODE_PAGE_DOWN -> -10
-        else -> null
     }
 }
 
@@ -1675,7 +1650,8 @@ internal class HaHorizontalSliderView(
     fun setValue(value: Float, active: Boolean) {
         boundFraction = value.coerceIn(0f, 1f)
         boundActive = active
-        if (dragging) return
+        // A drag or a key edit keeps what it shows until it ends.
+        if (dragging || access.editing) return
         val clamped = value.coerceIn(0f, 1f)
         if (clamped == targetFraction && active == this.active) return
         this.active = active
@@ -1684,6 +1660,8 @@ internal class HaHorizontalSliderView(
             return
         }
         targetFraction = clamped
+        // A new value from HA: TalkBack reads it, as it would a SeekBar's.
+        dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
         fractionAnimator?.cancel()
         val from = fraction
         fractionAnimator = HaMotion.run(this, VALUE_MS) { t ->
@@ -1715,26 +1693,44 @@ internal class HaHorizontalSliderView(
         SliderAccess.install(this)
     }
 
-    // TalkBack and a keyboard: the value as a percentage, stepped and committed as a release of a drag is.
+    /**
+     * TalkBack and keys: a 0–100 % slider, as HA's `ha-control-slider` is. A key edit is sent when its key comes up, as
+     * a drag is when it's let go (HA's `keyup`); TalkBack's steps are sent at once.
+     */
+    private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
+        min = { 0 }, max = { 100 }, step = { 1 },
+        value = { Math.round(targetFraction * 100f) },
+        preview = { v ->
+            fractionAnimator?.cancel()
+            fractionAnimator = null
+            fraction = v / 100f
+            targetFraction = fraction
+            active = v > 0
+            invalidate()
+            dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
+        },
+        commit = { v -> onCommit(v / 100f) },
+        // A cancelled key or focus gone mid-edit: back to HA's value, nothing sent.
+        restore = { setValue(boundFraction, boundActive) },
+    )
+
     override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
         super.onInitializeAccessibilityNodeInfo(info)
-        SliderAccess.describe(info, 0f, 100f, targetFraction * 100f)
+        access.onInitialize(info)
     }
 
     override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
-        SliderAccess.stepOf(action)?.let { stepBy(it * 0.10f); true } ?: super.performAccessibilityAction(action, arguments)
+        access.perform(action, arguments) ?: super.performAccessibilityAction(action, arguments)
 
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
-        SliderAccess.keyStep(keyCode)?.let { stepBy(it * 0.01f); true } ?: super.onKeyDown(keyCode, event)
+        access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
 
-    private fun stepBy(delta: Float) {
-        fractionAnimator?.cancel()
-        fractionAnimator = null
-        fraction = (targetFraction + delta).coerceIn(0f, 1f)
-        targetFraction = fraction
-        active = fraction > 0f
-        invalidate()
-        onCommit(fraction)
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus) access.cancel()
     }
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
@@ -1757,6 +1753,8 @@ internal class HaHorizontalSliderView(
                 parent?.requestDisallowInterceptTouchEvent(false)
                 invalidate()
                 onCommit(fraction)
+                // TalkBack reads the value the drag left (HA's bind that follows matches it, so it says nothing).
+                dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -1869,15 +1867,19 @@ internal class HaColorTempBarView(
 
     fun bind(minKelvin: Int, maxKelvin: Int, kelvin: Int?, on: Boolean) {
         val apply = {
+            val before = if (hasValue) kelvinAt(fraction) else null
             minK = minKelvin
             maxK = maxKelvin.coerceAtLeast(minKelvin + 1)
             hasValue = on && kelvin != null
             if (kelvin != null) fraction = ((kelvin - minK).toFloat() / (maxK - minK)).coerceIn(0f, 1f)
             alpha = if (on) 1f else 0.5f
             invalidate()
+            // A new value from HA: TalkBack reads it, as it would a SeekBar's.
+            if (hasValue && kelvinAt(fraction) != before) dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
         }
         reported = apply
-        if (!dragging) apply()
+        // A drag or a key edit keeps what it shows until it ends.
+        if (!dragging && !access.editing) apply()
     }
 
     private fun kelvinAt(frac: Float): Int = (minK + frac * (maxK - minK)).roundToInt().coerceIn(minK, maxK)
@@ -1886,23 +1888,42 @@ internal class HaColorTempBarView(
         SliderAccess.install(this)
     }
 
-    // TalkBack and a keyboard: the color temperature in Kelvin, stepped and committed as a release of a drag is.
+    /**
+     * TalkBack and keys: the color temperature in Kelvin, an arrow a hundredth of the range (as More Info's). A key
+     * edit is sent when its key comes up, as a drag is when it's let go; TalkBack's steps are sent at once.
+     */
+    private val access = dev.glassworks.engine.vitro.ui.AdjustableAccess(
+        min = { minK }, max = { maxK }, step = { maxOf(1, (maxK - minK) / 100) },
+        value = { kelvinAt(fraction) },
+        preview = { k ->
+            hasValue = true
+            fraction = ((k - minK).toFloat() / (maxK - minK)).coerceIn(0f, 1f)
+            invalidate()
+            dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
+        },
+        commit = { k -> onCommit(k) },
+        // A cancelled key or focus gone mid-edit: back to what HA reported, nothing sent.
+        restore = { reported?.invoke() ?: invalidate() },
+        valueText = { k -> "$k K" },
+    )
+
     override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
         super.onInitializeAccessibilityNodeInfo(info)
-        SliderAccess.describe(info, minK.toFloat(), maxK.toFloat(), kelvinAt(fraction).toFloat(), percent = false)
+        access.onInitialize(info)
     }
 
     override fun performAccessibilityAction(action: Int, arguments: android.os.Bundle?): Boolean =
-        SliderAccess.stepOf(action)?.let { stepBy(it * 0.10f); true } ?: super.performAccessibilityAction(action, arguments)
+        access.perform(action, arguments) ?: super.performAccessibilityAction(action, arguments)
 
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
-        SliderAccess.keyStep(keyCode)?.let { stepBy(it * 0.01f); true } ?: super.onKeyDown(keyCode, event)
+        access.keyDown(keyCode) || super.onKeyDown(keyCode, event)
 
-    private fun stepBy(delta: Float) {
-        hasValue = true
-        fraction = (fraction + delta).coerceIn(0f, 1f)
-        invalidate()
-        onCommit(kelvinAt(fraction))
+    override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
+        access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus) access.cancel()
     }
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
@@ -1923,6 +1944,8 @@ internal class HaColorTempBarView(
                 parent?.requestDisallowInterceptTouchEvent(false)
                 invalidate()
                 onCommit(kelvinAt(fraction))
+                // TalkBack reads the value the drag left (HA's bind that follows matches it, so it says nothing).
+                dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
