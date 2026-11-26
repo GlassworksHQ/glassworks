@@ -105,4 +105,19 @@ class SaveGateTest {
         elapsed = 30_000
         assertTrue(gate(store, boot = null).maySave(4))
     }
+
+    @Test fun anUnnamedChangeFromAnEarlierProcessHoldsUntilAReboot() {
+        // A began a change, the write naming it failed and its removal was refused; the app restarted; B joins
+        val store = MemStore()
+        val first = gate(store)
+        assertTrue(first.beginChange())
+        store.writable = false
+        first.unconfirmed(3) // not kept: the store still says CHANGING
+        store.writable = true
+        val after = gate(store)
+        assertTrue(after.beginChange())
+        after.unconfirmed(8)
+        assertFalse(after.maySave(8)) // A's change is still unnamed: no save this boot
+        assertTrue(gate(store, boot = "boot-2").maySave(8)) // the reboot put A's saved credential back
+    }
 }

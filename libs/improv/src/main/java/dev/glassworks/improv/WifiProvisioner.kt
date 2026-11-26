@@ -628,7 +628,10 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
     }
 
     // only this boot's: a restart put every saved credential back, so an older boot's ids mean nothing now
-    private val unconfirmed: MutableSet<Int> = store.read()?.takeIf { sameBoot(it) }?.ids.orEmpty().toMutableSet()
+    // A change another process began and never named (it died between beginChange and addNetwork's answer, or its
+    // write of the name failed) can't be told apart from a new one's: it becomes ORPHAN, which only a reboot clears
+    private val unconfirmed: MutableSet<Int> = store.read()?.takeIf { sameBoot(it) }?.ids.orEmpty()
+        .map { if (it == CHANGING) ORPHAN else it }.toMutableSet()
 
     /** Same boot: the kernel's boot ids agree, or, with one unknown, the clock since boot hasn't gone back (no wall clock). */
     private fun sameBoot(k: Kept): Boolean {
@@ -671,6 +674,9 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
     companion object {
         /** A change recorded before addNetwork returned its id. */
         private const val CHANGING = Int.MIN_VALUE
+
+        /** An earlier process's unnamed change: holds every save until a reboot. */
+        private const val ORPHAN = Int.MIN_VALUE + 1
 
         /** One gate per process, kept in the app's own preferences, so a new provisioner or a restarted app still holds. */
         @Volatile private var shared: SaveGate? = null
