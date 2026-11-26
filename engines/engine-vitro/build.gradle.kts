@@ -68,6 +68,8 @@ tasks.withType<Test>().configureEach {
         "vitroMockupDir" to "vitro.mockupDir",
         // An island page for tools/vitro-parity/island-probe.mjs (IslandPageDumpTest): the case file it draws.
         "vitroIslandCase" to "vitro.islandCase",
+        // The entity store's size for a whole dashboard (DashboardStoreMeasure): its input files and report directory.
+        "vitroStoreMeasure" to "vitro.storeMeasure",
     )
     for ((prop, sys) in options) {
         (project.findProperty(prop) as String?)?.let {

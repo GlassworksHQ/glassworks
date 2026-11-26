@@ -476,6 +476,15 @@ class VitroEngine(
         private var selectedFollowsAll = false
 
         /**
+         * Every entity the shown dashboard references, in all its views and subviews ([dashboardEntitiesOf]): what the
+         * client follows, once per connection, so a view switch asks HA for nothing. Null above
+         * [MAX_DASHBOARD_ENTITIES]: then each view follows its own, as it is selected. Computed for
+         * [dashboardEntitiesFor], the config on screen.
+         */
+        private var dashboardEntities: Set<String>? = null
+        private var dashboardEntitiesFor: DashboardConfig? = null
+
+        /**
          * Entities a web island of the shown dashboard looked up at runtime (`hass.states[id]`), beyond what its
          * config names: subscribed with the selected view, so their changes reach the island. Bounded; cleared with
          * the dashboard.
@@ -549,18 +558,48 @@ class VitroEngine(
             registriesNow = null
         }
 
-        private fun subscribeSelectedView() {
-            client?.subscribeViewEntities(if (selectedFollowsAll) emptySet() else selectedRefs + runtimeEntities)
+        /**
+         * The entities the page follows now, on the current client.
+         *
+         * Every entity of the dashboard, as HA's frontend subscribes once at startup: a view switch sends nothing and
+         * waits for no snapshot, and a config change or an island's runtime read adds only the new ids
+         * ([HaDashboardClient.followEntities], additive). The selected view's own come first in a new subscription,
+         * so its first build waits for its snapshot alone. A view that follows every entity (auto-entities, an island
+         * that walks `hass.states`) follows them while it is selected, and the dashboard's again after it.
+         *
+         * Above [MAX_DASHBOARD_ENTITIES] each view follows only its own: a view switch replaces the subscription
+         * ([additive] only for an island's runtime read, which adds to the view's).
+         */
+        private fun subscribeSelectedView(additive: Boolean = false) {
+            val c = client ?: return
+            val all = dashboardEntities
+            when {
+                selectedFollowsAll -> c.followEntities(emptySet())
+                all != null -> c.followEntities(all + runtimeEntities, first = selectedRefs, additive = true)
+                else -> c.followEntities(selectedRefs + runtimeEntities, additive = additive)
+            }
+        }
+
+        /** [config]'s entities ([dashboardEntities]), or null when there are more than [MAX_DASHBOARD_ENTITIES]. */
+        private fun dashboardEntitiesOf(config: DashboardConfig): Set<String>? {
+            val out = LinkedHashSet<String>()
+            for (v in config.views) {
+                out += CardRouter.referencedEntities(v)
+                if (out.size > MAX_DASHBOARD_ENTITIES) return null
+            }
+            return out
         }
 
         private fun watchRuntimeEntity(id: String) {
-            if (disposed || selectedFollowsAll || id in selectedRefs || runtimeEntities.size >= MAX_RUNTIME_ENTITIES) return
+            if (disposed || selectedFollowsAll || id in selectedRefs || dashboardEntities?.contains(id) == true ||
+                runtimeEntities.size >= MAX_RUNTIME_ENTITIES
+            ) return
             if (!runtimeEntities.add(id) || runtimeResubscribe) return
-            // A card reading several at once costs one resubscription.
+            // A card reading several at once costs one more subscription.
             runtimeResubscribe = true
             main.postDelayed({
                 runtimeResubscribe = false
-                if (!disposed) subscribeSelectedView()
+                if (!disposed) subscribeSelectedView(additive = true)
             }, RUNTIME_RESUBSCRIBE_MS)
         }
 
@@ -691,6 +730,12 @@ class VitroEngine(
                 // An empty filter subscribes to every entity, which auto-entities' runtime filters need.
                 selectedFollowsAll = CardRouter.followsAllEntities(v) || v.index in walkedViews
                 selectedRefs = if (selectedFollowsAll) emptySet() else CardRouter.referencedEntities(v)
+                // A new config (another dashboard, a lovelace_updated): its entities, once.
+                val shown = vitroView.dashboard
+                if (shown !== dashboardEntitiesFor) {
+                    dashboardEntitiesFor = shown
+                    dashboardEntities = shown?.let(::dashboardEntitiesOf)
+                }
                 subscribeSelectedView()
                 // Only the dashboard that owns the route reports a location: one still on screen while another loads
                 // (a theme rebuild) would pair its view with the other's path.
@@ -1380,8 +1425,18 @@ class VitroEngine(
         /** How long a view's first build waits for its first states. */
         private const val FIRST_STATES_WAIT_MS = 1_000L
 
-        /** Entities islands may add to a view's subscription at runtime, and how long their lookups are batched. */
+        /** Entities islands may add to the entity subscription at runtime, and how long their lookups are batched. */
         private const val MAX_RUNTIME_ENTITIES = 256
+
+        /**
+         * Above this many entities, a dashboard's views each follow their own ([dashboardEntities]). Measured on the
+         * JVM (DashboardStoreMeasure): 0.8 to 1 KB of heap per entity in the store, and 0.15 to 0.45 KB per entity in
+         * HA's snapshot, so 2,000 entities hold about 2 MB and parse a snapshot of up to about 0.9 MB, once per
+         * connection. Clarity's heavy dashboard references 363 (all seven views), its heavy view alone 359. Past a
+         * few thousand, a dashboard lists a whole house (an auto-generated Overview, entity lists), and one view's own
+         * snapshot at each switch costs a panel with little RAM less than holding every state.
+         */
+        internal const val MAX_DASHBOARD_ENTITIES = 2_000
         private const val RUNTIME_RESUBSCRIBE_MS = 150L
 
         /** The dashboard path while the fallback shows a non-dashboard page: no real path equals it. */

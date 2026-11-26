@@ -248,10 +248,11 @@ class VitroEngineTest {
         assertEquals(3, m.subscribedEntities)
     }
 
+    /** The dashboard's entities (both views'), and nothing else HA has. */
     @Test
-    fun theViewsEntitiesAreSubscribedToAlone() {
+    fun theDashboardsEntitiesAreSubscribedToAlone() {
         readyPage()
-        awaitMain("view-scoped subscription") {
+        awaitMain("dashboard-scoped subscription") {
             server.commands("subscribe_entities").any { it.has("entity_ids") }
         }
         val scoped = server.commands("subscribe_entities").last { it.has("entity_ids") }.getJSONArray("entity_ids")
@@ -264,18 +265,18 @@ class VitroEngineTest {
     @Test
     fun anEntityAnIslandLooksUpAtRuntimeJoinsTheViewsSubscription() {
         val page = readyPage()
-        awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
+        awaitMain("entity subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
         val before = server.commands("subscribe_entities").size
         val watch = page.javaClass.getDeclaredMethod("watchRuntimeEntity", String::class.java).apply { isAccessible = true }
         watch.invoke(page, "sensor.outdoor_temp")
-        watch.invoke(page, "sensor.indoor_temp") // batched with the first: one resubscription
+        watch.invoke(page, "sensor.indoor_temp") // batched with the first: one more subscription
+        watch.invoke(page, "light.lounge_lamp") // the dashboard's own: followed already
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
-        awaitMain("resubscribed with the runtime entities") { server.commands("subscribe_entities").size == before + 1 }
+        awaitMain("subscribed to the runtime entities") { server.commands("subscribe_entities").size == before + 1 }
+        // Only the new ids: what's followed already stays subscribed.
         val ids = server.commands("subscribe_entities").last().getJSONArray("entity_ids")
-        assertEquals(
-            setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door", "sensor.outdoor_temp", "sensor.indoor_temp"),
-            (0 until ids.length()).map { ids.getString(it) }.toSet(),
-        )
+        assertEquals(setOf("sensor.outdoor_temp", "sensor.indoor_temp"), (0 until ids.length()).map { ids.getString(it) }.toSet())
+        assertTrue(server.commands("unsubscribe_events").none { it.optInt("subscription") in server.commands("subscribe_entities").map { s -> s.getInt("id") } })
     }
 
     /** A plant card's sensors join its view's subscription: the view names only the plant. */
@@ -289,22 +290,23 @@ class VitroEngineTest {
             .put("sensor.fern_moisture", JSONObject("""{"s": "35", "a": {"friendly_name": "Fern moisture", "unit_of_measurement": "%"},
                 "lc": 1700000000.0, "lu": 1700000000.0}"""))
         readyPage()
-        awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
+        awaitMain("entity subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
-        awaitMain("resubscribed with the plant's sensor") {
+        awaitMain("subscribed to the plant's sensor") {
             server.commands("subscribe_entities").last().let { m ->
                 m.optJSONArray("entity_ids")?.let { arr -> (0 until arr.length()).any { arr.getString(it) == "sensor.fern_moisture" } } == true
             }
         }
+        // The plant was followed already: only its sensor is asked for.
         val ids = server.commands("subscribe_entities").last().getJSONArray("entity_ids")
-        assertEquals(setOf("plant.fern", "sensor.fern_moisture"), (0 until ids.length()).map { ids.getString(it) }.toSet())
+        assertEquals(setOf("sensor.fern_moisture"), (0 until ids.length()).map { ids.getString(it) }.toSet())
     }
 
     /** #838: an island that walked `hass.states` makes its view follow every entity, when shown again from the cache too. */
     @Test
     fun aViewWhoseIslandWalksTheStatesFollowsEveryEntity() {
         val page = readyPage()
-        awaitMain("view-scoped subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
+        awaitMain("entity subscription") { server.commands("subscribe_entities").any { it.has("entity_ids") } }
         val followAll = page.javaClass.getDeclaredMethod("followAllForIsland", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
             .apply { isAccessible = true }
         val gen = page.javaClass.getDeclaredField("walkGeneration").apply { isAccessible = true }.getInt(page)
