@@ -271,7 +271,8 @@ internal class AdjustableAccess(
     fun keyUp(event: KeyEvent): Boolean {
         if (!pending || event.keyCode != pendingKey) return false
         pending = false
-        if (event.isCanceled) restore() else commit(value())
+        // Within the limits as they are now: HA may have narrowed them while the key was held.
+        if (event.isCanceled) restore() else commit(value().coerceIn(min(), max()))
         return true
     }
 

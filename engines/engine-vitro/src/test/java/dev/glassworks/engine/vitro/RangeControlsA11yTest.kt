@@ -226,6 +226,19 @@ class RangeControlsA11yTest {
         assertFalse(down(bar, KeyEvent.KEYCODE_DPAD_DOWN))
     }
 
+    @Test
+    fun aKelvinKeyEditTakesTheLimitsHaReportsMeanwhile() {
+        val sent = ArrayList<Int>()
+        val bar = HaColorTempBarView(context()) { sent += it }.apply { bind(2000, 6500, 6000, on = true) }
+        attach(bar, 300, 42)
+        assertTrue(down(bar, KeyEvent.KEYCODE_DPAD_RIGHT))
+        // HA narrows the range while the key is held: the release sends a value inside the new one.
+        bar.bind(2000, 5000, 4800, on = true)
+        assertTrue(up(bar, KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertEquals(listOf(5000), sent)
+        assertEquals(5000f, bar.node().rangeInfo.max, 0f)
+    }
+
     // The light card's and the humidifier card's dials.
 
     @Test
@@ -251,6 +264,17 @@ class RangeControlsA11yTest {
         dial.update(true, 0.41f, "mdi:lightbulb")
         assertTrue(dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null))
         assertEquals(51, brightness.last())
+        // Two TalkBack steps before the optimistic render: the second goes on from the first.
+        dial.update(true, 0.5f, "mdi:lightbulb")
+        brightness.clear()
+        dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
+        dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
+        assertEquals(listOf(60, 70), brightness)
+        // A write turned down: HA's value comes back, and the next step starts from it.
+        dial.update(true, 0.5f, "mdi:lightbulb")
+        assertEquals(50f, dial.node().rangeInfo.current, 0f)
+        dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
+        assertEquals(60, brightness.last())
         // Enter toggles, as a tap on the icon does.
         down(dial, KeyEvent.KEYCODE_ENTER)
         up(dial, KeyEvent.KEYCODE_ENTER)
@@ -285,5 +309,34 @@ class RangeControlsA11yTest {
         // No target (off with no humidity): nothing to move.
         dial.bind(30.0, 80.0, 45.0, null, on = false, status = "Off")
         assertFalse(down(dial, KeyEvent.KEYCODE_DPAD_RIGHT))
+    }
+
+    private fun humidityDial(sent: MutableList<Int>, min: Double, max: Double, target: Double?) =
+        HumidityDialView(context()).apply {
+            onCommit = { sent += it }
+            bind(min, max, 45.0, target, on = true, status = "Humidifying")
+            attach(this, 300, 300)
+        }
+
+    @Test
+    fun aHumidityKeyEditIsDroppedWhenTheTargetGoes() {
+        val sent = ArrayList<Int>()
+        val dial = humidityDial(sent, 30.0, 80.0, 50.0)
+        assertTrue(down(dial, KeyEvent.KEYCODE_DPAD_LEFT))
+        // Turned off while the key is held: nothing to set, nothing sent.
+        dial.bind(30.0, 80.0, 45.0, null, on = false, status = "Off")
+        up(dial, KeyEvent.KEYCODE_DPAD_LEFT)
+        assertTrue(sent.toString(), sent.isEmpty())
+    }
+
+    @Test
+    fun aHumidityKeyEditTakesTheLimitsHaReportsMeanwhile() {
+        val sent = ArrayList<Int>()
+        val dial = humidityDial(sent, 20.0, 80.0, 79.0)
+        assertTrue(down(dial, KeyEvent.KEYCODE_DPAD_RIGHT))
+        // HA narrows the range while the key is held: the release sends a value inside the new one.
+        dial.bind(20.0, 60.0, 45.0, 79.0, on = true, status = "Humidifying")
+        up(dial, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals(listOf(60), sent)
     }
 }

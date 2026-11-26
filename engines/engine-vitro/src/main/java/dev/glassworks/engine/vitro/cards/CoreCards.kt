@@ -1878,8 +1878,17 @@ internal class HaColorTempBarView(
             if (hasValue && kelvinAt(fraction) != before) dev.glassworks.engine.vitro.ui.VitroAccess.valueChanged(this)
         }
         reported = apply
-        // A drag or a key edit keeps what it shows until it ends.
-        if (!dragging && !access.editing) apply()
+        // A drag or a key edit keeps what it shows until it ends, but takes HA's new limits: a key edit keeps its
+        // Kelvin (within them), a drag its place on the bar. The release sends a value inside the limits HA has now.
+        if (dragging || access.editing) {
+            val k = kelvinAt(fraction)
+            minK = minKelvin
+            maxK = maxKelvin.coerceAtLeast(minKelvin + 1)
+            if (access.editing) fraction = ((k - minK).toFloat() / (maxK - minK)).coerceIn(0f, 1f)
+            invalidate()
+        } else {
+            apply()
+        }
     }
 
     private fun kelvinAt(frac: Float): Int = (minK + frac * (maxK - minK)).roundToInt().coerceIn(minK, maxK)

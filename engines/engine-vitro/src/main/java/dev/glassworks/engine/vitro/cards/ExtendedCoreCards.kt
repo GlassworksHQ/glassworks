@@ -344,6 +344,12 @@ internal class BrightnessDialView(
     private var tint: Int? = null
     private var dims = true
     private var dragFraction: Float? = null
+
+    /**
+     * The brightness last sent, shown and stepped from until the next [update] (the optimistic render, or HA's value
+     * again if the write is turned down): a second TalkBack step before that render goes on from it.
+     */
+    private var sentFraction: Float? = null
     private var touchMode = TOUCH_NONE
 
     var onToggle: (() -> Unit)? = null
@@ -355,6 +361,7 @@ internal class BrightnessDialView(
         basePath = MdiIcons.pathFor(iconName)
         tint = lightColor
         dims = dimmable
+        sentFraction = null
         if (dragFraction == null) invalidate()
     }
 
@@ -373,7 +380,7 @@ internal class BrightnessDialView(
             arcPaint.strokeWidth = 24f * u
             arcPaint.color = trackColor
             canvas.drawArc(oval, START_ANGLE, SWEEP, false, arcPaint)
-            val shown = dragFraction ?: if (on) fraction else 0f
+            val shown = dragFraction ?: sentFraction ?: if (on) fraction else 0f
             if (shown > 0f) {
                 arcPaint.color = color
                 canvas.drawArc(oval, START_ANGLE, SWEEP * shown, false, arcPaint)
@@ -386,7 +393,7 @@ internal class BrightnessDialView(
             fillPaint.color = 0xFFFFFFFF.toInt()
             canvas.drawCircle(hx, hy, 8.8f * u, fillPaint)
         }
-        val lit = on || (dragFraction ?: 0f) > 0f
+        val lit = on || (dragFraction ?: sentFraction ?: 0f) > 0f
         // The light button's icon: 118 px of the 200 px dial.
         val scale = (118f / 200f) * size / 24f
         iconMatrix.reset()
@@ -431,7 +438,10 @@ internal class BrightnessDialView(
             MotionEvent.ACTION_UP -> {
                 when (touchMode) {
                     TOUCH_DRAG -> dragFraction?.let {
-                        onBrightness?.invoke((it * 100f).roundToInt())
+                        val pct = (it * 100f).roundToInt()
+                        // Before the call: a render it triggers at once clears it.
+                        sentFraction = pct / 100f
+                        onBrightness?.invoke(pct)
                         // TalkBack reads the brightness the drag left, as it does a SeekBar's.
                         VitroAccess.valueChanged(this)
                     }
@@ -470,15 +480,17 @@ internal class BrightnessDialView(
      */
     private val access = AdjustableAccess(
         min = { 0 }, max = { 100 }, step = { 1 },
-        value = { ((dragFraction ?: fraction) * 100f).roundToInt() },
+        value = { ((dragFraction ?: sentFraction ?: fraction) * 100f).roundToInt() },
         preview = { v ->
             dragFraction = v / 100f
             invalidate()
             VitroAccess.valueChanged(this)
         },
         commit = { v ->
-            onBrightness?.invoke(v)
             dragFraction = null
+            // Before the call: a render it triggers at once clears it.
+            sentFraction = v / 100f
+            onBrightness?.invoke(v)
             invalidate()
         },
         // A cancelled key or focus gone mid-edit: back to HA's brightness, nothing sent.
@@ -2134,6 +2146,11 @@ internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.co
         this.target = target
         this.on = on
         this.status = status
+        // No target any more (turned off, say): an edit under way has nothing to set, so it's dropped, not sent.
+        if (target == null) {
+            access.cancel()
+            dragTarget = null
+        }
         describe()
         if (dragTarget == null) invalidate()
     }
