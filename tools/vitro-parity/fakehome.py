@@ -490,13 +490,30 @@ def history(entity_ids, start, end, no_attributes=True, minimal=True):
     return out
 
 
+def _state_class(eid):
+    """The entity's state class for statistics: the fixture's `statistics` override, else its attribute."""
+    st = states().get(eid)
+    override = (fixture().get("statistics") or {}).get(eid) or {}
+    return override.get("state_class", ((st or {}).get("attributes") or {}).get("state_class"))
+
+
+def _change(values, increasing):
+    """How much a counter rose across [values] (the previous close, then each value held), as HA's recorder sums it.
+    A total_increasing value below 0.9 of the one before is a meter reset (`reset_detected`): the new cycle starts
+    from 0, so the value after the reset counts in full. A smaller drop, or any drop of a `total`, counts as it is."""
+    change = 0.0
+    for prev, cur in zip(values, values[1:]):
+        change += cur if increasing and cur < 0.9 * prev else cur - prev
+    return change
+
+
 def _meta(eid):
     st = states().get(eid)
     override = (fixture().get("statistics") or {}).get(eid) or {}
     if not st and not override:
         return None
     a = (st or {}).get("attributes", {})
-    sc = override.get("state_class", a.get("state_class"))
+    sc = _state_class(eid)
     if sc not in ("measurement", "total", "total_increasing"):
         return None
     unit = a.get("unit_of_measurement")
@@ -547,10 +564,11 @@ def statistics(ids, start, end, period, types):
                         if k in types:
                             row[k] = round(v, 6)
                 else:
-                    # HA's change runs from the previous hour's close: a step right at b belongs to this bucket.
+                    # HA's change runs from the previous hour's close (a step right at b belongs to this bucket),
+                    # through every value held, a meter reset included.
                     before = s.value(b - 1e-6)
                     opening = float(before) if before is not None and _num(before) else samples[0]
-                    change = max(0.0, samples[-1] - opening)
+                    change = _change([opening] + samples, _state_class(eid) == "total_increasing")
                     total += change
                     for k, v in (("change", change), ("state", samples[-1]), ("sum", total)):
                         if k in types:
