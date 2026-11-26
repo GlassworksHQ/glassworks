@@ -36,6 +36,14 @@ class HaPageStorage(private val prefs: SharedPreferences) {
         return true
     }
 
+    /**
+     * Removes the copy (the factory reset, [HaPageData]), after any write already sent with [putLater]: one that was
+     * waiting can't bring it back. False when it couldn't be written.
+     */
+    fun clear(): Boolean =
+        runCatching { writes.submit<Boolean> { prefs.edit().clear().commit() }.get(5, java.util.concurrent.TimeUnit.SECONDS) }
+            .getOrDefault(false)
+
     /** The copy for [url]'s origin, or null when the panel has none for it (it never ran HA's web UI there). */
     fun items(url: String?): JSONObject? {
         val origin = url?.let(OAuth::origin) ?: return null

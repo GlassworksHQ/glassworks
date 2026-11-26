@@ -76,7 +76,9 @@ in HA. If a request goes against it, say so and point at the page instead of bui
    hash, never vendored. Licences of new dependencies go in `THIRD-PARTY-NOTICES.md` and `LICENSES/`.
    One exception is decided (maintainer, 2026-11-16): `desugar_jdk_libs` (GPL-2.0 with the Classpath exception)
    in the generic app's legacy APK, for Android 6–7, and in the legacy engine's debug test app
-   (`dev.glassworks.s1.legacy`). Any other GPL code in an APK needs the maintainer's call.
+   (`dev.glassworks.s1.legacy`). The maintainer extended it on 2026-11-25 to Vitro's debug test app
+   (`:vitro-test`, `engines/engine-vitro/test-app`, `dev.glassworks.vitro.test`, never released). Any other GPL
+   code in an APK needs the maintainer's call.
 5. **Changes to the boot patch, the root helper, the radio or anything in `frames/aqara-s1-plus/tools/root` need a real
    panel before merge.** Say so in the PR. Off-device tests alone are not enough there.
 6. **Updates must keep installing in place.** Don't change `applicationId`, the signing setup or

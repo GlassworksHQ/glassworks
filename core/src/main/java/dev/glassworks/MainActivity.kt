@@ -1325,6 +1325,8 @@ open class MainActivity : Activity() {
     private fun configJson() = JSONObject()
         .put("hideHeader", prefs.hideHeader)
         .put("hideSidebar", prefs.hideSidebar)
+        // content.js reads HA's localStorage only when asked: Vitro's islands need the copy, nothing else does.
+        .put("pageStorage", runtime.engine.keepsPageStorage)
 
     private fun stateJson() = JSONObject()
         .put("presence", glassworks.screen.near)
@@ -1403,9 +1405,11 @@ open class MainActivity : Activity() {
     /**
      * `{type: "pageStorage", json}` from the HA frontend (content.js: the page's `localStorage`, credentials left out),
      * kept for cards that run outside Home Assistant's origin, Vitro's web islands (#881, [HaPageStorage]). Only the
-     * top-level page on the Home Assistant the panel uses is believed, as with the dashboards.
+     * top-level page on the Home Assistant the panel uses is believed, as with the dashboards. Kept only while the
+     * engine uses it (Vitro on): with Vitro off, the app keeps no copy of HA's storage.
      */
     private fun onPageStorage(m: JSONObject, sender: PagePort) {
+        if (!runtime.engine.keepsPageStorage) return
         val url = sender.url
         if (!sender.topLevel || url == null || !FrontendUrls.sameOrigin(url, prefs.haBase)) return
         val json = m.optString("json").ifEmpty { return }

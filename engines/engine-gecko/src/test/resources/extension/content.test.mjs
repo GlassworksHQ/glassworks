@@ -25,6 +25,7 @@ function page({ launchScreen = true, externalAuth = true, search = null, hass = 
   const winListeners = {};
   // The page's localStorage ([storage]: its items, changed by the test as it goes).
   const items = storage ?? {};
+  let storageReads = 0;
 
   const window = {
     wrappedJSObject: { externalBus: (m) => toPage.push(m) },
@@ -48,7 +49,7 @@ function page({ launchScreen = true, externalAuth = true, search = null, hass = 
     location: { search: search ?? (externalAuth ? "?external_auth=1" : "") },
     URLSearchParams,
     localStorage: {
-      get length() { return Object.keys(items).length; },
+      get length() { storageReads++; return Object.keys(items).length; },
       key: (i) => Object.keys(items)[i] ?? null,
       getItem: (k) => (k in items ? items[k] : null),
       setItem: (k, v) => { items[k] = String(v); },
@@ -78,6 +79,8 @@ function page({ launchScreen = true, externalAuth = true, search = null, hass = 
 
   return {
     posted, toPage, window, appended, events, items,
+    /** How often the script looked at localStorage. */
+    storageReads: () => storageReads,
     storage: () => posted.filter((m) => m.type === "pageStorage").map((m) => JSON.parse(m.json)),
     /** The page goes away (pagehide). */
     pagehide() { (winListeners.pagehide || []).forEach((f) => f()); },
@@ -273,8 +276,37 @@ test("colors that aren't plain are left out, and a missing accent takes the prim
 });
 
 
+/** The app's config with Vitro on: it asks for the page's storage. */
+const VITRO_CONFIG = { type: "config", config: { pageStorage: true } };
+
+test("with Vitro off (no pageStorage in the app's config), localStorage is never read or sent", () => {
+  const p = page({ hass: { themes: {} }, storage: { thc_snooze: '{"h_1":99}' } });
+  p.advance(20_000);
+  p.items.thc_snooze = '{"h_1":100}';
+  p.pagehide();
+  p.send({ type: "config", config: { hideHeader: false } });
+  p.advance(20_000);
+  p.pagehide();
+  assert.deepEqual(p.storage(), []);
+  assert.equal(p.storageReads(), 0, "no 5 s walk over the page's storage either");
+});
+
+test("the copy starts when the app's config asks for it, from the reply or a later push", async () => {
+  const p = page({ hass: { themes: {} }, storage: { a: "1" } });
+  const ask = p.posted.find((m) => m.type === "config");
+  p.send({ type: "reply", id: ask.id, config: { pageStorage: true } });
+  await new Promise((r) => setImmediate(r)); // the reply's promise settles
+  p.advance(5_000);
+  assert.deepEqual(p.storage(), [{ a: "1", dockedSidebar: '"always_hidden"' }]);
+  p.send(VITRO_CONFIG); // a second config doesn't start a second watch
+  p.items.a = "2";
+  p.advance(5_000);
+  assert.equal(p.storage().length, 2);
+});
+
 test("Home Assistant's localStorage is sent without credentials, and again only when it changes", () => {
   const p = page({ hass: { themes: {} }, storage: { thc_snooze: '{"h_1":99}', hassTokens: '{"access_token":"x"}', selectedTheme: '"dark"' } });
+  p.send(VITRO_CONFIG);
   p.advance(5_000);
   // The helper's own dockedSidebar is there too: HA's page holds it, so an island sees it as well.
   assert.deepEqual(p.storage(), [{ dockedSidebar: '"always_hidden"', selectedTheme: '"dark"', thc_snooze: '{"h_1":99}' }]);
@@ -291,6 +323,7 @@ test("Home Assistant's localStorage is sent without credentials, and again only 
 
 test("a change is sent as the page goes away, before the next check", () => {
   const p = page({ hass: { themes: {} }, storage: {} });
+  p.send(VITRO_CONFIG);
   p.advance(5_000);
   p.items.thc_kiosk = "1";
   p.pagehide();
@@ -299,10 +332,12 @@ test("a change is sent as the page goes away, before the next check", () => {
 
 test("storage is never sent from a frame or from a page that isn't Home Assistant", () => {
   const f = page({ hass: { themes: {} }, storage: { a: "1" }, frame: true });
+  f.send(VITRO_CONFIG);
   f.advance(20_000);
   f.pagehide();
   assert.deepEqual(f.storage(), []);
   const other = page({ storage: { a: "1" } });
+  other.send(VITRO_CONFIG);
   other.advance(20_000);
   assert.deepEqual(other.storage(), []);
 });

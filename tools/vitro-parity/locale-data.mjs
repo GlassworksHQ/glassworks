@@ -14,6 +14,11 @@
 //     literals, with the month, weekday and day-period names each format uses (shared in one list per locale);
 //   - useAmPm's test and the first day of the week (Intl.Locale weekInfo).
 //
+// The tables are Unicode CLDR data (through Chromium's and Node's ICU), under the Unicode License v3
+// (LICENSES/Unicode-3.0.txt). They ship in the APKs, so THIRD-PARTY-NOTICES.md names them ("Vitro's locale tables")
+// with the Chromium version languages.json records: update that entry when a new capture changes the browser. The
+// test string files are HA frontend strings (Apache-2.0), listed there too.
+//
 // HA's UI words aren't bundled: Vitro reads them from the signed-in HA (HaFrontend). For the tests only, this script
 // also copies HA's English, German and French for every frontend key Vitro's code names from the pinned frontend
 // (core, then the fragments) into engines/engine-vitro/src/test/resources/…/locale/strings-<lang>.json, and fails on
@@ -335,6 +340,8 @@ if (missing.size) {
 writeFileSync(join(OUT, 'languages.json'), JSON.stringify({
   frontend: FRONTEND_VERSION,
   browser: browserVersion,
+  // Where the tables marked "source": "node" came from (Chromium's own ICU version isn't visible to a page).
+  node: { icu: process.versions.icu, cldr: process.versions.cldr },
   // findAvailableLanguage's list: the languages the frontend has translations for.
   languages,
   tags: Object.keys(tables).sort(),
