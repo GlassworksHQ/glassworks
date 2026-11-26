@@ -190,6 +190,8 @@ public final class BleProbeServer {
                 h.removeCallbacks(serviceAddedWatchdog);
                 settled = false;
                 tearDown();
+                // keep looking: the STATE_ON broadcast after a restart can be missed too (see pollAdapter); stop() cancels it
+                if (!stopped) h.postDelayed(pollAdapter, ADAPTER_POLL_MS);
             }
         }
     };

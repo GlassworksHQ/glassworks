@@ -422,7 +422,7 @@ public class WifiProvisioner(
             Log.i(TAG, "addNetwork -> $netId (new=$addedNew), enableNetwork -> $enabled")
             if (!enabled) {
                 // don't leave our new entry behind: a later save (below API 26) would keep it for good
-                if (addedNew) Log.i(TAG, "removeNetwork($netId) -> ${wm.removeNetwork(netId)}") else saveGate.failed(netId)
+                if (addedNew) saveGate.removed(netId, wm.removeNetwork(netId).also { Log.i(TAG, "removeNetwork($netId) -> $it") }) else saveGate.failed(netId)
                 finish(Outcome.Failed("enableNetwork refused", null))
                 return true
             }
@@ -480,7 +480,7 @@ public class WifiProvisioner(
             // an entry addNetwork reused now holds this attempt's credential; Android 7 and earlier put the saved one back
             // at the next restart, unless something saves first
             if (netId != -1 && !addedNew) saveGate.failed(netId)
-            if (netId != -1 && addedNew) Log.i(TAG, "removeNetwork($netId) -> ${wm.removeNetwork(netId)}")
+            if (netId != -1 && addedNew) saveGate.removed(netId, wm.removeNetwork(netId).also { Log.i(TAG, "removeNetwork($netId) -> $it") })
             if (Compat.hasNetworkSuggestions) suggestion?.let { Log.i(TAG, "removeNetworkSuggestions -> ${wm.removeNetworkSuggestions(listOf(it))}") }
             if (netId != -1) {
                 if (prevNetId != -1) {
@@ -598,6 +598,12 @@ internal class SaveGate {
     private val tainted = mutableSetOf<Int>()
 
     @Synchronized fun failed(netId: Int) { tainted += netId }
+
+    /**
+     * A failed attempt's new entry, removed: when Android says the removal failed, the entry may still be there, and a
+     * later save would keep it for good, so it taints the save like [failed].
+     */
+    @Synchronized fun removed(netId: Int, ok: Boolean) { if (!ok) tainted += netId }
 
     /** Whether saving is safe now; [joined] is the network just joined, which a failed attempt no longer taints. */
     @Synchronized fun maySave(joined: Int?): Boolean {
