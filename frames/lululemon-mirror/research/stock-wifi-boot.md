@@ -81,16 +81,22 @@ lines.
 
 ## How to reproduce
 
-From a Mirror on stock with Glassworks installed in place, on adb. Read-only apart from the reboot.
+From a Mirror on stock with Glassworks installed in place, on adb. It reboots the Mirror and writes one setting,
+`wifi_on`, which the last step puts back.
 
-1. Reboot two or three times after the install, so the apps are compiled and the boot is fast. Before each
-   repeat, switch Wi-Fi back on for the next start (`adb shell settings put global wifi_on 1`): after a lost race
-   the switch stays off, and a boot that starts with it off never tries the driver, so it can't fail again.
-2. `adb shell settings get global wifi_on`: `0` after a lost race.
-3. `adb logcat -d | grep -E "Failed to load driver|Wi-Fi state is failed|Glassworks.Wifi"` and
-   `adb shell dmesg | grep -E "WCNSS driver not ready|wcnss_wlan triggered"`: the order above.
-4. With the app's recovery, the `Glassworks.Wifi` lines show the tries, and Wi-Fi is on again within a minute or
-   two.
+1. Note the switch as it is: `adb shell settings get global wifi_on` (`1` on, `0` off).
+2. Reboot two or three times after the install, so the apps are compiled and the boot is fast. For each boot,
+   before the next one:
+   1. Switch Wi-Fi back on for the next start: `adb shell settings put global wifi_on 1`. After a lost race the
+      switch stays off, and a boot that starts with it off never tries the driver, so it can't fail again.
+   2. `adb reboot`, then once adb is back:
+      `adb shell settings get global wifi_on` (`0` after a lost race),
+      `adb logcat -d | grep -E "Failed to load driver|Wi-Fi state is failed|Glassworks.Wifi"` and
+      `adb shell dmesg | grep -E "WCNSS driver not ready|wcnss_wlan triggered"`: the order above. Save them per
+      boot: the next reboot clears both logs.
+   3. With the app's recovery, the `Glassworks.Wifi` lines show the tries, and Wi-Fi is on again within a minute
+      or two.
+3. Put the switch back as step 1 found it: `adb shell settings put global wifi_on <value>`.
 
 ## Open questions
 
