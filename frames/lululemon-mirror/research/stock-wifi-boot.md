@@ -5,7 +5,9 @@ evidence: verified
 
 # Stock Wi-Fi at boot: why the Mirror's Wi-Fi switches itself off for good
 
-**Status (2026-11-25): cause verified on a Mirror; the app's fix and Kiln's step are untested on a Mirror.** On
+**Status (2026-11-25): cause and the app's recovery verified on a Mirror** (three reboots, each back on Wi-Fi about
+40 s after the reboot). **Untested on a Mirror:** Kiln's `keepWifiOn` step, the 0.1 brightness floor on the glass,
+and the setup hotspot's wait for Wi-Fi. On
 the Mirror's stock Android 6.0.1, with Glassworks installed in place, a fast boot starts Android's Wi-Fi driver
 before the Wi-Fi chip's firmware is up. The driver fails to load, Android switches Wi-Fi off, and the switch stays
 off across reboots. Switching Wi-Fi on a few seconds later works. Glassworks now does that after the failure, and
