@@ -289,6 +289,18 @@ class ActionDefaultsAndNamesTest {
     }
 
     @Test
+    fun callServiceAndPerformActionRowsKeepANameMadeOnlyOfEntityParts() {
+        val entities = EntitiesCardView(ctx(), card("""{"type": "entities", "entities": [
+            {"type": "call-service", "entity": "light.porch", "name": {"type": "entity"}, "action": "light.turn_on"},
+            {"type": "perform-action", "entity": "lock.front_door", "name": {"type": "device"}, "action": "lock.lock"},
+            {"type": "weblink", "url": "https://example.com/", "name": {"type": "entity"}}]}"""))
+        assertTrue(texts(entities).toString(), "Light" in texts(entities))
+        assertTrue(texts(entities).toString(), "Front door" in texts(entities))
+        // A weblink resolves no entity, so its empty name still falls back to its URL.
+        assertTrue(texts(entities).toString(), "https://example.com/" in texts(entities))
+    }
+
+    @Test
     fun miniGraphResolvesItsNameForItsEntityAndNamesLegendSeries() {
         // An entity on no registry entry: `{type: entity}` is its friendly name, not its object id or nothing.
         val graph = SensorGraphCardView(ctx(), card("""{"type": "custom:mini-graph-card", "entity": "sensor.outdoor",

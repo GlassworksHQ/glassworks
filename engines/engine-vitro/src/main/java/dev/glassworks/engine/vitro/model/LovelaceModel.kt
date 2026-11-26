@@ -221,12 +221,17 @@ data class EntityRowConfig(
             else -> null
         }
 
+        private val NAME_SPEC_ROWS = setOf("call-service", "perform-action", "button")
+
         private fun JSONObject.str(key: String): String? = if (isNull(key)) null else optString(key, "").ifEmpty { null }
 
         private fun parseObject(item: JSONObject): EntityRowConfig? {
             val spec = item.opt("name").takeIf(HaEntityName::isStructured) ?: return parseRow(item, item.str("name"))
             // HA's name-picker form: its text parts stand in for the name until the row draws it with its entity.
+            // A row that resolves the name per entity (call-service, perform-action, button) keeps an empty
+            // placeholder, so a name made only of entity parts doesn't drop it; text and weblink rows keep null.
             val text = HaEntityName.format(spec, null, null)?.ifEmpty { null }
+                ?: "".takeIf { item.optString("type", "") in NAME_SPEC_ROWS }
             return parseRow(item, text)?.let { if (it.isEntity || it.rowType == "button") it.copy(nameSpec = spec) else it }
         }
 
