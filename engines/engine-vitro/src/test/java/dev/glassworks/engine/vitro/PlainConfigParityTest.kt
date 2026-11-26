@@ -51,6 +51,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.TimeZone
+import kotlin.math.roundToInt
 
 /**
  * Plain configs, made only of options Vitro declares (`native-options.json`), that drew differently from HA
@@ -208,6 +209,29 @@ class PlainConfigParityTest {
         val chips = dev.glassworks.engine.vitro.cards.MushroomChipsCardView(ctx(), card("""{"type": "custom:mushroom-chips-card", "chips": [{"type": "entity", "entity": "light.lamp"}]}"""))
         idle()
         assertTrue("chip " + texts(chips), "On" in texts(chips))
+    }
+
+    @Test fun anEntityCardTallerThanItsContentSpreadsItAsHaCardsSpaceBetween() {
+        // hui-entity-card's ha-card: height 100%, a column with justify-content: space-between over the header, .info
+        // and .footer. In a 2-row section slot (120 px) the value line sits half the spare height lower than right under
+        // the header (#928: it was ~12 px high); in a masonry column, at its own height, nothing moves.
+        put("sensor.ink", "74", "unit_of_measurement" to "%", "friendly_name" to "Ink")
+        val entity = dev.glassworks.engine.vitro.cards.EntityCardView(ctx(), card("""{"type": "entity", "entity": "sensor.ink"}"""))
+        idle()
+        val dp = activity.resources.displayMetrics.density
+        val w = View.MeasureSpec.makeMeasureSpec((246 * dp).roundToInt(), View.MeasureSpec.EXACTLY)
+        val value = all(entity).filterIsInstance<TextView>().single { it.text.toString() == "74" }
+        fun topIn(v: View): Int { var t = 0; var c: View = v; while (c !== entity) { t += c.top; c = c.parent as View }; return t }
+        entity.measure(w, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val natural = entity.measuredHeight
+        entity.layout(0, 0, entity.measuredWidth, natural)
+        val atNatural = topIn(value)
+        // A slot 40 px taller than the content (the corpus's 120 px slot is the parity harness's; this sandbox's fonts
+        // differ in height).
+        val tall = natural + (40 * dp).roundToInt()
+        entity.measure(w, View.MeasureSpec.makeMeasureSpec(tall, View.MeasureSpec.EXACTLY))
+        entity.layout(0, 0, entity.measuredWidth, tall)
+        assertEquals((tall - natural) / 2f, (topIn(value) - atNatural).toFloat(), 1.5f)
     }
 
     @Test fun stateDisplayAddsAnAttributeThatIsSetAndNotZeroInAnyState() {

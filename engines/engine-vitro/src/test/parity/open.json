@@ -12,14 +12,6 @@
   "owner": "#799",
   "reason": "Entities rows: an active automation's icon is drawn in Vitro's blue active color where HA's state-badge uses --state-active-color (amber); predates the batch (ThemeResolver.activeColor), found by the region check on #926's new case"
  },
- "mirror/entity": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's (listed in #928)"
- },
- "mirror/entity-light-on": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits about 12 px higher than HA's, as in the `entity` case (listed in #928, not fixed there); name, state, icon color and dimming match"
- },
  "mirror/more-info-vacuum-cleaning": {
   "owner": "#799",
   "reason": "Vacuum More Info on the Mirror's tall sheet: HA centers the robot, its buttons and the fan speed in the sheet's height; Vitro puts them right under the header (found by the region check on #930's case)"
@@ -52,14 +44,6 @@
   "owner": "#799",
   "reason": "Header toggle shown where HA shows none (#928's _showHeaderToggle fix)"
  },
- "s1/entity": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's (listed in #928)"
- },
- "s1/entity-light-on": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits about 12 px higher than HA's, as in the `entity` case (listed in #928, not fixed there); name, state, icon color and dimming match"
- },
  "s1/m-alarm-panel-alarm-control-panel-unavailable": {
   "owner": "#799",
   "reason": "Alarm panel, unavailable: Disarm matches HA now; the 'Unavailable' chip is a lighter grey than HA's"
@@ -84,73 +68,17 @@
   "owner": "#799",
   "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
  },
- "s1/m-entity-binary-sensor-door-open": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
  "s1/m-entity-binary-sensor-unavailable": {
   "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-climate-heat": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-cover-open-position": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-light-off": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-light-on-color": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
+  "reason": "Entity card: icons of unavailable entities are blue where HA's are grey (the value line and a light's 'On' match HA now)"
  },
  "s1/m-entity-light-unavailable": {
   "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-person-home": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-person-zone": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-sensor-battery-low": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-sensor-long-name": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-sensor-no-unit": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-sensor-power": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-sensor-temperature": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
+  "reason": "Entity card: icons of unavailable entities are blue where HA's are grey (the value line and a light's 'On' match HA now)"
  },
  "s1/m-entity-sensor-unavailable": {
   "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-sensor-unknown": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-entity-weather-sunny": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
+  "reason": "Entity card: icons of unavailable entities are blue where HA's are grey (the value line and a light's 'On' match HA now)"
  },
  "s1/m-mushroom-alarm-alarm-control-panel-unavailable": {
   "owner": "#799",
@@ -271,14 +199,6 @@
  "tablet/entities-special-rows": {
   "owner": "#799",
   "reason": "Header toggle shown where HA shows none (#928's _showHeaderToggle fix)"
- },
- "tablet/entity": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits ~12 px higher than HA's (listed in #928)"
- },
- "tablet/entity-light-on": {
-  "owner": "#799",
-  "reason": "Entity card: the value line sits about 12 px higher than HA's, as in the `entity` case (listed in #928, not fixed there); name, state, icon color and dimming match"
  },
  "tablet/mushroom-light-horizontal": {
   "owner": "#799",
