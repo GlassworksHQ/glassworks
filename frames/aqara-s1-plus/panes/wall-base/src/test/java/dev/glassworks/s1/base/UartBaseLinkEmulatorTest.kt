@@ -85,7 +85,8 @@ class UartBaseLinkEmulatorTest {
             // Relay write from "Home Assistant".
             exec.execute { link.write("4.1.85", 1) }
             waitFor("relay 1 on") { values["4.1.85"] == 1 }
-            assertTrue(emuLog.any { "write ack 4.1.85=1" in it })
+            // The emulator's log reaches us on its own stdout reader thread, which can trail the link's reply.
+            waitFor("emulator acks relay 1") { emuLog.any { "write ack 4.1.85=1" in it } }
             // Power arrives by report (emulator: 60 W per relay that is on).
             waitFor("power report") { (values[BaseRes.POWER] as? Float ?: 0f) > 50f }
 
