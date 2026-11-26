@@ -1,0 +1,69 @@
+{
+ "title": "Entities: lock rows (Unlock while locked, Lock otherwise, disabled while unavailable)",
+ "card": {
+  "type": "entities",
+  "entities": [
+   "lock.front_door",
+   "lock.garage_side",
+   "lock.shed",
+   "lock.cellar"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "lock.front_door": {
+    "state": "locked",
+    "last_changed": "-120m",
+    "attributes": {
+     "friendly_name": "Front door",
+     "supported_features": 0
+    }
+   },
+   "lock.garage_side": {
+    "state": "unlocked",
+    "last_changed": "-5m",
+    "attributes": {
+     "friendly_name": "Garage side",
+     "supported_features": 0
+    }
+   },
+   "lock.shed": {
+    "state": "jammed",
+    "last_changed": "-40m",
+    "attributes": {
+     "friendly_name": "Shed",
+     "supported_features": 0
+    }
+   },
+   "lock.cellar": {
+    "state": "unavailable",
+    "last_changed": "-8m",
+    "attributes": {
+     "friendly_name": "Cellar"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "lock.front_door",
+    "pl": "demo",
+    "en": "Front door"
+   },
+   {
+    "ei": "lock.garage_side",
+    "pl": "demo",
+    "en": "Garage side"
+   },
+   {
+    "ei": "lock.shed",
+    "pl": "demo",
+    "en": "Shed"
+   },
+   {
+    "ei": "lock.cellar",
+    "pl": "demo",
+    "en": "Cellar"
+   }
+  ]
+ }
+}

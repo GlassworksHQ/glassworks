@@ -1,6 +1,5 @@
 {
- "title": "Entities rows HA draws as controls (a slider, a dropdown, Run, Activate, Press, Lock): HA's frontend draws the view",
- "route": "frontend",
+ "title": "Entities rows HA draws as controls: a slider, a dropdown, Run, Activate, Press, Unlock",
  "card": {
   "type": "entities",
   "title": "Evening",

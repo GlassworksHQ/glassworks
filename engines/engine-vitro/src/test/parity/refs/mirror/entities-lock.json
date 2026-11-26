@@ -1,0 +1,236 @@
+{
+ "case": "entities-lock",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 234
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 218,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Front door",
+   "x": 73,
+   "y": 28.8,
+   "w": 64.52,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Unlock",
+   "x": 433.73,
+   "y": 29,
+   "w": 43.09,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Garage side",
+   "x": 73,
+   "y": 76.8,
+   "w": 73.91,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Lock",
+   "x": 446.64,
+   "y": 77,
+   "w": 30.19,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Shed",
+   "x": 73,
+   "y": 124.8,
+   "w": 31.34,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Lock",
+   "x": 446.64,
+   "y": 125,
+   "w": 30.19,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Cellar",
+   "x": 73,
+   "y": 172.8,
+   "w": 35.69,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Lock",
+   "x": 446.64,
+   "y": 173,
+   "w": 30.19,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(94, 94, 94)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "lock.cellar": {
+   "s": "unavailable",
+   "a": {
+    "friendly_name": "Cellar"
+   },
+   "lc": 1794499200,
+   "lu": 1794499200
+  },
+  "lock.front_door": {
+   "s": "locked",
+   "a": {
+    "friendly_name": "Front door",
+    "supported_features": 0
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "lock.garage_side": {
+   "s": "unlocked",
+   "a": {
+    "friendly_name": "Garage side",
+    "supported_features": 0
+   },
+   "lc": 1794499380,
+   "lu": 1794499380
+  },
+  "lock.shed": {
+   "s": "jammed",
+   "a": {
+    "friendly_name": "Shed",
+    "supported_features": 0
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "lock.cellar",
+    "pl": "demo",
+    "en": "Cellar"
+   },
+   {
+    "ei": "lock.front_door",
+    "pl": "demo",
+    "en": "Front door"
+   },
+   {
+    "ei": "lock.garage_side",
+    "pl": "demo",
+    "en": "Garage side"
+   },
+   {
+    "ei": "lock.shed",
+    "pl": "demo",
+    "en": "Shed"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "lock"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "lock": {
+     "_": {
+      "default": "mdi:lock",
+      "state": {
+       "jammed": "mdi:lock-alert",
+       "locking": "mdi:lock-clock",
+       "open": "mdi:lock-open-variant",
+       "opening": "mdi:lock-clock",
+       "unlocked": "mdi:lock-open-variant",
+       "unlocking": "mdi:lock-clock"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.lock.entity_component._.state.jammed": "Jammed",
+    "component.lock.entity_component._.state.locked": "Locked",
+    "component.lock.entity_component._.state.locking": "Locking",
+    "component.lock.entity_component._.state.open": "Open",
+    "component.lock.entity_component._.state.opening": "Opening",
+    "component.lock.entity_component._.state.unlocked": "Unlocked",
+    "component.lock.entity_component._.state.unlocking": "Unlocking"
+   },
+   "entity": {}
+  }
+ }
+}

@@ -1,5 +1,5 @@
 {
- "case": "route-entities-controls",
+ "case": "entities-buttons",
  "frame": "tablet",
  "haVersion": "2026.11.0",
  "now": 1794499680000,
@@ -14,7 +14,7 @@
   "x": 382,
   "y": 16,
   "width": 516,
-  "height": 395
+  "height": 330
  },
  "docSize": {
   "width": 1280,
@@ -25,7 +25,7 @@
    "x": 390,
    "y": 24,
    "w": 500,
-   "h": 378.8,
+   "h": 314,
    "type": "hui-entities-card"
   }
  ],
@@ -33,74 +33,9 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "Evening",
-   "x": 17,
-   "y": 21,
-   "w": 81.28,
-   "h": 28,
-   "size": 24,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "clipped": false,
-   "text": "Target temperature",
-   "x": 73,
-   "y": 77.59,
-   "w": 119.05,
-   "h": 16,
-   "size": 14,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "clipped": false,
-   "text": "21.5 °C",
-   "x": 438,
-   "y": 77.59,
-   "w": 45.08,
-   "h": 16,
-   "size": 14,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "clipped": false,
-   "text": "House mode",
-   "x": 73,
-   "y": 123.55,
-   "w": 59.52,
-   "h": 13,
-   "size": 10.5,
-   "weight": 400,
-   "color": "rgba(255, 255, 255, 0.6)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "clipped": false,
-   "text": "Evening",
-   "x": 73,
-   "y": 141.64,
-   "w": 48.59,
-   "h": 16,
-   "size": 14,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "clipped": false,
    "text": "Goodnight",
    "x": 73,
-   "y": 189.59,
+   "y": 28.8,
    "w": 64.67,
    "h": 16,
    "size": 14,
@@ -113,7 +48,72 @@
    "clipped": false,
    "text": "Run",
    "x": 452.52,
-   "y": 189.8,
+   "y": 29,
+   "w": 24.31,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Water garden",
+   "x": 73,
+   "y": 76.8,
+   "w": 83.13,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Cancel",
+   "x": 433.91,
+   "y": 77,
+   "w": 42.92,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(243, 103, 108)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Chime",
+   "x": 73,
+   "y": 124.8,
+   "w": 39.92,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Cancel 2",
+   "x": 372.16,
+   "y": 125,
+   "w": 54.36,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(243, 103, 108)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Run",
+   "x": 452.52,
+   "y": 125,
    "w": 24.31,
    "h": 16,
    "size": 14,
@@ -126,7 +126,7 @@
    "clipped": false,
    "text": "Movie night",
    "x": 73,
-   "y": 237.59,
+   "y": 172.8,
    "w": 72.44,
    "h": 16,
    "size": 14,
@@ -137,10 +137,10 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "Activate",
-   "x": 425.38,
-   "y": 237.8,
-   "w": 51.45,
+   "text": "Start",
+   "x": 446.22,
+   "y": 173,
+   "w": 30.61,
    "h": 16,
    "size": 14,
    "weight": 500,
@@ -150,10 +150,10 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "Router Restart",
+   "text": "Ring doorbell",
    "x": 73,
-   "y": 285.59,
-   "w": 89.63,
+   "y": 220.8,
+   "w": 81.73,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -165,7 +165,7 @@
    "clipped": false,
    "text": "Press",
    "x": 441.11,
-   "y": 285.8,
+   "y": 221,
    "w": 35.72,
    "h": 16,
    "size": 14,
@@ -176,10 +176,10 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "Garden gate",
+   "text": "Hub Restart",
    "x": 73,
-   "y": 333.59,
-   "w": 75.73,
+   "y": 268.8,
+   "w": 74.13,
    "h": 16,
    "size": 14,
    "weight": 400,
@@ -189,67 +189,36 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "Unlock",
-   "x": 433.73,
-   "y": 333.8,
-   "w": 43.09,
+   "text": "Press",
+   "x": 441.11,
+   "y": 269,
+   "w": 35.72,
    "h": 16,
    "size": 14,
    "weight": 500,
-   "color": "rgb(55, 200, 253)",
+   "color": "rgb(94, 94, 94)",
    "transform": "none"
   }
  ],
  "states": {
-  "button.restart_router": {
-   "s": "unknown",
+  "button.reboot_hub": {
+   "s": "unavailable",
    "a": {
     "device_class": "restart",
-    "friendly_name": "Router Restart"
+    "friendly_name": "Hub Restart"
    },
-   "lc": 1794451680,
-   "lu": 1794451680
+   "lc": 1794498780,
+   "lu": 1794498780
   },
-  "input_number.target_temperature": {
-   "s": "21.5",
+  "input_button.ring_doorbell": {
+   "s": "unknown",
    "a": {
-    "initial": null,
     "editable": true,
-    "min": 15,
-    "max": 25,
-    "step": 0.5,
-    "mode": "slider",
-    "unit_of_measurement": "°C",
-    "icon": "mdi:thermometer",
-    "friendly_name": "Target temperature"
+    "icon": "mdi:doorbell",
+    "friendly_name": "Ring doorbell"
    },
-   "lc": 1794497280,
-   "lu": 1794497280
-  },
-  "input_select.house_mode": {
-   "s": "Evening",
-   "a": {
-    "options": [
-     "Day",
-     "Evening",
-     "Night",
-     "Away"
-    ],
-    "editable": true,
-    "icon": "mdi:home",
-    "friendly_name": "House mode"
-   },
-   "lc": 1794494280,
-   "lu": 1794494280
-  },
-  "lock.garden_gate": {
-   "s": "locked",
-   "a": {
-    "friendly_name": "Garden gate",
-    "supported_features": 0
-   },
-   "lc": 1794492480,
-   "lu": 1794492480
+   "lc": 1794445680,
+   "lu": 1794445680
   },
   "scene.movie_night": {
    "s": "unknown",
@@ -264,6 +233,19 @@
    "lc": 1794457680,
    "lu": 1794457680
   },
+  "script.chime": {
+   "s": "on",
+   "a": {
+    "last_triggered": "2026-11-12T16:07:00+00:00",
+    "mode": "queued",
+    "current": 2,
+    "max": 10,
+    "icon": "mdi:bell-ring",
+    "friendly_name": "Chime"
+   },
+   "lc": 1794499620,
+   "lu": 1794499620
+  },
   "script.goodnight": {
    "s": "off",
    "a": {
@@ -275,30 +257,32 @@
    },
    "lc": 1794463680,
    "lu": 1794463680
+  },
+  "script.water_garden": {
+   "s": "on",
+   "a": {
+    "last_triggered": "2026-11-12T16:06:00+00:00",
+    "mode": "single",
+    "current": 1,
+    "icon": "mdi:sprinkler",
+    "friendly_name": "Water garden"
+   },
+   "lc": 1794499560,
+   "lu": 1794499560
   }
  },
  "templates": {},
  "display": {
   "entities": [
    {
-    "ei": "button.restart_router",
+    "ei": "button.reboot_hub",
     "pl": "demo",
-    "en": "Router Restart"
+    "en": "Hub Restart"
    },
    {
-    "ei": "input_number.target_temperature",
-    "pl": "input_number",
-    "en": "Target temperature"
-   },
-   {
-    "ei": "input_select.house_mode",
-    "pl": "input_select",
-    "en": "House mode"
-   },
-   {
-    "ei": "lock.garden_gate",
-    "pl": "demo",
-    "en": "Garden gate"
+    "ei": "input_button.ring_doorbell",
+    "pl": "input_button",
+    "en": "Ring doorbell"
    },
    {
     "ei": "scene.movie_night",
@@ -306,18 +290,26 @@
     "en": "Movie night"
    },
    {
+    "ei": "script.chime",
+    "pl": "script",
+    "en": "Chime"
+   },
+   {
     "ei": "script.goodnight",
     "pl": "script",
     "en": "Goodnight"
+   },
+   {
+    "ei": "script.water_garden",
+    "pl": "script",
+    "en": "Water garden"
    }
   ],
   "devices": [],
   "requested": {
    "domains": [
     "button",
-    "input_number",
-    "input_select",
-    "lock",
+    "input_button",
     "scene",
     "script"
    ],
@@ -333,19 +325,6 @@
       "default": "mdi:restart"
      }
     },
-    "lock": {
-     "_": {
-      "default": "mdi:lock",
-      "state": {
-       "jammed": "mdi:lock-alert",
-       "locking": "mdi:lock-clock",
-       "open": "mdi:lock-open-variant",
-       "opening": "mdi:lock-clock",
-       "unlocked": "mdi:lock-open-variant",
-       "unlocking": "mdi:lock-clock"
-      }
-     }
-    },
     "script": {
      "_": {
       "default": "mdi:script-text",
@@ -359,13 +338,6 @@
   },
   "translations": {
    "entity_component": {
-    "component.lock.entity_component._.state.jammed": "Jammed",
-    "component.lock.entity_component._.state.locked": "Locked",
-    "component.lock.entity_component._.state.locking": "Locking",
-    "component.lock.entity_component._.state.open": "Open",
-    "component.lock.entity_component._.state.opening": "Opening",
-    "component.lock.entity_component._.state.unlocked": "Unlocked",
-    "component.lock.entity_component._.state.unlocking": "Unlocking",
     "component.script.entity_component._.state.off": "Off",
     "component.script.entity_component._.state.on": "On"
    },

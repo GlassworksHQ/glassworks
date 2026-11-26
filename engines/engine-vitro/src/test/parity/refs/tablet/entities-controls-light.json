@@ -1,30 +1,31 @@
 {
- "case": "route-entities-controls",
- "frame": "mirror",
+ "case": "entities-controls-light",
+ "frame": "tablet",
  "haVersion": "2026.11.0",
  "now": 1794499680000,
  "stable": true,
  "viewport": {
-  "width": 720,
-  "height": 1280,
-  "density": 1.5
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
  },
  "clip": {
-  "x": 102,
+  "x": 382,
   "y": 16,
   "width": 516,
-  "height": 395
+  "height": 482
  },
  "docSize": {
-  "width": 720,
-  "height": 1280
+  "width": 1280,
+  "height": 800
  },
  "slots": [
   {
-   "x": 110,
+   "x": 390,
    "y": 24,
    "w": 500,
-   "h": 378.8,
+   "h": 466,
    "type": "hui-entities-card"
   }
  ],
@@ -32,40 +33,53 @@
   {
    "slot": 0,
    "clipped": false,
-   "text": "Evening",
-   "x": 17,
-   "y": 21,
-   "w": 81.28,
-   "h": 28,
-   "size": 24,
-   "weight": 400,
-   "color": "rgb(225, 225, 225)",
-   "transform": "none"
-  },
-  {
-   "slot": 0,
-   "clipped": false,
-   "text": "Target temperature",
+   "text": "Speaker volume",
    "x": 73,
-   "y": 77.59,
-   "w": 119.05,
+   "y": 28.8,
+   "w": 99.25,
    "h": 16,
    "size": 14,
    "weight": 400,
-   "color": "rgb(225, 225, 225)",
+   "color": "rgb(20, 20, 20)",
    "transform": "none"
   },
   {
    "slot": 0,
    "clipped": false,
-   "text": "21.5 °C",
-   "x": 438,
-   "y": 77.59,
-   "w": 45.08,
+   "text": "35",
+   "x": 467.27,
+   "y": 28.8,
+   "w": 15.73,
    "h": 16,
    "size": 14,
    "weight": 400,
-   "color": "rgb(225, 225, 225)",
+   "color": "rgb(20, 20, 20)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Away target",
+   "x": 73,
+   "y": 88.8,
+   "w": 73.67,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(20, 20, 20)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°C",
+   "x": 452.66,
+   "y": 84.59,
+   "w": 14.34,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(94, 94, 94)",
    "transform": "none"
   },
   {
@@ -73,12 +87,12 @@
    "clipped": false,
    "text": "House mode",
    "x": 73,
-   "y": 123.55,
+   "y": 146.75,
    "w": 59.52,
    "h": 13,
    "size": 10.5,
    "weight": 400,
-   "color": "rgba(255, 255, 255, 0.6)",
+   "color": "rgba(0, 0, 0, 0.6)",
    "transform": "none"
   },
   {
@@ -86,12 +100,38 @@
    "clipped": false,
    "text": "Evening",
    "x": 73,
-   "y": 141.64,
+   "y": 164.84,
    "w": 48.59,
    "h": 16,
    "size": 14,
    "weight": 400,
-   "color": "rgb(225, 225, 225)",
+   "color": "rgb(20, 20, 20)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Guest scene",
+   "x": 73,
+   "y": 210.75,
+   "w": 57.78,
+   "h": 13,
+   "size": 10.5,
+   "weight": 400,
+   "color": "rgba(0, 0, 0, 0.6)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "unavailable",
+   "x": 73,
+   "y": 228.84,
+   "w": 70.33,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(20, 20, 20)",
    "transform": "none"
   },
   {
@@ -99,12 +139,12 @@
    "clipped": false,
    "text": "Goodnight",
    "x": 73,
-   "y": 189.59,
+   "y": 276.8,
    "w": 64.67,
    "h": 16,
    "size": 14,
    "weight": 400,
-   "color": "rgb(225, 225, 225)",
+   "color": "rgb(20, 20, 20)",
    "transform": "none"
   },
   {
@@ -112,51 +152,64 @@
    "clipped": false,
    "text": "Run",
    "x": 452.52,
-   "y": 189.8,
+   "y": 277,
    "w": 24.31,
    "h": 16,
    "size": 14,
    "weight": 500,
-   "color": "rgb(55, 200, 253)",
+   "color": "rgb(0, 154, 199)",
    "transform": "none"
   },
   {
    "slot": 0,
    "clipped": false,
-   "text": "Movie night",
+   "text": "Chime",
    "x": 73,
-   "y": 237.59,
-   "w": 72.44,
+   "y": 324.8,
+   "w": 39.92,
    "h": 16,
    "size": 14,
    "weight": 400,
-   "color": "rgb(225, 225, 225)",
+   "color": "rgb(20, 20, 20)",
    "transform": "none"
   },
   {
    "slot": 0,
    "clipped": false,
-   "text": "Activate",
-   "x": 425.38,
-   "y": 237.8,
-   "w": 51.45,
+   "text": "Cancel 2",
+   "x": 372.16,
+   "y": 325,
+   "w": 54.36,
    "h": 16,
    "size": 14,
    "weight": 500,
-   "color": "rgb(55, 200, 253)",
+   "color": "rgb(179, 5, 50)",
    "transform": "none"
   },
   {
    "slot": 0,
    "clipped": false,
-   "text": "Router Restart",
+   "text": "Run",
+   "x": 452.52,
+   "y": 325,
+   "w": 24.31,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hub Restart",
    "x": 73,
-   "y": 285.59,
-   "w": 89.63,
+   "y": 372.8,
+   "w": 74.13,
    "h": 16,
    "size": 14,
    "weight": 400,
-   "color": "rgb(225, 225, 225)",
+   "color": "rgb(20, 20, 20)",
    "transform": "none"
   },
   {
@@ -164,25 +217,25 @@
    "clipped": false,
    "text": "Press",
    "x": 441.11,
-   "y": 285.8,
+   "y": 373,
    "w": 35.72,
    "h": 16,
    "size": 14,
    "weight": 500,
-   "color": "rgb(55, 200, 253)",
+   "color": "rgb(204, 204, 204)",
    "transform": "none"
   },
   {
    "slot": 0,
    "clipped": false,
-   "text": "Garden gate",
+   "text": "Front door",
    "x": 73,
-   "y": 333.59,
-   "w": 75.73,
+   "y": 420.8,
+   "w": 64.52,
    "h": 16,
    "size": 14,
    "weight": 400,
-   "color": "rgb(225, 225, 225)",
+   "color": "rgb(20, 20, 20)",
    "transform": "none"
   },
   {
@@ -190,40 +243,63 @@
    "clipped": false,
    "text": "Unlock",
    "x": 433.73,
-   "y": 333.8,
+   "y": 421,
    "w": 43.09,
    "h": 16,
    "size": 14,
    "weight": 500,
-   "color": "rgb(55, 200, 253)",
+   "color": "rgb(0, 154, 199)",
    "transform": "none"
   }
  ],
  "states": {
-  "button.restart_router": {
-   "s": "unknown",
+  "button.reboot_hub": {
+   "s": "unavailable",
    "a": {
     "device_class": "restart",
-    "friendly_name": "Router Restart"
+    "friendly_name": "Hub Restart"
    },
-   "lc": 1794451680,
-   "lu": 1794451680
+   "lc": 1794498780,
+   "lu": 1794498780
   },
-  "input_number.target_temperature": {
-   "s": "21.5",
+  "input_number.away_target": {
+   "s": "16.5",
    "a": {
     "initial": null,
     "editable": true,
-    "min": 15,
+    "min": 10,
     "max": 25,
     "step": 0.5,
-    "mode": "slider",
+    "mode": "box",
     "unit_of_measurement": "°C",
-    "icon": "mdi:thermometer",
-    "friendly_name": "Target temperature"
+    "icon": "mdi:thermometer-low",
+    "friendly_name": "Away target"
    },
-   "lc": 1794497280,
-   "lu": 1794497280
+   "lc": 1794481680,
+   "lu": 1794481680
+  },
+  "input_number.speaker_volume": {
+   "s": "35.0",
+   "a": {
+    "initial": null,
+    "editable": true,
+    "min": 0,
+    "max": 100,
+    "step": 1,
+    "mode": "slider",
+    "icon": "mdi:volume-high",
+    "friendly_name": "Speaker volume"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  },
+  "input_select.guest_scene": {
+   "s": "unavailable",
+   "a": {
+    "friendly_name": "Guest scene"
+   },
+   "lc": 1794499080,
+   "lu": 1794499080
   },
   "input_select.house_mode": {
    "s": "Evening",
@@ -241,27 +317,27 @@
    "lc": 1794494280,
    "lu": 1794494280
   },
-  "lock.garden_gate": {
+  "lock.front_door": {
    "s": "locked",
    "a": {
-    "friendly_name": "Garden gate",
+    "friendly_name": "Front door",
     "supported_features": 0
    },
    "lc": 1794492480,
    "lu": 1794492480
   },
-  "scene.movie_night": {
-   "s": "unknown",
+  "script.chime": {
+   "s": "on",
    "a": {
-    "entity_id": [
-     "light.hallway_ceiling_ring"
-    ],
-    "id": "movie_night",
-    "icon": "mdi:movie",
-    "friendly_name": "Movie night"
+    "last_triggered": "2026-11-12T16:07:00+00:00",
+    "mode": "queued",
+    "current": 2,
+    "max": 10,
+    "icon": "mdi:bell-ring",
+    "friendly_name": "Chime"
    },
-   "lc": 1794457680,
-   "lu": 1794457680
+   "lc": 1794499620,
+   "lu": 1794499620
   },
   "script.goodnight": {
    "s": "off",
@@ -280,14 +356,24 @@
  "display": {
   "entities": [
    {
-    "ei": "button.restart_router",
+    "ei": "button.reboot_hub",
     "pl": "demo",
-    "en": "Router Restart"
+    "en": "Hub Restart"
    },
    {
-    "ei": "input_number.target_temperature",
+    "ei": "input_number.away_target",
     "pl": "input_number",
-    "en": "Target temperature"
+    "en": "Away target"
+   },
+   {
+    "ei": "input_number.speaker_volume",
+    "pl": "input_number",
+    "en": "Speaker volume"
+   },
+   {
+    "ei": "input_select.guest_scene",
+    "pl": "input_select",
+    "en": "Guest scene"
    },
    {
     "ei": "input_select.house_mode",
@@ -295,14 +381,14 @@
     "en": "House mode"
    },
    {
-    "ei": "lock.garden_gate",
+    "ei": "lock.front_door",
     "pl": "demo",
-    "en": "Garden gate"
+    "en": "Front door"
    },
    {
-    "ei": "scene.movie_night",
-    "pl": "homeassistant",
-    "en": "Movie night"
+    "ei": "script.chime",
+    "pl": "script",
+    "en": "Chime"
    },
    {
     "ei": "script.goodnight",
@@ -317,7 +403,6 @@
     "input_number",
     "input_select",
     "lock",
-    "scene",
     "script"
    ],
    "platforms": []

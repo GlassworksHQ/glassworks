@@ -1,0 +1,374 @@
+{
+ "case": "entities-controls",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 395
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 378.8,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Evening",
+   "x": 17,
+   "y": 21,
+   "w": 81.28,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Target temperature",
+   "x": 73,
+   "y": 77.59,
+   "w": 119.05,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "21.5 °C",
+   "x": 438,
+   "y": 77.59,
+   "w": 45.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "House mode",
+   "x": 73,
+   "y": 123.55,
+   "w": 59.52,
+   "h": 13,
+   "size": 10.5,
+   "weight": 400,
+   "color": "rgba(255, 255, 255, 0.6)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Evening",
+   "x": 73,
+   "y": 141.64,
+   "w": 48.59,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Goodnight",
+   "x": 73,
+   "y": 189.59,
+   "w": 64.67,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Run",
+   "x": 452.52,
+   "y": 189.8,
+   "w": 24.31,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Movie night",
+   "x": 73,
+   "y": 237.59,
+   "w": 72.44,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Activate",
+   "x": 425.38,
+   "y": 237.8,
+   "w": 51.45,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Router Restart",
+   "x": 73,
+   "y": 285.59,
+   "w": 89.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Press",
+   "x": 441.11,
+   "y": 285.8,
+   "w": 35.72,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Garden gate",
+   "x": 73,
+   "y": 333.59,
+   "w": 75.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Unlock",
+   "x": 433.73,
+   "y": 333.8,
+   "w": 43.09,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "button.restart_router": {
+   "s": "unknown",
+   "a": {
+    "device_class": "restart",
+    "friendly_name": "Router Restart"
+   },
+   "lc": 1794451680,
+   "lu": 1794451680
+  },
+  "input_number.target_temperature": {
+   "s": "21.5",
+   "a": {
+    "initial": null,
+    "editable": true,
+    "min": 15,
+    "max": 25,
+    "step": 0.5,
+    "mode": "slider",
+    "unit_of_measurement": "°C",
+    "icon": "mdi:thermometer",
+    "friendly_name": "Target temperature"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "input_select.house_mode": {
+   "s": "Evening",
+   "a": {
+    "options": [
+     "Day",
+     "Evening",
+     "Night",
+     "Away"
+    ],
+    "editable": true,
+    "icon": "mdi:home",
+    "friendly_name": "House mode"
+   },
+   "lc": 1794494280,
+   "lu": 1794494280
+  },
+  "lock.garden_gate": {
+   "s": "locked",
+   "a": {
+    "friendly_name": "Garden gate",
+    "supported_features": 0
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "scene.movie_night": {
+   "s": "unknown",
+   "a": {
+    "entity_id": [
+     "light.hallway_ceiling_ring"
+    ],
+    "id": "movie_night",
+    "icon": "mdi:movie",
+    "friendly_name": "Movie night"
+   },
+   "lc": 1794457680,
+   "lu": 1794457680
+  },
+  "script.goodnight": {
+   "s": "off",
+   "a": {
+    "last_triggered": null,
+    "mode": "single",
+    "current": 0,
+    "icon": "mdi:weather-night",
+    "friendly_name": "Goodnight"
+   },
+   "lc": 1794463680,
+   "lu": 1794463680
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "button.restart_router",
+    "pl": "demo",
+    "en": "Router Restart"
+   },
+   {
+    "ei": "input_number.target_temperature",
+    "pl": "input_number",
+    "en": "Target temperature"
+   },
+   {
+    "ei": "input_select.house_mode",
+    "pl": "input_select",
+    "en": "House mode"
+   },
+   {
+    "ei": "lock.garden_gate",
+    "pl": "demo",
+    "en": "Garden gate"
+   },
+   {
+    "ei": "scene.movie_night",
+    "pl": "homeassistant",
+    "en": "Movie night"
+   },
+   {
+    "ei": "script.goodnight",
+    "pl": "script",
+    "en": "Goodnight"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "button",
+    "input_number",
+    "input_select",
+    "lock",
+    "scene",
+    "script"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "button": {
+     "_": {
+      "default": "mdi:button-pointer"
+     },
+     "restart": {
+      "default": "mdi:restart"
+     }
+    },
+    "lock": {
+     "_": {
+      "default": "mdi:lock",
+      "state": {
+       "jammed": "mdi:lock-alert",
+       "locking": "mdi:lock-clock",
+       "open": "mdi:lock-open-variant",
+       "opening": "mdi:lock-clock",
+       "unlocked": "mdi:lock-open-variant",
+       "unlocking": "mdi:lock-clock"
+      }
+     }
+    },
+    "script": {
+     "_": {
+      "default": "mdi:script-text",
+      "state": {
+       "on": "mdi:script-text-play"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.lock.entity_component._.state.jammed": "Jammed",
+    "component.lock.entity_component._.state.locked": "Locked",
+    "component.lock.entity_component._.state.locking": "Locking",
+    "component.lock.entity_component._.state.open": "Open",
+    "component.lock.entity_component._.state.opening": "Opening",
+    "component.lock.entity_component._.state.unlocked": "Unlocked",
+    "component.lock.entity_component._.state.unlocking": "Unlocking",
+    "component.script.entity_component._.state.off": "Off",
+    "component.script.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}
