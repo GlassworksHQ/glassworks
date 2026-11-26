@@ -12,6 +12,7 @@ import { MIRROR_IMAGES } from './choices';
 import { IMAGE_PROXY } from './download';
 import { GLASS_PANES_USERDATA, MIRROR_FASTBOOT, USERDATA_BYTES, checkFastboot, firstBoot, makeOnlyHome } from './flash';
 import { checkMirrorApk } from './image';
+import { mirrorInPlace } from './inplace';
 import { workerImages } from './kiln/images';
 import { checkMirror, installMirror, undoMirror } from './recipe';
 import { describeMirrorUpdates, readMirrorUpdates } from './updates';
@@ -55,7 +56,9 @@ export const kilnFrame: DeviceFrame = {
     images: workerImages,
     proxy: IMAGE_PROXY.base,
     assets: { bootAnimation: d.assets.bootAnimation, settings: d.assets.settings },
-    storage: { flashedFlag: d.storage.flashedFlag },
+    // Stock-in-place (choices.ts GLASSWORKS_IN_PLACE): the stage, the bundle's check, the build, the app's install
+    inPlace: mirrorInPlace(d.words),
+    storage: { flashedFlag: d.storage.flashedFlag, inPlaceDb: d.storage.inPlaceDb },
   },
   timings: { authMs: d.timings.authMs, firstStartAuthMs: d.timings.firstStartAuthMs, readMs: d.timings.readMs },
 };

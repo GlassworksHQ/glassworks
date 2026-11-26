@@ -44,16 +44,37 @@ All of it at the frame level, in `frames/<id>/`. A new frame needs no change und
 | Its route in Kiln, its catalog facts | `design/frame.json` (`kiln`, `status`, …) | `/aqara-s1-plus` |
 | Touch: can the person tap the device's screen during the install? | `design/installer.json` `touch` | `true` / `false` |
 | Its flows, and each flow's steps in order | `installer.json` `flows.<flow>.steps` | S1: connect, install, first-boot, app |
-| Each step's transport | step `transport`: `fel`, `fastboot`, `adb`, `usb`, `none` | Mirror install: `fastboot` |
+| Which of the engine's flows runs each flow | flow `engine`: `image` (whole images over fastboot), `app` (the app alone over adb), `in-place` (the device's own software changed in place) | Mirror: `fastboot` is `image`, `stock` is `in-place`, `app` is `app` |
+| Each step's transport | step `transport`: `fel`, `fastboot`, `adb`, `usb`, `agent`, `none` | Mirror install: `fastboot`; its in-place `receive`: `agent` |
 | How the engine enters that transport | step `enter`: `button` (with `reachable`), `loader`, `boot` (with the key the image trusts), `usb-debugging`, `adb-reboot-bootloader` | Mirror fastboot: a button inside the case today; `adb-reboot-bootloader` in phase 2 |
 | What the person gives | step `inputs` | Mirror: APK, Home Assistant, Wi-Fi |
 | What the step checks before it writes | step `checks` | S1: chip, layout, boot read twice |
 | What it downloads | step `downloads`: pinned assets or release files | S1: `uboot-spl`, `uboot`; Mirror: the Glass Panes image |
 | Whether it writes, and whether the device restarts after | step `writes`, `reboots` | S1 install: both |
 | Taps on the device's own screen | step `taps`; none on a frame without touch | Android: `allow-usb-debugging` |
-| Its way back | `installer.json` `wayBack` | S1: restore the backup; Mirror: flash the Glass Panes images |
+| Its way back | `installer.json` `wayBack`, or a flow's own `wayBack` | S1: restore the backup; Mirror: flash the Glass Panes images, and for its `stock` flow, `restore-blocks` |
 | Words that name its hardware | `installer.json` `words`: the USB names at each "your turn", help links, the way back's words, the Silent updates words by state | "USB Device (1f3a:efe8)" |
 | Recovery drawing | `design/recovery.json` | (unchanged) |
+
+A frame that doesn't say a flow's `engine` gets `image` for a flow with a `fastboot` step and `app`
+for one without, as before the field existed.
+
+**The `agent` transport.** An in-place flow restarts the device into a small setup agent of the
+frame's own (the Mirror's is the MIT stock probe app in `tools/mirror/stock-probe-app`). Kiln takes
+the agent's bundle over the channels the frame names in its code (`InPlaceCode.channels`: the
+agent's HTTP port and path, and its Bluetooth GATT service and characteristics): this browser's saved
+copy first, then the local network, then Bluetooth, and a file the person downloads from the agent's
+own page at any time. The step is read-only. Kiln checks the bundle (SHA-256, serial, the run's
+signature) and then the frame's code does, before it is kept.
+
+**`wayBack: restore-blocks`.** For an in-place flow, `{ "how": "restore-blocks", "restore": "<file>" }`
+names the restore image its `in-place` step makes. Before the first write of what `in-place` built,
+Kiln puts in its own **restore point** step, which a recipe can't name or skip: the restore image is
+saved in this browser (the frame's `storage.inPlaceDb`), read back and checked by SHA-256 before
+Continue opens, and offered as a zip download. The way back writes it over the blocks the install
+changed, from this browser or from that zip, after restarting the device into fastboot over adb when
+it can (or with the button, when it can't). The frame gets undo's routes (`undo`, `undo/connect`,
+`undo/restore`, `undo/done`) for it, as a `restore-backup` frame does.
 
 `installer.json` is a draft today. The contract reads `route`, `touch` and each step's `id`,
 `writes`, `reboots`, `downloads` and `taps`. The engine starts reading the rest in phase 2, and the
@@ -184,9 +205,10 @@ device, and checks it ends where the S1 does:
 | `reload@<step>` | the page reloads during each step | it knows a write may have happened, and reaches Done without redoing a finished step's writes |
 | `stalled-download` | the first download stops sending | a watchdog ends it with an error, Try again on that step's screen (or the one before), then Done |
 | `no-touch` | nobody taps the device beyond the declared taps | it reaches Done |
+| `channel-drop` | in a flow with an `agent` step, the local network transfer drops halfway | Kiln carries on over Bluetooth by itself and reaches Done, with no error screen |
 
 The cases come from `installer.json`: a reload in each step, a drop in the first step that writes,
-a stall only for a flow that downloads. A driver per flow (`s1.ts`, `mirror.ts`, `android.ts`) does
+a stall only for a flow that downloads, a channel drop only for a flow with an `agent` step. A driver per flow (`s1.ts`, `mirror.ts` for the Mirror's three, `android.ts`) does
 what a person does: one click per screen visit, and the physical steps the frame declares.
 
 **Expected failures.** A case a flow fails today is in `expected-failures.json` with the issue that

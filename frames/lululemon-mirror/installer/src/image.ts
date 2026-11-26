@@ -56,7 +56,7 @@ export const LABELS = {
 } as const;
 
 /** Android's ids (system/core/include/private/android_filesystem_config.h). */
-const AID = { root: 0, system: 1000, wifi: 1010, shell: 2000, misc: 9998 } as const;
+export const AID = { root: 0, system: 1000, wifi: 1010, shell: 2000, misc: 9998 } as const;
 
 /** The Mirror's Android: 6.0.1. */
 const MIRROR_API = 23;

@@ -620,6 +620,13 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-onl
      [`frames/lululemon-mirror/installer/src/stock.ts`](../installer/src/stock.ts), shared by Kiln and
      the Node tool. USB MTP (`mUsbDataUnlocked=false` → 0 storages) and AOA v2 are dead ends, so the
      Stage 1 transport stays the SoftAP HTTP probe (or USB `adb forward`), not MTP.
+   - **Kiln's way back to stock (untested on a unit, 2026-11-24):** everything Kiln's app install
+     changes (the APK in `/data/app`, `device_owner.xml`, the `pm hide` state in
+     `package-restrictions.xml`, the preferred home activity, `user_rotation`) lives in `userdata`, so
+     Kiln's undo writes `restore-services.sparse` and then an empty ext4 `userdata` (root `0771
+     system:system`, `lost+found` only), the browser's version of `--undo --erase-userdata`. The
+     install's own fresh `userdata` is built the same way plus `/misc/adb`, so stock should take it
+     on first boot as after a factory reset, but no unit has booted Kiln's empty one yet.
 4. **Trust model for binding the SoftAP probe to the fastboot flash target — partially closed
    (2026-11-25, read):** a compatible but different Mirror in fastboot could otherwise receive
    writes computed from another unit's FIEMAP offsets (CodeRabbit, #769). `stock-surgical-adb.ts`
