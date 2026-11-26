@@ -258,6 +258,21 @@ class VitroEngine(
             connectionWatchers.forEach { runCatching { it(up) } }
         }
 
+        /**
+         * Moves to a new client generation (the client is replaced, closed or signs in again) and gives it. Islands whose
+         * connection was up hear it go down now: the old client's own `onDisconnected` no longer reaches them, and the
+         * new client's first connection is then a change they start their subscriptions on.
+         */
+        @Synchronized
+        private fun retireClient(): Int {
+            val next = ++clientGeneration
+            if (connectedGeneration != -1) {
+                connectedGeneration = -1
+                connectionWatchers.forEach { runCatching { it(false) } }
+            }
+            return next
+        }
+
         /** Island pages whose content went away this turn ([IslandHost]), handled together. Main thread. */
         private val deadIslandPages = LinkedHashSet<Page>()
         private var deadIslandsPosted = false
@@ -525,7 +540,7 @@ class VitroEngine(
             fallbackPage?.close()
             fallbackPage = null
             activity.application.unregisterActivityLifecycleCallbacks(lifecycle)
-            clientGeneration++
+            retireClient()
             detachRegistries()
             registryWatchers.clear()
             client?.close()
@@ -809,7 +824,7 @@ class VitroEngine(
             firstPaintReported = false
             vitroView.showStatus("Connecting to Home Assistant…")
             client?.close()
-            val generation = ++clientGeneration
+            val generation = retireClient()
             val wsClient = HaDashboardClient(
                 haBase = origin,
                 tokenProvider = { force, done ->
@@ -925,7 +940,7 @@ class VitroEngine(
                 fallbackFresh = true
             }
             // The island server stays up: a locked-down fallback allows its port, and only it, for the process.
-            clientGeneration++
+            retireClient()
             client?.close()
             client = null
             currentOrigin = null
@@ -1128,7 +1143,7 @@ class VitroEngine(
                     // That client's reader has stopped: the load after sign-in starts a new one instead of reusing it.
                     // Images fetched with the rejected sign-in go too.
                     VitroCardContext.clearImageCache()
-                    clientGeneration++
+                    retireClient()
                     // Nor does the page keep that session's registries for its islands: the next client's feed brings them.
                     detachRegistries()
                     client?.close()

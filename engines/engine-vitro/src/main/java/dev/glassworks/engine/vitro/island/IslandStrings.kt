@@ -49,6 +49,8 @@ object IslandStrings {
             val hash = MessageDigest.getInstance("SHA-256").digest(body).take(12).joinToString("") { "%02x".format(it) }
             return Snapshot(version, labels, hash, body).also {
                 last = it
+                // Made again (back to an earlier language): it counts as the newest.
+                recent.remove(hash)
                 recent[hash] = it
             }
         }

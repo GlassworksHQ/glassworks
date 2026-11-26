@@ -263,6 +263,9 @@ class WebIslandCardView(
                 // subscriptions start again on the new connection (HA dropped them with the old one). On while the
                 // card is detached too (a move in the layout): a drop then is never missed, and live ones stay live.
                 connectionWatch = ctx.watchConnection { up -> synchronized(seedLock) { connectionChanged(up) } }
+                // A change between the bridge's seed and the watcher above went unheard: where it is now. Idempotent:
+                // live subscriptions stay, waiting ones start, and a bridge told this already hears nothing.
+                synchronized(seedLock) { connectionChanged(ctx.haConnected()) }
             } else {
                 server.unregisterSlot(id)
                 slotId = null
@@ -988,9 +991,11 @@ function vitroSeedStorage(store, origin, seed) {
             val haCfgJson = ctx.haConfig().toString()
             val haUserJson = islandUser(ctx.haUser())?.toString() ?: "null"
             // The user's language and formats, as HA's page holds them in `hass.locale` (HaLocale).
-            val haLocaleJson = HaLocale.current.toJson().toString()
+            // One read of the locale: its formats and its language (lang, dir) agree.
+            val locale = HaLocale.current
+            val haLocaleJson = locale.toJson().toString()
             val tokenJson = JSONObject.quote(ctx.accessToken().orEmpty())
-            val language = HaLocale.current.language
+            val language = locale.language
             // HA's translationMetadata for the user's language: a right-to-left one lays the page out that way too.
             val langMeta = languageMeta(language)
             val stringsJson = JSONObject.quote(IslandStrings.path())
@@ -1594,6 +1599,8 @@ function vitroQuoteEnd(p, i) {
 function vitroBlockEnd(p, start) {
   let depth = 0;
   for (let j = start; j < p.length; j++) {
+    // '' is one apostrophe, never the start of a quote.
+    if (p[j] === "'" && p[j + 1] === "'") { j++; continue; }
     const q = vitroQuoteEnd(p, j);
     if (q >= 0) { j = q; continue; }
     if (p[j] === '{') depth++;
@@ -1601,13 +1608,19 @@ function vitroBlockEnd(p, start) {
   }
   return -1;
 }
-// A plural branch's # (the number), but not a quoted one.
+// A plural branch's own # (the number): not a quoted one, and not one inside a nested argument (a nested plural
+// puts its own count there).
 function vitroPound(branch, n) {
   let out = '';
+  let depth = 0;
   for (let j = 0; j < branch.length; j++) {
+    if (branch[j] === "'" && branch[j + 1] === "'") { out += "''"; j++; continue; }
     const q = vitroQuoteEnd(branch, j);
     if (q >= 0) { out += branch.slice(j, q + 1); j = q; continue; }
-    out += branch[j] === '#' ? n : branch[j];
+    const c = branch[j];
+    if (c === '{') depth++;
+    else if (c === '}') depth--;
+    out += c === '#' && depth === 0 ? n : c;
   }
   return out;
 }

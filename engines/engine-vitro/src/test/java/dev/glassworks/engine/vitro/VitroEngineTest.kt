@@ -871,6 +871,23 @@ class VitroEngineTest {
     }
 
     @Test
+    fun aRestartTellsTheIslandsTheOldConnectionWentBeforeTheNewOneIsUp() {
+        val page = readyPage()
+        awaitMain("connected") { server.commands("auth").size == 1 }
+        // A web island's view of the connection (VitroCardContext.watchConnection), as a card built now gets it.
+        val ctx = vitroView(page).contextFactory!!(ThemeResolver.resolve(ThemeCatalog(), true))
+        val heard = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+        ctx.watchConnection { heard += it }
+        assertTrue("up before the restart", ctx.haConnected())
+        page.restart()
+        // The old client's own disconnect is dropped as stale: the restart itself says the connection went.
+        assertEquals(listOf(false), heard.toList())
+        awaitMain("second connection") { server.commands("auth").size == 2 && heard.size == 2 }
+        assertEquals("then up on the new client, where the islands start their subscriptions again", listOf(false, true), heard.toList())
+        assertTrue(ctx.haConnected())
+    }
+
+    @Test
     fun viewAddressesJoinOriginDashboardAndView() {
         assertEquals("$base/wall-test/living", VitroEngine.buildViewUrl("$base/", "wall-test", "living"))
         assertEquals("$base/lovelace/0", VitroEngine.buildViewUrl(base, null, "0"))

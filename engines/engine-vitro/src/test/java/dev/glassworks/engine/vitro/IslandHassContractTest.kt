@@ -105,6 +105,16 @@ class IslandHassContractTest {
             assertEquals(german.hash, IslandStrings.byHash(german.hash)?.hash)
             assertNull("never another set's strings", IslandStrings.byHash("0123456789abcdef01234567"))
             assertEquals("${IslandStrings.PREFIX}${german.hash}.json", IslandStrings.path())
+            // Back to English after three more sets, then one more: English, made again, is among the last ones kept.
+            for (lang in listOf("fr", "es", "it")) {
+                dev.glassworks.engine.vitro.data.HaText.install(lang, mapOf("ui.common.save" to lang))
+                IslandStrings.current()
+            }
+            dev.glassworks.engine.vitro.data.HaText.install("en", mapOf("ui.common.save" to "Save"))
+            assertEquals(english.hash, IslandStrings.current().hash)
+            dev.glassworks.engine.vitro.data.HaText.install("nl", mapOf("ui.common.save" to "Opslaan"))
+            IslandStrings.current()
+            assertEquals("made again counts as new", english.hash, IslandStrings.byHash(english.hash)?.hash)
         } finally {
             dev.glassworks.engine.vitro.data.HaText.reset()
         }

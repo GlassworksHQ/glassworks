@@ -21,6 +21,8 @@ const STRINGS = {
   'state.default.unavailable': 'Unavailable',
   'ui.test.quoted': "Use '{name}' for {name}",
   'ui.test.pound': "{n, plural, other {# of '#' items, #}}",
+  'ui.test.doubled': "{n, plural, other {''{name} #}}",
+  'ui.test.nested': '{outer, plural, other {# groups, {inner, plural, other {# items}}}}',
 };
 
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
@@ -219,6 +221,8 @@ test('localize is HA\'s strings, with placeholders, plurals and selects, and "" 
   // ICU's quotes: a quoted brace or # is text.
   assert.equal(localize('ui.test.quoted', { name: 'Ada' }), 'Use {name} for Ada');
   assert.equal(localize('ui.test.pound', { n: 3 }), '3 of # items, 3');
+  assert.equal(localize('ui.test.doubled', { n: 2, name: 'Ada' }), "'Ada 2", "'' is one apostrophe, even before a brace");
+  assert.equal(localize('ui.test.nested', { outer: 2, inner: 5 }), '2 groups, 5 items', 'each plural has its own #');
 });
 
 test('formatEntityState takes HA\'s translated state labels', async () => {
