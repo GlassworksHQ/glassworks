@@ -1506,10 +1506,15 @@ class VitroEngineTest {
         assertTrue(html.contains("if (!customElements.get(name)) customElements.define(name, cls);"))
         assertTrue(html.indexOf("vitroDefine('paper-slider'") < html.indexOf("button-card.js"))
         assertTrue(html.indexOf("vitroDefine('paper-icon-button'") < html.indexOf("button-card.js"))
-        // ha-state-icon: explicit icon, then the entity's, then the domain's.
-        assertTrue(html.contains("if (st && st.attributes && st.attributes.icon) return st.attributes.icon;"))
+        // ha-state-icon: explicit icon, then the entity's, then the domain's (HA's DEFAULT_DOMAIN_ICON for one it has
+        // none for); with neither an icon nor a state object, nothing, as HA's.
+        assertTrue(html.contains("if (!st) return '';"))
+        assertTrue(html.contains("if (st.attributes && st.attributes.icon) return st.attributes.icon;"))
         assertTrue(html.contains("light: 'mdi:lightbulb'"))
-        assertTrue(html.contains("return VITRO_DOMAIN_ICONS[domain] || 'mdi:home';"))
+        assertTrue(html.contains("return VITRO_DOMAIN_ICONS[domain] || 'mdi:bookmark';"))
+        // ha-card carries HA's look in its own shadow root, so it holds inside a card's shadow root too.
+        assertTrue(html.contains("root.innerHTML = '<slot></slot><style>' + HA_CARD_CSS + '</style>';"))
+        assertFalse("no page rule for ha-card: it can't reach a card's shadow root", html.contains("ha-card { display: block;"))
         // Icon buttons draw an mdi path or an ha-icon in a plain round button.
         assertTrue(html.contains("border:0;background:transparent;color:inherit;cursor:pointer;padding:6px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%"))
         assertTrue(html.contains("svg.setAttribute('viewBox', '0 0 24 24');"))

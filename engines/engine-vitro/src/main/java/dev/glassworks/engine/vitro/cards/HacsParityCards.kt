@@ -1057,10 +1057,26 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
 
     private var lastState: EntityState? = null
 
+    /**
+     * Mushroom's `_controls` for [s]: the configured controls the cover supports (buttons with OPEN, CLOSE or STOP;
+     * the position slider with SET_POSITION 4), none without a state.
+     */
+    private fun available(s: EntityState?): List<String> = if (s == null) emptyList() else coverControls.filter { c ->
+        when (c) {
+            "buttons_control" -> s.supports(COVER_OPEN or COVER_CLOSE or COVER_STOP)
+            "position_control" -> s.supports(COVER_SET_POSITION)
+            else -> false
+        }
+    }
+
     private fun showActive() {
+        val available = available(lastState)
+        // Mushroom's updateActiveControl: the active control stays while the cover has it, else the first it has.
+        if (activeControl !in available) activeControl = available.firstOrNull()
         bindButtons(lastState)
         slider?.visibility = if (activeControl == "position_control") VISIBLE else GONE
-        switchButtons.forEach { (c, b) -> b.visibility = if (c == activeControl) GONE else VISIBLE }
+        // Mushroom's next-control button: only while the cover has more than one control.
+        switchButtons.forEach { (c, b) -> b.visibility = if (c == activeControl || c !in available || available.size < 2) GONE else VISIBLE }
     }
 
     override fun render(s: EntityState?) {
@@ -1073,7 +1089,7 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
         setSecondary(s?.let { mushroomStateLine(config.type, it) } ?: "…")
         slider?.setValue((pos ?: 0) / 100f, active = open)
         lastState = s
-        bindButtons(s)
+        showActive()
         collapseWhen(!open)
     }
 
@@ -1107,6 +1123,7 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
         const val COVER_OPEN = 1
         const val COVER_CLOSE = 2
         const val COVER_STOP = 8
+        const val COVER_SET_POSITION = 4
 
         /** `--rgb-state-cover`: Mushroom's blue. */
         val BLUE = 0xFF2196F3.toInt()

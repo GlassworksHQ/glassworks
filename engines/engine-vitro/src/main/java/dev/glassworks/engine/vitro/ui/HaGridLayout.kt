@@ -252,7 +252,14 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 (raw.optBoolean("show_percentage_control") && has(1)) || (raw.optBoolean("show_oscillate_control") && has(2)) ||
                     (raw.optBoolean("show_direction_control") && has(4))
             }
-            "custom:mushroom-cover-card" -> listOf("show_buttons_control", "show_position_control", "show_tilt_position_control").any { raw.optBoolean(it) }
+            "custom:mushroom-cover-card" -> {
+                // Mushroom 5.3.0's `_controls`: buttons for a cover with OPEN 1, CLOSE 2 or STOP 8, the position slider
+                // with SET_POSITION 4, the tilt one with SET_TILT_POSITION 128 (none without supported_features).
+                val f = if (state == null) null else (state.attributes["supported_features"] as? Number)?.toInt() ?: 0
+                fun has(bits: Int) = f == null || f and bits != 0
+                (raw.optBoolean("show_buttons_control") && has(1 or 2 or 8)) || (raw.optBoolean("show_position_control") && has(4)) ||
+                    (raw.optBoolean("show_tilt_position_control") && has(128))
+            }
             "custom:mushroom-climate-card" -> {
                 // A temperature control with a target to show; the hvac_modes the entity has and the card lists.
                 val target = state == null || state.attributes["temperature"] != null ||

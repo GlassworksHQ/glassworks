@@ -249,6 +249,21 @@ class HacsParityWaveTest {
         // No supported_features: Mushroom draws no button.
         set("open", "current_position" to 30)
         assertEquals(emptyMap<String, Boolean>(), enabled())
+
+        // Mushroom's `_controls` follow the cover too: with both configured, a cover without SET_POSITION (3) has the
+        // buttons only, and no button to switch to a slider it can't use (parity case m-mushroom-cover-cover-open-no-position).
+        val both = dev.glassworks.engine.vitro.cards.MushroomCoverCardView(ctx,
+            card("""{"type": "custom:mushroom-cover-card", "entity": "cover.blind", "show_buttons_control": true, "show_position_control": true}"""))
+        set("open", "supported_features" to 3)
+        fun shown(d: String) = both.all().any { it.contentDescription?.toString() == d && it.visibility == View.VISIBLE }
+        fun sliderShown() = both.all().any { it is dev.glassworks.engine.vitro.cards.HaHorizontalSliderView && it.visibility == View.VISIBLE }
+        assertTrue(shown("Open")); assertFalse(shown("position_control")); assertFalse(sliderShown())
+        // With SET_POSITION (15): the switch to the slider is back.
+        set("open", "current_position" to 100, "supported_features" to 15)
+        assertTrue(shown("Open")); assertTrue(shown("position_control"))
+        // Position only (4): the slider is the active control, and there's nothing to switch to.
+        set("open", "current_position" to 100, "supported_features" to 4)
+        assertFalse(shown("Open")); assertTrue(sliderShown()); assertFalse(shown("buttons_control"))
     }
 
     @Test
