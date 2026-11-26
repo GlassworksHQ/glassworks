@@ -58,7 +58,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 class VitroEngineTest {
 
     private val base = FakeHaServer.BASE
-    private val settings = EngineSettings(
+    /** What the panel is set to: a test that moves it to another Home Assistant replaces it. */
+    private var settings = EngineSettings(
         secureHosts = listOf("192.0.2.10"),
         zoom = 1f,
         remoteDebugging = false,
@@ -522,6 +523,8 @@ class VitroEngineTest {
     @Test
     fun aNewOriginStartsANewConnection() {
         val page = readyPage()
+        // The panel was moved to another Home Assistant: its dashboard loads there.
+        settings = settings.copy(dashboard = "http://192.0.2.20:8123/wall-test/living")
         page.load("http://192.0.2.20:8123/wall-test/living")
         awaitMain("second connection") { server.connectUrls.size == 2 }
         assertEquals(
@@ -669,6 +672,50 @@ class VitroEngineTest {
         assertEquals(View.VISIBLE, surface.visibility)
         assertEquals(View.GONE, alreadyGone.visibility)
         vv.removeView(island)
+    }
+
+    @Test
+    fun onlyThePanelsHomeAssistantHasDashboardsAnyOtherAddressOpensAsAPage() {
+        // A card's link to a web page whose path looks like a view's (`url_path: https://example.com/events/1`) isn't
+        // a dashboard of that host: HA's frontend opens it as a page, so the fallback shows it as it is.
+        val page = readyPage()
+        val vv = vitroView(page)
+        // The fallback's own page, not an island's (the view's custom cards each have one).
+        fun shown() = fallback.pages.filter { p -> p.loads.none { "/__vitro/" in it } }.single().loads
+        for (u in listOf(
+            "https://example.com/events/1",
+            "http://192.0.2.20:8123/wall-test/living",
+            // The same host on another port is another origin.
+            "http://192.0.2.10:8124/wall-test/living",
+        )) {
+            page.load(u)
+            assertEquals(u, shown().last())
+            assertEquals("$u: the fallback is in front", View.GONE, vv.visibility)
+        }
+        Thread.sleep(150)
+        idle()
+        assertEquals("no connection to an outside host", listOf("ws://192.0.2.10:8123/api/websocket"), server.connectUrls.toList())
+        // The panel's own Home Assistant still draws natively, on its one connection.
+        page.load("$base/wall-test/wall")
+        assertEquals(View.VISIBLE, vv.visibility)
+        assertEquals(3, shown().size)
+        assertEquals(1, server.connectUrls.size)
+    }
+
+    @Test
+    fun aCardsUrlActionToAnOutsidePageOpensItInTheFallback() {
+        // The native card's `url` action goes through the page's navigation (VitroCardContext.navigate).
+        val page = readyPage()
+        val vv = vitroView(page)
+        val ctx = vv.contextFactory!!(ThemeResolver.resolve(ThemeCatalog(), true))
+        ctx.navigate("https://example.com/events/1")
+        idle()
+        assertEquals(listOf("https://example.com/events/1"), fallback.pages.filter { p -> p.loads.none { "/__vitro/" in it } }.single().loads.toList())
+        assertEquals(View.GONE, vv.visibility)
+        // A path stays on the panel's Home Assistant, drawn natively.
+        ctx.navigate("/wall-test/wall")
+        idle()
+        assertEquals(View.VISIBLE, vv.visibility)
     }
 
     @Test

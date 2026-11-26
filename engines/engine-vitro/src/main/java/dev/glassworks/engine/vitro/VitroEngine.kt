@@ -533,6 +533,19 @@ class VitroEngine(
         /** The Home Assistant origin the app is set to (the settings' dashboard), the only one its token is for. */
         private fun configuredOrigin(): String? = settings(activity.applicationContext).dashboard?.let(OAuth::origin)
 
+        /**
+         * True when [url] is on the panel's own Home Assistant: the one it is set to, or the test hold's fake while a
+         * test holds the screen (Clarity's reference dashboards). A panel set to no Home Assistant yet has no outside
+         * to tell apart: any origin may be its dashboard, as before it had one.
+         */
+        private fun onPanelsHa(url: String): Boolean {
+            val own = listOfNotNull(
+                configuredOrigin(),
+                runCatching { testDashboard(activity.applicationContext) }.getOrNull()?.let(OAuth::origin),
+            )
+            return own.isEmpty() || own.any { VitroCardContext.sameOrigin(url, it) }
+        }
+
         /** Where the island server proxies to: the loaded origin, or before any load the configured one (sign-in first). */
         val proxyOrigin: String? get() = currentOrigin ?: configuredOrigin()
 
@@ -801,7 +814,9 @@ class VitroEngine(
             currentUrl?.let { if (it != url) remember(it) }
             currentUrl = url
 
-            if (!LovelaceParser.isDashboardUrl(url)) {
+            // Only the panel's own Home Assistant has dashboards. Any other address (a card's link to a web page, an
+            // island's) is a page, shown as it is, as HA's frontend opens an outside URL.
+            if (!LovelaceParser.isDashboardUrl(url) || !onPanelsHa(url)) {
                 leaveNativeDashboard()
                 openInFallback(url)
                 return
