@@ -1935,17 +1935,25 @@ class VitroView(
      * size and again when it changes. Never for a card that casts a shadow ([cardLayerWanted]), which the layer's
      * bounds would clip, nor for one that plays a live camera ([playsLiveVideo]): each video frame would draw its whole
      * layer again. Sections, masonry and sidebar views alike.
+     *
+     * Never for a card that holds an island ([IslandCard]: a custom card's page, an iframe) either: the island is a
+     * browser's SurfaceView, whose picture shows through the hole its window leaves for it, and a layer draws that
+     * hole as its own pixels. The island then stays blank while its page draws and sizes the card. The 160 px an island
+     * holds before its page reports a size is already big on the S1, so every masonry island was blank there.
      */
     private fun cacheCardAsLayer(cardView: View, card: CardConfig, ctx: VitroCardContext) {
         if (!cardLayerWanted(ctx.theme.cardElevationDp, cardView.elevation) || playsLiveVideo(card)) return
-        if (cardLayers == CardLayers.ALL) {
-            cardView.setLayerType(LAYER_TYPE_HARDWARE, null)
-            return
+        fun want(v: View, w: Int, h: Int): Int = when {
+            islandsIn(v).isNotEmpty() -> LAYER_TYPE_NONE
+            cardLayers == CardLayers.ALL || isBigCard(w, h, width, height) -> LAYER_TYPE_HARDWARE
+            else -> LAYER_TYPE_NONE
         }
+        if (cardLayers == CardLayers.ALL) cardView.setLayerType(want(cardView, 0, 0), null)
+        // Again when the card's size changes: a big card by its new size, and an island a card made later (an
+        // auto-entities child, a conditional's) takes the card off its layer.
         cardView.addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or, ob ->
             if (r - l == or - ol && b - t == ob - ot) return@addOnLayoutChangeListener
-            val big = isBigCard(r - l, b - t, width, height)
-            val want = if (big) LAYER_TYPE_HARDWARE else LAYER_TYPE_NONE
+            val want = want(v, r - l, b - t)
             if (v.layerType != want) v.setLayerType(want, null)
         }
     }
