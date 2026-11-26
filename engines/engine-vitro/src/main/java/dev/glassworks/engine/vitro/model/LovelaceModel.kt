@@ -50,9 +50,10 @@ class LovelaceResourceList(
     private val items: List<LovelaceResource>,
     val bubbleModules: Boolean,
 ) : List<LovelaceResource> by items {
-    override fun equals(other: Any?): Boolean =
-        other is List<*> && items == other && (other as? LovelaceResourceList)?.bubbleModules == bubbleModules
-    override fun hashCode(): Int = items.hashCode() * 31 + bubbleModules.hashCode()
+    // A List like any other: equal to a list of the same resources, and hashed as one. Whoever needs [bubbleModules]
+    // compares it on its own (VitroView.resourcesList).
+    override fun equals(other: Any?): Boolean = other is List<*> && items == other
+    override fun hashCode(): Int = items.hashCode()
     override fun toString(): String = "$items (bubbleModules=$bubbleModules)"
 }
 

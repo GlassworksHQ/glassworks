@@ -127,6 +127,48 @@ class BubbleModulesTest {
     }
 
     @Test
+    fun aLateAnswerFromAReplacedConnectionDoesntOverwriteTheCurrentOne() {
+        withBubble()
+        val release = java.util.concurrent.CountDownLatch(1)
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val c = HaDashboardClient(
+            haBase = FakeHaServer.BASE,
+            tokenProvider = { _, done -> done(FakeHaServer.TOKEN) },
+            store = EntityStore(),
+            listener = object : HaDashboardClient.Listener {
+                override fun onResources(resources: List<LovelaceResource>) { this@BubbleModulesTest.resources += resources }
+            },
+            // The first connection's file answer (none: 404) is held until the next connection has asked; that one
+            // finds the file.
+            httpStatus = { if (calls.incrementAndGet() == 1) { release.await(10, java.util.concurrent.TimeUnit.SECONDS); 404 } else 200 },
+            connect = server::connect,
+        )
+        clients += c
+        c.start(null)
+        awaitCondition("the first connection's file probe") { calls.get() == 1 }
+        server.dropConnection()
+        awaitCondition("the second connection's probe") { server.commands(BubbleModules.TOOLS_COMMAND).size == 2 &&
+            server.commands("subscribe_entities").count { it.optJSONArray("entity_ids")?.toString() == """["${BubbleModules.SENSOR}"]""" } == 2 }
+        Thread.sleep(200)
+        release.countDown()
+        awaitCondition("the current connection's answer") { calls.get() == 2 && resources.isNotEmpty() }
+        Thread.sleep(200)
+        // Only the current connection's verdict: the late 404 of the replaced one is dropped.
+        assertEquals(1, resources.size)
+        assertTrue((resources.single() as LovelaceResourceList).bubbleModules)
+    }
+
+    @Test
+    fun theResourceListIsAListLikeAnyOther() {
+        val items = listOf(LovelaceResource("/hacsfiles/Bubble-Card/bubble-card.js", "module"))
+        val withModules = LovelaceResourceList(items, bubbleModules = true)
+        assertEquals(ArrayList(items), withModules)
+        assertEquals(withModules, ArrayList(items))
+        assertEquals(items.hashCode(), withModules.hashCode())
+        assertEquals(LovelaceResourceList(items, bubbleModules = false), withModules)
+    }
+
+    @Test
     fun answersAreReadConservatively() {
         assertFalse(BubbleModules.toolsAnswer(JSONObject("""{"success": false, "error": {"code": "unknown_command"}}""")))
         assertTrue(BubbleModules.toolsAnswer(JSONObject("""{"success": false, "error": {"code": "unauthorized"}}""")))

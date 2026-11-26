@@ -24,6 +24,7 @@ import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.HaIntl
 import dev.glassworks.engine.vitro.data.HaLocale
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.theme.ThemeResolver
@@ -67,10 +68,15 @@ class BubbleCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     /** `--row-height`: a sections view's grid sets it (56 px); elsewhere each stylesheet's own fallback applies. */
     private val rowHeightVar: Float? = if (ctx.viewType == "sections") 56f else null
 
-    /** `applyRowSize`: the card's `rows` or `grid_options.rows` as `--row-size` (a number; `auto` leaves it). */
-    private fun rowSize(default: Float): Float {
+    /**
+     * `applyRowSize`: the card's `rows` or `grid_options.rows` as `--row-size` (a number; `auto` leaves it). The compat
+     * rule admits only sizes that leave the card its content ([BUBBLE_MIN_ROWS]); anything else (`NaN`, 0, a negative
+     * or tiny size) keeps the default rather than lay out a card with no height.
+     */
+    private fun rowSize(default: Float, min: Float): Float {
         val v = raw.opt("rows").takeUnless { it == null || it == JSONObject.NULL } ?: raw.optJSONObject("grid_options")?.opt("rows")
-        return (v as? Number)?.toFloat() ?: (v as? String)?.toFloatOrNull() ?: default
+        val n = (v as? Number)?.toFloat() ?: (v as? String)?.toFloatOrNull() ?: return default
+        return if (n.isFinite() && n >= min) n else default
     }
 
     private val buttonType: String = raw.optString("button_type").ifEmpty { if (config.entity != null) "switch" else "name" }
@@ -82,6 +88,16 @@ class BubbleCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         private set
     internal var buttonTarget: View? = null
         private set
+
+    /** The entity picture shown now (loaded), the one being fetched, and the last one that failed and when. */
+    private var pictureShown: String? = null
+    private var pictureLoading: String? = null
+    private var pictureFailed: String? = null
+    private var pictureFailedAt = 0L
+
+    /** The button's icon and picture views (null for a separator). */
+    private var iconView: View? = null
+    private var picture: ImageView? = null
 
     // Declared after every property it reads: Kotlin runs initializers in order.
     init {
@@ -98,7 +114,7 @@ class BubbleCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         // `.bubble-container { height: 40px }`; `.large`: `calc(var(--row-height,44px) * var(--row-size,0.8) +
         // var(--row-gap,8px) * (var(--row-size,0.8) - 1))`.
         val height = if (large) {
-            val size = rowSize(0.8f)
+            val size = rowSize(0.8f, BUBBLE_MIN_ROWS_SEPARATOR)
             (rowHeightVar ?: 44f) * size + 8f * (size - 1f)
         } else {
             40f
@@ -146,7 +162,7 @@ class BubbleCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         // (var(--row-size,1) - 1))`. Its corners: `--bubble-button-border-radius`, `--bubble-border-radius`, else half of
         // `--row-height` (56 px unless a grid sets it).
         val height = if (large) {
-            val size = rowSize(1f)
+            val size = rowSize(1f, BUBBLE_MIN_ROWS)
             (rowHeightVar ?: 56f) * size + 8f * (size - 1f)
         } else {
             50f
@@ -185,6 +201,8 @@ class BubbleCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
             visibility = GONE
         }
         iconContainer.addView(picture, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        this.picture = picture
+        iconView = icon
         if (showIcon) {
             row.addView(iconContainer, LinearLayout.LayoutParams(dpx(iconSize), dpx(iconSize)).apply {
                 setMargins(dpx(if (large) 8f else 6f), dpx(6f), dpx(6f), dpx(6f))
@@ -226,11 +244,14 @@ class BubbleCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         val buttonAction = raw.optJSONObject("button_action")
         val buttonTap = bubbleAction(buttonAction?.optJSONObject("tap_action"), buttonDefaults.first, eid)
         val buttonHold = bubbleAction(buttonAction?.optJSONObject("hold_action"), buttonDefaults.second, eid)
-        val label: () -> CharSequence? = { name.text?.toString()?.ifEmpty { null } ?: eid }
-        if (showIcon && wireActions(iconContainer, iconTap, iconHold, eid, oval = palette.iconRadius() == null, radius = (palette.iconRadius() ?: 0f) * ctx.dp, label)) {
+        // A target's name: the card's name, else its entity's, else what its tap does (an icon-only `name` button).
+        fun label(tap: ActionConfig): () -> CharSequence? = {
+            name.text?.toString()?.ifEmpty { null } ?: eid?.let { ctx.store[it]?.friendlyName } ?: eid ?: actionLabel(tap)
+        }
+        if (showIcon && wireActions(iconContainer, iconTap, iconHold, eid, oval = palette.iconRadius() == null, radius = (palette.iconRadius() ?: 0f) * ctx.dp, label(iconTap))) {
             iconTarget = iconContainer
         }
-        if (wireActions(backgroundLayer, buttonTap, buttonHold, eid, oval = false, radius = radius, label)) buttonTarget = backgroundLayer
+        if (wireActions(backgroundLayer, buttonTap, buttonHold, eid, oval = false, radius = radius, label(buttonTap))) buttonTarget = backgroundLayer
 
         val ticking: (EntityState, Long) -> String? = { s, now -> stateText(s, now)?.takeIf { hasTimestamps(s) } }
         val render: (EntityState?) -> Unit = { s ->
@@ -257,20 +278,8 @@ class BubbleCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
             val on = s != null && palette.isStateOn(s)
             val noColor = buttonType == "name"
             val iconColor = if (on && !noColor) palette.iconColor(s!!, raw) else ctx.theme.primaryTextColor
-            val image = s?.let { bubbleImage(it) }
-            if (image != null) {
-                icon.visibility = GONE
-                picture.visibility = VISIBLE
-                if (picture.tag != image) {
-                    picture.tag = image
-                    picture.setImageDrawable(null)
-                    ctx.loadImage(image, picture) { bmp -> if (picture.tag == image) picture.setImageBitmap(bmp) }
-                }
-            } else {
-                picture.visibility = GONE
-                icon.visibility = VISIBLE
-                icon.setIcon(MdiIcons.resolveIconName(raw.optString("icon").ifEmpty { null }, s), iconColor)
-            }
+            icon.setIcon(MdiIcons.resolveIconName(raw.optString("icon").ifEmpty { null }, s), iconColor)
+            showPicture(s?.let { bubbleImage(it) })
             // `.is-off .bubble-main-icon { opacity: .6 }`: the class is set only for a known state without a degree unit.
             val classed = s != null && s.unit?.contains('°') != true
             icon.alpha = if (classed && !on) 0.6f else 1f
@@ -289,6 +298,58 @@ class BubbleCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     }
 
     /** Gives [view] Bubble's tap and hold actions (`addActions`), when either does something; false when neither does. */
+    /**
+     * `changeIcon` with an entity picture: the picture once it has loaded, the icon until then. A picture that fails
+     * keeps the icon and is asked for again on a later update, at most every [PICTURE_RETRY_MS].
+     */
+    private fun showPicture(url: String?) {
+        if (url == null || url != pictureShown) {
+            if (url != pictureShown) {
+                pictureShown = null
+                picture?.setImageDrawable(null)
+            }
+            picture?.visibility = GONE
+            iconView?.visibility = VISIBLE
+        }
+        if (url == null) {
+            pictureLoading = null
+            return
+        }
+        if (url == pictureShown) {
+            picture?.visibility = VISIBLE
+            iconView?.visibility = GONE
+            return
+        }
+        val now = android.os.SystemClock.uptimeMillis()
+        if (url == pictureLoading || (url == pictureFailed && now - pictureFailedAt < PICTURE_RETRY_MS)) return
+        pictureLoading = url
+        val target = picture ?: return
+        // Loaded when the card shows (the picture itself stays hidden until it has loaded).
+        ctx.loadImage(url, this) { bmp ->
+            if (pictureLoading != url) return@loadImage
+            pictureLoading = null
+            if (bmp == null) {
+                pictureFailed = url
+                pictureFailedAt = android.os.SystemClock.uptimeMillis()
+                return@loadImage
+            }
+            pictureShown = url
+            target.setImageBitmap(bmp)
+            target.visibility = VISIBLE
+            iconView?.visibility = GONE
+        }
+    }
+
+    /** What a target's tap does, in HA's words (its action editor's), for a target with no other name. */
+    private fun actionLabel(tap: ActionConfig): String? = when (tap.action) {
+        "more-info" -> HaText.ui("ui.panel.lovelace.editor.action-editor.actions.more-info")
+        "toggle" -> HaText.ui("ui.panel.lovelace.editor.action-editor.actions.toggle")
+        "navigate" -> HaText.ui("ui.panel.lovelace.editor.action-editor.actions.navigate")
+        "url" -> HaText.ui("ui.panel.lovelace.editor.action-editor.actions.url")
+        "perform-action", "call-service" -> HaText.ui("ui.panel.lovelace.editor.action-editor.actions.perform-action")
+        else -> null
+    }?.ifEmpty { null }
+
     private fun wireActions(view: View, tap: ActionConfig, hold: ActionConfig, eid: String?, oval: Boolean, radius: Float, label: () -> CharSequence?): Boolean {
         val acts = tap.action != "none" || hold.action != "none"
         if (!acts) return false
@@ -337,6 +398,15 @@ class BubbleCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
             includeFontPadding = false
         }
 }
+
+/** The smallest `rows` a large Bubble button keeps its content in: one grid row (56 px), its icon and text. */
+internal const val BUBBLE_MIN_ROWS = 1f
+
+/** The smallest `rows` of a large separator: Bubble's own default, 0.8. */
+internal const val BUBBLE_MIN_ROWS_SEPARATOR = 0.8f
+
+/** How long a Bubble picture that failed to load waits before an update asks for it again. */
+private const val PICTURE_RETRY_MS = 30_000L
 
 /**
  * Bubble's state line (`resolveStateContent` and `renderStateLine` with `capitalizeTimes`): the legacy keys

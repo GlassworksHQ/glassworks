@@ -1561,8 +1561,13 @@ class HaDashboardClient(
             return
         }
         val answered = AtomicBoolean(false)
+        // An answer that lands after its connection was replaced (a reconnect asked again) is stale: the newer
+        // connection's own delivery stands.
+        val gen = connectionGen.get()
         fun answer(modules: Boolean) {
-            if (!closed.get() && answered.compareAndSet(false, true)) listener.onResources(LovelaceResourceList(resources, modules))
+            if (!closed.get() && gen == connectionGen.get() && answered.compareAndSet(false, true)) {
+                listener.onResources(LovelaceResourceList(resources, modules))
+            }
         }
         fun legacyFile() {
             val url = (origin ?: haBase.trimEnd('/')) + BubbleModules.LEGACY_FILE

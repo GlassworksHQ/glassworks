@@ -102,6 +102,7 @@ import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatChecker
+import dev.glassworks.engine.vitro.compat.BubbleFallback
 import dev.glassworks.engine.vitro.compat.IslandBudget
 import dev.glassworks.engine.vitro.compat.IslandFrontend
 import dev.glassworks.engine.vitro.compat.IslandScripts
@@ -110,6 +111,7 @@ import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.CardTier
 import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.model.LovelaceResourceList
 import dev.glassworks.engine.vitro.model.SectionConfig
 import dev.glassworks.engine.vitro.model.ViewConfig
 import dev.glassworks.engine.vitro.model.VisibilityCondition
@@ -269,7 +271,8 @@ class VitroView(
      */
     @Volatile var resourcesList: List<LovelaceResource> = emptyList()
         set(v) {
-            if (field == v) return
+            // A list equals another with the same resources; whether Bubble's modules apply changes the routes too.
+            if (field == v && (field as? LovelaceResourceList)?.bubbleModules == (v as? LovelaceResourceList)?.bubbleModules) return
             field = v
             // The islands load the resources into their page: new resources need new pages, pooled ones too.
             dropBuiltViews(keepIslands = false)
@@ -345,6 +348,7 @@ class VitroView(
         view.webFallbackReason ?: (if (gaveUpViews.isEmpty()) null else gaveUpViews[viewKey(view)])
             ?: (if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) })
             ?: IslandBudget.reason(view, IslandScripts.of(resourcesList), islandBudget)
+            ?: BubbleFallback.reason(view, IslandScripts.of(resourcesList))
 
     /**
      * The most island pages one view opens on this device ([IslandBudget]): a view with more goes to HA's frontend.
