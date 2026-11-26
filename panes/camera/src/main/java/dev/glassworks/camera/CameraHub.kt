@@ -60,6 +60,8 @@ class CameraHub(
     private val height: Int = HEIGHT,
     /** The frame's cap on the camera's and the stream's size, in pixels ([dev.glassworks.frame.Frame.cameraMaxPixels]). */
     private val maxPixels: Int = MAX_PIXELS,
+    /** The frame's word on how the sensor sits ([dev.glassworks.frame.Frame.cameraSensorDegrees]), over Android's. */
+    private val frameSensorDegrees: Int? = null,
     private val log: (String) -> Unit = { Log.i(TAG, it) },
 ) : FrameSource, StillCamera, EncoderInput, CameraFacts {
     private val app = context.applicationContext
@@ -218,7 +220,7 @@ class CameraHub(
                     opening = false
                     if (released) { camera.close(); thread.quitSafely(); return }
                     device = camera
-                    log("camera $id open (${if (facingFront) "front" else "back"}, ${size.first}x${size.second}${fpsRange?.let { ", $it fps" } ?: ""})")
+                    log("camera $id open (${if (facingFront) "front" else "back"} at $sensorDegrees°, ${size.first}x${size.second}${fpsRange?.let { ", $it fps" } ?: ""})")
                     settle()
                 }
                 override fun onDisconnected(camera: CameraDevice) {
@@ -374,7 +376,7 @@ class CameraHub(
         val id = cameraId() ?: return null
         val c = manager.getCameraCharacteristics(id)
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-        sensorDegrees = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+        sensorDegrees = frameSensorDegrees ?: c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         fpsRange = cameraRange?.let { android.util.Range(it.first, it.last) }
         streamFloor = cameraRange?.first
             ?: c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.minOfOrNull { it.lower } ?: 0

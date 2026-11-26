@@ -590,6 +590,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `cpuThermalZone` | The `type` of the thermal zone that measures the CPU, for the diagnostics pane. Null (the default) means no temperature entity. The S1's is `cpu_thermal_zone`. |
 | `dock` | Whether the device docks, for the core's *Docked* sensor: `NO` (the default, the S1: no sensor, nothing listens), `IF_SEEN` (the sensor comes once the device reports a dock, and stays) or `YES` (there from the start). `GenericAndroid` says `YES` for a frame with `"dock": true` or a device with Google's dock manager ([docs/esphome.md](../../../../../../docs/esphome.md#docked)). |
 | `cameraMaxPixels` | The most pixels the camera and its stream may run at, from the frame's `frame.json` (`camera.maxPixels`). Null (the default) means the camera pane's own limit, 1080p. The Mirror's is 1280 × 720. |
+| `cameraSensorDegrees` | How the camera's sensor really sits, from the frame's `frame.json` (`camera.sensorDegrees`), for a device whose camera reports it wrong. Null (the default) goes by Android's sensor orientation. The Mirror's is 180. |
 | `systemSettingsIntents()` | The device's own settings screens, best first. `Frame.systemSettings(context)` picks the first that resolves. |
 | `wifiSettingsIntents()` | Where to choose a Wi-Fi network, best first. The default is Android's Wi-Fi panel and settings. |
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |
