@@ -156,6 +156,7 @@ class VitroEngineTest {
         assertNotNull(legacy.started)
         assertSame(legacy.started, engine.started)
         assertEquals("Legacy Gecko 1.0", engine.name)
+        assertFalse("off: the app keeps no copy of HA's localStorage", engine.keepsPageStorage)
     }
 
     @Test
@@ -183,7 +184,9 @@ class VitroEngineTest {
         val engine = vitro()
         assertEquals("before the first open it is still the fallback's", "FakeGecko 1.0", engine.name)
         assertNull(engine.started)
+        assertFalse(engine.keepsPageStorage)
         openPage(engine)
+        assertTrue("on: the islands start from HA's localStorage", engine.keepsPageStorage)
         assertEquals(VitroEngine.VERSION_NAME, engine.name)
         assertSame(settings, engine.started)
         assertEquals("the content-process question is still the fallback's", true, engine.isContentProcess("x:tab"))

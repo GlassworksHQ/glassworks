@@ -3,21 +3,37 @@
 Vitro is an experimental way for Glassworks to show your Home Assistant dashboard. Instead of loading the dashboard in a browser, the panel reads the dashboard you already have and draws each card with its own native views. It's meant for low-power panels, where the browser is the heaviest thing running. Your dashboard stays in Home Assistant, written the same way as before, and nothing gets installed there.
 
 > [!NOTE]
-> **Feature status:** Vitro is experimental and off by default. Some cards still look slightly different from Home Assistant, and some aren't drawn natively yet. Turning it off puts the panel back exactly as it was.
+> **Feature status:** Vitro is experimental and off by default. Some cards still look slightly different from Home Assistant, and some aren't drawn natively yet. While it's off, the app shows your dashboard in its browser the way it always has, and turning it off again puts the dashboard back the same way.
+
+## Where it runs
+
+Vitro comes with every Glassworks app: the Aqara S1 Plus app, Glassworks for generic Android (Android 8 and newer), and that app's legacy build for Android 6 and 7, which the lululemon Studio Mirror runs. It has been tried most on the S1 Plus and on Android tablets. The legacy build has seen the least testing so far, so expect rough edges there.
 
 ## Turn it on
 
-1. Open **Settings → Labs** on the panel, or **Labs** on its Manage page in a browser.
+1. Open **Settings → Labs** on the panel, or **Labs** on its [Manage page](manage.md) in a browser.
 2. Turn on **Vitro renderer**.
 3. The app restarts and opens your dashboard with Vitro.
 
-To go back, turn **Vitro renderer** off the same way.
+To go back, turn **Vitro renderer** off the same way. The app restarts and shows your dashboard in its browser again.
+
+## If something goes wrong
+
+If the app keeps crashing right after it starts with Vitro on, it turns Vitro off by itself. Two crashes in a row, each within a minute of starting, are enough. The panel then opens your dashboard in its browser, as it did before you turned Vitro on, and tells you what happened:
+
+- a short message on the panel says Vitro was turned off because the app kept stopping;
+- **Settings → Labs** says **Vitro was turned off** and why, until you turn Vitro on again;
+- the **Engine** tile on the Manage page's Overview turns red, reads **Vitro turned off after crashes**, and opens Labs.
+
+Only the crashes the app can catch itself count. If the app freezes ("isn't responding"), crashes inside a native library, or is closed by Android to free memory, Vitro stays on, so turn it off yourself. The same goes for a dashboard that misbehaves without the app stopping. When the panel's own settings menu is hard to reach, turn Vitro off from **Labs** on the Manage page. Developers with adb can also start the app with the extra `--ez vitro false`, which turns Vitro off and restarts the app.
+
+If Vitro turned itself off, please [report it](#report-a-card-that-looks-wrong) and attach the panel's log: **Download diagnostics** on the Manage page's **Log** saves it.
 
 ## What works
 
-Vitro draws 32 of Home Assistant's built-in cards and 30 popular HACS cards natively, including the whole Mushroom set, Bubble Card buttons, button-card (when it doesn't use JavaScript templates), mini-graph-card, auto-entities, swipe-card, stack-in-card and layout-card. It reads your themes, your fonts and the card-mod styles it can draw the way Home Assistant does.
+Vitro draws 41 of Home Assistant's built-in card types and 30 popular HACS cards natively, including the whole Mushroom set, Bubble Card buttons, button-card (when it doesn't use JavaScript templates), mini-graph-card, auto-entities, swipe-card, stack-in-card and layout-card. It reads your themes, your fonts and the card-mod styles it can draw the way Home Assistant does.
 
-A card Vitro can't draw yet still shows. A custom card opens in a small browser view of its own, so it looks the way it does in Home Assistant. A built-in card Vitro doesn't have, such as the map, shows a plain summary instead.
+A card Vitro can't draw yet still shows. A custom card opens in a small browser view of its own, so it looks the way it does in Home Assistant. A view with a built-in card Vitro doesn't have, such as the map, or a view Home Assistant generates from a strategy, opens the way Home Assistant draws it, in the app's browser.
 
 To see how your own dashboard will do, paste it into the [Vitro compatibility check](https://www.glassworks.dev/blueprints#vitro-check). It runs in your browser and lists every card that won't be drawn natively, and why. The full list of cards, and what each one leaves out, is in [Vitro's README](../engines/engine-vitro/README.md#what-works).
 

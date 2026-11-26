@@ -18,7 +18,7 @@
   const params = new URLSearchParams(location.search);
   const disabledByUrl = params.get("kiosk") === "0" || params.has("edit");
 
-  let cfg = { hideHeader: true, hideSidebar: true };
+  let cfg = { hideHeader: true, hideSidebar: true, pageStorage: false };
 
   // ---- Home Assistant's launch screen, at night (#63 round 5) ----------------------------------------
   // HA's index.html starts with its own launch screen on #fafafa: the logo (.ha-lockup), an info box
@@ -227,13 +227,14 @@
       cfg = Object.assign(cfg, r.config);
       hideSidebar();
       apply();
+      watchStorageIfWanted();
     }
   });
 
   // Live pushes from the app (presence, lux, screen state; config changes) on the same port.
   portListeners.push((m) => {
     if (m && m.type === "state") publishState(m.state);
-    if (m && m.type === "config") { cfg = Object.assign(cfg, m.config); apply(); }
+    if (m && m.type === "config") { cfg = Object.assign(cfg, m.config); apply(); watchStorageIfWanted(); }
   });
 
   // ---- Notifications (#118): open a Home Assistant view in place ---------------------------------
@@ -353,7 +354,8 @@
   // islands run a card on the app's own loopback origin, so the app keeps a copy of this origin's storage and
   // starts the islands from it. Read every 5 s and when the page goes away, sent only when it changed. Keys
   // that may hold a credential (HA's own `hassTokens` among them) never leave the page; the app checks the
-  // sender as with the theme, and leaves out the same keys again.
+  // sender as with the theme, and leaves out the same keys again. Only while the app asks for it (its config's
+  // `pageStorage`, which it sets only when Vitro draws the dashboard): with Vitro off, nothing is read or sent.
   const STORAGE_CHECK_MS = 5000;
   const STORAGE_SECRET = /token|passw|secret|auth|credential|session|cookie/i;
   let sentStorage = "";
@@ -374,7 +376,7 @@
   }
 
   function reportStorage() {
-    if (!port || window !== window.top || !document.querySelector("home-assistant")) return;
+    if (!port || !cfg.pageStorage || window !== window.top || !document.querySelector("home-assistant")) return;
     let json;
     try { json = storageCopy(); } catch (e) { return; /* storage unavailable */ }
     if (json === sentStorage) return;
@@ -387,7 +389,11 @@
     if (!document.querySelector("home-assistant") && document.readyState === "complete") return;
     setTimeout(watchStorage, STORAGE_CHECK_MS);
   }
-  if (window === window.top) {
+  let storageWatched = false;
+  /** Starts the copy once the app's config asks for it (Vitro on); called on every config the app sends. */
+  function watchStorageIfWanted() {
+    if (storageWatched || !cfg.pageStorage || window !== window.top) return;
+    storageWatched = true;
     setTimeout(watchStorage, STORAGE_CHECK_MS);
     window.addEventListener("pagehide", reportStorage);
     document.addEventListener("visibilitychange", () => { if (document.hidden) reportStorage(); });
