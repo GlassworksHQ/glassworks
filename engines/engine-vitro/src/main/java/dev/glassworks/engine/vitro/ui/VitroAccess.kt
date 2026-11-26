@@ -6,6 +6,7 @@ package dev.glassworks.engine.vitro.ui
 
 import android.content.Context
 import android.content.res.Configuration
+import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
@@ -180,21 +181,24 @@ internal object VitroAccess {
 
 /**
  * A slider TalkBack and keys can move, as HA's `role="slider"` controls are: its value and range for TalkBack, whose
- * swipe up and down move it a tenth; with keys, the left and right arrows move it one [step], the page keys a tenth,
- * Home and End to the ends, committed on release (HA's `keyup`). Up and down are left for moving between controls, and
- * an arrow at an end is too, as Android's SeekBar does, so a D-pad never gets stuck on a slider.
+ * swipe up and down move it a tenth (and, from Android 7, `ACTION_SET_PROGRESS` sets it); with keys, the left and right
+ * arrows move it one [step], the page keys a tenth, Home and End to the ends, committed on release (HA's `keyup`), as a
+ * drag is on lift. Up and down are left for moving between controls, and an arrow at an end is too, as Android's
+ * SeekBar does, so a D-pad never gets stuck on a slider.
  *
- * [preview] shows a value (and tells the slider's listeners), [commit] sends it.
+ * [preview] shows a value (and tells the slider's listeners), [commit] sends it. [valueText], when given, is what
+ * TalkBack reads for the value (Android 11 and up; `2,700 K` rather than a percentage of the range).
  */
 internal class AdjustableAccess(
     private val min: () -> Int,
     private val max: () -> Int,
-    private val step: Int,
+    private val step: () -> Int,
     private val value: () -> Int,
     private val preview: (Int) -> Unit,
     private val commit: (Int) -> Unit,
     /** An edit dropped (a cancelled key, focus gone): show HA's value again. */
     private val restore: () -> Unit = {},
+    private val valueText: ((Int) -> CharSequence)? = null,
 ) {
     private var pending = false
 
@@ -204,7 +208,7 @@ internal class AdjustableAccess(
     /** A key edit is showing: a value bound from HA waits until its key comes up. */
     val editing: Boolean get() = pending
 
-    private val tenth: Int get() = maxOf(step, (max() - min()) / 10)
+    private val tenth: Int get() = maxOf(step(), (max() - min()) / 10)
 
     fun onInitialize(info: AccessibilityNodeInfo) {
         val v = value()
@@ -214,17 +218,29 @@ internal class AdjustableAccess(
         )
         if (v < max()) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)
         if (v > min()) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD)
+        if (Platform.hasSetProgressAction) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS)
+        if (Platform.hasStateDescription) valueText?.let { info.stateDescription = it(v) }
     }
 
-    /** TalkBack's scroll actions: a tenth, sent at once. Null for an action this doesn't take. */
-    fun perform(action: Int): Boolean? {
-        val sign = when (action) {
-            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> 1
-            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> -1
+    /**
+     * TalkBack's scroll actions (a tenth) and `ACTION_SET_PROGRESS` (a value), sent at once. Null for an action this
+     * doesn't take.
+     */
+    fun perform(action: Int, arguments: Bundle? = null): Boolean? {
+        val next = when (action) {
+            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD -> value() + tenth
+            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD -> value() - tenth
+            android.R.id.accessibilityActionSetProgress -> {
+                if (!Platform.hasSetProgressAction) return null
+                val p = arguments?.getFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, Float.NaN) ?: Float.NaN
+                if (p.isNaN()) return false
+                Math.round(p)
+            }
             else -> return null
-        }
-        val next = (value() + sign * tenth).coerceIn(min(), max())
+        }.coerceIn(min(), max())
         if (next == value()) return false
+        // A key edit under way is replaced by this one, which is sent now.
+        pending = false
         preview(next)
         commit(next)
         return true
@@ -234,8 +250,8 @@ internal class AdjustableAccess(
     fun keyDown(keyCode: Int): Boolean {
         val v = value()
         val next = when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_RIGHT -> v + step
-            KeyEvent.KEYCODE_DPAD_LEFT -> v - step
+            KeyEvent.KEYCODE_DPAD_RIGHT -> v + step()
+            KeyEvent.KEYCODE_DPAD_LEFT -> v - step()
             KeyEvent.KEYCODE_PAGE_UP -> v + tenth
             KeyEvent.KEYCODE_PAGE_DOWN -> v - tenth
             KeyEvent.KEYCODE_MOVE_HOME -> min()
@@ -255,7 +271,8 @@ internal class AdjustableAccess(
     fun keyUp(event: KeyEvent): Boolean {
         if (!pending || event.keyCode != pendingKey) return false
         pending = false
-        if (event.isCanceled) restore() else commit(value())
+        // Within the limits as they are now: HA may have narrowed them while the key was held.
+        if (event.isCanceled) restore() else commit(value().coerceIn(min(), max()))
         return true
     }
 
