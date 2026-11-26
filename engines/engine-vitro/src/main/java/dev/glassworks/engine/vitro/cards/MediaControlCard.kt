@@ -13,12 +13,16 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
+import android.os.Bundle
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
@@ -28,9 +32,11 @@ import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.model.CardConfig
+import dev.glassworks.engine.vitro.ui.AdjustableAccess
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
+import dev.glassworks.engine.vitro.ui.VitroAccess
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroFonts
 import dev.glassworks.ui.Inter
@@ -309,8 +315,8 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
             val updated = EntityStore.parseTimestamp(s.attributes["media_position_updated_at"])
             if (updated > 0.0) position += (ctx.now() / 1000.0 - updated).coerceAtLeast(0.0)
         }
-        // Not under a finger: the drag shows where it will seek to.
-        if (!progress.dragging) progress.fraction = if (duration > 0.0) (position / duration).toFloat().coerceIn(0f, 1f) else 0f
+        // Not under a finger or a held key: the edit shows where it will seek to.
+        if (!progress.held) progress.fraction = if (duration > 0.0) (position / duration).toFloat().coerceIn(0f, 1f) else 0f
     }
 
     /** HA's `_handleSeek`: `media_player.media_seek` to the whole second the slider was let go at. */
@@ -439,8 +445,52 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
 
         /** Seconds the track spans when the player can seek; 0: it only shows the position. */
         var duration = 0.0
+            set(v) {
+                field = v
+                // HA's ha-slider takes focus and keys; one that can't seek has nothing to move.
+                isFocusable = v > 0.0
+                if (v <= 0.0) access.cancel()
+            }
         var dragging = false
             private set
+
+        /** Under a finger or a held key: the bar shows where it will seek to, not HA's position. */
+        val held: Boolean get() = dragging || access.editing
+
+        /**
+         * TalkBack and keys, as HA's `ha-slider` (0 to `media_duration`, step 1): a key seeks when it comes up, as a
+         * drag does when it's let go; TalkBack's steps seek at once.
+         */
+        private val access = AdjustableAccess(
+            min = { 0 }, max = { duration.toInt() }, step = { 1 },
+            value = { (fraction * duration).roundToInt() },
+            preview = { v ->
+                fraction = if (duration > 0.0) (v / duration).toFloat().coerceIn(0f, 1f) else 0f
+                VitroAccess.valueChanged(this)
+            },
+            commit = { v -> seek(v) },
+            // A cancelled key or focus gone: HA's position again, nothing sent.
+            restore = { updateProgress(last) },
+        )
+
+        override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+            super.onInitializeAccessibilityNodeInfo(info)
+            if (duration > 0.0) access.onInitialize(info)
+        }
+
+        override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean =
+            (if (duration > 0.0) access.perform(action, arguments) else null) ?: super.performAccessibilityAction(action, arguments)
+
+        override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+            (duration > 0.0 && access.keyDown(keyCode)) || super.onKeyDown(keyCode, event)
+
+        override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+            access.keyUp(event) || super.onKeyUp(keyCode, event)
+
+        override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
+            super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+            if (!gainFocus) access.cancel()
+        }
 
         @android.annotation.SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
