@@ -34,6 +34,21 @@ stock 1.24.0 and no upstream network, the Mirror came up with:
 - `dumpsys connectivity` listing `wlan0_ap - TetheredState` under its tether state;
 - `dumpsys wifi` showing WifiStateMachine in `ConnectModeState`, that is, client mode.
 
+The reads behind each line, all read-only over adb (the serial is redacted):
+
+```
+$ adb shell ip addr show wlan0_ap | grep inet
+    inet 192.168.43.1/24 brd 192.168.43.255 scope global wlan0_ap
+$ adb shell ps | grep -E 'mapd|hostapd|dnsmasq'      # hostapd's and dnsmasq's PPID is mapd's PID
+$ adb shell getprop init.svc.mapd
+running
+$ adb shell dumpsys connectivity | grep -A2 -i tether   # wlan0_ap - TetheredState
+$ adb shell dumpsys wifi | grep -m1 -i 'curState'       # ConnectModeState
+```
+
+The `ps`, `dumpsys connectivity` and `dumpsys wifi` lines are given as what to look for, not as a capture:
+the session's raw output wasn't kept.
+
 The last one matters. Wi-Fi's own state machine was in client mode, so this AP isn't Android's SoftAP
 (`WifiManager.setWifiApEnabled`): something outside WifiManager adds a second interface, `wlan0_ap`, and
 runs `hostapd` on it. `hostapd` being a child of `mapd`, a Mirror-specific init service
@@ -143,7 +158,26 @@ it `MirrorApService` and the stock hotspot.
 3. **Run the patcher on the real stock jar** (2026-11-25, verified off-device). A throwaway Vitest file,
    deleted afterwards and never committed, read `$STOCK_JAR`, called `patchStockServicesJar(jar, key)`
    with a made-up adb key (defaults: Device Owner fixes and the hotspot patch on) and wrote the result to
-   `/tmp`:
+   `/tmp`. To run it again, save this as `frames/lululemon-mirror/installer/test/real-jar.local.test.ts`
+   (keep it out of commits), with the stock jar outside the repo:
+   ```ts
+   import { readFileSync, writeFileSync } from 'node:fs';
+   import { test } from 'vitest';
+   import { patchStockServicesJar } from '../src/stock';
+   import { fakeAdbKey } from './fakes';
+
+   test.skipIf(!process.env.STOCK_JAR)('patch the real stock services.jar', async () => {
+     const jar = new Uint8Array(readFileSync(process.env.STOCK_JAR!));
+     const r = await patchStockServicesJar(jar, fakeAdbKey(1));
+     writeFileSync('/tmp/services.patched.jar', r.patched);
+     console.log(JSON.stringify(r, (k, v) => (v instanceof Uint8Array ? undefined : v)));
+   });
+   ```
+   ```
+   $ cd frames/lululemon-mirror/installer
+   $ STOCK_JAR=/path/outside/the/repo/services.jar npx vitest run test/real-jar.local.test.ts
+   ```
+   It printed:
    ```
    {"inLen":2411806,"outLen":2411806,"padBytes":3670,
     "startConfirmationCodeOff":"0x2d8b08","patchedCodeUnits":25,
@@ -221,9 +255,11 @@ it `MirrorApService` and the stock hotspot.
 above (a code_item, `ins_size` 1, no tries, and a body that loads `ACTION_START_HOST_APD`), and rewrites its
 95 code units to one `return-void` and 94 `nop`s. It keeps registers, ins and outs, zeroes
 `debug_info_off`, and leaves the DEX checksums and the exact-size repack to the existing steps after it.
-The result reports `stockAp: { codeOff, insnsSize }`. A `services.jar` without the method, or with a
-different body, fails the patch with a clear error instead of being patched on a guess; stock 1.24.0
-always has it, and the in-place flow only patches stock. The Node surgical-ADB tool
+The result reports `stockAp: { codeOff, insnsSize }`. A `services.jar` without the method, or whose
+method has other ins, has tries, or doesn't load `ACTION_START_HOST_APD`, fails the patch with a clear
+error instead of being patched on a guess. The body isn't compared instruction by instruction: one that
+passes those checks is emptied in full, whatever else it does. Stock 1.24.0 always has the method read
+above, and the in-place flow only patches stock. The Node surgical-ADB tool
 (`tools/mirror/src/surgical-adb.ts`) passes `disableStockAp: false`, as it does `enableDeviceOwner:
 false`: it's a reversible probe that only changes who USB debugging lets in, and Phase 1 and its own
 transport rely on the stock hotspot.

@@ -1074,8 +1074,9 @@ const patchUsbAllow = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, s
  * starts its state machine, registers its four receivers (Wi-Fi state, connectivity, tether state,
  * `ACTION_START_HOST_APD`) and starts the thread that talks to the `mapd` daemon. Only SystemServer
  * calls it, inside a try/catch. Without it nothing asks `mapd` for the hotspot. Every check refuses
- * rather than guesses: a method that isn't the one we read (no code, other ins, tries, or no
- * `ACTION_START_HOST_APD` receiver in its body) fails the patch.
+ * rather than guesses: a method that isn't the one we read (no code, other ins, tries, or a body that
+ * doesn't load `ACTION_START_HOST_APD`) fails the patch. The body isn't compared instruction by
+ * instruction, so one that passes is emptied in full.
  */
 function patchStockAp(
   dex: Uint8Array,
