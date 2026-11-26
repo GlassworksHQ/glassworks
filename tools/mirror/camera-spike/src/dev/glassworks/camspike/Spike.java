@@ -322,6 +322,9 @@ public class Spike extends Activity {
         p("fps ranges=" + Arrays.toString(ranges));
         Range<Integer> fps = null;
         for (Range<Integer> r : ranges) if (r.getUpper() == 30 && (fps == null || r.getLower() > fps.getLower())) fps = r;
+        String want = getIntent().getStringExtra("fps"); // e.g. "15,15": the AE target range to ask for instead
+        if ("template".equals(want)) fps = null; // keep the template's own range
+        else if (want != null) { String[] a = want.split(","); fps = new Range<>(Integer.parseInt(a[0].trim()), Integer.parseInt(a[1].trim())); }
         final Enc enc = useEnc ? new Enc(true, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) : null;
         final ImageReader reader = useReader ? ImageReader.newInstance(W, H, ImageFormat.YUV_420_888, 3) : null;
         final int[] n = {0};
@@ -365,6 +368,7 @@ public class Spike extends Activity {
                 try {
                     CaptureRequest.Builder rb = d.createCaptureRequest(enc != null ? CameraDevice.TEMPLATE_RECORD : CameraDevice.TEMPLATE_PREVIEW);
                     for (Surface t : targets) rb.addTarget(t);
+                    p("template fps " + rb.get(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE));
                     if (fpsR != null) rb.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsR);
                     s.setRepeatingRequest(rb.build(), null, h);
                     sess[0] = s;

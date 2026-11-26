@@ -51,8 +51,8 @@ import java.util.concurrent.TimeUnit
  * once Android says another app freed it, never in bursts: on Android 6 a burst of connects to a camera another app
  * held crashed the media server (the Mirror, 2026-11-25).
  *
- * On a LEGACY camera the stream's encoder gets every frame and the reader only one in [readerEvery]: Android's shim
- * copies each frame it hands the reader on the CPU, which slowed the Mirror's stream to about 7 fps.
+ * While streaming, the encoder gets every frame and the reader only one in [readerEvery]: on a LEGACY camera Android's
+ * shim copies each frame it hands the reader on the CPU, which slowed the Mirror's stream to about 7 fps.
  */
 class CameraHub(
     context: Context,
@@ -91,9 +91,8 @@ class CameraHub(
     private var luma = ByteArray(0)
     private var facingFront = true
     private var sensorDegrees = 0
+    /** The range every request asks for ([cameraRange]). */
     private var fpsRange: android.util.Range<Int>? = null
-    /** Presence's range on a LEGACY camera ([presenceRangeFor]), else null. */
-    private var presenceRange: android.util.Range<Int>? = null
     /** The reader's size: [width] x [height] when the camera lists it ([yuvSizeFor]). */
     private var size = width to height
     /** The stream on the open camera, read with [size]: the session never looks the camera up again. */
@@ -107,9 +106,8 @@ class CameraHub(
     private var reopenAt = 0L
     /** Blank frames ([blankYuv]) since the session started or its last good frame. */
     private var blanks = 0
-    private var legacy = false
     /**
-     * The slowest the camera may run while streaming: the floor of the range asked for ([fpsRange]), or with none the
+     * The slowest the camera may run: the floor of the range asked for ([fpsRange]), or with none the
      * lowest floor the camera lists, since it then picks its own. 0: unknown. Sets [readerEvery].
      */
     private var streamFloor = 0
@@ -220,7 +218,7 @@ class CameraHub(
                     opening = false
                     if (released) { camera.close(); thread.quitSafely(); return }
                     device = camera
-                    log("camera $id open (${if (facingFront) "front" else "back"}, ${size.first}x${size.second}${if (presenceRange != null) ", legacy" else ""})")
+                    log("camera $id open (${if (facingFront) "front" else "back"}, ${size.first}x${size.second}${fpsRange?.let { ", $it fps" } ?: ""})")
                     settle()
                 }
                 override fun onDisconnected(camera: CameraDevice) {
@@ -256,22 +254,22 @@ class CameraHub(
     }
 
     /**
-     * The range the camera is asked for while streaming ([fpsRangeFor]). Read once and kept: the first
+     * The range the camera is asked for ([cameraRangeFor]). Read once and kept: the first
      * reader may be the stream's start ([streamFps], off the hub's thread, before the camera opens) or
      * [pickCamera] on the hub's thread; `lazy` makes that safe, and the camera's ranges don't change.
      */
-    private val streamRange: IntRange? by lazy {
+    private val cameraRange: IntRange? by lazy {
         try {
             cameraId()?.let { id ->
                 val ranges = manager.getCameraCharacteristics(id).get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
-                fpsRangeFor(ranges?.map { it.lower..it.upper }, H264Encoder.FPS)
+                cameraRangeFor(ranges?.map { it.lower..it.upper })
             }
         } catch (e: Exception) {
             null
         }
     }
 
-    override val streamFps: Int get() = announcedFps(streamRange)
+    override val streamFps: Int get() = announcedFps(cameraRange)
 
     private class Sizes(val reader: Pair<Int, Int>, val fit: StreamFit)
 
@@ -377,16 +375,12 @@ class CameraHub(
         val c = manager.getCameraCharacteristics(id)
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         sensorDegrees = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-        fpsRange = streamRange?.let { android.util.Range(it.first, it.last) }
-        streamFloor = streamRange?.first
+        fpsRange = cameraRange?.let { android.util.Range(it.first, it.last) }
+        streamFloor = cameraRange?.first
             ?: c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.minOfOrNull { it.lower } ?: 0
         val read = sizes.kept(id) ?: read(id) // throws to openCamera, which retries
         size = read.reader
         openFit = read.fit
-        legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
-        presenceRange = if (!legacy) null else presenceRangeFor(
-            c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { it.lower..it.upper }, CameraPresence.DEFAULT_FPS.toInt(),
-        )?.let { android.util.Range(it.first, it.last) }
         return id
     }
 
@@ -413,12 +407,9 @@ class CameraHub(
                         val template = if (encoder != null) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
                         fun request(to: List<Surface>) = camera.createCaptureRequest(template).apply {
                             to.forEach(::addTarget)
-                            // While streaming, the encoder's rate when the camera offers it (less CPU, a true a=framerate).
-                            if (encoder != null) fpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
-                            // Presence alone on a LEGACY camera: fewer frames for the shim to copy.
-                            else presenceRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+                            fpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
                         }.build()
-                        val every = readerEvery(legacy, streaming = encoder != null, streamFloor)
+                        val every = readerEvery(streaming = encoder != null, streamFloor)
                         if (every <= 1 || encoder == null) {
                             s.setRepeatingRequest(request(targets), null, handler)
                         } else {
@@ -426,7 +417,7 @@ class CameraHub(
                             // SurfaceTextureRenderer.drawIntoSurfaces), so the encoder alone runs at full rate.
                             val plain = request(listOf(encoder))
                             s.setRepeatingBurst(List(every - 1) { plain } + request(targets), null, handler)
-                            log("camera: LEGACY stream; the reader gets 1 frame in $every")
+                            log("camera: streaming; the reader gets 1 frame in $every")
                         }
                         blanks = 0
                         deadline.started(SystemClock.elapsedRealtime())
@@ -608,22 +599,22 @@ class CameraHub(
         private const val ERROR_CAMERA_IN_USE = CameraDevice.StateCallback.ERROR_CAMERA_IN_USE
         private const val ERROR_MAX_CAMERAS_IN_USE = CameraDevice.StateCallback.ERROR_MAX_CAMERAS_IN_USE
 
-        /** The reader's rate while a LEGACY camera streams: presence still sees motion, the encoder keeps the rest. */
-        const val LEGACY_STREAM_READER_FPS = 3
+        /** The reader's rate while the camera streams: presence still sees motion, the encoder keeps the rest. */
+        const val STREAM_READER_FPS = 3
     }
 }
 
 /**
  * Which of a session's repeating requests carry the frame reader: 1 is every one, else 1 in that many, the rest only the
- * stream's encoder. Every one unless a LEGACY camera ([legacy]) is [streaming]: Android's shim copies each frame it
- * gives the reader on the CPU (the Mirror's stream fell to about 7 fps with the reader in every request, 26 fps
- * without it, 2026-11-25). There the reader gets at least [CameraHub.LEGACY_STREAM_READER_FPS] even at the camera's
+ * stream's encoder. Every one unless the camera is [streaming]: a LEGACY camera's shim copies each frame it gives the
+ * reader on the CPU (the Mirror's stream fell to about 7 fps with the reader in every request, 26 fps without it,
+ * 2026-11-25), and presence needs no more on any camera. The reader gets at least [CameraHub.STREAM_READER_FPS] even at the camera's
  * slowest, [minFps] (the floor of its rate), so presence and the silence watchdog always have frames. A floor too low
  * for that, or unknown (0), keeps the reader in every request, as before. At most 1 in 30.
  */
-internal fun readerEvery(legacy: Boolean, streaming: Boolean, minFps: Int): Int {
-    if (!legacy || !streaming || minFps <= 0) return 1
-    return (minFps / CameraHub.LEGACY_STREAM_READER_FPS).coerceIn(1, 30)
+internal fun readerEvery(streaming: Boolean, minFps: Int): Int {
+    if (!streaming || minFps <= 0) return 1
+    return (minFps / CameraHub.STREAM_READER_FPS).coerceIn(1, 30)
 }
 
 /**

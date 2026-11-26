@@ -166,11 +166,12 @@ class CameraPartsTest {
         assertNotEquals(mac, onvifMac("02:00:00:00:00:02"))
     }
 
-    @Test fun theStreamAsksForARangeThatTopsAtTheEncodersRate() {
-        assertEquals("the steadiest one", 15..15, fpsRangeFor(listOf(7..15, 15..15, 15..30, 30..30), 15))
-        assertEquals(7..15, fpsRangeFor(listOf(7..15, 7..30), 15))
-        assertEquals("none tops at 15: the camera keeps its own rate", null, fpsRangeFor(listOf(15..30, 30..30), 15))
-        assertEquals(null, fpsRangeFor(null, 15))
+    /** Every camera runs at its top rate: on the Mirror, 15–15 (from its own list) broke every frame (2026-11-25). */
+    @Test fun aCameraIsAskedForItsSteadiestRangeAtItsTopRate() {
+        assertEquals("the Mirror: steady 30, never 15–15", 30..30, cameraRangeFor(listOf(15..15, 24..24, 7..30, 30..30)))
+        assertEquals("the steadiest at the top", 15..30, cameraRangeFor(listOf(7..30, 15..30, 7..15)))
+        assertEquals(null, cameraRangeFor(null))
+        assertEquals(null, cameraRangeFor(emptyList()))
     }
 
     @Test fun theSdpAnnouncesOnlyARateTheCameraIsAskedFor() {
@@ -246,10 +247,4 @@ class CameraPartsTest {
             CameraPlan.of(snapshots, true, ownSensor = false, signedIn = true, streams = false))
     }
 
-    @Test fun presenceOnALegacyCameraAsksForTheSlowestRangeThatCoversIt() {
-        assertEquals("the lowest top, then the lowest floor", 7..15, presenceRangeFor(listOf(15..30, 30..30, 15..15, 7..15), 5))
-        assertEquals(5..5, presenceRangeFor(listOf(5..5, 5..30), 5))
-        assertEquals("none reaches presence's rate", null, presenceRangeFor(listOf(1..3), 5))
-        assertEquals(null, presenceRangeFor(null, 5))
-    }
 }
