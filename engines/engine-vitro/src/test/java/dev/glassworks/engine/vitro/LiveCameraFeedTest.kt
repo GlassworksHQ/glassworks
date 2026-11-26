@@ -101,6 +101,9 @@ class LiveCameraFeedTest {
     private val wsCalls = ArrayList<JSONObject>()
     private var capabilities: Any? = JSONObject().put("frontend_stream_types", JSONArray().put("hls").put("web_rtc"))
     private var capabilitiesOk = true
+
+    /** Set: capabilities requests wait here for the test to answer them. */
+    private var pendingCaps: ArrayList<(Boolean, Any?, JSONObject?) -> Unit>? = null
     private val nullFor = HashSet<CameraStreamKind>()
     private val throwFor = HashSet<CameraStreamKind>()
     private val closesWhenHiddenFor = HashSet<CameraStreamKind>()
@@ -145,7 +148,9 @@ class LiveCameraFeedTest {
         callWs = { msg, done ->
             wsCalls += msg
             if (msg.optString("type") == "camera/capabilities") {
-                if (capabilitiesOk) done(true, capabilities, null) else done(false, null, JSONObject().put("code", "not_found"))
+                val held = pendingCaps
+                if (held != null) held += done
+                else if (capabilitiesOk) done(true, capabilities, null) else done(false, null, JSONObject().put("code", "not_found"))
             } else {
                 done(false, null, null)
             }
@@ -1297,6 +1302,90 @@ class LiveCameraFeedTest {
         // The new player has shown nothing: it gets WebRTC's short wait alone, then HLS takes over.
         ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
         assertEquals(listOf(HLS), f.runningKinds)
+    }
+
+    @Test
+    fun aParkedCamerasReplacementThatShowsNoVideoStillGivesWayToHls() {
+        CameraVideoBudget.max = 1
+        val top = feed(context(store()))
+        top.start()
+        idle()
+        live(WEB_RTC).frame()
+        idle()
+        val below = feed(context(store()))
+        below.start()
+        idle()
+        top.setOnScreen(false)
+        ms(LiveCameraFeed.PARK_MS)
+        idle()
+        assertEquals(emptyList<CameraStreamKind>(), top.runningKinds)
+        // The camera below goes; the top one, back on screen, takes the slot with a new WebRTC that shows nothing.
+        below.stop()
+        top.setOnScreen(true)
+        idle()
+        assertEquals(listOf(WEB_RTC), top.runningKinds)
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
+        assertEquals(listOf(HLS), top.runningKinds)
+    }
+
+    @Test
+    fun aCardMoreInfoTookTheSlotFromComesBackAsANewPlayer() {
+        val st = store()
+        val cams = fourOnWebRtc(context(st))
+        val sheet = LiveCameraFeed(context(st), "camera.porch", { null }, host = FrameLayout(activity), foreground = true) {}
+        sheet.start()
+        idle()
+        assertEquals(listOf(MJPEG), cams.last().runningKinds)
+        sheet.stop()
+        idle()
+        // Its new WebRTC has shown nothing: loading, so with no slot for HLS beside it, it gets WebRTC's short wait
+        // alone and then HLS, as any new player.
+        assertEquals(listOf(WEB_RTC), cams.last().runningKinds)
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
+        assertEquals(listOf(HLS), cams.last().runningKinds)
+    }
+
+    @Test
+    fun aCameraThatLostTheStreamFeatureIsReadAgainOnStartAndReconnect() {
+        val st = EntityStore().apply {
+            putLocal(EntityState("camera.porch", "streaming", mapOf("supported_features" to 2)))
+        }
+        val f = feed(context(st))
+        f.start()
+        idle()
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        // HA restarts and the camera lost its STREAM feature: MJPEG, without asking.
+        st.putLocal(EntityState("camera.porch", "streaming", mapOf("supported_features" to 0)))
+        LiveCameraFeed.connectionRestored(st)
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        assertEquals(1, wsCalls.count { it.optString("type") == "camera/capabilities" })
+        f.stop()
+        f.start()
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+    }
+
+    @Test
+    fun aCapabilitiesRequestLostToAReconnectIsAskedAgain() {
+        // HA never answers the first request: the connection dropped with it.
+        val pending = ArrayList<(Boolean, Any?, JSONObject?) -> Unit>()
+        pendingCaps = pending
+        val s = store()
+        val f = feed(context(s))
+        f.start()
+        idle()
+        assertEquals(1, pending.size)
+        LiveCameraFeed.connectionRestored(s)
+        idle()
+        assertEquals(2, pending.size)
+        // The old reply lands late: dropped. The new one is the answer.
+        pending[0](true, JSONObject().put("frontend_stream_types", JSONArray()), null)
+        idle()
+        assertTrue(f.runningKinds.isEmpty())
+        pending[1](true, capabilities, null)
+        idle()
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
     }
 
     @Test

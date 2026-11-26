@@ -250,11 +250,10 @@ internal class LiveCameraFeed(
             startPolling()
             return
         }
-        // The connection's answer, the one it has now: a copy from before a reconnect isn't used.
-        if (offersStream()) {
-            capabilities = knowledge.capabilities(entityId)
-            if (capabilities == null) capabilitiesAsked = false
-        }
+        // The connection's answer, the one it has now: a copy from before a reconnect isn't used (a camera without
+        // the STREAM feature is read from its state again).
+        capabilities = knowledge.capabilities(entityId)
+        if (capabilities == null) capabilitiesAsked = false
         if (capabilities == null) askCapabilities() else recompute()
         if (!onScreen) schedulePark()
     }
@@ -305,7 +304,7 @@ internal class LiveCameraFeed(
     private fun park(kind: CameraStreamKind) {
         CameraVideoBudget.park(this to kind, true) {
             held -= kind
-            closeSlot(kind)
+            closeReplaced(kind)
             offScreenOut = true
             // Not from inside the budget's call: the rest of the camera rests as hidden, next.
             ctx.main.post { if (running && offScreenOut) applyActive() }
@@ -335,10 +334,7 @@ internal class LiveCameraFeed(
             for (kind in slots.keys.toList()) {
                 val slot = slots[kind] ?: continue
                 if (slot.stream.closeWhenHidden) {
-                    closeSlot(kind)
-                    // Its replacement on show has shown nothing yet: loading, as a new player is (a failure stays).
-                    if (kind == CameraStreamKind.WEB_RTC && webRtcVideo == true) webRtcVideo = null
-                    if (kind == CameraStreamKind.HLS && hlsVideo == true) hlsVideo = null
+                    closeReplaced(kind)
                 } else if (guard(kind) { slot.stream.setActive(false) } == null) {
                     closeSlot(kind)
                 }
@@ -432,10 +428,8 @@ internal class LiveCameraFeed(
         if (!stream) return
         // HA may have restarted with other settings: its answer is asked again (the players run on meanwhile), now,
         // or when the camera shows.
-        if (offersStream()) {
-            capabilities = null
-            capabilitiesAsked = false
-        }
+        capabilities = null
+        capabilitiesAsked = false
         if (capabilities == null && !capabilitiesAsked && active) {
             ctx.main.removeCallbacks(askAgain)
             capabilitiesRetryMs = CAPABILITIES_RETRY_MS
@@ -735,6 +729,16 @@ internal class LiveCameraFeed(
         scheduleRecompute()
     }
 
+    /**
+     * Closes [kind]'s player for a new one later (hidden, its slot given up): that one has shown nothing yet, so the
+     * kind is loading again, as a new player is. A failure stays.
+     */
+    private fun closeReplaced(kind: CameraStreamKind) {
+        closeSlot(kind)
+        if (kind == CameraStreamKind.WEB_RTC && webRtcVideo == true) webRtcVideo = null
+        if (kind == CameraStreamKind.HLS && hlsVideo == true) hlsVideo = null
+    }
+
     private fun closeSlot(kind: CameraStreamKind) {
         val slot = slots.remove(kind) ?: return
         slot.stream.listener = null
@@ -760,7 +764,7 @@ internal class LiveCameraFeed(
         // plays MJPEG meanwhile, first in line for the next slot.
         val onPreempt = if (extra || foreground) null else ({
             held -= kind
-            closeSlot(kind)
+            closeReplaced(kind)
             capped = true
             scheduleRecompute()
         })
