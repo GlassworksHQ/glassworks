@@ -13,6 +13,23 @@ internal val Compat = CompatApi(Build.VERSION.SDK_INT)
 
 /** The capabilities for one API [level]; [Compat] is the running device's. Tests pass a level. */
 internal class CompatApi(private val level: Int) {
+    /**
+     * A network `addNetwork` adds lasts past a restart only once the app calls `saveConfiguration` (Android 7 and
+     * earlier). From Android 8 the framework saves it itself, and `saveConfiguration` is deprecated.
+     */
+    val mustSaveNetworks: Boolean get() = level < 26
+
+    /**
+     * `getConfiguredNetworks` gives every saved network: always before Android 10. From Android 10 an app that isn't
+     * privileged gets an empty list, and without location access a filtered one, so only the device owner with location
+     * access gets them all.
+     */
+    fun listsSavedNetworks(deviceOwner: Boolean, locationAccess: Boolean): Boolean = level < 29 || (deviceOwner && locationAccess)
+
+    /** `Settings.Global.BOOT_COUNT` exists (Android 7). */
+    @get:ChecksSdkIntAtLeast(api = 24)
+    val hasBootCount: Boolean get() = level >= 24
+
     /** `AdvertisingSet` exists (Android 8). Below it, advertising uses `startAdvertising` only. */
     @get:ChecksSdkIntAtLeast(api = 26)
     val hasAdvertisingSets: Boolean get() = level >= 26

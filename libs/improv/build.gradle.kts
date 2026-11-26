@@ -21,6 +21,8 @@ dependencies {
     compileOnly("androidx.annotation:annotation:1.11.0")
 
     testImplementation("junit:junit:4.13.2")
+    // WifiProvisionerSaveTest: a join through connect on Android 6 and 10, as the other libraries' Robolectric tests.
+    testImplementation("org.robolectric:robolectric:4.17")
 
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")

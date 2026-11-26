@@ -54,8 +54,10 @@ export function Picker() {
   const design = FRAMES.find((f) => f.id === picked);
   const frame = (design && kilnRoute(design)) ?? '';
   const data = design ? INSTALLERS[installsAs(design)] : undefined;
-  // undo has routes of its own only where the way back restores a backup; elsewhere it is on the frame's own screens
-  const undo = data?.wayBack?.how === 'restore-backup';
+  // undo has routes of its own where the way back restores a backup, or an in-place flow's restore point (restore-blocks:
+  // someone back on another day, or in a new tab, finds it here); elsewhere it is on the frame's own screens
+  const undo = data?.wayBack?.how === 'restore-backup'
+    || Object.values(data?.flows ?? {}).some((x) => (x as { wayBack?: { how?: string } }).wayBack?.how === 'restore-blocks');
   useEffect(() => {
     const old = fromHash(location.hash);
     if (old && OLD_LINKS_FRAME) router.replace(OLD_LINKS_FRAME + ROUTES[old]);
@@ -81,6 +83,8 @@ export function Picker() {
             <ul>
               <li>Chrome or Edge on this computer</li>
               {data.picker.needs.map((x) => <li key={x}>{x}</li>)}
+              {/* the install's time, from the frame's words: the same words its first screen says */}
+              {data.words?.time?.total && <li>{data.words.time.total.charAt(0).toUpperCase() + data.words.time.total.slice(1)}</li>}
             </ul>
             <p className="small">{data.picker.wayBack}</p>
           </div>

@@ -9,16 +9,23 @@ export class DeviceActivity implements Activity {
   /** `imageMode`: the page shows the image over fastboot (true) or the app alone over adb. */
   constructor(readonly base: string, readonly name: string, readonly sessions: { app: AppSession; image: ImageSession }, public imageMode: boolean) {}
 
-  /** Building, flashing or the first boot over fastboot; installing or undoing over adb. */
+  /** Building, flashing or the first boot over fastboot; an in-place install's restore while it writes; installing or undoing over adb. */
   writing(): boolean {
-    return this.sessions.image.state.screen === 'working' || this.sessions.app.state.screen === 'working';
+    const i = this.sessions.image.state;
+    return i.screen === 'working' || (i.screen === 'undo' && i.undo?.at === 'working') || this.sessions.app.state.screen === 'working';
   }
 
-  /** Back to it while it works, or while the flashed device waits for its first boot (the adb screen). */
+  /**
+   * Back to it while it works, while the flashed device waits for its first boot (the adb screen), and while an
+   * in-place install waits between its steps (its bundle, its second fastboot, its restore point): the device is
+   * changed already, so the picker says so.
+   */
   running(): string | undefined {
-    const f = this.sessions.image.state.screen;
+    const i = this.sessions.image.state;
+    const f = i.screen;
     const apk = `?apk=${this.sessions.app.from}`;
-    if (f === 'working' || f === 'adb') return `${this.base}${apk}`;
+    const between = f === 'receive' || f === 'restore-point' || (f === 'fastboot' && i.round === 2) || (f === 'undo' && i.undo?.at === 'working');
+    if (f === 'working' || f === 'adb' || between) return `${this.base}${apk}`;
     if (this.sessions.app.state.screen === 'working') return `${this.base}${apk}&mode=app`;
     return undefined;
   }

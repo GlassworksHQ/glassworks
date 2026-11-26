@@ -6,7 +6,7 @@
 // of the frame's line) or ?apk=local (a file from this computer), or a demo, until its frame.json makes it installable
 // (usbOpen). The frame's words, brands and grants come from its data and its code (kiln-core UsbFrame).
 import { loadOrCreateAdbKey } from '@glassworks/adb';
-import { fmtSize, webUsbDevices, type SilentWords, type UsbApp, type UsbFrame, type UsbGrant, type UsbIdentified, type UsbInstalled, type UsbPhase, type UsbPlace, type UsbSilentUpdates, type UsbSim } from '@glassworks/kiln-core';
+import { cap, fmtSize, webUsbDevices, type SilentWords, type UsbApp, type UsbFrame, type UsbGrant, type UsbIdentified, type UsbInstalled, type UsbPhase, type UsbPlace, type UsbSilentUpdates, type UsbSim } from '@glassworks/kiln-core';
 import { KIND_TEXT, STAGE_TEXT, type FrameDesign } from '@glassworks/frame-card';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import * as RadioGroup from '@radix-ui/react-radio-group';
@@ -23,6 +23,8 @@ import { status, stepOf, type Step } from '../wizard/routes';
 import { Browser } from '../wizard/screens';
 import type { Entry } from '../wizard/registry';
 import { Shell, useBrowserChip } from '../components/Shell';
+import { Foot } from '../components/Nav';
+import { Hands, Note, Problem, Progress, type ProgressRow } from '../components/Kit';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { FRAMES, MEASURED, RENDERS } from '../frames/catalog';
 import { adbKeyHolder, webUsbAdb } from './DevicePage';
@@ -118,10 +120,10 @@ function Off() {
     <section className="card" aria-labelledby="h">
       <h2 id="h">{dev.off.title}</h2>
       <p className="lede">Its installer is still being tested. Follow it on GitHub, or pick another panel.</p>
-      <div className="foot">
-        <a className="link" href={dev.off.follow}>Follow it on GitHub</a>
+      <Foot back={null}>
+        <a className="btn ghost" href={dev.off.follow}>Follow it on GitHub</a>
         <Link className="btn ghost" href="/">Pick a panel</Link>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -171,16 +173,15 @@ function Find({ s, session }: { s: UsbState; session: UsbSession }) {
       {s.changed && <p className="small">{`An earlier attempt already changed ${dev.the}.`}</p>}
       {s.finding && <p className="status work" role="status">{`Pick ${dev.the} in the browser list…`}</p>}
       {s.findError && <p className="status err" role="alert">{s.findError}</p>}
-      <div className="foot">
+      <Foot back={{ href: '/' }} busy={s.finding}>
         <span className="links">
-          <button type="button" className="link" onClick={() => session.brands()}>Not in the list? Pick your brand</button>
-          <span aria-hidden="true">·</span>
+          <button type="button" className="btn ghost" onClick={() => session.brands()}>Not in the list? Pick your brand</button>
           {s.flow === 'install'
-            ? <button type="button" className="link" onClick={() => session.setFlow('undo')}>Undo an install</button>
-            : <button type="button" className="link" onClick={() => session.setFlow('install')}>Install instead</button>}
+            ? <button type="button" className="btn ghost" onClick={() => session.setFlow('undo')}>Undo an install</button>
+            : <button type="button" className="btn ghost" onClick={() => session.setFlow('install')}>Install instead</button>}
         </span>
         <button type="button" className="btn ember" disabled={s.finding} onClick={() => void session.find()}>Find device</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -208,10 +209,10 @@ function Named({ s, session }: { s: UsbState; session: UsbSession }) {
       </div>
       <ApkField s={s} session={session} />
       {blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
-      <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => session.brands()}>Not right? Pick your brand</button></span>
+      <Foot back={{ run: () => session.restart() }}>
+        <button type="button" className="btn ghost" onClick={() => session.brands()}>Not right? Pick your brand</button>
         <button type="button" className="btn ember" disabled={!!blocked} onClick={() => session.toSteps()}>Continue</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -232,10 +233,10 @@ function Brand({ s, session }: { s: UsbState; session: UsbSession }) {
       </RadioGroup.Root>
       <ApkField s={s} session={session} />
       {blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
-      <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => session.back()}>Back</button><span aria-hidden="true">·</span>Pick one to see its steps.</span>
+      {!s.brand && <p className="small">Pick one to see its steps.</p>}
+      <Foot back={{ run: () => session.back() }}>
         <button type="button" className="btn ember" disabled={!s.brand || !!blocked} onClick={() => session.chooseBrand()}>Continue</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -274,13 +275,13 @@ function Debug({ s, session }: { s: UsbState; session: UsbSession }) {
         </li>
       </ol>
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-      <div className="foot">
-        <span className="small">
-          Steps from {st.sources.map((src, i) => <span key={src.href}>{i > 0 && ' and '}<a className="link" href={src.href} target="_blank" rel="noreferrer">{src.title.split(':')[0]}</a></span>)}
-          {' · '}<button type="button" className="link" onClick={() => session.brands()}>Different on yours?</button>
-        </span>
+      <p className="small">
+        Steps from {st.sources.map((src, i) => <span key={src.href}>{i > 0 && ' and '}<a className="link" href={src.href} target="_blank" rel="noreferrer">{src.title.split(':')[0]}</a></span>)}
+      </p>
+      <Foot back={{ run: () => session.backFromSteps() }}>
+        <button type="button" className="btn ghost" onClick={() => session.brands()}>Different on yours?</button>
         <button type="button" className="btn ember" onClick={() => void session.connect()}>USB debugging is on</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -290,7 +291,9 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
   const [help, setHelp] = useState(false);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h" className="huge">{`Tap Allow on ${dev.the}`}</h2>
+      <span className="turn-label"><span className="pulse" />Your turn</span>
+      <h2 id="h">{`Tap Allow on ${dev.the}`}</h2>
+      <p className="lede">{`${cap(dev.the)} asks whether to trust this computer. Tick “Always allow from this computer”, then tap Allow.`}</p>
       <div className="tab" aria-hidden="true">
         <div className="scr">
           <div className="dlg">
@@ -311,25 +314,27 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
             <li>{`Another tool on this computer may be using ${dev.the}: close other Kiln tabs or Android tools, or run `}<code>adb kill-server</code>.</li>
           </ul>
         </Collapsible.Content>
-        <div className="foot">
+        {/* Back to the steps once the ask has stopped (a refusal, nothing picked): not while it still waits for the tap */}
+        <Foot back={s.connectError ? { run: () => session.backToSteps() } : null} backLabel="Back to the steps">
+          <Collapsible.Trigger className="btn ghost">Nothing on the screen?</Collapsible.Trigger>
           {s.connectError
             ? <button type="button" className="btn ember" onClick={() => void session.connect()}>Try again</button>
             : <span className="chip inline"><span className="pulse" />{`Waiting for ${dev.the}`}</span>}
-          <Collapsible.Trigger className="link">Nothing on the screen?</Collapsible.Trigger>
-        </div>
+        </Foot>
       </Collapsible.Root>
     </section>
   );
 }
 
 type RowId = 'read' | 'apk' | 'grant' | 'start' | 'home' | 'handoff';
-const ROWS: { id: RowId; doing: string; done: string }[] = [
-  { id: 'read', doing: 'Reading device info', done: '' },
-  { id: 'apk', doing: 'Installing Glassworks', done: 'Glassworks installed' },
-  { id: 'grant', doing: 'Granting permissions', done: 'Permissions granted' },
-  { id: 'start', doing: 'Starting Glassworks', done: 'Glassworks started' },
-  { id: 'home', doing: 'Setting as home screen', done: 'Set as home screen' },
-  { id: 'handoff', doing: 'Preparing setup', done: 'Ready for setup' },
+/** Each row: as a step still to come (`step`), while it runs (`doing`), and once done (`done`). */
+const ROWS: { id: RowId; step: string; doing: string; done: string }[] = [
+  { id: 'read', step: 'Read the device', doing: 'Reading device info', done: '' },
+  { id: 'apk', step: 'Install Glassworks', doing: 'Installing Glassworks', done: 'Glassworks installed' },
+  { id: 'grant', step: 'Give it its permissions', doing: 'Granting permissions', done: 'Permissions granted' },
+  { id: 'start', step: 'Start Glassworks', doing: 'Starting Glassworks', done: 'Glassworks started' },
+  { id: 'home', step: 'Make it the home screen', doing: 'Setting as home screen', done: 'Set as home screen' },
+  { id: 'handoff', step: 'Get set-up ready', doing: 'Preparing setup', done: 'Ready for setup' },
 ];
 const rowOf = (p: UsbPhase): RowId => (p.step === 'updates' || p.step === 'granted' ? 'grant' : p.step);
 
@@ -378,10 +383,12 @@ function Working({ s }: { s: UsbState }) {
   if (s.flow === 'undo') {
     return (
       <section className="card" aria-labelledby="h">
-        <h2 id="h" className="huge">Keep it plugged in</h2>
+        <h2 id="h">Removing Glassworks</h2>
         <p className="lede">Kiln removes Glassworks&apos; screen-lock permission and uninstalls the app.</p>
+        <Hands the={dev.the} />
         <div className="bar wait"><i /></div>
-        <div className="foot"><span className="small">{`Nothing else on ${dev.the} changes.`}</span><Log s={s} /></div>
+        <p className="small">{`Nothing else on ${dev.the} changes.`}</p>
+        <Log s={s} />
       </section>
     );
   }
@@ -394,25 +401,22 @@ function Working({ s }: { s: UsbState }) {
   return (
     <section className={`card${pick ? ' turn' : ''}`} aria-labelledby="h">
       {pick ? <>
-        <h2 id="h" className="huge">{`One tap on ${dev.the}`}</h2>
+        <span className="turn-label"><span className="pulse" />Your turn</span>
+        <h2 id="h">{`One tap on ${dev.the}`}</h2>
         <p className="lede">Android asks which app to use as the home screen. Pick <b className="fg">{pick}</b>, then <b className="fg">Always</b>.</p>
       </> : <>
-        <h2 id="h" className="huge">Keep it plugged in</h2>
-        <div className="prog">
-          <div className="spread"><span>{doing}</span><span className="small">{at + 1} of {ROWS.length}</span></div>
-          <div className="bar"><i style={{ width: `${((at + 0.5) / ROWS.length) * 100}%` }} /></div>
-        </div>
-        <ol className="plain" aria-label="Done so far">
-          {ROWS.slice(0, at).map((r) => <li key={r.id}><span className="ok">✓</span> {done(r)}</li>)}
-          <li><span className="go">→</span> {doing}</li>
-        </ol>
+        <h2 id="h">Installing Glassworks</h2>
+        <Hands the={dev.the} />
+        <Progress label="Installing Glassworks" rows={ROWS.map((r, i): ProgressRow => ({
+          id: r.id,
+          label: i < at ? done(r) || r.step : i === at ? doing : r.step,
+          state: i < at ? 'done' : i === at ? 'now' : 'next',
+        }))} />
       </>}
       {grants && <GrantList grants={grants} updates={s.granted?.silentUpdates} />}
       {grants && <Refusals grants={grants} updates={s.granted?.silentUpdates} />}
-      <div className="foot">
-        {pick ? <span className="chip inline"><span className="pulse" />Waiting for your tap</span> : <span className="small">{`Nothing else on ${dev.the} changes.`}</span>}
-        <Log s={s} />
-      </div>
+      {pick ? <span className="chip inline"><span className="pulse" />Waiting for your tap</span> : <p className="small">{`Nothing else on ${dev.the} changes.`}</p>}
+      <Log s={s} />
     </section>
   );
 }
@@ -426,7 +430,8 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
         <span className="okmark" aria-hidden="true">✓</span>
         <h2 id="h">{r.removed.length ? `Glassworks is off ${dev.the}` : `Glassworks wasn't on ${dev.the}`}</h2>
         <p className="lede">{r.removed.length ? 'Android opens the home screen it had, or asks which one to use.' : 'Nothing was changed.'} Unplug it when you like.</p>
-        <div className="foot"><Log s={s} /><Link className="btn ghost" href="/">Back to Kiln</Link></div>
+        <Foot back={null}><Link className="btn ghost" href="/">Back to Kiln</Link></Foot>
+        <Log s={s} />
       </section>
     );
   }
@@ -466,10 +471,11 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
       </> : (
         <p className="small">{installed.handoff.why}{` Finish setting up on ${dev.the}: Glassworks shows its setup screen.`}</p>
       )}
-      <div className="foot">
-        <button type="button" className="link" onClick={() => void session.undoFromDone()}>Undo</button>
-        <Log s={s} />
-      </div>
+      <Foot back={null}>
+        <button type="button" className="btn ghost" onClick={() => void session.undoFromDone()}>Undo</button>
+        <span />
+      </Foot>
+      <Log s={s} />
     </section>
   );
 }
@@ -481,10 +487,10 @@ function Failed({ s, session }: { s: UsbState; session: UsbSession }) {
       <section className="card err" aria-labelledby="h">
         <h2 id="h">This is {article} {s.own.name}</h2>
         <p className="lede">It has its own dedicated installer in Kiln. Installing Glassworks for Android here would replace its built-in app, so Kiln stopped before changing anything.</p>
-        <div className="foot">
-          <Log s={s} />
+        <Foot back={null}>
           <Link className="btn ember" href={s.own.route}>Go to the {s.own.name}</Link>
-        </div>
+        </Foot>
+        <Log s={s} />
       </section>
     );
   }
@@ -498,21 +504,20 @@ function Stopped({ s, session }: { s: UsbState; session: UsbSession }) {
   const blocked = s.flow === 'install' ? session.blocked() : undefined;
   const untouched = /Nothing was changed\.$/.test(s.error ?? '');
   return (
-    <section className="card err" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Undo didn\'t finish' : untouched ? `Kiln can't install on this ${dev.short}` : 'The install didn\'t finish'}</h2>
-      {!untouched && <p className="lede">Check the cable and device, then click Try again. Details are below if you need them.</p>}
-      <pre className="raw">{s.error}</pre>
+    <Problem title={s.flow === 'undo' ? 'Undo didn\'t finish' : untouched ? `Kiln can't install on this ${dev.short}` : 'The install stopped'}
+      fix={untouched ? undefined : 'Check the cable and the device, then click Try again.'}
+      details={<><pre className="raw">{s.error}</pre><pre className="rawlog">{[...s.log].reverse().join('\n') || 'Nothing yet.'}</pre></>}>
+      {untouched && <p className="lede">{s.error}</p>}
       {repick && <ApkField s={s} session={session} />}
-      {repick && blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
-      <div className="foot">
-        <Log s={s} />
-        <span className="row">
+      {repick && blocked && s.apk && <Note tone="bad">{blocked}</Note>}
+      <Foot back={null}>
+        <span className="links">
           {s.flow === 'install' && <ReportButton prefill={usbPrefill(dev, s, 'stopped')}>Tell us what happened</ReportButton>}
-          {s.flow === 'install' && !s.release && !repick && <button type="button" className="link" onClick={() => setRepick(true)}>Pick another APK</button>}
-          <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.connect()}>Try again</button>
+          {s.flow === 'install' && !s.release && !repick && <button type="button" className="btn ghost" onClick={() => setRepick(true)}>Pick another APK</button>}
         </span>
-      </div>
-    </section>
+        <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.connect()}>Try again</button>
+      </Foot>
+    </Problem>
   );
 }
 

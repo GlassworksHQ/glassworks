@@ -31,13 +31,17 @@ afterEach(() => cleanup());
 
 const WHOSE = /Glass Panes is made by git-nimrod\. Questions about it go to its project\./;
 /** Round three (maintainer, 2026-11-19): welcoming to image authors, and no manual download path. */
-const NEVER = [/recommended/i, /isn.t Glassworks/i, /not Glassworks/i, /can.t help/i, /yourself/i, /select the/i, /not to Glassworks/i, /Way back:/];
+// a community image's screens never weigh it against Glassworks; the choice's advice is the frame's (maintainer, 2026-11-25)
+const NEVER = [/isn.t Glassworks/i, /not Glassworks/i, /can.t help/i, /yourself/i, /select the/i, /not to Glassworks/i, /Way back:/];
 const IMAGE_DEMOS = ALL_DEMOS.filter((d) => d.startsWith('image-'));
 /** The demos whose screen belongs to Glass Panes' install. */
 const COMMUNITY = IMAGE_DEMOS.filter((d) => !d.startsWith('image-choose') && !d.startsWith('image-back'));
 
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
-const radios = () => screen.queryAllByRole('radio').map((r) => r.getAttribute('aria-label'));
+/** Each image's radio, by its name (the card's heading names it). */
+const radios = () => screen.queryAllByRole('radio').map((r) => document.getElementById(r.getAttribute('aria-labelledby')!)?.textContent);
+/** An image's card: its radio covers it, and its project link sits beside the radio, not inside it. */
+const card = (name: string) => screen.getByRole('radio', { name }).parentElement!;
 const rail = () => [...document.querySelectorAll('.steps > li')].map((li) => li.textContent);
 
 /** As the page shows it: the install's screens, or after the first start the standard flow with the image's lines. */
@@ -86,32 +90,60 @@ function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'change
   const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
   const f = new ImageSession({ frame: mirrorFrame, simulated: true, images, refract: 'https://refract.test', search: o.search ?? '', requestFastboot: async () => fb,
     requestAdb: async () => new FirstBootMirror(), adbKey: () => 'QAAA= kiln@glassworks', apk: () => undefined, sleep: async () => {} });
+  f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
   return { f, mirror, calls };
 }
 
 describe('the choice', () => {
-  it('opens on Glassworks\' own installs, Glassworks first and picked, with no badge; the community images are one quiet click away', async () => {
+  it('opens on Glassworks\' own installs, the recommended way first and picked, the alternative after it; the community images are one quiet click away', async () => {
     await show('image-choose');
     expect(screen.getByRole('heading').textContent).toBe('Choose what to install on the Mirror');
-    expect(radios()).toEqual(['Glassworks', 'Glassworks on the stock software']);
-    expect(screen.getByRole('radio', { name: 'Glassworks on the stock software' }).querySelector('.pill')).toBeNull();
-    expect(screen.getByRole('radio', { name: 'Glassworks' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('radio', { name: 'Glassworks' }).querySelector('.pill')).toBeNull();
-    expect(rail()).toEqual(['Mirror', 'Choose', 'Download', 'Fastboot', 'Install', 'Set up', 'Done']);
+    // the frame's advice (maintainer, 2026-11-25): in place keeps lululemon's software, the full image is faster
+    expect(radios()).toEqual(['Glassworks on the stock software', 'Glassworks']);
+    expect(screen.getByRole('radio', { name: 'Glassworks on the stock software' }).getAttribute('aria-checked')).toBe('true');
+    expect(card('Glassworks on the stock software').querySelector('.pill')!.textContent).toBe('Recommended');
+    expect(card('Glassworks').querySelector('.pill')!.textContent).toBe('Alternative');
+    expect(card('Glassworks on the stock software').textContent).toContain('Slower, but it keeps lululemon’s software, so you can always go back.');
+    expect(card('Glassworks').textContent).toContain('Faster, but there’s no way back to lululemon’s software afterward.');
+    expect(screen.getByRole('radio', { name: 'Glassworks' }).getAttribute('aria-describedby')).toContain('image-glassworks-trade');
+    expect(embers()).toEqual(['Continue with Glassworks on the stock software']);
+    expect(screen.getByRole('radio', { name: 'Glassworks' }).querySelector('a')).toBeNull(); // no link inside the radio
+    expect(card('Glassworks').querySelector('a')!.textContent).toBe('glassworks.dev');
+    expect(rail()).toEqual(['Mirror', 'Choose', 'Prepare', 'Fastboot', 'Copy', 'Install', 'Set up', 'Done']);
     const more = screen.getByRole('button', { name: 'Show community images (1)' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(more);
-    expect(radios()).toEqual(['Glassworks', 'Glassworks on the stock software', 'Glass Panes']);
-    expect(screen.getByRole('radio', { name: 'Glassworks' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('radio', { name: 'Glass Panes' }).textContent).toMatch(/Community image.*Its project, on GitHub/);
+    expect(radios()).toEqual(['Glassworks on the stock software', 'Glassworks', 'Glass Panes']);
+    expect(screen.getByRole('radio', { name: 'Glassworks on the stock software' }).getAttribute('aria-checked')).toBe('true');
+    expect(card('Glass Panes').textContent).toMatch(/Community image.*Its project, on GitHub/);
   });
 
-  it('hiding the community images again goes back to Glassworks', async () => {
+  it('each choice says how long it usually takes, from the frame\'s words, and only where the frame gives a time', async () => {
+    await show('image-choose');
+    const words = mirrorFrame.words as unknown as Record<string, string | undefined>;
+    const time = (name: string) => card(name).querySelector('[id$="-time"]')?.textContent;
+    for (const r of mirrorFrame.imageFlow.recipes.filter((x) => !x.community)) {
+      const want = words[`time.total.${r.id}`];
+      expect(time(r.name), r.id).toBe(want ? `Usually ${want}` : undefined);
+      // read with the card's summary
+      if (want) expect(screen.getByRole('radio', { name: r.name }).getAttribute('aria-describedby')).toContain(`image-${r.id}-time`);
+    }
+    // every Mirror choice has its total (maintainer, 2026-11-25)
+    expect(time('Glassworks on the stock software')).toBe(`Usually ${words['time.total.glassworks-in-place']}`);
+    expect(time('Glassworks')).toBe('Usually about 10 minutes');
+  });
+
+  it('a community image says how long it takes too, once the community images are shown', async () => {
+    await show('image-choose-panes');
+    expect(card('Glass Panes').querySelector('[id$="-time"]')?.textContent).toBe('Usually about 10 minutes');
+  });
+
+  it('hiding the community images again goes back to the recommended way', async () => {
     await show('image-choose-panes');
     expect(embers()).toEqual(['Continue with Glass Panes']);
     fireEvent.click(screen.getByRole('button', { name: 'Hide community images' }));
-    expect(radios()).toEqual(['Glassworks', 'Glassworks on the stock software']);
-    expect(embers()).toEqual(['Continue with Glassworks']);
+    expect(radios()).toEqual(['Glassworks on the stock software', 'Glassworks']);
+    expect(embers()).toEqual(['Continue with Glassworks on the stock software']);
   });
 
   it('choosing downloads nothing; Continue goes to the picked image\'s first screen', () => {
@@ -259,6 +291,16 @@ describe('Glass Panes', () => {
     await waitFor(() => expect(flash.state.files.every((x) => x.state === 'ok')).toBe(true));
   });
 
+  it('the stock install\'s first fastboot offers the restart over USB too (a reinstall: Kiln checks the Mirror\'s own Wi-Fi first); its second doesn\'t', async () => {
+    const flash = await show('place-fastboot');
+    const restart = vi.spyOn(flash, 'restartToFastboot').mockResolvedValue();
+    fireEvent.click(screen.getByRole('button', { name: 'Already running Glassworks or Glass Panes? Restart over USB' }));
+    expect(restart).toHaveBeenCalledTimes(1);
+    cleanup();
+    await show('place-fastboot-again');
+    expect(screen.queryByRole('button', { name: 'Already running Glassworks or Glass Panes? Restart over USB' })).toBeNull();
+  });
+
   it('fastboot opens on the steps by hand; its restart over USB restarts the image over adb, inside the click', async () => {
     const flash = await show('image-fastboot');
     expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
@@ -295,7 +337,7 @@ describe('Glassworks\' Done', () => {
     // the page leaves Done for the install's first screen
     cleanup();
     render(<ImageFlow image={flash} app={app} />);
-    expect(radios()).toEqual(['Glassworks', 'Glassworks on the stock software', 'Glass Panes']);
+    expect(radios()).toEqual(['Glassworks on the stock software', 'Glassworks', 'Glass Panes']);
     expect(embers()).toEqual(['Continue with Glass Panes']);
   });
 });
@@ -348,7 +390,7 @@ describe('every image screen', () => {
     const card = document.querySelector('.card')!;
     expect(card).not.toBeNull();
     expect(embers().length).toBeLessThanOrEqual(1);
-    if ((COMMUNITY as readonly string[]).includes(d)) expect(card.textContent).toMatch(WHOSE);
+    if ((COMMUNITY as readonly string[]).includes(d)) { expect(card.textContent).toMatch(WHOSE); expect(card.textContent).not.toMatch(/recommended|alternative/i); }
     for (const w of NEVER) expect(document.body.textContent).not.toMatch(w);
     expect(document.querySelector('input[type="file"]')).toBeNull();
   });

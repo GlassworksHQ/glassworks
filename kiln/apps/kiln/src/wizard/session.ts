@@ -12,7 +12,7 @@ import {
 import type { AppPhase, AppResult, AppSettings, KilnFrame } from '@glassworks/kiln-core';
 import { standardOf } from '../standard/frame';
 import { StandardSession } from '../standard/session';
-import { initial, type Flow, type WizardState } from './state';
+import { firstStart, initial, type Flow, type WizardState } from './state';
 
 export { Store } from '../standard/session';
 
@@ -104,7 +104,7 @@ export class Session extends StandardSession {
   }
 
   private async waitForPanel() {
-    this.setupPhase({ phase: 'waiting', note: 'The panel is starting its new software. The first start takes a minute or two.' });
+    this.setupPhase(firstStart(this.d.frame));
     try {
       this.panel = await this.flow!.connectAdb();
       this.setupPhase({ phase: 'settings', update: false });

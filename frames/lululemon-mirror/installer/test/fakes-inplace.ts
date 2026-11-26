@@ -12,6 +12,7 @@
 // Self-contained on purpose: nothing here imports the in-place code it tests (src/stock.ts).
 import type { FastbootLike } from '../src/flash';
 import { SYSTEM_BYTES, USERDATA_BYTES } from '../src/flash';
+import { STOCK_PROBE_LAN } from '../src/inplace';
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The GWSB bundle
@@ -146,7 +147,8 @@ export async function buildFakeGwsbBundle(o: FakeGwsbOptions = {}): Promise<Fake
   let metaJson = metaBaseJson;
   let hmacSha256: string | undefined;
   if (o.secret) {
-    const real = await hmacSha256Hex(o.secret, enc.encode(metaBaseJson), jarBytes);
+    // as the probe app signs (StockBundle.computeHmacHex): the JSON up to the field, without its closing brace
+    const real = await hmacSha256Hex(o.secret, enc.encode(metaBaseJson.slice(0, -1)), jarBytes);
     hmacSha256 = o.corruptHmac ? flipHex(real) : real;
     metaJson = `${metaBaseJson.slice(0, -1)},"hmacSha256":"${hmacSha256}"}`;
   } else if (o.corruptHmac) {
@@ -175,7 +177,7 @@ export function splitGwsb(bytes: Uint8Array): { metaJson: string; meta: Record<s
 
 /**
  * Checks a GWSB bundle as the in-place flow must: its jar against servicesSha256, and with `secret`, hmacSha256 over the
- * meta without that field and the jar. The test reference for the contract; src/stock.ts carries the real reader.
+ * meta up to that field (without the closing brace) and the jar. The test reference for the contract; src/stock.ts carries the real reader.
  */
 export async function verifyFakeGwsb(bytes: Uint8Array, secret?: Uint8Array): Promise<{ shaOk: boolean; hmacOk: boolean | null }> {
   const { metaJson, meta, jar } = splitGwsb(bytes);
@@ -183,7 +185,7 @@ export async function verifyFakeGwsb(bytes: Uint8Array, secret?: Uint8Array): Pr
   if (!secret) return { shaOk, hmacOk: null };
   const m = /,"hmacSha256":"([0-9a-f]{64})"\}$/.exec(metaJson);
   if (!m) return { shaOk, hmacOk: false };
-  const base = `${metaJson.slice(0, m.index)}}`;
+  const base = metaJson.slice(0, m.index);
   return { shaOk, hmacOk: m[1] === await hmacSha256Hex(secret, enc.encode(base), jar) };
 }
 
@@ -329,7 +331,9 @@ export class FakeStockAgent {
     const signal = init.signal ?? req?.signal ?? undefined;
     if (signal?.aborted) throw signal.reason ?? domError('The operation was aborted.', 'AbortError');
     const fail = () => new TypeError('Failed to fetch');
-    if (this.lanMode === 'offline' || !this.origin || url.origin !== this.origin) throw fail();
+    // the probe answers on the address its description gives, and on the Mirror's own Wi-Fi (STOCK_PROBE_LAN.hotspot)
+    const hotspot = `http://${STOCK_PROBE_LAN.hotspot.host}:${STOCK_PROBE_LAN.port}`;
+    if (this.lanMode === 'offline' || ((!this.origin || url.origin !== this.origin) && url.origin !== hotspot)) throw fail();
     if (this.lanMode === 'lna-denied') throw fail(); // Chrome's Local Network Access refusal looks the same to the page
     if (this.lanMode === 'timeout') {
       return new Promise<Response>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason ?? domError('The operation was aborted.', 'AbortError')), { once: true }));
@@ -354,6 +358,7 @@ export class FakeStockAgent {
       return new Response(method === 'HEAD' ? null : this.bodyStream(signal), { status: 200, headers });
     }
     if (route === '/' || route === '/bundle') return text(200, this.page(), 'text/html');
+    if (route === '/status') return new Response('{"ok":true}\n', { status: 200, headers: { 'Content-Type': 'application/json', ...STOCK_CORS_HEADERS, Connection: 'close' } });
     return text(404, 'not found\n');
   }
 

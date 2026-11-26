@@ -10,17 +10,18 @@ export {
 } from './flow';
 export type { BackupPlan, FlashStep, PatchContext, Recipe, SetUpContext, StepCredits } from './recipe';
 export {
-  BUNDLE_CHANNELS, SAFETY_STEPS, STEP_LIBRARY, adbKeyStep, assertImages, imageFromLink, plan, sourceFile, systemKeyStep, validateImage, wifiStep, writtenAsIs,
+  BUNDLE_CHANNELS, SAFETY_STEPS, STEP_LIBRARY, adbKeyStep, assertImages, defaultImage, imageFromLink, plan, sourceFile, systemKeyStep, validateImage, wifiStep, writtenAsIs,
   type FrameAccess, type ImageFile, type ImageLink, type ImageRecipe, type ImageStep, type PlannedStep, type RestorePoint, type SafetyStep, type StepKind,
 } from './images';
 export { checkInPlace, mergeRanges, parseSparseWriteRanges, parseSparseWrites, type ByteRange, type InPlaceCheckInput, type SparseWrites } from './inplace';
+export { RestoreRefused, checkRestorePoint, deviceFileState, recordRestoreFiles, restoreFileRecord, type DeviceFileState, type RestoreCheckInput, type RestoreFileRecord, type RestoredFile } from './restore';
 export {
-  IdbBundleCache, hmacSha256Hex, memoryBundleCache, parseGwsbBundle, sha256Hex, verifyGwsbBundle,
+  BundleSignatureError, IdbBundleCache, hmacSha256Hex, memoryBundleCache, parseGwsbBundle, sha256Hex, verifyGwsbBundle,
   type BundleCache, type BundleChannel, type BundleChannelKind, type ParsedGwsbBundle, type VerifyGwsbOptions,
 } from './bundle';
 export {
   frameWords,
-  type AppPhase, type AppResult, type AppSettings, type AskCopy, type DemoFrame, type FrameCode, type FrameSim, type FrameWords, type KilnFrame, type SilentWords,
+  type AppPhase, type AppResult, type AppSettings, type AskCopy, type DemoFrame, type FrameCode, type FrameSim, type FrameTimes, type FrameWords, type KilnFrame, type SilentWords,
 } from './frame';
 export type { Mm, RecoveryData, Rect, Screw, Shown } from './recovery';
 export {

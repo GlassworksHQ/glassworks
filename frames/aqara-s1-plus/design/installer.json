@@ -42,6 +42,19 @@
         "pick": "QUAD-CORE R818 EVB2"
       }
     },
+    "time": {
+      "total": "about 10 minutes",
+      "steps": { "first-boot": "1–2 minutes" },
+      "why": "total: the frame's README and docs/install.md (What you need, Before you start), also the picker's What you'll need line. first-boot: docs/install.md, the second Your turn (First boot takes one to two minutes). The FEL boot, backup, patch and write have no timed source yet, so their rows show none"
+    },
+    "recoverySteps": [
+      "**Unplug the panel**, so it’s off.",
+      "**Take out the 9 screws** in the back cover.",
+      "**Lift off the back cover.**",
+      "**Find the recovery button** on the board, right of the metal shield’s notch and below the round sensor window. It’s not the reset button on the case.",
+      "**Hold the button and plug in the USB-C cable** from this computer.",
+      "**Let go after about 2 seconds.** The screen stays black, which is normal."
+    ],
     "felPick": "USB Device (1f3a:efe8)",
     "drivers": {
       "win": "Windows needs a driver once: in Zadig, give USB Device (1f3a:efe8) the WinUSB driver.",
@@ -91,10 +104,9 @@
   "picker": {
     "needs": [
       "A USB-C data cable, plugged straight into this computer",
-      "A small screwdriver, for the back cover",
-      "About 10 minutes"
+      "A small screwdriver, for the back cover"
     ],
     "wayBack": "Kiln backs up the panel before it writes anything. Undo puts its original software back.",
-    "why": "The picker's What you'll need bar (#672), as the frame's README says it (What you need)"
+    "why": "The picker's What you'll need bar (#672), as the frame's README says it (What you need). Its time line comes from words.time.total"
   }
 }

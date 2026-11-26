@@ -85,7 +85,7 @@ function adler32(b: Uint8Array): number {
   return ((s << 16) | a) >>> 0;
 }
 
-function crc32(b: Uint8Array): number {
+export function crc32(b: Uint8Array): number {
   let c = ~0;
   for (let i = 0; i < b.length; i++) {
     c ^= b[i]!;
@@ -160,52 +160,70 @@ export function buildSurgicalSparseImage(
   fileData: Uint8Array,
   blockSize = SPARSE_BLOCK_SIZE,
 ): Uint8Array {
+  return buildSurgicalSparseImageFiles(partitionBytes, [{ extents, data: fileData }], blockSize);
+}
+
+/** One file a surgical write puts back in its own blocks: where FIEMAP says it sits, and its bytes. */
+export interface SurgicalFile { extents: readonly FiemapExtent[]; data: Uint8Array }
+
+/**
+ * buildSurgicalSparseImage for several files in one sparse image (services.jar and the boot animation): each is
+ * checked as that one is, and no two may share a block. One file gives the same bytes as buildSurgicalSparseImage.
+ */
+export function buildSurgicalSparseImageFiles(
+  partitionBytes: number,
+  files: readonly SurgicalFile[],
+  blockSize = SPARSE_BLOCK_SIZE,
+): Uint8Array {
   if (blockSize !== SPARSE_BLOCK_SIZE) throw new Error(`unsupported sparse block size ${blockSize}`);
   if (!Number.isSafeInteger(partitionBytes) || partitionBytes <= 0 || partitionBytes % blockSize !== 0) {
     throw new Error(`partition size ${partitionBytes} must be a positive multiple of ${blockSize}`);
   }
   const totalBlocks = partitionBytes / blockSize;
   if (totalBlocks > 0xffffffff) throw new Error(`partition exceeds 32-bit sparse block count (${totalBlocks})`);
-  if (extents.length === 0) throw new Error('FIEMAP returned zero extents');
-  if (fileData.length === 0) throw new Error('file data is empty');
-
-  const neededBytes = Math.ceil(fileData.length / blockSize) * blockSize;
-  const byLogical = [...extents].sort((a, b) => a.logical - b.logical);
-  let expectedLogical = 0;
-  for (const e of byLogical) {
-    if (e.logical < 0 || e.physical < 0 || e.length <= 0) {
-      throw new Error(`invalid FIEMAP extent: ${JSON.stringify(e)}`);
-    }
-    if ((e.flags & UNSAFE_FIEMAP_FLAGS) !== 0) {
-      throw new Error(`FIEMAP extent is not plain, initialized data (flags=0x${e.flags.toString(16)}): ${JSON.stringify(e)}`);
-    }
-    if (e.logical % blockSize !== 0 || e.physical % blockSize !== 0 || e.length % blockSize !== 0) {
-      throw new Error(`FIEMAP extent is not ${blockSize}-byte aligned: ${JSON.stringify(e)}`);
-    }
-    if (e.block !== e.physical / blockSize || e.blocks !== e.length / blockSize) {
-      throw new Error(`FIEMAP extent block/length fields are inconsistent: ${JSON.stringify(e)}`);
-    }
-    if (e.block + e.blocks > totalBlocks) {
-      throw new Error(`FIEMAP extent [${e.block}..${e.block + e.blocks}) exceeds partition ${totalBlocks} blocks`);
-    }
-    if (e.logical !== expectedLogical) {
-      throw new Error(`FIEMAP logical gap/overlap at offset ${expectedLogical} (got ${e.logical})`);
-    }
-    expectedLogical += e.length;
-  }
-  if (expectedLogical < neededBytes) {
-    throw new Error(`FIEMAP extents cover only ${expectedLogical} bytes, need ${neededBytes} for ${fileData.length}-byte file`);
-  }
+  if (files.length === 0) throw new Error('no file to write');
 
   // Build physical write segments (splitting at file end if an extent has preallocated trailing blocks)
   // and sort by physical block address so sparse chunks advance monotonically.
-  interface PhysSeg { physBlock: number; blocks: number; logicalStart: number }
+  interface PhysSeg { physBlock: number; blocks: number; logicalStart: number; fileData: Uint8Array }
   const segments: PhysSeg[] = [];
-  for (const e of byLogical) {
-    if (e.logical >= neededBytes) break;
-    const useBytes = Math.min(e.length, neededBytes - e.logical);
-    const useBlocks = useBytes / blockSize;
-    segments.push({ physBlock: e.block, blocks: useBlocks, logicalStart: e.logical });
+  for (const { extents, data: fileData } of files) {
+    if (extents.length === 0) throw new Error('FIEMAP returned zero extents');
+    if (fileData.length === 0) throw new Error('file data is empty');
+
+    const neededBytes = Math.ceil(fileData.length / blockSize) * blockSize;
+    const byLogical = [...extents].sort((a, b) => a.logical - b.logical);
+    let expectedLogical = 0;
+    for (const e of byLogical) {
+      if (e.logical < 0 || e.physical < 0 || e.length <= 0) {
+        throw new Error(`invalid FIEMAP extent: ${JSON.stringify(e)}`);
+      }
+      if ((e.flags & UNSAFE_FIEMAP_FLAGS) !== 0) {
+        throw new Error(`FIEMAP extent is not plain, initialized data (flags=0x${e.flags.toString(16)}): ${JSON.stringify(e)}`);
+      }
+      if (e.logical % blockSize !== 0 || e.physical % blockSize !== 0 || e.length % blockSize !== 0) {
+        throw new Error(`FIEMAP extent is not ${blockSize}-byte aligned: ${JSON.stringify(e)}`);
+      }
+      if (e.block !== e.physical / blockSize || e.blocks !== e.length / blockSize) {
+        throw new Error(`FIEMAP extent block/length fields are inconsistent: ${JSON.stringify(e)}`);
+      }
+      if (e.block + e.blocks > totalBlocks) {
+        throw new Error(`FIEMAP extent [${e.block}..${e.block + e.blocks}) exceeds partition ${totalBlocks} blocks`);
+      }
+      if (e.logical !== expectedLogical) {
+        throw new Error(`FIEMAP logical gap/overlap at offset ${expectedLogical} (got ${e.logical})`);
+      }
+      expectedLogical += e.length;
+    }
+    if (expectedLogical < neededBytes) {
+      throw new Error(`FIEMAP extents cover only ${expectedLogical} bytes, need ${neededBytes} for ${fileData.length}-byte file`);
+    }
+    for (const e of byLogical) {
+      if (e.logical >= neededBytes) break;
+      const useBytes = Math.min(e.length, neededBytes - e.logical);
+      const useBlocks = useBytes / blockSize;
+      segments.push({ physBlock: e.block, blocks: useBlocks, logicalStart: e.logical, fileData });
+    }
   }
   segments.sort((a, b) => a.physBlock - b.physBlock);
   for (let i = 1; i < segments.length; i++) {
@@ -229,6 +247,7 @@ export function buildSurgicalSparseImage(
     }
     let remBlocks = seg.blocks;
     let logicalOff = seg.logicalStart;
+    const fileData = seg.fileData;
     while (remBlocks > 0) {
       const n = Math.min(remBlocks, MAX_RAW_CHUNK_BLOCKS);
       const buf = new Uint8Array(n * blockSize); // tail past fileData.length stays 0x00
@@ -604,6 +623,44 @@ export interface StockApPatch {
   insnsSize: number;
 }
 
+/** `UsbService`, whose `allowUsbDebugging` answers Android's "Allow USB debugging?" for the computer asking. */
+const USB_SERVICE = 'Lcom/android/server/usb/UsbService;';
+const MANAGE_USB = 'android.permission.MANAGE_USB';
+/**
+ * The permission `allowUsbDebugging` checks after the patch. A privileged app holds MANAGE_USB; an app adb installs
+ * can't, but adb's `pm grant` gives it this one (Android 6: signature|privileged|development). An app holding it can
+ * already turn adb on (`Settings.Global.ADB_ENABLED`), so answering for the computer asking adds no power it lacks.
+ */
+export const USB_ALLOW_PERMISSION = 'android.permission.WRITE_SECURE_SETTINGS';
+
+/** `AlarmManagerService`'s binder (`IAlarmManager.Stub`, the class's second anonymous class on stock 1.24.0). */
+const ALARM_SERVICE_STUB = 'Lcom/android/server/AlarmManagerService$2;';
+const SET_TIME_ZONE = 'android.permission.SET_TIME_ZONE';
+const SET_TIME = 'android.permission.SET_TIME';
+/**
+ * The permission `IAlarmManager.setTimeZone` and `setTime` check after the patch. On stock, only the system holds
+ * SET_TIME_ZONE and SET_TIME (Android 6: signature|privileged), so adb's shell can't set the time zone or the clock
+ * (`service call alarm 3` and `2` are refused) and an app adb installs can't either. adb's shell holds this one, and the
+ * install grants it to Glassworks. Whoever holds it can already change every global setting, automatic time among them.
+ */
+export const TIME_ZONE_PERMISSION = 'android.permission.WRITE_SECURE_SETTINGS';
+
+/** What the clock patch changed in one method: the permission `IAlarmManager.setTimeZone` or `setTime` checks. */
+export interface TimeZonePatch {
+  /** File offset of `setTimeZone`'s code_item in `classes.dex`. */
+  codeOff: number;
+  /** Code-unit offset (in its insns) of the `const-string` whose string index changed. */
+  pc: number;
+}
+
+/** What the USB-debugging patch changed: the permission `UsbService.allowUsbDebugging` checks. */
+export interface UsbAllowPatch {
+  /** File offset of `allowUsbDebugging`'s code_item in `classes.dex`. */
+  codeOff: number;
+  /** Code-unit offset (in its insns) of the `const-string` whose string index changed. */
+  pc: number;
+}
+
 export interface PatchedServicesJar {
   patched: Uint8Array;
   fingerprint: string;
@@ -616,6 +673,31 @@ export interface PatchedServicesJar {
   deviceOwner?: DeviceOwnerPatch;
   /** Present only when `disableStockAp` was applied. */
   stockAp?: StockApPatch;
+  /** Present only when `appApprovesUsbDebugging` was applied (or found in place by a repatch). */
+  usbAllow?: UsbAllowPatch;
+  /** Present only when `adbSetsClock` was applied (or found in place by a repatch): `setTimeZone`. */
+  timeZone?: TimeZonePatch;
+  /** Present only when `adbSetsClock` was applied (or found in place by a repatch): `setTime`. */
+  time?: TimeZonePatch;
+  /**
+   * The jar already carried this patch, from an earlier install (Kiln reinstalling over itself): only the key it trusts
+   * changed, from `from` (the earlier computer's fingerprint) to `fingerprint`; the rest was checked to be in place.
+   */
+  repatched?: { from: string };
+}
+
+/** The string this patch leaves in `startConfirmation`: the log line's prefix, a key fingerprint, spaces to its length. */
+const PATCHED_FP_STRING = /^unable to start ((?:[0-9A-F]{2}:){15}[0-9A-F]{2}) *$/;
+
+/**
+ * The key fingerprint a services.jar this patch already changed trusts (an earlier install), or undefined for one it
+ * hasn't: no stock log line left, and exactly one string of the shape the patch writes, at the log line's length.
+ */
+export function patchedKeyFingerprint(dex: Uint8Array): string | undefined {
+  const strings = readDexStrings(dex);
+  if (strings.includes(START_CONFIRMATION_LOG_STRING)) return undefined;
+  const ours = strings.filter((x) => x.length === START_CONFIRMATION_LOG_STRING.length && PATCHED_FP_STRING.test(x));
+  return ours.length === 1 ? PATCHED_FP_STRING.exec(ours[0]!)![1] : undefined;
 }
 
 export interface PatchStockServicesJarOptions {
@@ -636,6 +718,20 @@ export interface PatchStockServicesJarOptions {
    * behavior. Why and how: frames/lululemon-mirror/research/stock-softap.md.
    */
   disableStockAp?: boolean;
+  /**
+   * Also let an app holding `USB_ALLOW_PERMISSION` answer "Allow USB debugging?" (`UsbService.allowUsbDebugging`
+   * checks it in place of MANAGE_USB), so Glassworks, installed over adb, can let in the computers its Manage page
+   * lists, as the privileged app does on the Glass Panes image. Every other UsbService call keeps MANAGE_USB.
+   * Default `true`; the Node surgical-ADB tool passes `false`.
+   */
+  appApprovesUsbDebugging?: boolean;
+  /**
+   * Also let a caller holding `TIME_ZONE_PERMISSION` set the time zone and the clock (`IAlarmManager.setTimeZone` and
+   * `setTime` check it in place of SET_TIME_ZONE and SET_TIME): adb's shell, for Kiln's App step, and Glassworks.
+   * Without it the person's time zone never takes on stock, the Mirror stays on GMT, and a Mirror that can't reach a
+   * time server starts in 1970. Default `true`; the Node surgical-ADB tool passes `false`.
+   */
+  adbSetsClock?: boolean;
   /** MD5 fingerprint to refuse (defaults to `GLASS_PANES_KEY_FINGERPRINT`). */
   forbiddenFingerprint?: string;
 }
@@ -672,6 +768,8 @@ export async function patchStockServicesJar(
 ): Promise<PatchedServicesJar> {
   const enableDeviceOwner = options.enableDeviceOwner ?? true;
   const disableStockAp = options.disableStockAp ?? true;
+  const appApprovesUsbDebugging = options.appApprovesUsbDebugging ?? true;
+  const adbSetsClock = options.adbSetsClock ?? true;
   const fp = stockKeyFingerprint(adbKey, options.forbiddenFingerprint);
 
   const { list } = parseZipEntries(jar);
@@ -696,6 +794,10 @@ export async function patchStockServicesJar(
   if (paddedFp.length !== START_CONFIRMATION_LOG_STRING.length) {
     throw new Error(`internal error: padded fingerprint length ${paddedFp.length} !== ${START_CONFIRMATION_LOG_STRING.length}`);
   }
+
+  // An earlier install already changed this jar: trust this key instead of that one, and check the rest is in place.
+  const earlier = patchedKeyFingerprint(origDex);
+  if (earlier) return repatch(jar, origDex, earlier, fp, paddedFp, { enableDeviceOwner, disableStockAp, appApprovesUsbDebugging, adbSetsClock });
 
   // Step 1: swap the single-use 71-byte log string inside startConfirmation with our padded MD5.
   // replaceDexString re-sorts string_ids, renumbers every reference, and validates the whole DEX.
@@ -785,6 +887,20 @@ export async function patchStockServicesJar(
     stockAp = patchStockAp(dex, dv, lookup, strings);
   }
 
+  // Step 4c (optional): the app may answer "Allow USB debugging?".
+  let usbAllow: UsbAllowPatch | undefined;
+  if (appApprovesUsbDebugging) {
+    usbAllow = patchUsbAllow(dex, dv, lookup, strings);
+  }
+
+  // Step 4d (optional): adb and the app may set the time zone.
+  let timeZone: TimeZonePatch | undefined;
+  let time: TimeZonePatch | undefined;
+  if (adbSetsClock) {
+    timeZone = patchPermissionLoad(dex, dv, lookup, strings, TIME_ZONE);
+    time = patchPermissionLoad(dex, dv, lookup, strings, TIME);
+  }
+
   // Recompute DEX SHA-1 (over bytes 32..end) and Adler-32 (over bytes 12..end), both pure TS.
   dex.set(sha1Bytes(dex.subarray(32)), 12);
   dv.setUint32(8, adler32(dex.subarray(12)), true);
@@ -811,8 +927,160 @@ export async function patchStockServicesJar(
     patchedCodeUnits: units.length,
     ...(deviceOwner ? { deviceOwner } : {}),
     ...(stockAp ? { stockAp } : {}),
+    ...(usbAllow ? { usbAllow } : {}),
+    ...(timeZone ? { timeZone } : {}),
+    ...(time ? { time } : {}),
   };
 }
+
+/**
+ * patchStockServicesJar over a jar it already changed (`earlier`: the fingerprint it trusts): the padded fingerprint
+ * string is swapped for this key's (same length; replaceDexString renumbers every reference), and nothing else is
+ * written. Before that, every part of the patch is checked to be there: `startConfirmation` loads that string first
+ * (the code this patch writes), and with `disableStockAp`, `MirrorApService.systemReady()` is one `return-void`.
+ * A fix the options ask for that an earlier patch left out (Device Owner, the hotspot, USB debugging, the clock) is
+ * added with the same bytes a fresh patch writes. Anything else is a jar Kiln doesn't know, and is refused.
+ */
+async function repatch(
+  jar: Uint8Array, origDex: Uint8Array, earlier: string, fp: string, paddedFp: string,
+  { enableDeviceOwner, disableStockAp, appApprovesUsbDebugging, adbSetsClock }: { enableDeviceOwner: boolean; disableStockAp: boolean; appApprovesUsbDebugging: boolean; adbSetsClock: boolean },
+): Promise<PatchedServicesJar> {
+  const what = 'services.jar already carries Glassworks\' changes, but';
+  const prefix = 'unable to start ';
+  const oldPadded = prefix + earlier + ' '.repeat(START_CONFIRMATION_LOG_STRING.length - prefix.length - earlier.length);
+  const dex = earlier === fp ? origDex.slice() : await replaceDexString(origDex, oldPadded, paddedFp);
+  const strings = readDexStrings(dex);
+  const fpStrIdx = strings.indexOf(paddedFp);
+  if (fpStrIdx < 0) throw new Error(`${what} this key's fingerprint didn't land in its string table`);
+  const lookup = createDexLookup(dex, strings);
+  const codeOff = lookup.findCodeItem('Lcom/android/server/usb/UsbDebuggingManager;',
+    lookup.findMethod('Lcom/android/server/usb/UsbDebuggingManager;', 'startConfirmation', '(Ljava/lang/String;Ljava/lang/String;)V'));
+  const dv = new DataView(dex.buffer, dex.byteOffset, dex.byteLength);
+  const op = dv.getUint16(codeOff + 16, true);
+  const loads = op === 0x001a ? dv.getUint16(codeOff + 18, true) === fpStrIdx
+    : op === 0x001b ? (dv.getUint16(codeOff + 18, true) | (dv.getUint16(codeOff + 20, true) << 16)) === fpStrIdx : false;
+  if (!loads) throw new Error(`${what} its startConfirmation isn't the code Kiln writes. Kiln doesn't know this jar`);
+  // A jar patched without Device Owner (tools/mirror's surgical adb): add both fixes now (the same bytes a fresh patch
+  // writes). One that has both: keep them. Only one of the two is a jar Kiln didn't make.
+  let deviceOwner: DeviceOwnerPatch | undefined;
+  let addedDeviceOwner = false;
+  if (enableDeviceOwner) {
+    const at = findDeviceOwner(dex, dv, lookup, strings);
+    if (at.patch) deviceOwner = at.patch;
+    else if (at.stock) { deviceOwner = patchDeviceOwner(dex, dv, lookup, strings); addedDeviceOwner = true; }
+    else throw new Error(`${what} only one of its two Device Owner changes is there. Kiln doesn't know this jar`);
+  }
+  // An install that left stock's hotspot on (disableStockAp: false): turn it off now, with patchStockAp's own checks
+  // (the same bytes a fresh patch writes). One that has it off: keep it.
+  let stockAp: StockApPatch | undefined;
+  let addedStockAp = false;
+  if (disableStockAp) {
+    const ap = lookup.findCodeItem(MIRROR_AP_SERVICE, lookup.findMethod(MIRROR_AP_SERVICE, 'systemReady', '()V'));
+    if (dv.getUint16(ap + 16, true) === 0x000e) stockAp = { codeOff: ap, insnsSize: dv.getUint32(ap + 12, true) };
+    else { stockAp = patchStockAp(dex, dv, lookup, strings); addedStockAp = true; }
+  }
+  // An install from before the USB-debugging patch: add it now (the same bytes a fresh patch writes). One that has it: keep it.
+  let usbAllow: UsbAllowPatch | undefined;
+  let addedUsbAllow = false;
+  if (appApprovesUsbDebugging) {
+    usbAllow = findUsbAllow(dex, dv, lookup, strings, USB_ALLOW_PERMISSION);
+    if (!usbAllow) { usbAllow = patchUsbAllow(dex, dv, lookup, strings); addedUsbAllow = true; }
+  }
+  // An install from before the clock patch (or from before its setTime half): add what's missing. What's there: keep it.
+  let timeZone: TimeZonePatch | undefined;
+  let time: TimeZonePatch | undefined;
+  let addedClock = false;
+  if (adbSetsClock) {
+    timeZone = findPermissionLoad(dex, dv, lookup, strings, TIME_ZONE, TIME_ZONE_PERMISSION);
+    if (!timeZone) { timeZone = patchPermissionLoad(dex, dv, lookup, strings, TIME_ZONE); addedClock = true; }
+    time = findPermissionLoad(dex, dv, lookup, strings, TIME, TIME_ZONE_PERMISSION);
+    if (!time) { time = patchPermissionLoad(dex, dv, lookup, strings, TIME); addedClock = true; }
+  }
+  let out = jar;
+  let padBytes = 0;
+  if (earlier !== fp || addedDeviceOwner || addedUsbAllow || addedStockAp || addedClock) {
+    dex.set(sha1Bytes(dex.subarray(32)), 12);
+    dv.setUint32(8, adler32(dex.subarray(12)), true);
+    ({ out, padBytes } = await replaceJarDexExactSize(jar, dex));
+    const back = await zipEntry(out, 'classes.dex');
+    if (!back || back.length !== dex.length || !back.every((x, i) => x === dex[i])) throw new Error('patched services.jar failed round-trip classes.dex read-back check');
+    if (out.length !== jar.length) throw new Error(`patched services.jar length ${out.length} !== original ${jar.length}`);
+  }
+  return {
+    patched: out,
+    fingerprint: fp,
+    originalSha256: await sha256Hex(jar),
+    patchedSha256: await sha256Hex(out),
+    padBytes,
+    startConfirmationCodeOff: codeOff,
+    patchedCodeUnits: 0,
+    ...(deviceOwner ? { deviceOwner } : {}),
+    ...(stockAp ? { stockAp } : {}),
+    ...(usbAllow ? { usbAllow } : {}),
+    ...(timeZone ? { timeZone } : {}),
+    ...(time ? { time } : {}),
+    repatched: { from: earlier },
+  };
+}
+
+/** One method whose permission check a patch swaps: where it is, and the two permissions it may load. */
+interface PermissionCheck { what: string; cls: string; name: string; sig: string; stock: string; ours: string }
+
+const USB_ALLOW: PermissionCheck = { what: 'USB debugging patch', cls: USB_SERVICE, name: 'allowUsbDebugging', sig: '(ZLjava/lang/String;)V', stock: MANAGE_USB, ours: USB_ALLOW_PERMISSION };
+const TIME_ZONE: PermissionCheck = { what: 'clock patch', cls: ALARM_SERVICE_STUB, name: 'setTimeZone', sig: '(Ljava/lang/String;)V', stock: SET_TIME_ZONE, ours: TIME_ZONE_PERMISSION };
+const TIME: PermissionCheck = { what: 'clock patch', cls: ALARM_SERVICE_STUB, name: 'setTime', sig: '(J)Z', stock: SET_TIME, ours: TIME_ZONE_PERMISSION };
+
+/**
+ * The `const-string` in `c`'s method that loads `permission`, for its `enforceCallingOrSelfPermission(permission, …)`;
+ * undefined when it loads the other. Exactly one load of either permission string is the body we read (stock
+ * 1.24.0): anything else refuses.
+ */
+function findPermissionLoad(dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[], c: PermissionCheck, permission: string): { codeOff: number; pc: number } | undefined {
+  const where = `${c.cls}.${c.name}${c.sig}`;
+  const short = `${c.cls.slice(c.cls.lastIndexOf('/') + 1, -1)}.${c.name}`;
+  let codeOff: number;
+  try {
+    codeOff = lookup.findCodeItem(c.cls, lookup.findMethod(c.cls, c.name, c.sig));
+  } catch (e) {
+    throw new Error(`${c.what}: services.jar has no ${where} (${(e as Error).message})`);
+  }
+  if (codeOff === 0 || codeOff + 16 > dex.length) throw new Error(`${c.what}: invalid code_item offset 0x${codeOff.toString(16)} for ${where}`);
+  const perms = new Map([c.stock, c.ours].map((x) => [strings.indexOf(x), x] as const));
+  const insnsOff = codeOff + 16;
+  const loads: { pc: number; name: string }[] = [];
+  for (const insn of walkInsns(dex, codeOff)) {
+    if (insn.op === 0x1b) {
+      const name = perms.get(dv.getUint32(insnsOff + (insn.pc + 1) * 2, true));
+      if (name) throw new Error(`${c.what}: ${short} loads ${name} with const-string/jumbo, which Kiln doesn't change`);
+    }
+    if (insn.op !== 0x1a) continue;
+    const name = perms.get(dv.getUint16(insnsOff + (insn.pc + 1) * 2, true));
+    if (name) loads.push({ pc: insn.pc, name });
+  }
+  if (loads.length !== 1) throw new Error(`${c.what}: ${short} loads ${loads.length} permission strings, not the one Kiln read`);
+  return loads[0]!.name === permission ? { codeOff, pc: loads[0]!.pc } : undefined;
+}
+
+/**
+ * Makes `c`'s method check `c.ours` in place of `c.stock`, in place on `dex` (SHA-1/Adler recomputed by the caller):
+ * one `const-string` operand, the same 2 code units, nothing else moved.
+ */
+function patchPermissionLoad(dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[], c: PermissionCheck): { codeOff: number; pc: number } {
+  const to = strings.indexOf(c.ours);
+  if (to < 0) throw new Error(`${c.what}: "${c.ours}" string not in classes.dex`);
+  if (to > 0xffff) throw new Error(`${c.what}: "${c.ours}" is string ${to}, past what const-string holds`);
+  const at = findPermissionLoad(dex, dv, lookup, strings, c, c.stock);
+  if (!at) throw new Error(`${c.what}: ${c.cls.slice(c.cls.lastIndexOf('/') + 1, -1)}.${c.name} doesn't check ${c.stock} (already patched, or not stock)`);
+  dv.setUint16(at.codeOff + 16 + (at.pc + 1) * 2, to, true);
+  return at;
+}
+
+/** `UsbService.allowUsbDebugging`'s permission load, when it is `permission`. */
+const findUsbAllow = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[], permission: string): UsbAllowPatch | undefined =>
+  findPermissionLoad(dex, dv, lookup, strings, USB_ALLOW, permission);
+/** `UsbService.allowUsbDebugging` checks `USB_ALLOW_PERMISSION` in place of MANAGE_USB. */
+const patchUsbAllow = (dex: Uint8Array, dv: DataView, lookup: DexMethodLookup, strings: readonly string[]): UsbAllowPatch =>
+  patchPermissionLoad(dex, dv, lookup, strings, USB_ALLOW);
 
 /**
  * Empties `MirrorApService.systemReady()V` in place on `dex` (SHA-1/Adler recomputed by the caller):
@@ -889,7 +1157,30 @@ function patchDeviceOwner(
   lookup: DexMethodLookup,
   strings: readonly string[],
 ): DeviceOwnerPatch {
-  // (a) mHasFeature = true
+  const at = findDeviceOwner(dex, dv, lookup, strings);
+  if (!at.stock) throw new Error('Device Owner patch: DevicePolicyManagerService is already patched, or not stock');
+  const { ctorInsns, sdoInsns, hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc } = at.stock;
+  // (a) const/4 vA, #1  ==  (1 << 12) | (vA << 8) | 0x12
+  dv.setUint16(ctorInsns + hasFeatureMoveResultPc * 2, (1 << 12) | (hasFeatureReg << 8) | 0x12, true);
+  // (b) nop × 3 over the invoke-interface
+  for (let k = 0; k < 3; k++) dv.setUint16(sdoInsns + (setBackupServiceActivePc + k) * 2, 0x0000, true);
+  return { hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc };
+}
+
+/**
+ * The two Device Owner sites in `DevicePolicyManagerService`, read without changing anything: `stock` when both are
+ * as stock has them (where patchDeviceOwner writes), `patch` when both carry its bytes, neither when only one does.
+ *   (a) the instruction after `pm.hasSystemFeature("android.software.device_admin")` in `<init>`: stock's
+ *       `move-result vA`, or the patch's `const/4 vA, #1`, followed by the `iput-boolean` into mHasFeature;
+ *   (b) `setDeviceOwner`'s `invoke-interface IBackupManager.setBackupServiceActive(IZ)V`: there on stock; NOP'd by the
+ *       patch, which leaves no such call and a run of three `nop`s.
+ */
+function findDeviceOwner(
+  dex: Uint8Array,
+  dv: DataView,
+  lookup: DexMethodLookup,
+  strings: readonly string[],
+): { stock?: DeviceOwnerPatch & { ctorInsns: number; sdoInsns: number }; patch?: DeviceOwnerPatch } {
   const daIdx = strings.indexOf(DEVICE_ADMIN_FEATURE);
   if (daIdx < 0) throw new Error(`Device Owner patch: "${DEVICE_ADMIN_FEATURE}" string not in classes.dex`);
   const mHasSystemFeature = lookup.findMethod('Landroid/content/pm/PackageManager;', 'hasSystemFeature', '(Ljava/lang/String;)Z');
@@ -916,38 +1207,43 @@ function patchDeviceOwner(
     if (ins.op === 0x6e && dv.getUint16(ctorInsns + (ins.pc + 1) * 2, true) === mHasSystemFeature) { invAt = i; break; }
   }
   if (invAt < 0) throw new Error('Device Owner patch: PackageManager.hasSystemFeature invoke not found after the device_admin const-string');
-  // move-result must immediately follow the invoke whose value it takes (Dalvik verifier rule),
-  // and the stored boolean lands in mHasFeature via iput-boolean.
+  // On stock, move-result immediately follows the invoke whose value it takes (Dalvik verifier rule); the patch turns
+  // it into const/4 vA, #1. Either way the boolean lands in mHasFeature via iput-boolean.
   const mr = ctor[invAt + 1];
-  if (!mr || mr.op !== 0x0a) throw new Error('Device Owner patch: expected move-result after hasSystemFeature');
   const iput = ctor[invAt + 2];
-  if (!iput || iput.op !== 0x5c) throw new Error('Device Owner patch: expected iput-boolean (mHasFeature) after move-result');
-  const hasFeatureReg = (mr.unit >>> 8) & 0xff;
+  if (!iput || iput.op !== 0x5c) throw new Error('Device Owner patch: expected iput-boolean (mHasFeature) after hasSystemFeature');
+  const hasFeaturePatched = !!mr && mr.op === 0x12 && (mr.unit >>> 12) === 1;
+  if (!mr || (mr.op !== 0x0a && !hasFeaturePatched)) throw new Error('Device Owner patch: expected move-result after hasSystemFeature');
+  const hasFeatureReg = (mr.unit >>> 8) & (hasFeaturePatched ? 0xf : 0xff);
   const hasFeatureMoveResultPc = mr.pc;
   if (hasFeatureReg > 15) throw new Error(`Device Owner patch: move-result register v${hasFeatureReg} exceeds const/4 4-bit encoding`);
-  // const/4 vA, #1  ==  (1 << 12) | (vA << 8) | 0x12
-  dv.setUint16(ctorInsns + hasFeatureMoveResultPc * 2, (1 << 12) | (hasFeatureReg << 8) | 0x12, true);
 
-  // (b) NOP IBackupManager.setBackupServiceActive(IZ)V inside setDeviceOwner
   const mSetBackup = lookup.findMethod('Landroid/app/backup/IBackupManager;', 'setBackupServiceActive', '(IZ)V');
   const sdoIdx = lookup.findMethod(DPMS, 'setDeviceOwner', '(Ljava/lang/String;Ljava/lang/String;)Z');
   const sdoOff = lookup.findCodeItem(DPMS, sdoIdx);
   const sdoInsns = sdoOff + 16;
-
   let setBackupServiceActivePc = -1;
+  let nopRun = 0;
+  let nopsAt = -1;
   for (const insn of walkInsns(dex, sdoOff)) {
-    if (insn.op !== 0x72) continue; // invoke-interface
+    if (insn.op === 0x00 && insn.unit === 0x0000) { if (++nopRun === 3 && nopsAt < 0) nopsAt = insn.pc - 2; continue; }
+    nopRun = 0;
+    if (insn.op !== 0x72 || setBackupServiceActivePc >= 0) continue; // invoke-interface
     if (dv.getUint16(sdoInsns + (insn.pc + 1) * 2, true) !== mSetBackup) continue;
     if (insn.width !== 3) throw new Error(`Device Owner patch: setBackupServiceActive invoke is ${insn.width} units, expected 3`);
-    for (let k = 0; k < 3; k++) dv.setUint16(sdoInsns + (insn.pc + k) * 2, 0x0000, true); // nop × 3
     setBackupServiceActivePc = insn.pc;
-    break;
-  }
-  if (setBackupServiceActivePc < 0) {
-    throw new Error('Device Owner patch: invoke-interface IBackupManager.setBackupServiceActive not found in setDeviceOwner');
   }
 
-  return { hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc };
+  if (!hasFeaturePatched && setBackupServiceActivePc >= 0) {
+    return { stock: { ctorInsns, sdoInsns, hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc } };
+  }
+  if (hasFeaturePatched && setBackupServiceActivePc < 0 && nopsAt >= 0) {
+    return { patch: { hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc: nopsAt } };
+  }
+  if (!hasFeaturePatched && setBackupServiceActivePc < 0) {
+    throw new Error('Device Owner patch: invoke-interface IBackupManager.setBackupServiceActive not found in setDeviceOwner');
+  }
+  return {};
 }
 
 // ---------------------------------------------------------------------------

@@ -15,6 +15,8 @@ in `kiln/`. It's the reference for building Kiln's UI, and for the per-frame rec
 | File | What |
 |---|---|
 | [sketch.html](sketch.html) | The Kiln screens: panel, connect, your turn, install, Wi-Fi, Home Assistant, done, undo, error |
+| [navigation.md](navigation.md) | Moving through Kiln: the rail as the map, one Back in every foot, locks behind a write, Start over as a dialog, the resume screen, and the phone's step bar. Draft, built on a branch |
+| [system.md](system.md) | Kiln's screens, round two: what people hit on a real install, the principles, and the component kit every screen is built from (progress, waits, instructions, the browser's list, notes, errors, the restore point's copy). Draft, built on a branch |
 | [community-images.md](community-images.md) | Community images (#579): the choice on a frame's page, the community install, its Done and the way back. Approved 2026-11-19 and built |
 | [lineageos.md](lineageos.md) | Kiln installs LineageOS, then Glassworks (#748): LineageOS's devices counted by install method, how Kiln knows the device, downloads and CORS, each step with its undo, the copy, the spike and the libraries. Design, post-v1 |
 | [recovery/player.js](recovery/player.js) | The recovery-mode player: draws any frame's device and animates its steps from data |

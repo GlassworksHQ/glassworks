@@ -15,7 +15,7 @@
     "branding/boot/stack.py": "9fb0bc0c19541b111d1a00c3333819830e0ac10e40f19d6230dba918f1818e17",
     "branding/boot/formats.py": "6d817072684abeacbe0a5a0fa822031ff1dfea2e798c7f69961073e4bf52b69d",
     "branding/boot/target.py": "c98b896c1409ad84f60257740f4cfbe80e910a2842430af219fa47c30f064cbf",
-    "branding/boot/compact.py": "ee3c3ad68b2bad463735d79ffb2c99c5fe27075a4f74dedbec483a34ec0a0e70",
+    "branding/boot/compact.py": "e2f072c40e9afb163c31361767e53f26e033a1d2f000d1044ad9acb34ae72f82",
     "Inter": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031"
   },
   "outputs": {

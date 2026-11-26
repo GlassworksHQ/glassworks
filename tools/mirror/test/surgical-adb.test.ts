@@ -354,6 +354,12 @@ describe('patchStockServicesJar + runStockSurgicalAdb', () => {
     expect(res.patched.length).toBe(jar.length);
     expect(res.fingerprint).not.toBe(GLASS_PANES_KEY_FINGERPRINT);
     expect(res.patchedCodeUnits).toBeGreaterThanOrEqual(24);
+    // The tool is a USB-ADB-only probe: none of Kiln's in-place extras.
+    expect(res.deviceOwner).toBeUndefined();
+    expect(res.stockAp).toBeUndefined();
+    expect(res.usbAllow).toBeUndefined();
+    expect(res.timeZone).toBeUndefined();
+    expect(res.time).toBeUndefined();
 
     const dexdump = findTool('dexdump');
     if (dexdump) {

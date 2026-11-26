@@ -13,12 +13,12 @@ const notPicked = (e: unknown) => e instanceof DOMException && e.name === 'NotFo
 export class AskBridge {
   /** The ask whose picker is open. Tied to that ask, so aborting it never blocks the next one. */
   private picking?: object;
-  private pending?: { action: () => Promise<unknown>; resolve: (v: unknown) => void; signal: AbortSignal };
+  private pending?: { kind: AskKind; action: () => Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void; signal: AbortSignal };
 
   constructor(private readonly dispatch: (a: Action) => void) {}
 
   open<T>(kind: AskKind, action: () => Promise<T>, signal: AbortSignal): Promise<T> {
-    return new Promise<T>((resolve) => {
+    return new Promise<T>((resolve, reject) => {
       const end = () => {
         if (this.pending?.signal !== signal) return;
         this.pending = undefined;
@@ -26,10 +26,26 @@ export class AskBridge {
       };
       // Found by itself after all (the browser had allowed it before): the sheet just goes.
       signal.addEventListener('abort', end, { once: true });
-      this.pending = { action, resolve: resolve as (v: unknown) => void, signal };
+      this.pending = { kind, action, resolve: resolve as (v: unknown) => void, reject, signal };
       this.dispatch({ type: 'ask', kind });
     });
   }
+
+  /**
+   * Not now, on the set-up's connect ask (kind `connect`) only: the ask ends with `Declined`, so the step that asked
+   * stops on its error screen, with Try again. An install's own asks (fastboot, adb, mid-write) can't be declined.
+   */
+  decline(): boolean {
+    const p = this.pending;
+    if (!p || p.kind !== 'connect' || this.picking === p) return false;
+    this.pending = undefined;
+    this.dispatch({ type: 'ask-end' });
+    p.reject(new Declined());
+    return true;
+  }
+
+  /** Whether the open ask can be declined (decline). */
+  declinable(): boolean { return this.pending?.kind === 'connect' && this.picking !== this.pending; }
 
   /** Call straight from the button's onClick. */
   click(): Promise<void> {
@@ -50,6 +66,11 @@ export class AskBridge {
       },
     );
   }
+}
+
+/** The person said Not now to a connect ask (AskBridge.decline). */
+export class Declined extends Error {
+  constructor() { super('Not connected yet. When it\'s plugged in and running, click Try again.'); this.name = 'Declined'; }
 }
 
 const stamp = () => new Date().toTimeString().slice(0, 8);
