@@ -12,7 +12,8 @@ import design from '../../design/installer.json';
 import {
   BundleRefused, DEFAULT_PROBE_APP_UID, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata, installInPlace, mirrorInPlace, restoredFiles,
 } from '../src';
-import { ADB_KEYS, macFromSerial } from '../src/image';
+import { ADB_KEYS, AID, LABELS, WIFI_CONF, macFromSerial, wpaSupplicantConf } from '../src/image';
+import { DEFAULT_WIFI_TEMPLATE } from '../src/stage';
 import { INSTALLER_MAC_SETTING, USB_ALLOW_PERMISSION_SETTING, factoryUserdata, glassworksInPlace, keepWifiOn, keptBundleFits } from '../src/inplace';
 import { USB_ALLOW_PERMISSION } from '../src/stock';
 import type { PanelShell } from '@glassworks/adb';
@@ -54,6 +55,19 @@ describe('the stage', () => {
     expect([st.mode & 0o7777, st.uid, st.gid]).toEqual([0o600, DEFAULT_PROBE_APP_UID, DEFAULT_PROBE_APP_UID]);
     expect(await fs.label(secret)).toBe(STOCK_PROBE_LABELS.appData);
     expect(new TextDecoder().decode(await fs.readFile('/misc/wifi/wpa_supplicant.conf'))).not.toContain('not-a-real-password');
+    // the network as Android's Wi-Fi reads it on the agent's first start: the Mirror's own template (its
+    // /system/etc/wifi/wpa_supplicant.conf, read 2026-11-26), then the network with its PSK, system:wifi 0660
+    expect(new TextDecoder().decode(await fs.readFile(WIFI_CONF))).toBe(await wpaSupplicantConf(DEFAULT_WIFI_TEMPLATE, { ssid: 'Home Net', password: 'not-a-real-password' }));
+    const conf = await fs.stat(WIFI_CONF);
+    expect([conf.mode & 0o7777, conf.uid, conf.gid]).toEqual([0o660, AID.system, AID.wifi]);
+    expect([await fs.label('/misc/wifi'), await fs.label(WIFI_CONF)]).toEqual([LABELS.wifi, LABELS.wifi]);
+  });
+
+  it('without a network, leaves Wi-Fi alone: no saved network and no switch, so stock\'s own Wi-Fi comes up as usual', async () => {
+    const blob = await buildStageUserdata({ adbKey: fakeAdbKey(3), userdataBytes: 64 * 2 ** 20, secret: SECRET, assets, time: 1_700_000_000 });
+    const fs = await openSparse(blob);
+    expect(await fs.exists('/app/dev.glassworks.stockprobe-1/enable_wifi')).toBe(false);
+    expect(await fs.exists(WIFI_CONF)).toBe(false);
   });
 
   it('refuses to build without the probe app\'s files, before anything is written', async () => {

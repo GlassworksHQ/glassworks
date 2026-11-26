@@ -173,7 +173,10 @@ describe('Glassworks on the stock software', () => {
   it('on a reinstall over Glassworks (stock\'s hotspot turned off), gives the helper the person\'s network and reaches it there', async () => {
     // the frame's check runs over adb before the restart (the Mirror's: Glassworks is installed, inplace.test.ts)
     let asked: PanelShell | undefined;
-    const r = rig({ code: { ownWifiGone: async (p) => { asked = p; return true; } } });
+    // what Kiln hands the frame's stage (the sim's stand-in ignores the network; inplace.test.ts checks the real one
+    // writes it as Android's Wi-Fi reads it)
+    let staged: Parameters<InPlaceCode['stage']>[0] | undefined;
+    const r = rig({ code: { ownWifiGone: async (p) => { asked = p; return true; }, stage: async (o) => { staged = o; return sim.code.stage(o); } } });
     r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
     r.image.pick(RECIPE.id);
     r.image.choose();
@@ -189,6 +192,7 @@ describe('Glassworks on the stock software', () => {
     expect(log).toContain('own Wi-Fi network is off since its earlier install');
     expect(log).toContain('the setup agent, this browser\'s adb key, its signing secret and your network, on a fresh userdata');
     expect(log).not.toContain('HomeNet'); // the person's network stays out of the log
+    expect(staged?.wifi).toEqual({ ssid: 'HomeNet', password: 'correcthorse' });
     // no "join mirror-<serial>" screen: the Bluetooth way, with the local network the agent joined
     expect(r.image.state.receive).toMatchObject({ network: null });
     expect(r.progress.mark).toMatchObject({ at: 'staged', noOwnWifi: true });
@@ -218,7 +222,8 @@ describe('Glassworks on the stock software', () => {
   });
 
   it('keeps the stage free of the person\'s network when the Mirror\'s own Wi-Fi is still there', async () => {
-    const r = rig({ code: { ownWifiGone: async () => false } });
+    let staged: Parameters<InPlaceCode['stage']>[0] | undefined;
+    const r = rig({ code: { ownWifiGone: async () => false, stage: async (o) => { staged = o; return sim.code.stage(o); } } });
     r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
     r.image.pick(RECIPE.id);
     r.image.choose();
@@ -230,6 +235,8 @@ describe('Glassworks on the stock software', () => {
     expect(r.image.state.receive).toMatchObject({ network: `mirror-${FAKE_SERIAL}` });
     expect(r.image.state.log.join('\n')).toContain('the setup agent, this browser\'s adb key and its signing secret, on a fresh userdata');
     expect(r.progress.mark?.noOwnWifi).toBeUndefined();
+    expect(staged).toBeTruthy();
+    expect(staged?.wifi).toBeUndefined(); // the agent would switch Wi-Fi to client and close stock's hotspot
   });
 
   it('a reload on receive keeps knowing the Mirror\'s own Wi-Fi is gone', async () => {
