@@ -45,6 +45,7 @@ class PlatformTest {
         Triple("hasDescendantInvalidated", 26) { it.hasDescendantInvalidated },
         Triple("hasAccessibilityPaneTitle", 28) { it.hasAccessibilityPaneTitle },
         Triple("hasWindowInsetsController", 30) { it.hasWindowInsetsController },
+        Triple("hasStateDescription", 30) { it.hasStateDescription },
         Triple("hasSystemCameraIndicator", 31) { it.hasSystemCameraIndicator },
         Triple("canInstallWithoutUserAction", 31) { it.canInstallWithoutUserAction },
         Triple("hasApplicationExitInfo", 30) { it.hasApplicationExitInfo },

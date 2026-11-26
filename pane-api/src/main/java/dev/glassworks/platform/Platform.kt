@@ -133,6 +133,12 @@ open class PlatformApi(
     /** `View.setAccessibilityPaneTitle`, which TalkBack announces a sheet by, exists (Android 9). */
     val hasAccessibilityPaneTitle: Boolean get() = apiLevel >= 28
 
+    /**
+     * `AccessibilityNodeInfo.setStateDescription` exists (Android 11): a slider can tell TalkBack what its value reads
+     * as (`2,700 K`). Below it, TalkBack reads a slider's value as a percentage of its range.
+     */
+    val hasStateDescription: Boolean get() = apiLevel >= 30
+
     /** `WindowInsetsController` and `setDecorFitsSystemWindows` exist (Android 11). */
     val hasWindowInsetsController: Boolean get() = apiLevel >= 30
 
