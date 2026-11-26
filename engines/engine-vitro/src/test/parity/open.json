@@ -180,14 +180,6 @@
   "owner": "#799",
   "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
  },
- "s1/m-humidifier-humidifier-off": {
-  "owner": "#799",
-  "reason": "Humidifier card: HA shows no mode bar without features, 'Humidifying' in blue and a '💧41%' line; Vitro adds a power/mode bar and 'Currently 41%', so the card is 20 px taller"
- },
- "s1/m-humidifier-humidifier-on": {
-  "owner": "#799",
-  "reason": "Humidifier card: HA shows no mode bar without features, 'Humidifying' in blue and a '💧41%' line; Vitro adds a power/mode bar and 'Currently 41%', so the card is 20 px taller"
- },
  "s1/m-media-control-media-player-paused": {
   "owner": "#799",
   "reason": "Media control: the cover art sits further left and the progress bar ends ~2 % later than HA's"

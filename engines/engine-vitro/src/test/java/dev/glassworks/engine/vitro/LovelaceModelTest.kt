@@ -9,7 +9,6 @@ import dev.glassworks.engine.vitro.cards.AreaCardView
 import dev.glassworks.engine.vitro.cards.CalendarCardView
 import dev.glassworks.engine.vitro.cards.EntityCardView
 import dev.glassworks.engine.vitro.cards.GaugeCardView
-import dev.glassworks.engine.vitro.cards.HumidifierCardView
 import dev.glassworks.engine.vitro.cards.LogbookCardView
 import dev.glassworks.engine.vitro.cards.PictureElementsCardView
 import dev.glassworks.engine.vitro.cards.StatisticsGraphCardView
@@ -907,19 +906,6 @@ class LovelaceModelTest {
         assertEquals(0.5f, els[1].xFrac, 1e-6f)
         assertEquals("~…!", PictureElementsCardView.labelText(els[0], null))
         assertEquals("~21 °C!", PictureElementsCardView.labelText(els[0], EntityState("sensor.t", "21", mapOf("unit_of_measurement" to "°C"))))
-    }
-
-    @Test
-    fun humidifierStatusModesAndSnapping() {
-        assertEquals("Off", HumidifierCardView.statusLabel(EntityState("humidifier.h", "off", mapOf("action" to "humidifying"))))
-        assertEquals("Humidifying", HumidifierCardView.statusLabel(EntityState("humidifier.h", "on", mapOf("action" to "humidifying"))))
-        assertEquals("On", HumidifierCardView.statusLabel(EntityState("humidifier.h", "on", emptyMap())))
-        assertEquals("Unavailable", HumidifierCardView.statusLabel(EntityState("humidifier.h", "unavailable", emptyMap())))
-        assertEquals(listOf("normal", "eco"), HumidifierCardView.availableModes(EntityState("humidifier.h", "on", mapOf("available_modes" to listOf("normal", "eco")))))
-        assertEquals("Boost mode", HumidifierCardView.modeLabel("boost_mode"))
-        assertEquals(51, HumidifierCardView.snapHumidity(50.6, 0.0, 100.0))
-        assertEquals(30, HumidifierCardView.snapHumidity(12.0, 30.0, 80.0))
-        assertEquals(55, HumidifierCardView.snapHumidity(53.0, 0.0, 100.0, 5.0))
     }
 
     @Test

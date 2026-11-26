@@ -784,14 +784,19 @@ private const val HEAT_COLOR = 0xFFFF6F22.toInt()
 private const val COOL_COLOR = 0xFF2196F3.toInt()
 private const val OFF_COLOR = 0xFF757575.toInt()
 
-/** Native HA `thermostat` (`hui-thermostat-card`) + `custom:mushroom-climate-card`: a 270° dial and a mode bar. */
-class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
+/**
+ * Native HA `thermostat` (`hui-thermostat-card`), and through [HumidifierCardView] `humidifier`
+ * (`hui-humidifier-card`, laid out the same): a 270° dial, and a mode bar for Mushroom's climate card.
+ */
+open class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
+    /** A humidifier's card: HA's humidity control in the dial, humidifier.set_humidity. */
+    private val humid = config.entity?.startsWith("humidifier.") == true
     private val titleView = label(ctx, 16f, ctx.theme.primaryTextColor).apply {
         gravity = Gravity.CENTER
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
     }
-    private val dial = ThermostatDialView(ctx, temperatureUnit(ctx))
+    private val dial = ThermostatDialView(ctx, if (humid) "%" else temperatureUnit(ctx))
     private val modeBar = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -899,7 +904,17 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             // A water heater sets its tank through its own domain's service, and has no heat/cool range.
             val waterHeater = eid.startsWith("water_heater.")
             dial.waterHeater = waterHeater
+            dial.humidifier = humid
             dial.onCommit = commit@{ target ->
+                if (humid) {
+                    // ha-state-control-humidifier-humidity: humidifier.set_humidity with the target, a whole number
+                    // when it is one.
+                    val s = ctx.store[eid] ?: return@commit
+                    val value: Number = if (target % 1.0 == 0.0) target.toInt() else target
+                    ctx.callOptimistic(s.copy(attributes = s.attributes + ("humidity" to value)), "humidifier", "set_humidity",
+                        JSONObject().put("entity_id", eid).put("humidity", value))
+                    return@commit
+                }
                 val domain = if (waterHeater) "water_heater" else "climate"
                 val s = ctx.store[eid]
                 // Only while the store still holds a single target: not after HA moved to a range (its state, not the
@@ -918,6 +933,10 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             dial.onSelect = { styleSteppers() }
             observe(eid) { s ->
                 titleView.text = config.name ?: s?.displayName ?: eid
+                if (humid) {
+                    bindHumidifier(s)
+                    return@observe
+                }
                 val attrs = s?.attributes.orEmpty()
                 val mode = s?.state ?: "off"
                 val action = attrs["hvac_action"] as? String
@@ -949,10 +968,39 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
     }
 
     /**
+     * HA's humidity control: `min_humidity`..`max_humidity` (0..100), `target_humidity_step` (1), the target while the
+     * humidifier is available, `current_humidity`, and a dehumidifier's slider filling to the end.
+     */
+    private fun bindHumidifier(s: EntityState?) {
+        val attrs = s?.attributes.orEmpty()
+        val state = s?.state ?: "unavailable"
+        fun num(key: String) = (attrs[key] as? Number)?.toDouble()
+        val target = num("humidity")?.takeIf { state != "unavailable" }
+        dial.dehumidifier = attrs["device_class"] == "dehumidifier"
+        dial.bind(
+            min = num("min_humidity") ?: 0.0,
+            max = num("max_humidity") ?: 100.0,
+            step = num("target_humidity_step")?.takeIf { it > 0 } ?: 1.0,
+            current = num("current_humidity"),
+            target = target,
+            mode = state,
+            action = attrs["action"] as? String,
+            stateLabel = s?.formattedState().orEmpty(),
+        )
+        hasTarget = target != null
+        showSteppers()
+        stepButtons?.let { (minus, plus) ->
+            minus.contentDescription = "Lower target humidity"
+            plus.contentDescription = "Raise target humidity"
+        }
+    }
+
+    /**
      * HA's − and + for the target, or for the selected end of a range: named after it ("Increase lower target
      * temperature") and outlined in its color (heat for the low end, cool for the high one) while the thermostat is on.
      */
     private fun styleSteppers() {
+        if (humid) return
         val (minus, plus) = stepButtons ?: return
         val handle = dial.selected.takeIf { dial.isRange }
         val outline = handle?.let { dial.handleColor(it) } ?: ctx.theme.secondaryTextColor

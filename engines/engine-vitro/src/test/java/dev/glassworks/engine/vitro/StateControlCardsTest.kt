@@ -212,4 +212,41 @@ class StateControlCardsTest {
         assertEquals("water_heater.set_temperature", calls.single().service)
         assertEquals(50.5, calls.single().data!!.getDouble("temperature"), 0.0)
     }
+
+    private val humidifierOn = mapOf(
+        "min_humidity" to 30, "max_humidity" to 80, "available_modes" to listOf("normal", "eco"), "current_humidity" to 41,
+        "humidity" to 45, "mode" to "normal", "action" to "humidifying", "device_class" to "humidifier", "supported_features" to 1,
+        "friendly_name" to "Nursery Humidifier",
+    )
+
+    private fun humidifierCard(state: String, attrs: Map<String, Any?>): View {
+        val store = EntityStore()
+        store.putLocal(EntityState("humidifier.nursery", state, attrs))
+        val card = dev.glassworks.engine.vitro.cards.HumidifierCardView(context(store),
+            LovelaceParser.parseCard(JSONObject("""{"type": "humidifier", "entity": "humidifier.nursery"}""")))
+        val px = (500 * activity.resources.displayMetrics.density).toInt()
+        card.measure(View.MeasureSpec.makeMeasureSpec(px, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        card.layout(0, 0, px, card.measuredHeight)
+        return card
+    }
+
+    private fun shown(card: View, v: View) = generateSequence(v) { if (it === card) null else it.parent as? View }.all { it.visibility == View.VISIBLE }
+
+    @Test
+    fun theHumidifierCardIsHasHumidityControlWithoutABar() {
+        val card = humidifierCard("on", humidifierOn)
+        val dial = all(card).filterIsInstance<ThermostatDialView>().single()
+        // The action, the target in whole percents, the current humidity: no "Currently".
+        assertEquals("Humidifying, 45%, 41%", dial.contentDescription.toString())
+        // No power button or mode picker: HA draws a bar only for features, which fall back to HA's frontend.
+        assertTrue(all(card).none { it.contentDescription?.toString() == "Power" || (it as? TextView)?.text?.toString() == "Normal" })
+        // The + adds one step and sends humidifier.set_humidity with a whole number.
+        all(card).single { it.contentDescription == "Raise target humidity" }.performClick()
+        assertEquals("humidifier.set_humidity", calls.single().service)
+        assertEquals(46, calls.single().data!!.get("humidity"))
+        // Unavailable: no target, no buttons, the state as the label.
+        val gone = humidifierCard("unavailable", emptyMap())
+        assertEquals(0, all(gone).count { it.contentDescription?.toString()?.endsWith("humidity") == true && shown(gone, it) })
+        assertEquals("Unavailable", all(gone).filterIsInstance<ThermostatDialView>().single().contentDescription.toString())
+    }
 }

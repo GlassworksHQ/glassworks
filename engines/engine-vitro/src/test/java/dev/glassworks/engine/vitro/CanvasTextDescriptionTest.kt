@@ -9,7 +9,6 @@ import android.app.Application
 import android.view.View
 import android.view.ViewGroup
 import dev.glassworks.engine.vitro.cards.GaugeCardView
-import dev.glassworks.engine.vitro.cards.HumidityDialView
 import dev.glassworks.engine.vitro.cards.LightCardView
 import dev.glassworks.engine.vitro.cards.ThermostatDialView
 import dev.glassworks.engine.vitro.data.EntityState
@@ -57,11 +56,15 @@ class CanvasTextDescriptionTest {
 
     @Test
     fun theHumidityDialDescribesWhatItDraws() {
-        val dial = HumidityDialView(context())
-        dial.bind(30.0, 80.0, current = 41.0, target = 50.0, on = true, status = "Humidifying")
-        assertEquals("Humidifying, 50%, Currently 41%", dial.contentDescription.toString())
+        // HA's humidity control: the action, the target in whole percents, the current humidity.
+        val dial = ThermostatDialView(context(), "%").apply { humidifier = true }
+        dial.bind(30.0, 80.0, 1.0, current = 41.0, target = 50.0, mode = "on", action = "humidifying", stateLabel = "On")
+        assertEquals("Humidifying, 50%, 41%", dial.contentDescription.toString())
         dial.nudge(1)
-        assertEquals("Humidifying, 51%, Currently 41%", dial.contentDescription.toString())
+        assertEquals("Humidifying, 51%, 41%", dial.contentDescription.toString())
+        // Off: HA's label is the state while there's a target.
+        dial.bind(30.0, 80.0, 1.0, current = 52.0, target = 45.0, mode = "off", action = "off", stateLabel = "Off")
+        assertEquals("Off, 45%, 52%", dial.contentDescription.toString())
     }
 
     @Test

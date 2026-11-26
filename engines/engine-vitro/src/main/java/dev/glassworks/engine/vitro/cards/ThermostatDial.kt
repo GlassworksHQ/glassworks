@@ -228,7 +228,7 @@ internal class ThermostatDialView(
     private val highWhole = NumberText()
     private val highDec = NumberText()
     private val fmBuf = Paint.FontMetrics()
-    private val thermometer: Path by lazy { MdiIcons.pathFor("mdi:thermometer") }
+    private val thermometer: Path by lazy { MdiIcons.pathFor(if (humidifier) "mdi:water-percent" else "mdi:thermometer") }
     private val pt = FloatArray(2)
 
     /** The thermometer and the current temperature, centered on [centerY]. */
@@ -257,7 +257,8 @@ internal class ThermostatDialView(
         offCurMemo.of(cur) { v -> HaDisplay.formatFixed(v, 1) + " " + unit }
     private fun curText(cur: Double) = curMemo.of(cur) { v ->
         // A water heater's line: "Currently" and the temperature as HA formats the attribute.
-        if (waterHeater) HaText.ui("ui.card.water_heater.currently") + " " + HaFormat.formatNumberWithUnit(v, unit)
+        if (humidifier) HaFormat.formatNumberWithUnit(v, unit)
+        else if (waterHeater) HaText.ui("ui.card.water_heater.currently") + " " + HaFormat.formatNumberWithUnit(v, unit)
         else HaDisplay.formatFixed(v, 1) + " " + unit
     }
 
@@ -269,6 +270,16 @@ internal class ThermostatDialView(
     var waterHeater = false
 
     /**
+     * A humidifier's dial (`ha-state-control-humidifier-humidity`): the target in whole percents with the % under its
+     * side, the current humidity after a water-percent icon, blue while on, the arc from the start (to the end for
+     * a dehumidifier).
+     */
+    var humidifier = false
+
+    /** A dehumidifier (`device_class: dehumidifier`): HA's slider fills to the end. */
+    var dehumidifier = false
+
+    /**
      * HA's label over the target: the HVAC action while it runs (anything but `off`), else the state as HA names it
      * ("Heat/Cool"), else the mode.
      */
@@ -276,6 +287,13 @@ internal class ThermostatDialView(
         val a = action
         when {
             waterHeater -> if (target != null) HaText.ui("ui.card.water_heater.target") else stateLabel
+            // The humidifier's label: the action while there is one (off aside), else the state beside a target.
+            humidifier -> when {
+                mode == "unavailable" -> stateLabel
+                a != null && a != "off" -> humanize(a)
+                target != null -> stateLabel
+                else -> ""
+            }
             a != null && a != "off" -> humanize(a)
             stateLabel.isNotEmpty() -> stateLabel
             else -> humanize(a ?: mode)
@@ -284,11 +302,14 @@ internal class ThermostatDialView(
 
     private fun humanize(s: String) = s.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
 
-    /** A target as the dial prints it, `21.5 °C`. */
+    /** A target as the dial prints it, `21.5 °C` (a humidifier's `45%`). */
     private fun targetText(v: Double): String {
-        val (whole, dec) = splitTemp(v, step)
-        return "$whole$dec $unit"
+        val (whole, dec) = splitTemp(v, shownStep)
+        return if (humidifier) "$whole$dec$unit" else "$whole$dec $unit"
     }
+
+    /** The step the big number is formatted to: a humidifier's target is whole percents (`maximumFractionDigits: 0`). */
+    private val shownStep: Double get() = if (humidifier) 1.0 else step
 
     /**
      * The texts the dial draws, in order, as its content description: what HA's page has as text (the state or the
@@ -539,7 +560,10 @@ internal class ThermostatDialView(
      * HA's `stateColorCss` for a climate mode (`--state-climate-<mode>-color`): the slider's color for that mode, or
      * null for one HA gives no color (off).
      */
-    private fun modeColor(m: String?): Int? = if (waterHeater) when (m) {
+    private fun modeColor(m: String?): Int? = if (humidifier) {
+        // `--state-humidifier-on-color`.
+        if (m == "on") COOL_COLOR else null
+    } else if (waterHeater) when (m) {
         // `--state-water_heater-<state>-color`.
         "eco" -> AUTO_MODE_COLOR
         "electric", "gas", "heat_pump" -> DRY_COLOR
@@ -561,6 +585,7 @@ internal class ThermostatDialView(
      */
     private fun actionColor(): Int? {
         if (!isActive) return null
+        if (humidifier) return if (action == "humidifying" || action == "drying") modeColor("on") else null
         return modeColor(when (action) {
             "heating", "preheating", "defrosting" -> "heat"
             "cooling" -> "cool"
@@ -613,6 +638,7 @@ internal class ThermostatDialView(
     private fun sliderMode(): SliderMode {
         // The water heater's slider has no mode: ha-control-circular-slider fills from the start.
         if (waterHeater) return SliderMode.START
+        if (humidifier) return if (dehumidifier) SliderMode.END else SliderMode.START
         val heatCool = hvacModes.filter { it == "heat" || it == "cool" || it == "heat_cool" }
         val m = if (heatCool.size == 1 && (mode == "off" || mode == "auto")) heatCool[0] else mode
         return when (m) {
@@ -772,10 +798,10 @@ internal class ThermostatDialView(
             Primary.SINGLE -> {
                 val t = target
                 if (t != null) {
-                    if (t != splitValue || step != splitStep) {
-                        val parts = splitTemp(t, step)
+                    if (t != splitValue || shownStep != splitStep) {
+                        val parts = splitTemp(t, shownStep)
                         splitValue = t
-                        splitStep = step
+                        splitStep = shownStep
                         splitWhole = parts.first
                         splitDec = parts.second
                     }
@@ -894,8 +920,12 @@ internal class ThermostatDialView(
     }
 
     /** One ha-big-number's width: the whole part, then the wider of the unit and the decimals, side by side. */
-    private fun numberWidth(whole: String, dec: String): Float =
-        bigPaint.measureText(whole) + maxOf(unitPaint.measureText(unit), if (dec.isEmpty()) 0f else decPaint.measureText(dec))
+    private fun numberWidth(whole: String, dec: String): Float {
+        val decW = if (dec.isEmpty()) 0f else decPaint.measureText(dec)
+        // unit-position="bottom" (the humidifier): the decimals and the unit side by side, 2 px apart.
+        return if (humidifier) bigPaint.measureText(whole) + decW + 2f * dp + unitPaint.measureText(unit)
+        else bigPaint.measureText(whole) + maxOf(unitPaint.measureText(unit), decW)
+    }
 
     /**
      * Draws one ha-big-number with its box's top at [top] and its left at [x], and records the box a press on it
@@ -917,7 +947,16 @@ internal class ThermostatDialView(
         val decTop = top + bigLine - 4f * dp - decLine
         if (dec.isNotEmpty()) canvas.drawText(dec, sideX, lineBaseline(decTop, decLine, decPaint), decPaint)
         val unitLine = 1.2f * unitPaint.textSize
-        canvas.drawText(unit, sideX, lineBaseline(decTop - unitLine, unitLine, unitPaint), unitPaint)
+        if (humidifier) {
+            // `.addon.bottom`: a baseline-aligned row; the empty decimals' box has its baseline at its bottom, and
+            // the unit has 4 px under it, so the shared baseline sits the unit's descent and 4 px above the row's end.
+            val unitAbove = lineBaseline(0f, unitLine, unitPaint)
+            val baseline = top + bigLine - 4f * dp - (unitLine - unitAbove + 4f * dp)
+            val unitX = sideX + (if (dec.isEmpty()) 0f else decPaint.measureText(dec)) + 2f * dp
+            canvas.drawText(unit, unitX, baseline, unitPaint)
+        } else {
+            canvas.drawText(unit, sideX, lineBaseline(decTop - unitLine, unitLine, unitPaint), unitPaint)
+        }
         hit.set(x - 4f * dp, top, x + numberWidth(whole, dec) + 4f * dp, top + bigLine)
     }
 
@@ -1187,7 +1226,11 @@ internal class ThermostatDialView(
         if (low != null && high != null && target == null) {
             commitRange(keyHandle, keyProposal)
         } else if (boundTarget != null) {
-            target?.takeIf { it != boundTarget }?.let(onCommit)
+            // Within the limits HA reports now: they may have narrowed while the key was held.
+            target?.coerceIn(min, max)?.takeIf { it != boundTarget }?.let { v ->
+                if (v != target) setTarget(v)
+                onCommit(v)
+            }
         } else {
             dropEdit()
         }

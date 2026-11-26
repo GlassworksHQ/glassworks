@@ -77,14 +77,6 @@
   "missingText": 0,
   "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
  },
- "mirror/humidifier": {
-  "pixel": 0.1146,
-  "bounds": 20,
-  "font": 0,
-  "missingText": 0,
-  "region": 0.56,
-  "reason": "HA 2026's humidifier card: a 270-degree arc with the target in blue, 'Humidifying' and the current humidity under the number, and +/- buttons; Vitro draws a smaller arc with 'Currently 41%', and adds a power/mode row ('Normal') HA no longer shows, so the card is ~20 px taller (2026-11-25, fake HA)"
- },
  "mirror/logbook-user": {
   "pixel": 0.0071,
   "bounds": 0,
@@ -276,14 +268,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "at 1.5x only (the tablet matches since #822's Roboto in the page): the fixture's step series has a change every few pixels, and their vertical edges land half a device pixel apart in HA's canvas and Vitro's, 2.1% against the 2.0% slack; axis, ticks, legend and colors match (2026-11-25, fake HA, after #822)"
- },
- "s1/humidifier": {
-  "pixel": 0.1147,
-  "bounds": 20,
-  "font": 0,
-  "missingText": 0,
-  "region": 0.56,
-  "reason": "HA 2026's humidifier card: a 270-degree arc with the target in blue, 'Humidifying' and the current humidity under the number, and +/- buttons; Vitro draws a smaller arc with 'Currently 41%', and adds a power/mode row ('Normal') HA no longer shows, so the card is ~20 px taller (2026-11-25, fake HA)"
  },
  "s1/layout-card": {
   "pixel": 0.0239,
@@ -526,14 +510,6 @@
   "missingText": 1,
   "region": 0.29,
   "reason": "HA replaces the gauge with a one-line warning card ('Entity is currently unavailable: ...'); Vitro draws an empty gauge arc at full height (~141 px taller) (2026-11-25, fake HA)"
- },
- "tablet/humidifier": {
-  "pixel": 0.1114,
-  "bounds": 20,
-  "font": 0,
-  "missingText": 0,
-  "region": 0.56,
-  "reason": "HA 2026's humidifier card: a 270-degree arc with the target in blue, 'Humidifying' and the current humidity under the number, and +/- buttons; Vitro draws a smaller arc with 'Currently 41%', and adds a power/mode row ('Normal') HA no longer shows, so the card is ~20 px taller (2026-11-25, fake HA)"
  },
  "tablet/locale-de-weather-forecast": {
   "pixel": 0.0145,
