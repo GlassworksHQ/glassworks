@@ -78,10 +78,10 @@ internal object EntityRowControls {
             "input_number", "number" -> numberControl(ctx, row, name, rowContentWidth)
             "input_select", "select" -> selectControl(ctx, row, name)
             "script" -> scriptControl(ctx, row, name)
-            "scene" -> singleButton(ctx, row, name, { haUi("ui.card.scene.activate", "Activate") }) { _ ->
+            "scene" -> singleButton(ctx, row, name, { HaText.ui("ui.card.scene.activate") }) { _ ->
                 ctx.callService("scene", "turn_on", JSONObject().put("entity_id", row.entity), null)
             }
-            "button", "input_button" -> singleButton(ctx, row, name, { haUi("ui.card.button.press", "Press") }) { _ ->
+            "button", "input_button" -> singleButton(ctx, row, name, { HaText.ui("ui.card.button.press") }) { _ ->
                 ctx.callService(row.entity.substringBefore('.'), "press", JSONObject().put("entity_id", row.entity), null)
             }
             "lock" -> lockControl(ctx, row, name)
@@ -210,12 +210,12 @@ internal object EntityRowControls {
             val currentRuns = (s?.attributes?.get("current") as? Number)?.toInt() ?: 0
             val multiple = s?.attributes?.get("mode") != "single" && currentRuns > 0
             cancel.visibility = if (on) View.VISIBLE else View.GONE
-            cancel.text = if (multiple) haUi("ui.card.script.cancel_multiple", "Cancel {number}", "number" to currentRuns)
-                else haUi("ui.card.script.cancel", "Cancel")
+            cancel.text = if (multiple) HaText.ui("ui.card.script.cancel_multiple", "number" to currentRuns)
+                else HaText.ui("ui.card.script.cancel")
             cancel.contentDescription = "${cancel.text} ${name()}".trim()
             val showRun = s?.state == "off" || maxRuns != null
             run.visibility = if (showRun) View.VISIBLE else View.GONE
-            run.text = row.actionName ?: haUi("ui.card.script.run", "Run")
+            run.text = row.actionName ?: HaText.ui("ui.card.script.run")
             run.contentDescription = "${run.text} ${name()}".trim()
             setEnabled(ctx, run, s != null && s.state != "unavailable" && canRun(s), brandText(ctx))
             // The last visible button reaches past the row's content.
@@ -250,35 +250,45 @@ internal object EntityRowControls {
     }
 
     /**
-     * `hui-lock-entity-row`: Unlock while locked, Lock otherwise. A lock with a `code_format` asks for its code first, as
-     * HA's `callProtectedLockService` does, and sends it with the call.
+     * `hui-lock-entity-row`: Unlock while locked, Lock otherwise. As HA's `callProtectedLockService`: a lock with a
+     * `code_format` and no `default_code` in its entity registry options asks for the code first (HA's enter-code
+     * dialog, titled and confirmed with the action), and the code goes with the call.
      */
     private fun lockControl(ctx: VitroCardContext, row: EntityRowConfig, name: () -> String): Control =
-        singleButton(ctx, row, name, { s ->
-            if (s?.state == "locked") haUi("ui.card.lock.unlock", "Unlock") else haUi("ui.card.lock.lock", "Lock")
-        }) { s ->
+        singleButton(ctx, row, name, { s -> lockLabel(if (s?.state == "locked") "unlock" else "lock") }) { s ->
             val service = if (s.state == "locked") "unlock" else "lock"
             val send = { code: String? ->
                 val data = JSONObject().put("entity_id", row.entity)
                 if (code != null) data.put("code", code)
                 ctx.callService("lock", service, data, null)
             }
-            if (s.attributes["code_format"] != null) askCode(ctx, service, send) else send(null)
+            if (s.attributes["code_format"] == null) {
+                send(null)
+            } else {
+                ctx.callWs(JSONObject().put("type", "config/entity_registry/get").put("entity_id", row.entity)) { ok, result, _ ->
+                    val defaultCode = if (ok) (result as? JSONObject)?.optJSONObject("options")?.optJSONObject("lock")
+                        ?.optString("default_code", "")?.takeIf { it.isNotEmpty() } else null
+                    ctx.main.post { if (defaultCode != null) send(null) else askCode(ctx, service) { send(it) } }
+                }
+            }
         }
+
+    /** `ui.card.lock.lock` / `ui.card.lock.unlock`: the button, and the code dialog's title and confirm button. */
+    private fun lockLabel(service: String): String =
+        if (service == "unlock") HaText.ui("ui.card.lock.unlock") else HaText.ui("ui.card.lock.lock")
 
     private fun askCode(ctx: VitroCardContext, service: String, onCode: (String) -> Unit) {
         val field = EditText(ctx.context).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
-            hint = haUi("ui.card.lock.code", "Code")
+            hint = HaText.ui("ui.dialogs.enter_code.input_label")
         }
         runCatching {
             android.app.AlertDialog.Builder(ctx.context)
+                .setTitle(lockLabel(service))
                 .setView(field)
-                .setNegativeButton(HaText.ui("ui.common.cancel").ifEmpty { "Cancel" }, null)
-                .setPositiveButton(haUi("ui.card.lock.$service", service.replaceFirstChar { it.titlecase() })) { _, _ ->
-                    onCode(field.text?.toString().orEmpty())
-                }
+                .setNegativeButton(HaText.ui("ui.common.cancel"), null)
+                .setPositiveButton(lockLabel(service)) { _, _ -> onCode(field.text?.toString().orEmpty()) }
                 .show()
         }
     }

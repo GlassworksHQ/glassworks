@@ -2290,6 +2290,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 nameView.text = rowCfg.name ?: s?.displayName ?: rowCfg.entity
                 // ha-entity-toggle's label: "Toggle Desk lamp".
                 if (isSwitchable) switchView.contentDescription = "Toggle ${nameView.text}"
+                // A dropdown row shows its name in the field (HA's `hide-name`): the row, which opens More Info,
+                // is named by it for TalkBack.
+                if (control?.hideName == true) row.contentDescription = nameView.text
                 secondaryView?.text = EntityRowControls.secondaryText(s, rowCfg.secondaryInfo, ctx.now()).orEmpty()
                 when {
                     control != null -> control.update(s)

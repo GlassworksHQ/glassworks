@@ -192,6 +192,8 @@ class EntityRowControlsTest {
         layout(c, 500)
         // The name is the field's label, over the value: HA's `hide-name`.
         assertEquals(listOf("House mode", "Evening", "Program", "Cotton"), texts(c))
+        // The row's name moved into the field: TalkBack still reads the row (which opens More Info) by it.
+        assertEquals("House mode", (button(c, "House mode").parent.parent as View).contentDescription)
         (button(c, "House mode").parent as View).performClick()
         val menu = ShadowPopupMenu.getLatestPopupMenu()
         assertEquals(listOf("Day", "Evening", "Night"), (0 until menu.menu.size()).map { menu.menu.getItem(it).title.toString() })
@@ -280,13 +282,24 @@ class EntityRowControlsTest {
         button(c, "Lock").performClick()
         assertEquals(listOf("lock.unlock", "lock.lock"), calls())
         all(c).filterIsInstance<TextView>().filter { it.text == "Unlock" }.last().performClick()
+        idle()
         val dialog = ShadowAlertDialog.getLatestAlertDialog() as AlertDialog
+        assertEquals("the prompt reads HA's code label", "Code", all(dialog.window!!.decorView).filterIsInstance<EditText>().single().hint)
         all(dialog.window!!.decorView).filterIsInstance<EditText>().single().setText("1234")
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
         idle()
         assertEquals("lock.unlock", calls().last())
         assertEquals("1234", calls.last().third!!.getString("code"))
         assertEquals("lock.safe", calls.last().third!!.getString("entity_id"))
+        assertEquals("the registry entry was read first", "config/entity_registry/get", ws.last().getString("type"))
+        // A default code in the lock's registry options: no prompt, and no code sent (HA's lock uses its own).
+        services = JSONObject("""{"options": {"lock": {"default_code": "9999"}}}""")
+        val shownBefore = ShadowAlertDialog.getShownDialogs().size
+        all(c).filterIsInstance<TextView>().filter { it.text == "Unlock" }.last().performClick()
+        idle()
+        assertEquals(shownBefore, ShadowAlertDialog.getShownDialogs().size)
+        assertEquals("lock.unlock", calls().last())
+        assertFalse(calls.last().third!!.has("code"))
     }
 
     @Test fun aRowWithAControlStillOpensMoreInfoFromItsName() {
