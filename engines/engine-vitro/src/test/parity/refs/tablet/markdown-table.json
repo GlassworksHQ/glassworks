@@ -36,7 +36,7 @@
    "text": "Inside",
    "x": 22,
    "y": 22,
-   "w": 49.58,
+   "w": 49.56,
    "h": 15,
    "size": 12,
    "weight": 600,
@@ -49,7 +49,7 @@
    "text": "Living Room",
    "x": 54,
    "y": 51.78,
-   "w": 87.03,
+   "w": 86.67,
    "h": 19,
    "size": 15,
    "weight": 400,
@@ -60,9 +60,9 @@
    "slot": 0,
    "clipped": false,
    "text": "21.4°",
-   "x": 1133.42,
+   "x": 1134.13,
    "y": 51.19,
-   "w": 40.58,
+   "w": 39.88,
    "h": 20,
    "size": 17,
    "weight": 400,
@@ -73,9 +73,9 @@
    "slot": 0,
    "clipped": false,
    "text": "47%",
-   "x": 1185.08,
+   "x": 1185.3,
    "y": 51.78,
-   "w": 32.92,
+   "w": 32.7,
    "h": 19,
    "size": 15,
    "weight": 400,
@@ -88,7 +88,7 @@
    "text": "Fridge",
    "x": 54,
    "y": 87.97,
-   "w": 45.06,
+   "w": 44.77,
    "h": 19,
    "size": 15,
    "weight": 400,
@@ -99,9 +99,9 @@
    "slot": 0,
    "clipped": false,
    "text": "3.4°",
-   "x": 1140.58,
+   "x": 1141.08,
    "y": 87.38,
-   "w": 33.42,
+   "w": 32.92,
    "h": 20,
    "size": 17,
    "weight": 400,
@@ -112,9 +112,9 @@
    "slot": 0,
    "clipped": false,
    "text": "49 W",
-   "x": 1180,
+   "x": 1180.11,
    "y": 87.97,
-   "w": 38,
+   "w": 37.89,
    "h": 19,
    "size": 15,
    "weight": 400,
@@ -181,28 +181,32 @@
     "pl": "demo",
     "dp": 0,
     "di": "device-1",
-    "en": "Power"
+    "en": "Power",
+    "np": "device"
    },
    {
     "ei": "sensor.fridge_temperature",
     "pl": "demo",
     "dp": 1,
     "di": "device-1",
-    "en": "Temperature"
+    "en": "Temperature",
+    "np": "device"
    },
    {
     "ei": "sensor.living_room_humidity",
     "pl": "esphome",
     "dp": 0,
     "di": "device-2",
-    "en": "Humidity"
+    "en": "Humidity",
+    "np": "device"
    },
    {
     "ei": "sensor.living_room_temperature",
     "pl": "esphome",
     "dp": 1,
     "di": "device-2",
-    "en": "Temperature"
+    "en": "Temperature",
+    "np": "device"
    }
   ],
   "devices": [
@@ -243,7 +247,14 @@
   "translations": {
    "entity_component": {
     "component.sensor.entity_component._.state.off": "Off",
-    "component.sensor.entity_component._.state.on": "On"
+    "component.sensor.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state_attributes.last_reset.name": "Last reset",
+    "component.sensor.entity_component._.state_attributes.options.name": "Possible states",
+    "component.sensor.entity_component._.state_attributes.state_class.name": "State class",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement": "Measurement",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement_angle": "Measurement angle",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total": "Total",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total_increasing": "Total increasing"
    },
    "entity": {}
   }

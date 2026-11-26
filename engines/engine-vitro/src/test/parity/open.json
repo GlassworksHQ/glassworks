@@ -20,10 +20,6 @@
   "owner": "#799",
   "reason": "Entity card: the value line sits about 12 px higher than HA's, as in the `entity` case (listed in #928, not fixed there); name, state, icon color and dimming match"
  },
- "mirror/markdown-cardmod": {
-  "owner": "#799",
-  "reason": "Markdown with card-mod: the thin 21.4° is drawn larger and heavier than HA's (found by the region check)"
- },
  "mirror/more-info-vacuum-cleaning": {
   "owner": "#799",
   "reason": "Vacuum More Info on the Mirror's tall sheet: HA centers the robot, its buttons and the fan speed in the sheet's height; Vitro puts them right under the header (found by the region check on #930's case)"
@@ -236,14 +232,6 @@
   "owner": "#799",
   "reason": "Light card: HA's ring takes the light's color (blue for a white light) and the bulb dims with brightness, with no '65%' under it; Vitro draws a yellow ring, a full bulb and '65%'. Unavailable: HA greys the bulb and writes 'Unavailable' with no knob; Vitro draws a blue bulb and a knob"
  },
- "s1/m-media-control-media-player-paused": {
-  "owner": "#799",
-  "reason": "Media control: the cover art sits further left and the progress bar ends ~2 % later than HA's"
- },
- "s1/m-media-control-media-player-playing": {
-  "owner": "#799",
-  "reason": "Media control: the cover art sits further left and the progress bar ends ~2 % later than HA's"
- },
  "s1/m-mushroom-alarm-alarm-control-panel-unavailable": {
   "owner": "#928",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
@@ -368,10 +356,6 @@
   "owner": "#799",
   "reason": "Weather forecast, unavailable: HA replaces the card with the 'Entity is currently unavailable' warning; Vitro draws an empty forecast"
  },
- "s1/markdown-cardmod": {
-  "owner": "#799",
-  "reason": "Markdown with card-mod: the thin 21.4° is drawn larger and heavier than HA's (found by the region check)"
- },
  "s1/mushroom-light-horizontal": {
   "owner": "#799",
   "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
@@ -423,10 +407,6 @@
  "tablet/entity-light-on": {
   "owner": "#799",
   "reason": "Entity card: the value line sits about 12 px higher than HA's, as in the `entity` case (listed in #928, not fixed there); name, state, icon color and dimming match"
- },
- "tablet/markdown-cardmod": {
-  "owner": "#799",
-  "reason": "Markdown with card-mod: the thin 21.4° is drawn larger and heavier than HA's (found by the region check)"
  },
  "tablet/mushroom-light-horizontal": {
   "owner": "#799",

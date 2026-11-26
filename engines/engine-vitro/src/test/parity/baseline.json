@@ -107,14 +107,6 @@
   "missingText": 0,
   "reason": "at 1.5x: the 1 px border and the controls' icon edges (2.0%); the idle card's layout, colors and artwork placeholder match (the tablet matches) (2026-11-25, fake HA, after #822)"
  },
- "mirror/media-control-playing": {
-  "pixel": 0.0395,
-  "bounds": 0.8,
-  "font": 0,
-  "missingText": 0,
-  "region": 0.17,
-  "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
- },
  "mirror/mini-graph-card": {
   "pixel": 0.2173,
   "bounds": 48.2,
@@ -408,14 +400,6 @@
   "missingText": 0,
   "reason": "at 1.5x: the 1 px border and the controls' icon edges (2.0%); the idle card's layout, colors and artwork placeholder match (the tablet matches) (2026-11-25, fake HA, after #822)"
  },
- "s1/media-control-playing": {
-  "pixel": 0.0395,
-  "bounds": 0.8,
-  "font": 0,
-  "missingText": 0,
-  "region": 0.17,
-  "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
- },
  "s1/mini-graph-card": {
   "pixel": 0.2173,
   "bounds": 48.2,
@@ -602,14 +586,6 @@
   "missingText": 3,
   "region": 0.43,
   "reason": "changes made by people: HA shows each user's initial in a round avatar (A, S) from config/auth/list; Vitro shows the light's icon instead, so the three avatars are missing texts. Times, states and the timeline match (2026-11-25, fake HA)"
- },
- "tablet/media-control-playing": {
-  "pixel": 0.0297,
-  "bounds": 0.2,
-  "font": 0,
-  "missingText": 0,
-  "region": 0.18,
-  "reason": "playing with artwork: the art's position and its fade differ by ~1 px at 1.5x and the progress bar's rounded ends; title, artist, controls and colors match (tablet 3.0%) (2026-11-25, fake HA)"
  },
  "tablet/mini-graph-card": {
   "pixel": 0.213,

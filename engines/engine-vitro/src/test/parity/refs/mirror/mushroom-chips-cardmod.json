@@ -35,7 +35,7 @@
    "text": "CO2 512",
    "x": 37.8,
    "y": 15.2,
-   "w": 39.14,
+   "w": 38.98,
    "h": 11,
    "size": 9.6,
    "weight": 700,
@@ -68,7 +68,8 @@
     "pl": "esphome",
     "dp": 0,
     "di": "device-1",
-    "en": "CO2"
+    "en": "CO2",
+    "np": "device"
    }
   ],
   "devices": [
@@ -99,7 +100,14 @@
   "translations": {
    "entity_component": {
     "component.sensor.entity_component._.state.off": "Off",
-    "component.sensor.entity_component._.state.on": "On"
+    "component.sensor.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state_attributes.last_reset.name": "Last reset",
+    "component.sensor.entity_component._.state_attributes.options.name": "Possible states",
+    "component.sensor.entity_component._.state_attributes.state_class.name": "State class",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement": "Measurement",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement_angle": "Measurement angle",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total": "Total",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total_increasing": "Total increasing"
    },
    "entity": {}
   }
