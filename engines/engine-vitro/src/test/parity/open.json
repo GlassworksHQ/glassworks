@@ -2,7 +2,7 @@
  "_comment": "Cases Vitro draws wrong today, each with the PR that owns its fix (#799: filed on the exp/vitro list, no fixer yet) and what's wrong. Not drift: the harness reports them as open and fails once one matches, so the fix drops its entry (ParityOpen in ParityReport.kt).",
  "mirror/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the light card, thermostat and header-toggle differences"
+  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the header-toggle differences"
  },
  "mirror/d-mushroom-dense": {
   "owner": "#928",
@@ -10,7 +10,7 @@
  },
  "mirror/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
+  "reason": "Sections dashboard: placement matches; weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
  },
  "mirror/entity": {
   "owner": "#928",
@@ -34,7 +34,7 @@
  },
  "s1/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the light card, thermostat and header-toggle differences"
+  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the header-toggle differences"
  },
  "s1/d-mushroom-dense": {
   "owner": "#928",
@@ -42,7 +42,7 @@
  },
  "s1/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
+  "reason": "Sections dashboard: placement matches; weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
  },
  "s1/entities-special-rows": {
   "owner": "#928",
@@ -458,7 +458,7 @@
  },
  "tablet/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the light card, thermostat and header-toggle differences"
+  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the header-toggle differences"
  },
  "tablet/d-mushroom-dense": {
   "owner": "#928",
@@ -466,7 +466,7 @@
  },
  "tablet/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
+  "reason": "Sections dashboard: placement matches; weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
  },
  "tablet/entities-special-rows": {
   "owner": "#928",
