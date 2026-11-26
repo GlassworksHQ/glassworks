@@ -717,6 +717,84 @@ class WebFallbackTest {
         assertEquals(listOf("$base/wall-test/auto"), pageFallback()!!.loads)
     }
 
+    // A slow Home Assistant, or a slow panel: HA's first `subscribe_entities` event (every state) lands late. Held back
+    // ([FakeHaServer.holdEntitySnapshot]) and sent by the test, before or after the view's wait for it runs out.
+
+    /** The page has asked HA for every entity (an auto-entities view follows them all). */
+    private fun awaitEveryEntitySubscribed() =
+        awaitMain("every entity subscribed") { server.commands("subscribe_entities").any { !it.has("entity_ids") } }
+
+    /** HA's held first event for every entity: its snapshot, on the newest connection. */
+    private fun sendHeldSnapshot() {
+        val id = server.sockets.last().received.last { it.optString("type") == "subscribe_entities" && !it.has("entity_ids") }.optInt("id")
+        server.pushEvent(id, JSONObject().put("a", server.initialEntities))
+    }
+
+    /** The view's wait for its first states runs out ([VitroView.holdFirstBuildForStatesMs]): it builds without them. */
+    private fun waitRunsOut() = shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_500))
+
+    @Test fun anAutoEntitiesViewWaitsForItsStatesAndIsReadyWithItsRows() {
+        // Built before its states, an auto-entities view would match nothing, and say it's ready with no rows.
+        withEntity("cover.garage", "closed")
+        server.holdEntitySnapshot = true
+        server.dashboardConfig = autoEntitiesView("""{"domain": "light"}""")
+        val p = page()
+        p.load("$base/wall-test/auto")
+        awaitEveryEntitySubscribed()
+        idle()
+        assertTrue("not ready before its states", host.messages("ready").isEmpty())
+
+        sendHeldSnapshot()
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertNull("no fallback page", pageFallback())
+        assertTrue("its rows are there when it's ready", hasText(vitroView(p), "Lounge Lamp"))
+    }
+
+    @Test fun anAutoEntitiesViewWhoseLateStatesMatchARowVitroDoesntDrawOpensInHomeAssistantsFrontend() {
+        withEntity("cover.garage", "closed")
+        server.holdEntitySnapshot = true
+        server.dashboardConfig = autoEntitiesView("""{"domain": "cover"}""")
+        page().load("$base/wall-test/auto")
+        awaitEveryEntitySubscribed()
+        idle()
+        assertNull(pageFallback())
+
+        sendHeldSnapshot()
+        awaitMain("fallback") { pageFallback() != null }
+        assertEquals(listOf("$base/wall-test/auto"), pageFallback()!!.loads)
+    }
+
+    @Test fun statesThatLandAfterTheWaitRanOutFillAnAutoEntitiesViewBuiltWithout() {
+        withEntity("cover.garage", "closed")
+        server.holdEntitySnapshot = true
+        server.dashboardConfig = autoEntitiesView("""{"domain": "light"}""")
+        val p = page()
+        p.load("$base/wall-test/auto")
+        awaitEveryEntitySubscribed()
+        waitRunsOut()
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertFalse("built without states: nothing matched yet", hasText(vitroView(p), "Lounge Lamp"))
+
+        sendHeldSnapshot()
+        awaitMain("the matched row") { hasText(vitroView(p), "Lounge Lamp") }
+        assertNull("no fallback page", pageFallback())
+    }
+
+    @Test fun statesThatLandAfterTheWaitRanOutAndMatchARowVitroDoesntDrawOpenTheViewInHomeAssistantsFrontend() {
+        withEntity("cover.garage", "closed")
+        server.holdEntitySnapshot = true
+        server.dashboardConfig = autoEntitiesView("""{"domain": "cover"}""")
+        page().load("$base/wall-test/auto")
+        awaitEveryEntitySubscribed()
+        waitRunsOut()
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertNull("nothing matched yet: native", pageFallback())
+
+        sendHeldSnapshot()
+        awaitMain("fallback") { pageFallback() != null }
+        assertEquals(listOf("$base/wall-test/auto"), pageFallback()!!.loads)
+    }
+
     @Test fun anEntityThatAppearsAndMatchesARowVitroDoesntDrawSendsTheViewOnScreenToHomeAssistantsFrontend() {
         server.dashboardConfig = autoEntitiesView("""{"entity_id": "/^(light|cover)\\./"}""")
         val p = page()

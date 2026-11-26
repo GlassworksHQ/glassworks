@@ -1024,8 +1024,11 @@ class VitroView(
         holding?.cancel?.invoke()
         holding = null
         val refs = CardRouter.referencedEntities(viewCfg)
-        fun known() = refs.all { store[it] != null || store.isMissing(it) }
-        if (refs.isEmpty() || known()) return false
+        // A view that picks its entities at run time (auto-entities) names none of them: it waits for HA's answer for
+        // every entity, as HA's frontend draws a view once hass has every state. Built before, it matches nothing.
+        val all = CardRouter.followsAllEntities(viewCfg)
+        fun known() = refs.all { store[it] != null || store.isMissing(it) } && (!all || store.answeredAll)
+        if ((refs.isEmpty() && !all) || known()) return false
         val config = dashboard
         lateinit var timeout: Runnable
         lateinit var mine: Wait
@@ -1049,7 +1052,8 @@ class VitroView(
             if (checkQueued.compareAndSet(false, true)) mainHandler.post(check)
         }
         // Each unknown entity's listener hears its state land, and HA's answer that it doesn't exist (markSnapshot).
-        val unsubs = refs.filter { store[it] == null }.map { id -> store.subscribe(id) { queueCheck() } }
+        val unsubs = refs.filter { store[it] == null }.map { id -> store.subscribe(id) { queueCheck() } } +
+            listOfNotNull(if (all) store.subscribeSnapshot { queueCheck() } else null)
         mine = Wait(index) {
             unsubs.forEach { it() }
             mainHandler.removeCallbacks(timeout)
