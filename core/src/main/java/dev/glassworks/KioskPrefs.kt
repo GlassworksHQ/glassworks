@@ -424,13 +424,31 @@ class KioskPrefs(
         get() = sp.getString("device_mac", "") ?: ""
         set(v) = sp.edit().putString("device_mac", v).apply()
 
-    var speakerVolume: Float
-        get() = sp.getFloat("speaker_volume", 1.0f)
-        set(v) = sp.edit().putFloat("speaker_volume", v).apply()
+    /** The master volume, 0 to 1 ([dev.glassworks.audio.MasterVolume]); -1 until it first reads Android's media volume. */
+    var masterLevel: Float
+        get() = sp.getFloat("master_level", -1f)
+        set(v) = sp.edit().putFloat("master_level", v).apply()
 
+    /** The master volume is muted: Home Assistant's *Speaker* mute and the Sound page's switch. */
     var speakerMuted: Boolean
         get() = sp.getBoolean("speaker_muted", false)
         set(v) = sp.edit().putBoolean("speaker_muted", v).apply()
+
+    /** A critical alert has the media volume at full. Written at once, so a start after a crash mid-alert puts the level back. */
+    var volumeRaised: Boolean
+        get() = sp.getBoolean("volume_raised", false)
+        set(v) { sp.edit().putBoolean("volume_raised", v).commit() }
+
+    /**
+     * The speaker volume builds before the master volume kept for voice and announcements alone (0 to 1), or null
+     * when there is none; reading it removes it ([dev.glassworks.audio.MasterVolume.start]).
+     */
+    fun takeOldSpeakerVolume(): Float? {
+        if (!sp.contains("speaker_volume")) return null
+        val v = sp.getFloat("speaker_volume", 1.0f)
+        sp.edit().remove("speaker_volume").apply()
+        return v
+    }
 
     // ---- Improv Wi-Fi via BLE (see improv/ImprovController)
 

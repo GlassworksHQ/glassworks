@@ -5,6 +5,13 @@ What changed in each release of `dev.glassworks:sendspin` on Maven Central. Vers
 cut from `libs/sendspin/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
+## [0.2.0] - 2026-11-26
+
+### Added
+- **`SendspinPlayer.setOutputGain(gain)`.** A gain from 0 to 1 over the player's own volume, for an app with a
+  master volume of its own on a device whose volume Android keeps fixed. The server isn't told: the player's
+  volume stays where Music Assistant set it.
+
 ## [0.1.0] - 2026-11-22
 
 ### Added

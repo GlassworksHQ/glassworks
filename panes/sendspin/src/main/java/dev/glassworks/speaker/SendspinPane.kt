@@ -72,6 +72,8 @@ class SendspinPane(ctx: PaneContext, haBase: () -> String?) : Pane {
             }
             // Sendspin keeps its timeline (the group plays on); the panel just goes quiet locally.
             is PanelEvent.SpeakerClaimed -> player.setDucked(event.claimed)
+            // The master volume, where the device's own volume is fixed: Music Assistant's level stays its own.
+            is PanelEvent.VolumeGain -> player.setOutputGain(event.gain)
         }
     }
 }

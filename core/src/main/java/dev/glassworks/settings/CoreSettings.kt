@@ -7,10 +7,12 @@ import dev.glassworks.pane.SettingsSection
 import dev.glassworks.screen.ScreenHardware
 import dev.glassworks.theme.Themes
 import dev.glassworks.KioskPrefs
+import dev.glassworks.audio.MasterVolume
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
- * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Appearance, Log,
+ * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Sound, Appearance, Log,
  * Security and About (#63). Network has nothing yet. Durations are picked, the
  * presence range is a slider: nothing on the Screen page is typed (#63 round 2). Values are read when the menu opens; each change
  * applies on its own. The ones Gecko reads at start (the dashboard's address, zoom, secure hosts) ask
@@ -39,6 +41,8 @@ class CoreSettings(
     private val now: () -> Long = System::currentTimeMillis,
     /** The device has a PIN, pattern or password ([dev.glassworks.platform.ScreenLock]): the Screen page says what that means. */
     private val screenLock: () -> Boolean = { false },
+    /** The master volume, for the Sound page; null leaves the page out. */
+    private val volume: MasterVolume? = null,
 ) {
     class Live(
         /** Full screen: the page hides or shows HA's header and sidebar. */
@@ -88,6 +92,7 @@ class CoreSettings(
             // Night is Home Assistant's to decide (#473): the blueprint turns the screen off sooner and dims it.
             screenBlueprints,
         )),
+        SettingsPlace.SOUND to SettingsSection(SOUND, SOUND_TITLE, volume?.let(::sound).orEmpty()),
         // The panel's own screens over the dashboard (#691): voice, timers, notifications and setup.
         SettingsPlace.APPEARANCE to SettingsSection(APPEARANCE, APPEARANCE_TITLE, listOf(
             SettingsItem.Group(THEME_TITLE, listOf(SettingsItem.Note { THEME_NOTE }, theme(), followHaDark())),
@@ -144,6 +149,19 @@ class CoreSettings(
         if (why != null) prefs.presenceRangeM = old
         done(why)
     }
+
+    /**
+     * The master volume: everything the panel plays, whichever panes are on. Music Assistant's player volume (the Music
+     * page) sits under it. The panel's switch is Home Assistant's *Speaker* mute.
+     */
+    private fun sound(v: MasterVolume): List<SettingsItem> = listOf(
+        SettingsItem.Note { SOUND_NOTE },
+        SettingsItem.Slider(VOLUME_TITLE, { (v.level * 100).roundToInt().toFloat() }, 0f, 100f, 1f, { "${it.roundToInt()} %" }) { x, done ->
+            v.set(x / 100f)
+            done(null)
+        },
+        switch(MUTE_TITLE, MUTE_DETAIL, { v.muted }) { v.mute(it) },
+    )
 
     /**
      * "Turn off when idle", the same on every frame: Home Assistant's `Screen mode` "always" (the default since #522, and
@@ -304,6 +322,13 @@ class CoreSettings(
         /** The Screen page's id, and its blueprints' `pane` in the app's blueprint list (core/src/main/java/dev/glassworks/screen/page.json). */
         const val SCREEN = "screen"
         const val ACCOUNT_TITLE = "Dashboard sign-in"
+        /** The Sound page's id: the master volume. */
+        const val SOUND = "sound"
+        const val SOUND_TITLE = "Sound"
+        const val SOUND_NOTE = "Sets the volume of everything the panel plays: voice replies, timers, notifications, music, and the dashboard."
+        const val VOLUME_TITLE = "Volume"
+        const val MUTE_TITLE = "Mute"
+        const val MUTE_DETAIL = "Critical notifications still play at full volume"
         /** The Appearance page's id (#691). */
         const val APPEARANCE = "appearance"
         const val APPEARANCE_TITLE = "Appearance"

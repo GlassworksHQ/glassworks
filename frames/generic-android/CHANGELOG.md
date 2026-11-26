@@ -11,6 +11,17 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
+  page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
+  with a mute switch. It is Android's media volume, so the device's volume buttons move it too. Home Assistant's
+  *Speaker* volume and mute now control the same thing, so turning the panel down in Home Assistant quiets all of
+  it, not only announcements. The Music page's slider is now called
+  **Music volume** and sets Music Assistant's level under it. On the few devices whose volume Android keeps fixed,
+  such as some TV boxes, it still sets everything but the dashboard's own sound.
+- **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
+  when the panel is turned down or muted, and the volume goes back to where it was after each tone.
+
 ### Fixed
 - **App updates fail fast when "Install unknown apps" is turned off.** On Android 8 and newer (unless Glassworks is a system app or device owner), starting a Home Assistant update without "Install unknown apps" allowed used to download the APK, open Android's refusal dialog, and wait 10 minutes before reporting a timeout. Glassworks now stops right away and tells you to enable "Install unknown apps" in Android's settings.
 - **Wi-Fi setup over Bluetooth finishes on the Mirror.** When Home Assistant or its phone app sent the Wi-Fi
