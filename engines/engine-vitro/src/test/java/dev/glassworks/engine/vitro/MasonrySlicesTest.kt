@@ -8,6 +8,7 @@ import android.app.Activity
 import android.app.Application
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.IframeCardView
 import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -30,10 +31,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
 
 /**
- * The masonry view builds as HA's does (`hui-masonry-view.ts` `_createColumns`): its columns on screen first, then its
- * cards in config order, at most 16 ms of them at a time with a frame between, and the finished view the same as one
- * built in one go. Slices are counted on a clock the test moves ([VitroView.sliceClock]): 5 ms per look, so four cards
- * fit in a slice (the budget is checked before each card after the first, as HA checks it).
+ * A masonry view builds its first screen in one pass, so its first frame shows that screen whole, then adds the cards
+ * below it in chunks that don't wait for frames ([VitroView.postSlice]); the finished view is the one a build in one go
+ * makes. Chunks are counted on a clock the test moves ([VitroView.sliceClock]): 5 ms per look.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w1440dp-h720dp-mdpi")
@@ -52,7 +52,10 @@ class MasonrySlicesTest {
         },
     ).toString()
 
-    /** A view of [dashboard]; [sliced]: on a clock that moves 5 ms per look, else on Robolectric's (one slice). */
+    /** The chunks waiting for the main thread ([VitroView.postSlice]), oldest first. */
+    private val queued = ArrayDeque<Runnable>()
+
+    /** A view of [dashboard]; [sliced]: on a clock that moves 5 ms per look, else on Robolectric's (one pass). */
     private fun vitroView(
         dashboard: String,
         sliced: Boolean,
@@ -65,9 +68,9 @@ class MasonrySlicesTest {
         if (sliced) {
             var t = 0L
             vv.sliceClock = { t += 5; t }
-            vv.afterNextFrame = { task ->
-                nextFrame += task
-                val cancel = { nextFrame.remove(task); Unit }
+            vv.postSlice = { task ->
+                queued += task
+                val cancel = { queued.remove(task); Unit }
                 cancel
             }
         }
@@ -84,12 +87,9 @@ class MasonrySlicesTest {
         return vv
     }
 
-    /** The slices waiting for the next frame ([VitroView.afterNextFrame]), oldest first. */
-    private val nextFrame = ArrayDeque<Runnable>()
-
-    /** One frame drawn: the slice waiting for it runs, and whatever else the main thread has queued. */
-    private fun frame() {
-        nextFrame.removeFirstOrNull()?.run()
+    /** The next chunk runs, and whatever else the main thread has queued. */
+    private fun chunk() {
+        queued.removeFirstOrNull()?.run()
         ShadowLooper.idleMainLooper()
     }
 
@@ -101,13 +101,25 @@ class MasonrySlicesTest {
     /** The cards attached to [row]'s columns, by column. */
     private fun attached(row: MasonryColumnsLayout): List<Int> = (0 until row.childCount).map { (row.getChildAt(it) as ViewGroup).childCount }
 
-    /** Every view under the masonry columns: its depth, class, place and size, and whether it shows. */
-    private fun layoutDump(vv: VitroView): List<String> {
+    /** The card views in [row]'s columns. */
+    private fun cardViews(row: MasonryColumnsLayout): List<View> =
+        (0 until row.childCount).flatMap { c -> (row.getChildAt(c) as ViewGroup).let { col -> (0 until col.childCount).map { col.getChildAt(it) } } }
+
+    /** The name a test card shows (`heavy 12`). */
+    private fun nameOf(card: View): String =
+        all(card).filterIsInstance<TextView>().firstNotNullOf { Regex("""\w+ \d+""").find(it.text)?.value }
+
+    private fun layOut(vv: VitroView) {
         vv.measure(View.MeasureSpec.makeMeasureSpec(1440, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(720, View.MeasureSpec.EXACTLY))
         vv.layout(0, 0, 1440, 720)
+    }
+
+    /** Every view under the masonry columns: its depth, class, place and size, and whether it shows. */
+    private fun layoutDump(vv: VitroView): List<String> {
+        layOut(vv)
         val out = ArrayList<String>()
         fun walk(v: View, depth: Int) {
-            val text = (v as? android.widget.TextView)?.text?.toString().orEmpty()
+            val text = (v as? TextView)?.text?.toString().orEmpty()
             out += "$depth ${v.javaClass.simpleName} ${v.left},${v.top} ${v.width}x${v.height} ${v.visibility} $text"
             if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i), depth + 1)
         }
@@ -116,28 +128,35 @@ class MasonrySlicesTest {
     }
 
     @Test
-    fun theFirstSliceAttachesTheFirstCardsAndLeavesTheRestPending() {
+    fun theFirstPassBuildsTheWholeFirstScreenAndLeavesTheRestPending() {
+        val config = dashboard("heavy" to 80)
+        // The cards a build in one go puts on the first screen (their top above the panel's 720 px).
+        val once = vitroView(config, sliced = false)
+        layOut(once)
+        val onFirstScreen = cardViews(columns(once)).filter { (it.parent as View).top + it.top < 720 }.map(::nameOf).toSet()
+        assertTrue(onFirstScreen.size in 10..60)
+
         val metrics = ArrayList<VitroMetrics>()
-        val vv = vitroView(dashboard("heavy" to 30), sliced = true, metrics = metrics)
+        val vv = vitroView(config, sliced = true, metrics = metrics)
         val row = columns(vv)
-        // HA's masonry view on a 1440 px screen: four columns, on screen before the cards.
-        assertEquals(4, row.childCount)
-        assertEquals("the first slice: four cards, in config order", 4, attached(row).sum())
+        val first = cardViews(row).map(::nameOf).toSet()
+        assertTrue("every card of the first screen, at once: missing ${onFirstScreen - first}", first.containsAll(onFirstScreen))
+        assertTrue("the rest waits: ${first.size} of 80", first.size < 80)
+        assertTrue("every column has its first card, so none changes width later", attached(row).all { it > 0 })
         assertTrue(vv.buildInProgress)
         assertTrue("the view's tree is on screen (Clarity's launch screen is over)", vv.currentViewOnScreen)
         assertFalse("not built yet: the page isn't ready until its last card", vv.currentViewBuilt)
         assertTrue("no metrics until the view is built", metrics.isEmpty())
-        // The first cards in config order, each in the column HA's placement gives it: the first column takes cards
-        // until its size reaches 5.
-        val first = (0 until row.childCount).flatMap { c -> all(row.getChildAt(c)).filterIsInstance<android.widget.TextView>().map { it.text.toString() } }
-        assertTrue(first.toString(), first.any { it.startsWith("heavy 0") })
-        assertFalse(first.toString(), first.any { it.startsWith("heavy 4") })
+        assertEquals("one chunk waits", 1, queued.size)
 
-        frame()
-        assertEquals("one frame, one more slice", 8, attached(row).sum())
-        repeat(10) { frame() }
+        // A chunk: up to 48 ms of cards, at 5 ms a look, then the next one queued.
+        val before = attached(row).sum()
+        chunk()
+        val added = attached(row).sum() - before
+        assertTrue("a chunk adds several cards: $added", added in 2..10)
+        repeat(20) { chunk() }
         assertFalse(vv.buildInProgress)
-        assertEquals(30, attached(row).sum())
+        assertEquals(80, attached(row).sum())
         assertTrue(vv.currentViewBuilt)
         assertEquals("one report, once the last card is in", 1, metrics.size)
         assertFalse(metrics.single().cacheHit)
@@ -145,88 +164,90 @@ class MasonrySlicesTest {
 
     @Test
     fun theFinishedViewIsTheOneABuildInOneGoMakes() {
-        val config = dashboard("heavy" to 40)
+        val config = dashboard("heavy" to 80)
         val once = vitroView(config, sliced = false)
-        assertFalse("Robolectric's clock stands still: one slice", once.buildInProgress)
+        assertFalse("Robolectric's clock stands still: one pass", once.buildInProgress)
         val oneShot = layoutDump(once)
-        assertTrue("every card and its insides, laid out", oneShot.size > 80)
+        assertTrue("every card and its insides, laid out", oneShot.size > 160)
         assertTrue("cards stacked down the columns", oneShot.map { it.split(' ')[2] }.distinct().size > 10)
 
         val sliced = vitroView(config, sliced = true)
         assertTrue(sliced.buildInProgress)
-        repeat(20) { frame() }
+        repeat(30) { chunk() }
         assertFalse(sliced.buildInProgress)
         assertEquals(oneShot, layoutDump(sliced))
-        assertEquals(40, attached(columns(sliced)).sum())
+        assertEquals(80, attached(columns(sliced)).sum())
     }
 
     @Test
     fun aViewSwitchStopsTheBuildAndAddsNoCardToTheViewLeft() {
         val metrics = ArrayList<VitroMetrics>()
-        val vv = vitroView(dashboard("heavy" to 30, "light" to 2), sliced = true, metrics = metrics)
+        val vv = vitroView(dashboard("heavy" to 80, "light" to 2), sliced = true, metrics = metrics)
         val heavyRow = columns(vv)
         val heavyTree = vv.currentScroll()!!
-        assertEquals(4, attached(heavyRow).sum())
+        val firstPass = attached(heavyRow).sum()
+        assertTrue(firstPass < 80)
 
         assertTrue(vv.navigateToView("light"))
-        assertFalse("the light view is built in one slice, and the heavy build stopped", vv.buildInProgress)
-        assertTrue("nothing waits for a frame", nextFrame.isEmpty())
-        repeat(10) { frame() }
-        assertEquals("no card added to the view left", 4, attached(heavyRow).sum())
+        assertFalse("the light view is built in one pass, and the heavy build stopped", vv.buildInProgress)
+        assertTrue("no chunk waits", queued.isEmpty())
+        repeat(10) { chunk() }
+        assertEquals("no card added to the view left", firstPass, attached(heavyRow).sum())
         assertNull("its half-built tree is gone", heavyTree.parent)
         assertEquals(listOf("LIGHT"), metrics.map { it.viewTitle })
 
         // Back to it: built again from the start, all of it.
         assertTrue(vv.navigateToView("heavy"))
         assertTrue(vv.buildInProgress)
-        repeat(10) { frame() }
+        repeat(30) { chunk() }
         assertFalse(vv.buildInProgress)
-        assertEquals(30, attached(columns(vv)).sum())
+        assertEquals(80, attached(columns(vv)).sum())
         assertEquals(listOf("LIGHT", "HEAVY"), metrics.map { it.viewTitle })
     }
 
     @Test
     fun aRebuildOfTheSameViewStartsAgainAndTheTabShownAgainKeepsBuilding() {
         val metrics = ArrayList<VitroMetrics>()
-        val vv = vitroView(dashboard("heavy" to 30), sliced = true, metrics = metrics)
-        frame()
-        assertTrue("still building after two slices", vv.buildInProgress)
+        val vv = vitroView(dashboard("heavy" to 80), sliced = true, metrics = metrics)
+        chunk()
+        assertTrue("still building after a chunk", vv.buildInProgress)
         // The same tab again, not a rebuild: the build goes on.
         assertTrue(vv.navigateToView("heavy"))
         assertTrue("the same tab again keeps building", vv.buildInProgress)
         assertTrue("nothing reported for a view still adding its cards", metrics.isEmpty())
         // A new config (a lovelace_updated): the build starts over, and only the new one finishes.
-        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject(dashboard("heavy" to 12))), null)
-        repeat(10) { frame() }
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject(dashboard("heavy" to 60))), null)
+        repeat(30) { chunk() }
         assertFalse("the new build finished", vv.buildInProgress)
-        assertEquals(12, attached(columns(vv)).sum())
+        assertEquals(60, attached(columns(vv)).sum())
         assertEquals(1, metrics.size)
     }
 
     @Test
     fun aPageThatGoesStopsTheBuild() {
-        val vv = vitroView(dashboard("heavy" to 30), sliced = true)
+        val vv = vitroView(dashboard("heavy" to 80), sliced = true)
         val row = columns(vv)
+        val firstPass = attached(row).sum()
         vv.closeIslands()
         assertFalse(vv.buildInProgress)
-        assertTrue("nothing waits for a frame", nextFrame.isEmpty())
-        repeat(10) { frame() }
-        assertEquals(4, attached(row).sum())
+        assertTrue("no chunk waits", queued.isEmpty())
+        repeat(10) { chunk() }
+        assertEquals(firstPass, attached(row).sum())
     }
 
-    // #947's rules hold for cards a later slice adds: a card holding an island (a browser's SurfaceView, blank under a
+    // #947's rules hold for cards a later chunk adds: a card holding an island (a browser's SurfaceView, blank under a
     // layer) never gets a layer, and an island attaches into a tree already on screen, where it lifts any layer above it.
     @Test
-    fun cardsALaterSliceAddsKeepTheIslandLayerRules() {
-        val cards = cards("heavy", 10).apply {
+    fun cardsALaterChunkAddsKeepTheIslandLayerRules() {
+        val cards = cards("heavy", 60).apply {
             put(JSONObject("""{"type": "iframe", "url": "https://example.com/", "aspect_ratio": "60%"}"""))
             put(JSONObject("""{"type": "vertical-stack", "cards": [{"type": "iframe", "url": "https://example.com/", "aspect_ratio": "60%"}]}"""))
             put(JSONObject().put("type", "markdown").put("content", "Last"))
         }
         val config = JSONObject().put("views", JSONArray().put(JSONObject().put("path", "heavy").put("cards", cards))).toString()
         val vv = vitroView(config, sliced = true, layers = VitroView.CardLayers.ALL)
-        assertTrue("no island in the first slice", all(vv).filterIsInstance<IframeCardView>().isEmpty())
-        repeat(5) { frame() }
+        assertTrue("no island in the first pass: they're below the first screen", all(vv).filterIsInstance<IframeCardView>().isEmpty())
+        repeat(20) { chunk() }
         assertFalse(vv.buildInProgress)
         val islands = all(vv).filterIsInstance<IframeCardView>()
         assertEquals(2, islands.size)
@@ -237,9 +258,9 @@ class MasonrySlicesTest {
             }
         }
         val last = all(vv).filterIsInstance<MarkdownCardView>()
-            .single { card -> all(card).filterIsInstance<android.widget.TextView>().any { it.text.toString() == "Last" } }
+            .single { card -> all(card).filterIsInstance<TextView>().any { it.text.toString() == "Last" } }
         assertTrue(
-            "the last slice's own card keeps its layer",
+            "the last chunk's own card keeps its layer",
             generateSequence(last as View) { it.parent as? View }.takeWhile { it !== vv }.any { it.layerType == View.LAYER_TYPE_HARDWARE },
         )
     }

@@ -99,6 +99,7 @@ import dev.glassworks.engine.vitro.data.HaLocale
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.EntityFilterConfig
+import dev.glassworks.engine.vitro.model.HaCardSize
 import dev.glassworks.engine.vitro.fonts.WebFonts
 import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatChecker
@@ -293,24 +294,33 @@ class VitroView(
     private var buildingIndex = -1
 
     /**
-     * The cards a masonry build still has to make and attach, in config order, collected while [buildViewTree] runs:
-     * [renderView] hands them to a [SlicedBuild]. Null outside a build.
+     * A card of a masonry view still to be added ([SlicedBuild]): [make] builds it (or hands back the one built ahead,
+     * a live camera), [attach] puts it in its column, after the cards before it there.
      */
-    private var pendingSteps: MutableList<() -> View>? = null
+    private class CardStep(val make: () -> View, val attach: (View) -> Unit, val discard: () -> Unit = {})
 
     /**
-     * A view on screen whose cards are still being added, as HA's masonry view adds them (`hui-masonry-view.ts`
-     * `_createColumns`): its columns are on screen first, then its cards are made and attached in config order, for
-     * at most [SLICE_BUDGET_MS] at a time, with a frame drawn between, so the first screen draws after the first
-     * slice instead of after the whole view. Where each card goes is decided before any is built ([HaMasonry.place]),
-     * so the finished view is the one a build in one go makes. What waits for the whole view (the islands no card took
-     * back, the readiness and metrics, the rebuild for guessed states) waits for its last slice ([finishBuild]).
+     * The cards below a masonry view's first screen, in config order, collected while [buildViewTree] runs:
+     * [renderView] hands them to a [SlicedBuild]. Null outside a build.
+     */
+    private var pendingSteps: MutableList<CardStep>? = null
+
+    /**
+     * A masonry view on screen whose cards below its first screen are still being added. Home Assistant's masonry
+     * view (`hui-masonry-view.ts` `_createColumns`) puts its columns up first and adds every card in 16 ms slices with
+     * a frame between, which on a panel draws the first screen over many frames and stretches the whole build.
+     * Vitro builds the first screen in one pass instead ([buildMasonryLayout]: the cards whose column, decided from
+     * the config, puts them within it by HA's card sizes), so the first frame shows it whole, then adds the rest in
+     * chunks of at most [REST_SLICE_BUDGET_MS] that don't wait for frames: each runs as soon as the main thread is
+     * free, frames and input in between. The finished view is the one a build in one go makes, as every card's column
+     * is decided before any is built ([HaMasonry.place]). What waits for the whole view (the islands no card took
+     * back, the readiness and metrics, the rebuild for guessed states) waits for its last chunk ([finishBuild]).
      */
     private inner class SlicedBuild(
         val index: Int,
         val viewCfg: ViewConfig,
         val startedAt: Long,
-        steps: List<() -> View>,
+        steps: List<CardStep>,
     ) {
         val steps = ArrayDeque(steps)
         var slices = 0
@@ -319,7 +329,7 @@ class VitroView(
         private var scheduled: (() -> Unit)? = null
 
         fun schedule() {
-            scheduled = afterNextFrame(run)
+            scheduled = postSlice(run)
         }
 
         fun unschedule() {
@@ -329,17 +339,13 @@ class VitroView(
     }
 
     /**
-     * HA's `nextRender()` (`requestAnimationFrame`, then a task): runs [task] once the next frame has been drawn, and
-     * returns what cancels it. The Choreographer's frame callback runs before the frame's layout and draw, so the task
-     * it posts runs after them. Tests give their own.
+     * Runs [task] as soon as the main thread is free, and returns what cancels it. An asynchronous message: a view
+     * that changed (cards just added) holds ordinary messages back until its next frame is drawn, and these chunks
+     * don't wait for one. The frame still runs between two chunks when it's due. Tests give their own.
      */
-    internal var afterNextFrame: (Runnable) -> (() -> Unit) = { task ->
-        val frame = android.view.Choreographer.FrameCallback { mainHandler.post(task) }
-        android.view.Choreographer.getInstance().postFrameCallback(frame)
-        val cancel = {
-            android.view.Choreographer.getInstance().removeFrameCallback(frame)
-            mainHandler.removeCallbacks(task)
-        }
+    internal var postSlice: (Runnable) -> (() -> Unit) = { task ->
+        mainHandler.sendMessage(android.os.Message.obtain(mainHandler, task).apply { isAsynchronous = true })
+        val cancel = { mainHandler.removeCallbacks(task) }
         cancel
     }
 
@@ -347,7 +353,7 @@ class VitroView(
     private var building: SlicedBuild? = null
 
     /**
-     * The clock a slice's budget is read on ([SLICE_BUDGET_MS]). Tests set one that moves: Robolectric's stands still
+     * The clock a chunk's budget is read on ([SLICE_BUDGET_MS], [REST_SLICE_BUDGET_MS]). Tests set one that moves: Robolectric's stands still
      * while the main thread works, so every view builds there in one slice, as before.
      */
     internal var sliceClock: () -> Long = { SystemClock.uptimeMillis() }
@@ -363,30 +369,38 @@ class VitroView(
         val b = building ?: return
         building = null
         b.unschedule()
+        // A camera made ahead of its turn closes its stream: its card is never attached now.
+        b.steps.forEach { it.discard() }
+        b.steps.clear()
         if (dropPartial) dropView(b.index, keepIslands = false)
     }
 
     /**
-     * One slice of [b]: cards made and attached in config order until [SLICE_BUDGET_MS] has passed (at least one), as
-     * HA's loop checks its 16 ms before each card. The rest wait for the next frame; the last slice finishes the view.
+     * One chunk of [b]: cards made in config order until [budgetMs] has passed since [start] (at least one), off the
+     * tree, then attached together, so the next frame lays out only them. The last chunk finishes the view. The first
+     * chunk runs in the build's own pass ([renderView]), with HA's [SLICE_BUDGET_MS] counted from the build's start:
+     * a first screen that took longer than that is drawn before any card below it is made.
      */
-    private fun runSlice(b: SlicedBuild) {
+    private fun runSlice(b: SlicedBuild, start: Long = sliceClock(), budgetMs: Long = REST_SLICE_BUDGET_MS) {
         if (building !== b) return
-        val start = sliceClock()
+        val began = sliceClock()
         b.slices++
-        val added = ArrayList<View>()
+        val made = ArrayList<Pair<CardStep, View>>()
         buildingIndex = b.index
         try {
             // A card whose build ends this one (a re-entrant render or drop) leaves the rest unmade.
             while (building === b && b.steps.isNotEmpty()) {
-                if (added.isNotEmpty() && sliceClock() - start > SLICE_BUDGET_MS) break
-                added += b.steps.removeFirst().invoke()
+                if ((made.isNotEmpty() || start != began) && sliceClock() - start > budgetMs) break
+                val step = b.steps.removeFirst()
+                made += step to step.make()
             }
         } finally {
             buildingIndex = -1
         }
-        b.longestMs = maxOf(b.longestMs, sliceClock() - start)
         if (building !== b) return
+        for ((step, card) in made) step.attach(card)
+        val added = made.map { it.second }
+        b.longestMs = maxOf(b.longestMs, sliceClock() - began)
         // Islands of the cards just added run only while their view is on screen, as [updateIslandsShown] sets them.
         val root = viewCache[b.index]
         if (root != null) {
@@ -1280,7 +1294,8 @@ class VitroView(
             updateCardsHidden()
             return
         }
-        var steps: List<() -> View> = emptyList()
+        var steps: List<CardStep> = emptyList()
+        val clockAtStart = sliceClock()
         val viewRoot = if (cached != null) {
             cached
         } else {
@@ -1293,7 +1308,7 @@ class VitroView(
             fontsFor = cardCtx.haBase to cardCtx.resources
             val pinned = ArrayList<Pair<View, FrameLayout.LayoutParams>>()
             pendingPinned = pinned
-            val deferred = ArrayList<() -> View>()
+            val deferred = ArrayList<CardStep>()
             pendingSteps = deferred
             guessedStates.clear()
             // The view's old tree, if it has one, goes first: its islands wait for this build to take them back.
@@ -1345,12 +1360,13 @@ class VitroView(
             finishBuild(index, viewCfg, t0, cached = cached != null)
             return
         }
-        // The columns are on screen; the cards follow, the first slice now ([SlicedBuild]).
+        // The first screen is on screen; the cards below it follow ([SlicedBuild]), while 16 ms of the build are left
+        // now, the rest once that screen is drawn.
         updateIslandsShown()
         updateCardsHidden()
         val b = SlicedBuild(index, viewCfg, t0, steps)
         building = b
-        runSlice(b)
+        runSlice(b, start = clockAtStart, budgetMs = SLICE_BUDGET_MS)
     }
 
     /**
@@ -1547,9 +1563,9 @@ class VitroView(
      * view builds, if the connection knows their capabilities ([PictureCardView.startEarly]). Only those the build
      * shows, while the dashboard is on screen: a hidden card opens no stream, as in HA.
      */
-    private fun startCamerasEarly(card: View) {
+    private fun startCamerasEarly(card: View, untilAttached: Boolean = false) {
         if (!dashboardShown || !activityShown || card.visibility != VISIBLE) return
-        forEachCard(card) { c -> if (c is PictureCardView && visibleWithin(c, card)) c.startEarly() }
+        forEachCard(card) { c -> if (c is PictureCardView && visibleWithin(c, card)) c.startEarly(untilAttached) }
     }
 
     private fun forEachCard(v: View, action: (CardSurface) -> Unit) {
@@ -2024,19 +2040,37 @@ class VitroView(
         val columns = (0 until count).map { cardColumn(ctx) }
         columns.forEach { row.addView(it, LinearLayout.LayoutParams(0, WRAP_CONTENT)) }
         val viewIndex = buildingIndex
-        // Each card in config order, into the column it was placed in: in slices once the columns are on screen
-        // ([SlicedBuild], HA's `_createColumns`), or here, outside a view build.
-        val steps = placed.mapIndexed { k, (configIndex, card) ->
-            {
-                val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
-                clarity?.cardBuilt(viewIndex, configIndex, card, v)
-                cacheCardAsLayer(v, card, ctx)
-                startCamerasEarly(v)
-                columns[placement[k]].addView(v, cardMarginParams(ctx, widthDp))
-                v
+        fun make(configIndex: Int, card: CardConfig, ahead: Boolean = false): View {
+            val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
+            clarity?.cardBuilt(viewIndex, configIndex, card, v)
+            cacheCardAsLayer(v, card, ctx)
+            startCamerasEarly(v, untilAttached = ahead)
+            return v
+        }
+        val deferred = pendingSteps
+        // The first screen: each card whose column, as HA's card sizes fill it (50 px a unit, and the card's margins),
+        // puts its top within it. Those are made and attached now, so the view's first frame shows that screen whole;
+        // the rest follow in chunks ([SlicedBuild]), or here too, outside a view build. Every column gets its first
+        // card now, so none changes width as the rest arrive.
+        val margin = cardMargin(ctx)
+        val viewportDp = (if (height > 0) height else resources.displayMetrics.heightPixels) / dp
+        val firstScreenDp = viewportDp * FIRST_SCREEN_SHARE
+        val tops = DoubleArray(count) { 4.0 }
+        placed.forEachIndexed { k, (configIndex, card) ->
+            val column = columns[placement[k]]
+            val top = tops[placement[k]]
+            tops[placement[k]] += HaCardSize.of(card, ::stateForBuild) * 50.0 + margin[0] + margin[2]
+            val attach = { v: View -> column.addView(v, cardMarginParams(ctx, widthDp)) }
+            when {
+                deferred == null || top < firstScreenDp -> attach(make(configIndex, card))
+                // A live camera below the first screen is made now all the same: its stream starts with the view, as
+                // in a build in one go, and the card waits for its turn in its column.
+                playsLiveVideo(card) -> make(configIndex, card, ahead = true).let { early ->
+                    deferred += CardStep({ early }, attach, discard = { forEachCard(early) { (it as? PictureCardView)?.stopEarly() } })
+                }
+                else -> deferred += CardStep({ make(configIndex, card) }, attach)
             }
         }
-        pendingSteps?.addAll(steps) ?: steps.forEach { it() }
         return row
     }
 
@@ -2681,10 +2715,24 @@ class VitroView(
         private const val RESTORE_SCROLL_MS = 5_000L
 
         /**
-         * How long a masonry build works before it lets a frame draw ([SlicedBuild]): HA's `_createColumns` waits for
-         * the next render once more than 16 ms went by since its slice began (`hui-masonry-view.ts`).
+         * How long a masonry build goes on past its first screen before that screen is drawn ([SlicedBuild]): HA's
+         * `_createColumns` waits for the next render once more than 16 ms went by since its slice began
+         * (`hui-masonry-view.ts`).
          */
         internal const val SLICE_BUDGET_MS = 16L
+
+        /**
+         * The longest chunk of cards below a masonry view's first screen ([SlicedBuild]): under the 50 ms a task may
+         * take before it counts as long (RAIL's input budget, which Clarity's main-thread probe uses too). One card that
+         * takes longer is still made whole.
+         */
+        internal const val REST_SLICE_BUDGET_MS = 48L
+
+        /**
+         * How far down a masonry view its first pass builds ([buildMasonryLayout]), as a share of the viewport's height:
+         * HA's card sizes only estimate a card's height, so a little more than the screen, not to leave its foot empty.
+         */
+        internal const val FIRST_SCREEN_SHARE = 1.25
 
         /** Whether a card is drawn through a hardware layer: never when it casts a shadow, which the layer's bounds would clip. */
         internal fun cardLayerWanted(themeElevationDp: Float, viewElevation: Float): Boolean =

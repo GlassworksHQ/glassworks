@@ -3716,12 +3716,20 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
      * shows), when the connection knows the camera's capabilities: its players open and connect while the rest of the
      * view builds, rather than once it's on screen. Attached, it plays or pauses as usual ([followShown]); one the
      * build never attached (a card replaced or dropped) closes what it opened on the next turn of the main loop.
+     * [untilAttached]: the build attaches the card later (a camera below a masonry view's first screen, made with the
+     * view so its stream starts with it), and calls [stopEarly] if it never does.
      */
-    internal fun startEarly() {
+    internal fun startEarly(untilAttached: Boolean = false) {
         val f = feed ?: return
         if (isAttachedToWindow || !f.capabilitiesKnown) return
         guarded("camera") { f.start() }
-        ctx.main.post { if (!isAttachedToWindow) guarded("camera") { f.stop() } }
+        if (!untilAttached) ctx.main.post { stopEarly() }
+    }
+
+    /** What [startEarly] opened closes, unless the card was attached since. */
+    internal fun stopEarly() {
+        val f = feed ?: return
+        if (!isAttachedToWindow) guarded("camera") { f.stop() }
     }
 
     override fun onCardFailed() {
