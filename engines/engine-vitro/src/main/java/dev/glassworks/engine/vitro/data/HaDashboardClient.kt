@@ -1305,6 +1305,10 @@ class HaDashboardClient(
                     out += LovelaceResource(u, r.optString("type", "module"))
                 }
                 deliverResources(out)
+            } else if (!isTransportError(res)) {
+                // Home Assistant refused them: its frontend loads none, and the page that waits for them builds now
+                // (VitroView.holdFirstBuildForResourcesMs). A dropped connection asks again when it's back.
+                deliverResources(emptyList())
             }
         }
         // 4. Active dashboard config (and live lovelace_updated notifications)

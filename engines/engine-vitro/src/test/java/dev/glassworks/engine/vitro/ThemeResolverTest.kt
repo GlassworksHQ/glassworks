@@ -93,7 +93,7 @@ class ThemeResolverTest {
         assertEquals(argb(0xFF009AC7), t.primaryColor)
         assertEquals(argb(0xFFFF9800), t.accentColor)
         assertEquals(argb(0xFF111111), t.backgroundColor)
-        assertEquals(argb(0xFF202020), t.secondaryBackgroundColor)
+        assertEquals(argb(0xFF282828), t.secondaryBackgroundColor)  // HA's darkColorStyles, not neutral-10
         assertEquals(argb(0xFF1C1C1C), t.cardBackgroundColor) // ha-card-background -> var(--card-background-color)
         assertEquals(argb(0xFFE1E1E1), t.primaryTextColor)
         assertEquals(argb(0xFF9B9B9B), t.secondaryTextColor)

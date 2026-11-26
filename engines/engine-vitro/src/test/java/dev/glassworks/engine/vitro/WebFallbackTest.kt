@@ -337,6 +337,91 @@ class WebFallbackTest {
         assertEquals(listOf("$base/wall-test/plain"), pageFallback()!!.loads)
     }
 
+    // ---- The first decision waits for the resources (tablet Vitro run 3) ----
+
+    /**
+     * A VitroView as the engine sets it up for a cold start: the first build waits for the resources' answer. Records
+     * each view it hands to HA's frontend, and each view it builds.
+     */
+    private class ColdView(val vv: VitroView, val web: MutableList<String>, val built: MutableList<Int>)
+
+    private fun coldView(dashboard: JSONObject, path: String, holdMs: Long = 5_000): ColdView {
+        val store = EntityStore().apply { putLocal(EntityState("light.lounge_lamp", "on", mapOf("friendly_name" to "Lounge"))) }
+        val vv = VitroView(activity, store, Color.BLACK)
+        vv.holdFirstBuildForStatesMs = 0
+        vv.holdFirstBuildForResourcesMs = holdMs
+        val web = ArrayList<String>()
+        val built = ArrayList<Int>()
+        vv.onWebView = { v, reason -> web += "${v.path}: $reason" }
+        vv.onMetrics = { built += vv.currentViewIndex }
+        vv.contextFactory = { theme ->
+            VitroCardContext(
+                context = activity, haBase = base, store = store, theme = theme, resources = vv.resourcesList,
+                accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            )
+        }
+        activity.setContentView(vv)
+        vv.setDashboard(LovelaceParser.parseDashboard(dashboard), path)
+        idle()
+        return ColdView(vv, web, built)
+    }
+
+    private val bubbleScript = LovelaceResource("/hacsfiles/Bubble-Card/bubble-card.js?hacstag=343", "module")
+
+    @Test fun aColdStartDecidesOnceTheResourcesAreKnown() {
+        // The config lands before the resources (Bubble's modules check holds them back): the view whose sub-button only
+        // Bubble's island draws went to HA's frontend ("no Lovelace resource loads Bubble Card's script"), then came
+        // back once they landed. Now it waits, and the first decision is the one that stands.
+        val c = coldView(views(living, bubbleSubButtons), "bubble")
+        assertEquals("nothing is decided before the resources", emptyList<String>(), c.web)
+        assertEquals(emptyList<Int>(), c.built)
+        assertFalse(c.vv.currentViewBuilt)
+        c.vv.resourcesList = LovelaceResourceList(listOf(bubbleScript), bubbleModules = false)
+        idle()
+        assertEquals("an island draws it: Vitro's view", emptyList<String>(), c.web)
+        assertEquals(listOf(1), c.built)
+        assertTrue(c.vv.currentViewBuilt)
+    }
+
+    @Test fun aColdStartThatGoesToHomeAssistantsFrontendBuildsNoOtherView() {
+        // Without Bubble's script the view goes to HA's frontend once the answer says so, and the dashboard's first
+        // view, which the page never showed, isn't built behind it (tablet Vitro run 3 built `bubble` there).
+        val c = coldView(views(living, bubbleSubButtons), "bubble")
+        c.vv.resourcesList = LovelaceResourceList(emptyList(), bubbleModules = false)
+        idle()
+        assertEquals(1, c.web.size)
+        assertTrue(c.web.single(), c.web.single().startsWith("bubble: a Bubble card Vitro doesn't draw as Bubble does"))
+        assertEquals(emptyList<Int>(), c.built)
+        // Resources that change later rebuild the view the page went to HA's frontend for, not the first one.
+        c.vv.resourcesList = LovelaceResourceList(listOf(LovelaceResource("/local/other.js", "module")), bubbleModules = false)
+        idle()
+        assertEquals(2, c.web.size)
+        assertEquals(emptyList<Int>(), c.built)
+    }
+
+    @Test fun aColdStartWithoutAnAnswerBuildsAfterTheWait() {
+        val c = coldView(views(living, bubblePlain), "plain", holdMs = 2_000)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_900))
+        assertEquals(emptyList<Int>(), c.built)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200))
+        assertEquals("built as if there were none", listOf(1), c.built)
+        assertTrue(c.vv.resourcesKnown)
+        // A later answer is a change like any other: the view is built again.
+        c.vv.resourcesList = LovelaceResourceList(listOf(bubbleScript), bubbleModules = false)
+        idle()
+        assertEquals(listOf(1, 1), c.built)
+    }
+
+    @Test fun anEmptyFirstAnswerReleasesTheWait() {
+        // The list the view assumed (none) is still an answer: the held build goes ahead.
+        val c = coldView(views(living, bubblePlain), "plain")
+        c.vv.resourcesList = emptyList()
+        idle()
+        assertEquals(listOf(1), c.built)
+        assertEquals(emptyList<String>(), c.web)
+    }
+
     @Test fun bubbleFallbackFollowsTheIslandsScriptsAndBubblesModules() {
         fun view(card: String) = LovelaceParser.parseView(0, JSONObject("""{"cards": [$card]}"""))
         val sub = view("""{"type": "custom:bubble-card", "entity": "switch.fan", "sub_button": [{"entity": "switch.fan"}]}""")

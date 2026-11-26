@@ -777,6 +777,9 @@ class VitroEngine(
             // A view's first build waits (up to a second) for its states, as HA's frontend does: no wrong layout first,
             // and no second build once they land.
             vitroView.holdFirstBuildForStatesMs = FIRST_STATES_WAIT_MS
+            // And for the dashboard's Lovelace resources, which decide its islands and whether it goes to HA's frontend:
+            // one answer per server, so only a cold start (or another HA) waits, and only when they land after the config.
+            vitroView.holdFirstBuildForResourcesMs = FIRST_RESOURCES_WAIT_MS
             vitroView.onViewSelected = { v ->
                 // An empty filter subscribes to every entity, which auto-entities' runtime filters need.
                 selectedFollowsAll = CardRouter.followsAllEntities(v) || v.index in walkedViews
@@ -1507,6 +1510,12 @@ class VitroEngine(
 
         /** How long a view's first build waits for its first states. */
         private const val FIRST_STATES_WAIT_MS = 1_000L
+
+        /**
+         * How long a first build waits for the Lovelace resources: as long as Bubble Card's modules check may take
+         * ([dev.glassworks.engine.vitro.data.BubbleModules.probe]'s own timeouts), after two WebSocket round trips.
+         */
+        private const val FIRST_RESOURCES_WAIT_MS = 6_000L
 
         /** Entities islands may add to the entity subscription at runtime, and how long their lookups are batched. */
         private const val MAX_RUNTIME_ENTITIES = 256
