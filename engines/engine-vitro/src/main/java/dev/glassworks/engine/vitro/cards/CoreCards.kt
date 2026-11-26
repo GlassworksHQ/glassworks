@@ -2496,9 +2496,8 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                 }
                 cell.bindHoldAction(ctx, e.holdAction ?: ActionConfig("more-info"), e.entity)
                 observe(e.entity) { s ->
-                    val active = s?.isActive == true
-                    val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
-                    icon.setIcon(MdiIcons.resolveIconName(e.icon, s), tint)
+                    // HA's <state-badge> with the glance card's `color: "state"`.
+                    icon.setIcon(MdiIcons.resolveIconName(e.icon, s), stateColorBrightness(s, HaStateColor.icon(ctx, s, hvacOverRgb = true)))
                     name.text = e.name ?: s?.displayName ?: e.entity
                     state.text = s?.plainState() ?: "…"
                 }
@@ -2562,9 +2561,8 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         applyHaRipple(this, ctx.theme.cardBorderRadiusDp * ctx.dp, ctx.theme.dark)
         if (eid != null) {
             observe(eid) { s ->
-                val active = s?.isActive == true
-                val color = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
-                icon.setIcon(MdiIcons.resolveIconName(config.icon, s), stateColorBrightness(s, color))
+                // HA's `_computeColor` with no `color` (the compat rule claims none) and `state_color` on.
+                icon.setIcon(MdiIcons.resolveIconName(config.icon, s), stateColorBrightness(s, HaStateColor.icon(ctx, s, hvacOverRgb = false)))
                 label.text = config.name ?: s?.displayName ?: eid
                 state.text = s?.plainState().orEmpty()
             }

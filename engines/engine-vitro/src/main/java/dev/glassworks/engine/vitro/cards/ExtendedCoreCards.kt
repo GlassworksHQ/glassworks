@@ -1194,8 +1194,9 @@ class TodoListCardView(ctx: VitroCardContext, private val config: CardConfig) : 
             }, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(21f)))
         }
         dueText(item)?.let { (label, overdue) ->
-            // `.due`: a 14 px clock, then the time, in the secondary color (`--warning-color` once overdue).
-            val color = if (overdue) ThemeResolver.parseColor(ctx.theme.vars["warning-color"]) ?: WARNING else ctx.theme.secondaryTextColor
+            // `.due`: a 14 px clock, then the time, in the secondary color (`--warning-color` once overdue, unless
+            // the item is done: `.completed .due.overdue` is the secondary color again).
+            val color = if (overdue && !item.completed) ThemeResolver.parseColor(ctx.theme.vars["warning-color"]) ?: WARNING else ctx.theme.secondaryTextColor
             column.addView(LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL

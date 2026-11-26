@@ -60,5 +60,6 @@
  "ui.panel.lovelace.cards.todo-list.no_unchecked_items": "Du hast keine Aufgaben!",
  "ui.panel.lovelace.cards.todo-list.today": "Heute",
  "ui.panel.lovelace.cards.todo-list.unchecked_items": "Aktiv",
- "ui.panel.lovelace.editor.action-editor.actions.more-info": "Detailansicht"
+ "ui.panel.lovelace.editor.action-editor.actions.more-info": "Detailansicht",
+ "ui.panel.lovelace.warning.entity_unavailable": "Entität ist derzeit nicht verfügbar: {entity}"
 }
