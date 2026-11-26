@@ -822,11 +822,35 @@ open class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardS
         if (steppers?.visibility != v) steppers?.visibility = v
     }
 
+    private val dialFrame = FrameLayout(ctx.context)
+    private var showModes = false
+
+    /**
+     * hui-thermostat-card's `.container` (flex: 1, at least as tall as it is wide, as wide as what it holds) holding the
+     * state control (8 px of padding, a 320 px dial at most, as wide as the container's height, shrunk to the card's
+     * width): with no fixed height (a masonry column) the container is a square around the control, the dial 16 px
+     * narrower than the card up to 320 px; with one (a sections grid's rows) it's what the title leaves and the dial
+     * as tall as it, overflowing its padding.
+     */
     override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
-            // The dial: the card's width inside its paddings (and the column's 12 px), at most its 262 px height.
-            val w = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight - ctx.px(24f)
-            dialSize = DialSize.of(minOf(w, ctx.px(262f)) / ctx.dp)
+            val w = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+            val fixed = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
+            val bar = if (showModes) ctx.px(66f) else 0
+            val containerH = if (fixed) {
+                (MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom - ctx.px(48f) - bar).coerceAtLeast(0)
+            } else {
+                minOf(w, ctx.px(336f))
+            }
+            val dialPx = minOf(ctx.px(320f), w - ctx.px(16f), if (fixed) containerH else w).coerceAtLeast(0)
+            (dialFrame.layoutParams as? LinearLayout.LayoutParams)?.let { if (it.height != containerH) it.height = containerH }
+            (dial.layoutParams as? LayoutParams)?.let { if (it.height != dialPx) it.height = dialPx }
+            // `.buttons` sit 10 px above the dial's bottom, the dial centered in the container.
+            (steppers?.layoutParams as? LayoutParams)?.let { lp ->
+                val m = ctx.px(10f) + (containerH - dialPx) / 2
+                if (lp.bottomMargin != m) lp.bottomMargin = m
+            }
+            dialSize = DialSize.of(dialPx / ctx.dp)
             showSteppers()
         }
         super.measureCard(widthMeasureSpec, heightMeasureSpec)
@@ -835,7 +859,7 @@ open class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardS
     init {
         // hui-thermostat-card: a 48 px title row over the 262 px dial; the mode bar only when its feature is set
         // (Mushroom's climate card: when `hvac_modes` is).
-        val showModes = if (config.type == "thermostat") {
+        showModes = if (config.type == "thermostat") {
             config.raw.optJSONArray("features")?.let { a -> (0 until a.length()).any { a.optJSONObject(it)?.optString("type") == "climate-hvac-modes" } } == true
         } else {
             config.raw.has("hvac_modes")
@@ -863,8 +887,7 @@ open class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardS
         col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
 
         // Dial, with the outlined − and + in the opening at its bottom.
-        val dialFrame = FrameLayout(ctx.context)
-        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(262f)))
+        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(262f), Gravity.CENTER_VERTICAL))
         val steppers = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -893,7 +916,10 @@ open class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardS
         dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
             bottomMargin = ctx.px(10f)
         })
-        col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(262f)))
+        // The container spans the card's width: the column's 12 px padding doesn't hold it.
+        col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(262f)).apply {
+            leftMargin = -ctx.px(12f); rightMargin = -ctx.px(12f)
+        })
 
         if (showModes) col.addView(modeBar, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(46f)).apply { topMargin = ctx.px(8f) })
         this.steppers = steppers

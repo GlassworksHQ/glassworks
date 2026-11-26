@@ -249,4 +249,24 @@ class StateControlCardsTest {
         assertEquals(0, all(gone).count { it.contentDescription?.toString()?.endsWith("humidity") == true && shown(gone, it) })
         assertEquals("Unavailable", all(gone).filterIsInstance<ThermostatDialView>().single().contentDescription.toString())
     }
+
+    @Test
+    fun theThermostatSizesItsDialAsHaDoes() {
+        // getGridOptions: 12 columns by 5 rows (a sections grid fixes its height), two thirds of a row per feature.
+        val grid = dev.glassworks.engine.vitro.ui.HaGridSize.of(LovelaceParser.parseCard(JSONObject("""{"type": "thermostat", "entity": "climate.hall"}""")))
+        assertEquals(12, grid.columns)
+        assertEquals(5, grid.rows)
+        assertEquals(6, dev.glassworks.engine.vitro.ui.HaGridSize.of(LovelaceParser.parseCard(JSONObject(
+            """{"type": "humidifier", "entity": "humidifier.h", "features": [{"type": "humidifier-toggle"}]}"""))).rows)
+        // No fixed height (a masonry column): the title, then a square container around the control, as wide as the
+        // card up to the control's 336 px.
+        val dp = activity.resources.displayMetrics.density
+        for ((width, container) in listOf(310 to 310 - 2, 400 to 336)) {
+            val card = thermostat("climate.hall", "heat", heat, width = width)
+            val dial = all(card).filterIsInstance<ThermostatDialView>().single()
+            val inner = card.measuredHeight - card.paddingTop - card.paddingBottom
+            assertEquals("width $width", 48f + container, inner / dp, 1.5f)
+            assertEquals("width $width", container - 16f, dial.height / dp, 1.5f)
+        }
+    }
 }

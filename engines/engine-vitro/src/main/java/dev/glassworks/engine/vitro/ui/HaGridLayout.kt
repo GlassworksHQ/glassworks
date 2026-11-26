@@ -221,10 +221,14 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
             return HaGridSize(c, r?.takeIf { it > 0 })
         }
 
+        /** A state-control card's rows for its `features`: `Math.ceil(features.length * 2 / 3)`. */
+        private fun featureRows(raw: org.json.JSONObject): Int = ((raw.optJSONArray("features")?.length() ?: 0) * 2 + 2) / 3
+
         /** The minimum size a card type reports from `getGridOptions()`: entity and sensor 6 x 2, the graphs 6 wide. */
         fun minimums(card: CardConfig): HaGridSize = when (card.type) {
             "entity", "sensor", "history-graph" -> HaGridSize(6, 2)
             "statistics-graph" -> HaGridSize(6, 3)
+            "thermostat", "humidifier" -> HaGridSize(6, 2 + featureRows(card.raw))
             // hui-error-card: `min_columns: 6, min_rows: 1`.
             ErrorCardView.TYPE -> HaGridSize(6, 1)
             else -> HaGridSize(null, null)
@@ -301,6 +305,9 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                 }
                 // Measured in HA: the light card spans the section's width.
                 "light" -> HaGridSize(12, null)
+                // hui-thermostat-card's and hui-humidifier-card's getGridOptions: 12 columns, 5 rows (and two thirds of
+                // a row per feature, rounded up).
+                "thermostat", "humidifier" -> HaGridSize(12, 5 + featureRows(raw))
                 // hui-button-card's getGridOptions: 6 columns, 2 rows (`entity-button` is the same card).
                 "button", "entity-button" -> HaGridSize(6, 2)
                 // hui-statistic-card: 6 columns, 2 rows.
