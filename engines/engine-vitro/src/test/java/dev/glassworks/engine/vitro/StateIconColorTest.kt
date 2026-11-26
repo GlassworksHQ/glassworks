@@ -102,6 +102,22 @@ class StateIconColorTest {
     private fun hex(c: Int) = String.format("#%08X", c)
 
     @Test
+    fun anUnavailableIconTakesTheThemesUnavailableColor() {
+        // HA's iconColorCSS reads --state-unavailable-color: a theme that sets it wins over the disabled text color.
+        val themed = ThemeResolver.resolve(ThemeCatalog(defaultTheme = "t", themes = mapOf("t" to ThemeCatalog.ThemeDefinition(
+            base = mapOf("state-unavailable-color" to "#ff0000", "disabled-text-color" to "#666666")))), true)
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = store(), theme = themed, resources = emptyList(),
+            accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+        )
+        val gone = EntityState("light.gone", "unavailable", emptyMap())
+        assertEquals(hex(Color.RED), hex(dev.glassworks.engine.vitro.cards.HaStateColor.icon(ctx, gone, hvacOverRgb = false)))
+        // Without it, HA's default: the disabled text color.
+        assertEquals(hex(theme.disabledTextColor), hex(dev.glassworks.engine.vitro.cards.HaStateColor.icon(context(), gone, hvacOverRgb = false)))
+    }
+
+    @Test
     fun buttonIconsTakeHasStateColors() {
         val store = store()
         for ((entity, color) in expected + ("climate.heating" to Color.rgb(0, 0, 255))) {

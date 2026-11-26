@@ -214,13 +214,19 @@ class VitroEngine(
             // does instead ([navigateInPlace]: the panel's page, with back).
             override fun allowsLoad(url: String): Boolean {
                 if (url == "about:blank" || islandPageUrl(url)) return true
-                if (url.startsWith("http://") || url.startsWith("https://")) main.post { if (!disposed) navigateInPlace(url) }
+                val origin = islandServer.origin
+                when {
+                    // Another document the island server proxies from HA (a `/local/help.html`): HA's own page for it,
+                    // with back, never in the card's window.
+                    origin != null && url.startsWith("$origin/") -> main.post { if (!disposed) navigateInPlace(url.removePrefix(origin)) }
+                    url.startsWith("http://") || url.startsWith("https://") -> main.post { if (!disposed) navigateInPlace(url) }
+                }
                 return false
             }
-            /** A page of the island server: its origin and a path under it (never `http://127.0.0.1:<port>.evil`). */
+            /** An island document of the island server (`/__vitro/island/<id>`), never another of its paths or hosts. */
             private fun islandPageUrl(url: String): Boolean {
                 val origin = islandServer.origin ?: return false
-                return url.startsWith("$origin/")
+                return url.startsWith("$origin/__vitro/island/")
             }
             // The activity's host decides, as for every page (#847). An island's own page is on loopback, not Home
             // Assistant, so its card gets no microphone or camera without a prompt.

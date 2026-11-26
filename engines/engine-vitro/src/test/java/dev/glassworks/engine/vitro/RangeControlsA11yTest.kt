@@ -247,7 +247,8 @@ class RangeControlsA11yTest {
         val dial = BrightnessDialView(activity, 0xFFFFA000.toInt(), 0xFF888888.toInt(), 0xFF888888.toInt(), 0xFF03A9F4.toInt()).apply {
             onBrightness = { brightness += it }
             onToggle = { toggles++ }
-            update(true, 0.4f, "mdi:lightbulb")
+            // The light reports 40 % (HA's slider runs 1–100: 40 % is (40 - 1) / 99 of the arc).
+            update(true, BrightnessDialView.fractionOf(40), "mdi:lightbulb")
         }
         attach(dial, 200, 200)
         val info = dial.node()
@@ -260,17 +261,17 @@ class RangeControlsA11yTest {
         up(dial, KeyEvent.KEYCODE_DPAD_RIGHT)
         assertEquals(listOf(41), brightness)
         // TalkBack: a tenth, at once.
-        dial.update(true, 0.41f, "mdi:lightbulb")
+        dial.update(true, BrightnessDialView.fractionOf(41), "mdi:lightbulb")
         assertTrue(dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null))
         assertEquals(51, brightness.last())
         // Two TalkBack steps before the optimistic render: the second goes on from the first.
-        dial.update(true, 0.5f, "mdi:lightbulb")
+        dial.update(true, BrightnessDialView.fractionOf(50), "mdi:lightbulb")
         brightness.clear()
         dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
         dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
         assertEquals(listOf(60, 70), brightness)
         // A write turned down: HA's value comes back, and the next step starts from it.
-        dial.update(true, 0.5f, "mdi:lightbulb")
+        dial.update(true, BrightnessDialView.fractionOf(50), "mdi:lightbulb")
         assertEquals(50f, dial.node().rangeInfo.current, 0f)
         dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
         assertEquals(60, brightness.last())

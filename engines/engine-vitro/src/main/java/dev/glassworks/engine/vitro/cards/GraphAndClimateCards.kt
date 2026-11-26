@@ -943,6 +943,8 @@ open class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardS
                     // ha-state-control-humidifier-humidity: humidifier.set_humidity with the target, a whole number
                     // when it is one.
                     val s = ctx.store[eid] ?: return@commit
+                    // An unavailable humidifier has no target for HA to set (a TalkBack step on a kept edit): nothing sent.
+                    if (s.state == "unavailable") return@commit
                     val value: Number = if (target % 1.0 == 0.0) target.toInt() else target
                     ctx.callOptimistic(s.copy(attributes = s.attributes + ("humidity" to value)), "humidifier", "set_humidity",
                         JSONObject().put("entity_id", eid).put("humidity", value))

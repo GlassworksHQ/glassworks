@@ -1404,7 +1404,7 @@ class VitroView(
         }
         val w = length(mod.fixedWidth, viewportW)?.takeIf { it > 0 } ?: WRAP_CONTENT
         val h = length(mod.fixedHeight, viewportH)?.takeIf { it > 0 }
-            ?: if (fillsHeight && mod.fixedToViewport) viewportH else WRAP_CONTENT
+            ?: if (fillsHeight && mod.fixedToViewport && mod.fixedHeight?.trim()?.lowercase() != "auto") viewportH else WRAP_CONTENT
         return FrameLayout.LayoutParams(w, h, horizontal or vertical).apply {
             if (!mod.fixedCenterY) {
                 topMargin = length(mod.fixedTop, viewportH) ?: 0

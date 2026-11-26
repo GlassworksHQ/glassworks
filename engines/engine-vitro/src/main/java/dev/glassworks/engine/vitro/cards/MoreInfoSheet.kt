@@ -1088,6 +1088,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 stateLabel = s?.let { dev.glassworks.engine.vitro.data.HaDisplay.stateLabel(it) }.orEmpty(),
                 low = targets.low,
                 high = targets.high,
+                // As the dashboard's dial: one mode (heat, cool) fills from the start, several (auto) draw the segment
+                // from the current temperature to the target.
+                hvacModes = (attrs["hvac_modes"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty(),
             )
             styleSteppers()
             current.text = (attrs["current_temperature"] as? Number)?.toDouble()

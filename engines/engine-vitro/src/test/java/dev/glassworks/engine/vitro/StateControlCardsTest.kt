@@ -86,6 +86,70 @@ class StateControlCardsTest {
     }
 
     @Test
+    fun theLightDialRunsOneToAHundredOnEveryPath() {
+        // HA's ha-control-circular-slider for the light: min 1, max 100. A quarter sweep is 26 %, the start 1 %.
+        assertEquals(26, BrightnessDialView.percentAt(0.25f))
+        assertEquals(1, BrightnessDialView.percentAt(0f))
+        assertEquals(100, BrightnessDialView.percentAt(1f))
+        for (p in 1..100) assertEquals(p, BrightnessDialView.percentAt(BrightnessDialView.fractionOf(p)))
+        assertEquals(0f, BrightnessDialView.fractionOf(1), 0f)
+        // TalkBack and keys never preview 0 %.
+        val (_, dial) = light("on", dimmable + ("brightness" to 128))
+        val info = android.view.accessibility.AccessibilityNodeInfo.obtain()
+        dial.onInitializeAccessibilityNodeInfo(info)
+        assertEquals(1f, info.rangeInfo.min, 0f)
+        assertEquals(100f, info.rangeInfo.max, 0f)
+    }
+
+    @Test
+    fun anUnavailableLightTakesNoBrightnessWriteAndItsGestureEnds() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", dimmable + mapOf("brightness" to 128, "friendly_name" to "Desk")))
+        val card = LightCardView(context(store), LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}""")))
+        activity.setContentView(card)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val dial = all(card).filterIsInstance<BrightnessDialView>().single()
+        dial.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY))
+        dial.layout(0, 0, 400, 400)
+        fun touchMode() = BrightnessDialView::class.java.getDeclaredField("touchMode").apply { isAccessible = true }.getInt(dial)
+        // A drag on the ring starts, then the light goes unavailable.
+        val t = android.os.SystemClock.uptimeMillis()
+        val ringX = 200f + 400f * 145f / 320f
+        dial.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_DOWN, ringX, 200f, 0))
+        assertTrue("a drag is under way", touchMode() != 0)
+        store.putLocal(EntityState("light.desk", "unavailable", dimmable + ("friendly_name" to "Desk")))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals("the whole gesture ended", 0, touchMode())
+        // Its later MOVE and UP send nothing.
+        dial.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 50, android.view.MotionEvent.ACTION_MOVE, 200f, 380f, 0))
+        dial.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 60, android.view.MotionEvent.ACTION_UP, 200f, 380f, 0))
+        assertTrue(calls.toString(), calls.isEmpty())
+        // A release that lands first (the reader wrote the store, the render isn't in yet) writes nothing either.
+        dial.onBrightness!!.invoke(40)
+        assertTrue(calls.toString(), calls.isEmpty())
+    }
+
+    @Test
+    fun theDragsPercentageStaysThroughHasUpdates() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", dimmable + mapOf("brightness" to 128, "friendly_name" to "Desk")))
+        val card = LightCardView(context(store), LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}""")))
+        activity.setContentView(card)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val dial = all(card).filterIsInstance<BrightnessDialView>().single()
+        dial.onDragging!!.invoke(70)
+        assertTrue(visibleTexts(card).toString(), "70 %" in visibleTexts(card))
+        // HA's update while the finger holds still: the percentage stays.
+        store.putLocal(EntityState("light.desk", "on", dimmable + mapOf("brightness" to 130, "friendly_name" to "Desk")))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertTrue(visibleTexts(card).toString(), "70 %" in visibleTexts(card))
+        // Unavailable: the state replaces it.
+        store.putLocal(EntityState("light.desk", "unavailable", dimmable + ("friendly_name" to "Desk")))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals(listOf("Unavailable", "Desk"), visibleTexts(card))
+    }
+
+    @Test
     fun theLightButtonRunsTheTapActionAndTheNameNone() {
         // Default: tap toggles.
         val (card, dial) = light("on", dimmable + ("brightness" to 128))

@@ -211,6 +211,8 @@ class IslandEndToEndTest {
         // threw on each update and kept the "Entity not found" its first render (before the states) had drawn.
         val late = ArrayList<(JSONObject) -> Unit>()
         var configNow = JSONObject()
+        // The guard's island: config goes to it once its bridge has connected without one.
+        var guardIsland: WebIslandCardView? = null
         val guards = listOf(case("mushroom-entity", "lovelace-mushroom", "Bedroom Strip Accent", "Off"))
         for ((i, c) in (cases.map { it to false } + guards.map { it to true }).withIndex()) {
             val (case, guard) = c
@@ -239,6 +241,7 @@ class IslandEndToEndTest {
                     .put("floors", JSONObject()),
             )
             val island = WebIslandCardView(ctx, LovelaceParser.parseCard(case.card))
+            if (guard) guardIsland = island
             column.addView(island)
             jobs.put(JSONObject().put("name", if (guard) "${case.name} (config after the page)" else case.name)
                 .put("url", islandUrl(island)).put("tag", case.card.getString("type").removePrefix("custom:"))
@@ -249,24 +252,26 @@ class IslandEndToEndTest {
         val jobFile = File.createTempFile("island-e2e", ".json").apply { writeText(JSONObject().put("cases", jobs).toString()) }
 
         // Node drives Chromium; the main looper keeps turning meanwhile (the bridge posts to it), and HA's config
-        // reaches the guard's pages a second and a half after they're up.
+        // reaches the guard's page half a second after its bridge connected without it (the late-config watcher).
         var result: Pair<Int, String>? = null
         var failure: Throwable? = null
         val runner = thread {
             try { result = IslandNode.run(node, listOf(File(RepoFiles.root, "engines/engine-vitro/src/test/js/island-e2e.mjs").path, jobFile.path), timeoutSeconds = 240) }
             catch (t: Throwable) { failure = t }
         }
-        val started = System.nanoTime()
+        var seededAt = 0L
         var told = false
         while (runner.isAlive) {
             idle()
-            if (!told && System.nanoTime() - started > TimeUnit.MILLISECONDS.toNanos(1500)) {
+            if (seededAt == 0L && guardConnected(guardIsland)) seededAt = System.nanoTime()
+            if (!told && seededAt != 0L && System.nanoTime() - seededAt > TimeUnit.MILLISECONDS.toNanos(500)) {
                 told = true
                 configNow = config
                 late.toList().forEach { it(config) }
             }
             Thread.sleep(50)
         }
+        assertTrue("the guard's page connected before HA's config (its seed had none), so the late-config path ran", told)
         jobFile.delete()
         failure?.let { throw it }
         val (code, out) = result!!
@@ -296,4 +301,12 @@ class IslandEndToEndTest {
     private companion object {
         const val TOKEN = "made-up-island-e2e-token"
     }
+
+    /** True once the guard island's page has a bridge open (its seed went out, with no config yet). */
+    private fun guardConnected(island: WebIslandCardView?): Boolean {
+        island ?: return false
+        val senders = WebIslandCardView::class.java.getDeclaredField("senders").apply { isAccessible = true }.get(island) as Collection<*>
+        return senders.isNotEmpty()
+    }
+
 }

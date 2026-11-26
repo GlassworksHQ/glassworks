@@ -427,6 +427,11 @@ class CardModAndOverlayTest {
         assertEquals((120 * dp).toInt(), vv.pinnedLayoutParams(sized, fillsHeight = true).height)
         val half = ThemeResolver.parseCardMod("ha-card { position: fixed; top: 0; height: 50%; }")
         assertEquals(screenH / 2, vv.pinnedLayoutParams(half, fillsHeight = true).height)
+        // An explicit `height: auto` is the content's height, not the 100% card's viewport.
+        val auto = ThemeResolver.parseCardMod("ha-card { position: fixed; top: 0; height: auto; }")
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, vv.pinnedLayoutParams(auto, fillsHeight = true).height)
+        // `entity-button` is the button card's other name: the same 100%.
+        assertTrue("button" in dev.glassworks.engine.vitro.ui.HA_CARD_FULL_HEIGHT && "entity-button" in dev.glassworks.engine.vitro.ui.HA_CARD_FULL_HEIGHT)
     }
 
     @Test

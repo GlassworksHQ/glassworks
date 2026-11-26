@@ -23,9 +23,9 @@ import java.io.File
  *
  * ```
  * # Clarity's dashboard and states, as tools/perf/dashboards.py serves them (read-only, writes two JSON files):
- * cd tools/perf && python3 -I -c "import sys,json; sys.path.insert(0,'.'); import dashboards as d; \
+ * (cd tools/perf && python3 -I -c "import sys,json; sys.path.insert(0,'.'); import dashboards as d; \
  *   json.dump(d.lovelace(d.DASHBOARD), open('$DIR/clarity-lovelace.json','w')); \
- *   json.dump({k: {'s': v['state'], 'a': v['attributes'], 'lc': v['last_changed']} for k, v in d.states().items()}, open('$DIR/clarity-states.json','w'))"
+ *   json.dump({k: {'s': v['state'], 'a': v['attributes'], 'lc': v['last_changed']} for k, v in d.states().items()}, open('$DIR/clarity-states.json','w'))")
  * ./gradlew :engine-vitro:testDebugUnitTest --tests '*DashboardStoreMeasure*' -PvitroStoreMeasure=$DIR
  * ```
  *

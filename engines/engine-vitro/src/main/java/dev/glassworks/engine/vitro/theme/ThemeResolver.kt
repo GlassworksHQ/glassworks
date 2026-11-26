@@ -1092,7 +1092,8 @@ object ThemeResolver {
             fixedBottom = prop("bottom")?.let(::inset),
             fixedLeft = prop("left")?.let(::inset),
             fixedWidth = prop("width")?.let(::inset),
-            fixedHeight = prop("height")?.let(::inset),
+            // An explicit `height: auto` is kept: the card's content height, unlike no height (a 100% card's viewport).
+            fixedHeight = prop("height")?.let { if (it.trim().lowercase(Locale.ROOT) == "auto") "auto" else inset(it) },
             fixedToViewport = position == "fixed",
             fixedCenterY = centerY,
             fixedCenterX = centerX,

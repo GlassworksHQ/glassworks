@@ -159,6 +159,10 @@ class WebIslandCardView(
     /** The config watcher's handle ([VitroCardContext.watchConfig]), with the same lifetime. */
     @Volatile private var configWatch: (() -> Unit)? = null
 
+    /** Under [seedLock]: sockets seeded with no config before [configWatch] was on, and whether it has sent one since. */
+    private val seededWithoutConfig = HashSet<(JSONObject) -> Unit>()
+    private var configSent = false
+
     /**
      * Whether the card picks its entities at runtime (`auto-entities` filters, `button-card` JS templates, a card
      * that names none up front): such a card follows every entity in the store, not only the ones it read.
@@ -212,7 +216,8 @@ class WebIslandCardView(
                         sentConnected[send] = up
                         send(connMessage(up, ctx.haConnectionEpoch()))
                         // HA's config as the panel has it now: a page made before it arrived has none.
-                        ctx.haConfig().takeIf { it.length() > 0 }?.let { send(configMessage(it)) }
+                        val config = ctx.haConfig().takeIf { it.length() > 0 }
+                        if (config != null) send(configMessage(config)) else if (configWatch == null) seededWithoutConfig += send
                         seedInitialStates(send)
                         registries?.let { send(registriesMessage(it)) }
                         senders += send
@@ -293,7 +298,17 @@ class WebIslandCardView(
                     synchronized(seedLock) {
                         val msg = configMessage(config)
                         senders.forEach { it(msg) }
+                        configSent = true
                     }
+                }
+                // HA's config that arrived between a bridge's seed (which had none) and the watcher above went unheard:
+                // it goes now. A page told it already gets nothing more.
+                synchronized(seedLock) {
+                    if (!configSent) ctx.haConfig().takeIf { it.length() > 0 }?.let { config ->
+                        val msg = configMessage(config)
+                        senders.filter { it in seededWithoutConfig }.forEach { it(msg) }
+                    }
+                    seededWithoutConfig.clear()
                 }
             } else {
                 server.unregisterSlot(id)
@@ -2027,7 +2042,8 @@ function vitroDateFormat(l, kind) {
 function vitroStateParts(stateObj, state) {
   const s = state !== undefined && state !== null ? state : (stateObj ? stateObj.state : '');
   const str = String(s == null ? '' : s);
-  if (str === 'unknown' || str === 'unavailable') return [{ type: 'value', value: vitroLocalize('state.default.' + str) }];
+  // HA's words for it, or the state in words when the page has no strings for it (never an empty state).
+  if (str === 'unknown' || str === 'unavailable') return [{ type: 'value', value: vitroLocalize('state.default.' + str) || vitroTitle(str) }];
   const id = String((stateObj && stateObj.entity_id) || '');
   const domain = id.split('.')[0];
   const attributes = (stateObj && stateObj.attributes) || {};
@@ -2522,7 +2538,7 @@ function connectBridge() {
           // doesn't resubscribe ended with it (the panel ended its side then). The others are asked for again.
           const changedMeanwhile = connEpoch !== null && epoch !== connEpoch;
           for (const [sid, entry] of Array.from(pageSubs)) {
-            if (changedMeanwhile && entry.acked && !entry.resubscribe) { pageSubs.delete(sid); continue; }
+            if ((changedMeanwhile || !up) && entry.acked && !entry.resubscribe) { pageSubs.delete(sid); continue; }
             sendIfOpen(subscribeLine(sid, entry));
           }
         }
@@ -2785,6 +2801,8 @@ function linkTarget(ev) {
     let u;
     try { u = new URL(String(el.href), location.href); } catch (e) { return null; }
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    // A fragment of this very document (a card's own table of contents): the browser scrolls to it, as on HA's page.
+    if (u.origin === location.origin && u.pathname === location.pathname && u.search === location.search && u.hash) return null;
     return u.origin === location.origin ? u.pathname + u.search + u.hash : u.href;
   }
   return null;

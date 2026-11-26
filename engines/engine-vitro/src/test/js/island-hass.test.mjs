@@ -40,7 +40,7 @@ async function settle() { for (let i = 0; i < 5; i++) await tick(); }
  * One island page: the module run in its own context, with [card] as the custom element (a class-like factory:
  * (el) => void sets up el). Returns the bridge and the page's globals.
  */
-async function openPage({ card, strings = STRINGS, height = 40, mountHeight, snapshot = LAMP, source = SOURCE, epoch = () => 1, defineLater = false } = {}) {
+async function openPage({ card, strings = STRINGS, height = 40, mountHeight, snapshot = LAMP, source = SOURCE, epoch = () => 1, connected = () => true, defineLater = false } = {}) {
   const listeners = {};
   const sockets = [];
   let defined = !defineLater;
@@ -65,7 +65,7 @@ async function openPage({ card, strings = STRINGS, height = 40, mountHeight, sna
         if (this.onopen) this.onopen();
         // What the panel sends a page whose bridge opens: the states it has (null: none yet).
         // The panel's seed: where HA's connection is (and which one: its epoch), then the states.
-        this.push({ type: 'conn', connected: true, epoch: epoch() });
+        this.push({ type: 'conn', connected: connected(), epoch: epoch() });
         if (snapshot) this.push({ type: 'snapshot', states: snapshot });
       }, 0);
     }
@@ -328,6 +328,27 @@ test('a subscription that doesn\'t resubscribe stays ended when HA\'s connection
   await kept;
   page.ws().drop();
   epoch = 2; // HA went down and came back meanwhile
+  await tick(80);
+  await settle();
+  assert.equal(page.sockets.length, 2);
+  assert.deepEqual(page.sockets[1].sent.filter((m) => m.type === 'subscribe').map((m) => m.sid), [b.sid], 'only the resubscribing one');
+});
+
+test('a subscription that doesn\'t resubscribe ends when the bridge comes back while HA is down', async () => {
+  // HA's epoch only moves on a connect: a bridge that reopens while HA is down sees the last one's. The one-shot
+  // subscription still ended with HA's connection, as in HA's client; the resubscribing one is asked for again.
+  let up = true;
+  const page = await openPage({ card: plainCard, connected: () => up });
+  const once = page.hass().connection.subscribeMessage(() => {}, { type: 'render_template', template: '{{ 1 }}' }, { resubscribe: false });
+  const kept = page.hass().connection.subscribeMessage(() => {}, { type: 'scheduler' });
+  await settle();
+  const [a, b] = page.sent('subscribe').slice(-2);
+  page.ws().push({ type: 'subAck', sid: a.sid });
+  page.ws().push({ type: 'subAck', sid: b.sid });
+  await once;
+  await kept;
+  page.ws().drop();
+  up = false; // same epoch, HA down
   await tick(80);
   await settle();
   assert.equal(page.sockets.length, 2);

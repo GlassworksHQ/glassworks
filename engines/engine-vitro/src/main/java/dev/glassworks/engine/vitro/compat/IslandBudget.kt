@@ -64,7 +64,8 @@ object IslandBudget {
     private fun islandsIn(card: CardConfig, scripts: IslandScripts): Int = when {
         CardRouter.tier(card, scripts) == CardTier.WEB_ISLAND -> 1
         card.type == "iframe" -> 1
-        else -> CardRouter.producedCards(card).sumOf { islandsIn(it.value, scripts) }
+        // Not per entity: auto-entities' generated cards are the inner card's children, counted through it once.
+        else -> CardRouter.producedCards(card, perEntity = false).sumOf { islandsIn(it.value, scripts) }
     }
 
     /** Why [view] goes to HA's frontend for its islands, or null when it has [budget] of them or fewer. */

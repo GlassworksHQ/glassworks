@@ -2091,11 +2091,15 @@ internal class HaHorizontalSliderView(
                 dragTo(event.x, w)
                 return true
             }
+            // Only a live drag moves or sends: one cancelled meanwhile (the entity went unavailable, then came back
+            // while the finger stayed down) ignores the rest of its touch stream until a fresh press.
             MotionEvent.ACTION_MOVE -> {
+                if (!dragging) return false
                 dragTo(event.x, w)
                 return true
             }
             MotionEvent.ACTION_UP -> {
+                if (!dragging) return false
                 dragTo(event.x, w)
                 dragging = false
                 parent?.requestDisallowInterceptTouchEvent(false)

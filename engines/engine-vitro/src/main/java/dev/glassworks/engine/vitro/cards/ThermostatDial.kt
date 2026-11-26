@@ -304,12 +304,19 @@ internal class ThermostatDialView(
 
     /** A target as the dial prints it, `21.5 °C` (a humidifier's `45%`). */
     private fun targetText(v: Double): String {
-        val (whole, dec) = splitTemp(v, shownStep)
+        val (whole, dec) = shownParts(v)
         return if (humidifier) "$whole$dec$unit" else "$whole$dec $unit"
     }
 
     /** The step the big number is formatted to: a humidifier's target is whole percents (`maximumFractionDigits: 0`). */
     private val shownStep: Double get() = if (humidifier) 1.0 else step
+
+    /**
+     * The big number's parts: a humidifier's target rounded to a whole percent (HA's `maximumFractionDigits: 0`), a
+     * 45.5 % target reads 46 % while the control keeps 45.5; a temperature at the step's decimals ([splitTemp]).
+     */
+    private fun shownParts(v: Double): Pair<String, String> =
+        if (humidifier) HaDisplay.formatFixed(v, 0) to "" else splitTemp(v, step)
 
     /**
      * The texts the dial draws, in order, as its content description: what HA's page has as text (the state or the
@@ -550,6 +557,9 @@ internal class ThermostatDialView(
     }
 
     private fun snap(v: Double): Double {
+        // The device's own ends stay reachable: a 7.3 minimum on a 0.5 step is 7.3 at the ring's start, not 7.5.
+        if (v <= min) return min
+        if (v >= max) return max
         // ha-control-circular-slider's _steppedValue: whole steps from 0, not from the minimum.
         val snapped = Math.round(v / step) * step
         // Rounded to the step's decimals, then kept within the device's limits (a 30.25 maximum stays 30.25).
@@ -799,7 +809,7 @@ internal class ThermostatDialView(
                 val t = target
                 if (t != null) {
                     if (t != splitValue || shownStep != splitStep) {
-                        val parts = splitTemp(t, shownStep)
+                        val parts = shownParts(t)
                         splitValue = t
                         splitStep = shownStep
                         splitWhole = parts.first
@@ -829,7 +839,8 @@ internal class ThermostatDialView(
             }
             null -> Unit
         }
-        if (cur != null && cur != 0.0 && showCurrentInDial) drawCurrentRow(canvas, cur, curColor, y, infoLine)
+        // A humidity of 0 % is a reading HA shows; a temperature of exactly 0 isn't drawn (as before).
+        if (cur != null && (cur != 0.0 || humidifier) && showCurrentInDial) drawCurrentRow(canvas, cur, curColor, y, infoLine)
     }
 
     /**
@@ -1227,9 +1238,15 @@ internal class ThermostatDialView(
             commitRange(keyHandle, keyProposal)
         } else if (boundTarget != null) {
             // Within the limits HA reports now: they may have narrowed while the key was held.
-            target?.coerceIn(min, max)?.takeIf { it != boundTarget }?.let { v ->
-                if (v != target) setTarget(v)
-                onCommit(v)
+            // The preview settles on what's allowed now even when nothing is sent (61 % held against a 60 % maximum
+            // that HA also reports as the target: the dial reads 60 %, and no write goes).
+            target?.coerceIn(min, max)?.let { v ->
+                if (v != target) {
+                    setTarget(v)
+                    describe()
+                    invalidate()
+                }
+                if (v != boundTarget) onCommit(v)
             }
         } else {
             dropEdit()

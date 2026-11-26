@@ -156,6 +156,7 @@ class TileNativeOptionsTest {
         val t = android.os.SystemClock.uptimeMillis()
         val y = slider.height / 2f
         slider.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_DOWN, slider.width * 0.9f, y, 0))
+        assertEquals("the drag is live: it shows 90 %", 90f, shown(), 1f)
         // The fan goes unavailable mid-drag: the slider is disabled and the drag's up never arrives.
         store.putLocal(fan(10.0, 20, state = "unavailable"))
         ShadowLooper.idleMainLooper()
@@ -165,6 +166,10 @@ class TileNativeOptionsTest {
         ShadowLooper.idleMainLooper()
         android.os.SystemClock.sleep(0)
         ShadowLooper.idleMainLooper(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(70f, shown(), 1f)
+        assertTrue(calls.none { it.service == "set_percentage" })
+        // The finger was still down through all that: its late UP, on a slider enabled again, sends nothing.
+        slider.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 900, android.view.MotionEvent.ACTION_UP, slider.width * 0.9f, y, 0))
         assertEquals(70f, shown(), 1f)
         assertTrue(calls.none { it.service == "set_percentage" })
     }

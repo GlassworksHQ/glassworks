@@ -297,8 +297,11 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     private fun setBrightness(eid: String, pct: Int) {
         val value = pct.coerceIn(1, 100)
         val bri = (value * 255.0 / 100).roundToInt().coerceIn(1, 255)
+        val current = ctx.store[eid]
+        // An unavailable light takes no write: a release can land before the render that disables the dial.
+        if (current?.isUnavailable == true) return
         ctx.callOptimistic(
-            ctx.store[eid]?.let { it.copy(state = "on", attributes = it.attributes + ("brightness" to bri)) },
+            current?.let { it.copy(state = "on", attributes = it.attributes + ("brightness" to bri)) },
             "light", "turn_on", JSONObject().put("entity_id", eid).put("brightness_pct", value),
         )
     }
@@ -327,12 +330,17 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         val pct = s?.brightnessPct
         // HA's line above the name: the state while unavailable or unknown, else the brightness, hidden (its place
         // kept) but while a drag shows it.
+        val wasShowing = showsBrightness
         showsBrightness = s != null && !s.isUnavailable
-        removeCallbacks(hideBrightness)
-        brightnessView.text = if (showsBrightness) "" else s?.formattedState() ?: ""
-        brightnessView.visibility = if (showsBrightness) INVISIBLE else VISIBLE
+        if (showsBrightness && wasShowing) {
+            // Still available: a drag's percentage (and its half-second linger) stays through HA's updates.
+        } else {
+            removeCallbacks(hideBrightness)
+            brightnessView.text = if (showsBrightness) "" else s?.formattedState() ?: ""
+            brightnessView.visibility = if (showsBrightness) INVISIBLE else VISIBLE
+        }
         val dims = s != null && lightSupportsBrightness(s)
-        dial.update(on, if (on && pct != null) pct / 100f else 0f, MdiIcons.resolveIconName(config.icon, s), lightButtonColor(s), dims, enabled = !unavailable)
+        dial.update(on, if (on && pct != null) BrightnessDialView.fractionOf(pct) else 0f, MdiIcons.resolveIconName(config.icon, s), lightButtonColor(s), dims, enabled = !unavailable)
         dial.contentDescription = when {
             s == null || s.isUnavailable -> s?.formattedState() ?: "–"
             !on -> s.formattedState()
@@ -434,10 +442,15 @@ internal class BrightnessDialView(
         basePath = MdiIcons.pathFor(iconName)
         tint = iconColor
         dims = dimmable
-        if (!enabled && dragFraction != null) {
-            dragFraction = null
-            onDragging?.invoke(null)
+        if (!enabled && touchMode != TOUCH_NONE) {
+            // The light went unavailable mid-gesture: the whole gesture ends (no MOVE or UP of it acts later, no hold
+            // fires), and the dial waits for a fresh press.
+            if (touchMode == TOUCH_DRAG) onDragging?.invoke(null)
+            touchMode = TOUCH_NONE
+            removeCallbacks(holdCheck)
+            parent?.requestDisallowInterceptTouchEvent(false)
         }
+        if (!enabled) dragFraction = null
         this.enabled = enabled
         isEnabled = enabled
         sentFraction = null
@@ -529,9 +542,9 @@ internal class BrightnessDialView(
                 if (touchMode == TOUCH_DRAG) onDragging?.invoke(null)
                 when (touchMode) {
                     TOUCH_DRAG -> dragFraction?.let {
-                        val pct = (it * 100f).roundToInt()
+                        val pct = percentAt(it)
                         // Before the call: a render it triggers at once clears it.
-                        sentFraction = pct / 100f
+                        sentFraction = fractionOf(pct)
                         onBrightness?.invoke(pct)
                         // TalkBack reads the brightness the drag left, as it does a SeekBar's.
                         VitroAccess.valueChanged(this)
@@ -555,7 +568,7 @@ internal class BrightnessDialView(
         return true
     }
 
-    private fun dragPercent(): Int? = dragFraction?.let { (it * 100f).roundToInt() }
+    private fun dragPercent(): Int? = dragFraction?.let(::percentAt)
 
     init {
         isClickable = true
@@ -575,17 +588,17 @@ internal class BrightnessDialView(
      * stays a button.
      */
     private val access = AdjustableAccess(
-        min = { 0 }, max = { 100 }, step = { 1 },
-        value = { ((dragFraction ?: sentFraction ?: fraction) * 100f).roundToInt() },
+        min = { 1 }, max = { 100 }, step = { 1 },
+        value = { percentAt(dragFraction ?: sentFraction ?: fraction) },
         preview = { v ->
-            dragFraction = v / 100f
+            dragFraction = fractionOf(v)
             invalidate()
             VitroAccess.valueChanged(this)
         },
         commit = { v ->
             dragFraction = null
             // Before the call: a render it triggers at once clears it.
-            sentFraction = v / 100f
+            sentFraction = fractionOf(v)
             onBrightness?.invoke(v)
             invalidate()
         },
@@ -621,6 +634,14 @@ internal class BrightnessDialView(
         private const val TOUCH_NONE = 0
         private const val TOUCH_TOGGLE = 1
         private const val TOUCH_DRAG = 2
+
+        /**
+         * HA's light slider runs 1–100 (`ha-control-circular-slider` min 1, max 100): the arc's start is 1 %, its end
+         * 100 %, so a quarter sweep is 26 %. Touch, the handle, keys and TalkBack all map through these.
+         */
+        fun percentAt(fraction: Float): Int = (1f + fraction.coerceIn(0f, 1f) * 99f).roundToInt().coerceIn(1, 100)
+
+        fun fractionOf(percent: Int): Float = (percent.coerceIn(1, 100) - 1) / 99f
     }
 }
 

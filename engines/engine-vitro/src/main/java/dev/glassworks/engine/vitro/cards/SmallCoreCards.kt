@@ -157,7 +157,8 @@ internal object HaStateColor {
      * `--state-inactive-color`, as under a heading badge's `--state-inactive-color: initial`.
      */
     fun of(ctx: VitroCardContext, s: EntityState, state: String = s.state, inactiveDefault: Boolean = true): Int? {
-        if (state == "unavailable") return ctx.theme.disabledTextColor
+        // HA's iconColorCSS reads --state-unavailable-color (a theme may set it); HA's default is the disabled text color.
+        if (state == "unavailable") return property(ctx, "state-unavailable-color") ?: ctx.theme.disabledTextColor
         val domain = s.domain
         val dc = s.deviceClass
         if (domain == "sensor" && dc == "battery") {

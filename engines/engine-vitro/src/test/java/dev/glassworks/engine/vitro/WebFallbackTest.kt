@@ -256,6 +256,9 @@ class WebFallbackTest {
         assertEquals("an island draws the cards inside it in its own page", 1, count("""{"type": "custom:acme-wrap-card",
             "cards": [{"type": "custom:acme-a-card"}, {"type": "custom:acme-b-card"}]}"""))
         assertEquals("an iframe is a page of its own", 1, count("""{"type": "iframe", "url": "https://example.com/"}"""))
+        assertEquals("auto-entities' generated cards count once, inside the card they fill", 1, count("""{"type": "custom:auto-entities",
+            "card_param": "cards", "card": {"type": "grid"},
+            "filter": {"include": [{"domain": "light", "options": {"type": "iframe", "url": "https://example.com/"}}]}}"""))
         assertEquals("a panel view builds its first card", 1, IslandBudget.islandCount(LovelaceParser.parseView(0, JSONObject(
             """{"type": "panel", "cards": [{"type": "custom:acme-a-card"}, {"type": "custom:acme-b-card"}]}""")), IslandScripts.ANY))
     }
@@ -283,10 +286,12 @@ class WebFallbackTest {
         assertFalse("another host that starts like the island's", islandHost.allowsLoad("$origin.example.com/"))
         assertFalse("a calendar event's link", islandHost.allowsLoad("https://www.example.com/events/1.html"))
         assertFalse("nothing but a web address is opened elsewhere", islandHost.allowsLoad("javascript:alert(1)"))
+        // Another document the island server proxies from HA: HA's own page for it, never the card's window.
+        assertFalse("a proxied HA document", islandHost.allowsLoad("$origin/local/help.html"))
         idle()
         assertEquals("the island stays on its page", listOf(islandUrl), fallback.pages[i].loads)
         // Web addresses open in the panel's page, as a native card's url action does, in the order they came.
-        assertEquals(listOf("$origin.example.com/", "https://www.example.com/events/1.html"), pageFallback()?.loads)
+        assertEquals(listOf("$origin.example.com/", "https://www.example.com/events/1.html", "$base/local/help.html"), pageFallback()?.loads)
     }
 
     @Test fun aBuiltInCardNestedInAStackOrAutoEntitiesCounts() {

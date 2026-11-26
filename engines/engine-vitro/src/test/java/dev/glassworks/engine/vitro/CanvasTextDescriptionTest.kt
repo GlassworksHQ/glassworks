@@ -65,6 +65,9 @@ class CanvasTextDescriptionTest {
         // Off: HA's label is the state while there's a target.
         dial.bind(30.0, 80.0, 1.0, current = 52.0, target = 45.0, mode = "off", action = "off", stateLabel = "Off")
         assertEquals("Off, 45%, 52%", dial.contentDescription.toString())
+        // A 45.5 % target reads as HA's whole percent; a current 0 % is a reading too.
+        dial.bind(30.0, 80.0, 0.5, current = 0.0, target = 45.5, mode = "on", action = "humidifying", stateLabel = "On")
+        assertEquals("Humidifying, 46%, 0%", dial.contentDescription.toString())
     }
 
     @Test

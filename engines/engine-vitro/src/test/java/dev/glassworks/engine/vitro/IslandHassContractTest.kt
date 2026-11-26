@@ -114,9 +114,10 @@ class IslandHassContractTest {
             assertEquals("${IslandStrings.PREFIX}${german.hash}.json", IslandStrings.path())
             // Four sets (en, de, fr, es), English made again, then one more: English, made again, counts as the newest
             // and stays; without that, the fifth would push it out as the oldest.
+            val made = HashMap<String, String>()
             for (lang in listOf("fr", "es")) {
                 dev.glassworks.engine.vitro.data.HaText.install(lang, mapOf("ui.common.save" to lang))
-                IslandStrings.current()
+                made[lang] = IslandStrings.current().hash
             }
             dev.glassworks.engine.vitro.data.HaText.install("en", mapOf("ui.common.save" to "Save"))
             assertEquals(english.hash, IslandStrings.current().hash)
@@ -124,9 +125,11 @@ class IslandHassContractTest {
             IslandStrings.current()
             assertEquals("made again counts as new", english.hash, IslandStrings.byHash(english.hash)?.hash)
             assertNull("German, the oldest, went", IslandStrings.byHash(german.hash))
-            // A lookup makes no set, so it can't push out the one it looks for.
+            // A lookup makes no set, so it pushes nothing out: with Portuguese installed, a lookup that made its set
+            // would evict French, the oldest kept (fr, es, en, nl).
             dev.glassworks.engine.vitro.data.HaText.install("pt", mapOf("ui.common.save" to "Guardar"))
             assertEquals(english.hash, IslandStrings.byHash(english.hash)?.hash)
+            assertEquals("the oldest kept set survives a lookup", made["fr"], IslandStrings.byHash(made.getValue("fr"))?.hash)
         } finally {
             dev.glassworks.engine.vitro.data.HaText.reset()
         }

@@ -60,6 +60,9 @@ tasks.withType<Test>().configureEach {
     inputs.dir("src/test/ha-frontend").withPropertyName("vitroHaTypes").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.files(rootProject.file("tools/vitro-parity/cards.json"), rootProject.file("tools/vitro-parity/lib/browser.mjs"))
         .withPropertyName("vitroIslandE2eTools").withPathSensitivity(PathSensitivity.RELATIVE)
+    // The Playwright pin the end to end drives Chromium with (npm ci builds node_modules from these).
+    inputs.files(rootProject.file("tools/vitro-parity/package.json"), rootProject.file("tools/vitro-parity/package-lock.json"))
+        .withPropertyName("vitroIslandE2ePackages").withPathSensitivity(PathSensitivity.RELATIVE)
     // The end to end runs only with GW_VITRO_ISLAND_E2E=1 (CI's app job): a run with it is never one without it.
     inputs.property("vitroIslandE2e", System.getenv("GW_VITRO_ISLAND_E2E") ?: "")
     // ClarityStatsTest holds Vitro's Clarity harness to the web harness's cases.

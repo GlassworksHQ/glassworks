@@ -55,7 +55,7 @@ object HaMasonry {
  * 100% against the viewport ([VitroView.pinnedLayoutParams]).
  */
 internal val HA_CARD_FULL_HEIGHT = setOf(
-    "alarm-panel", "button", "calendar", "clock", "entities", "entity", "gauge", "glance", "history-graph",
+    "alarm-panel", "button", "entity-button", "calendar", "clock", "entities", "entity", "gauge", "glance", "history-graph",
     "humidifier", "iframe", "light", "logbook", "map", "markdown", "media-control", "picture", "picture-elements",
     "picture-entity", "picture-glance", "plant-status", "sensor", "statistic", "statistics-graph", "thermostat",
     "tile", "todo-list", "weather-forecast",
