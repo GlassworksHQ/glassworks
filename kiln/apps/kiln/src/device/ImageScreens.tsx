@@ -525,16 +525,22 @@ const UndoGlyph = () => (
 
 export function ImageError({ f, s }: P) {
   const d = f.frame;
-  const inFastboot = !!s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on', 'app-install'].includes(s.work.step);
+  const inFastboot = !!s.work && !s.bundleLost && !['first-boot', 'hand-back', 'restart', 'wifi-on', 'app-install'].includes(s.work.step);
   const kept = f.inPlace && s.restorePoint?.status === 'ready';
+  // an in-place install that can't go on: its bundle is gone after a write, or the system didn't take the change. The
+  // way back, on the restore point saved before the first write, is the one way on
+  const restoreOnly = f.inPlace && (s.bundleLost === 'restore' || !!s.notTaken);
   const safe = s.wifiOnFailed ? `${cap(d.the)} is installed. Only its Wi-Fi didn’t turn on yet.`
+    : f.inPlace && s.notTaken ? `${cap(d.the)} started, but its system didn’t take the change Kiln wrote, so Kiln stopped before installing anything.`
+    : f.inPlace && s.bundleLost === 'restore' ? 'Kiln can’t finish this install without what it copied from the device.'
     : inFastboot ? `${cap(d.the)} is still in fastboot mode, so leave it plugged in.${kept ? ' Your restore point is saved in this browser.' : ''}`
     : kept ? 'Your restore point is saved in this browser.' : undefined;
   const fix = s.wifiOnFailed ? 'Click Connect again when you’re ready.'
+    : restoreOnly ? `Restore the original system with the restore point saved before the ${s.notTaken ? 'write' : 'first write'}.`
     : inFastboot ? (s.files.every((x) => x.state === 'ok') ? 'Click Try again. Kiln reconnects and picks up from fastboot.' : 'Click Try again. Kiln downloads the files again and goes on.')
     : 'Click Try again when you’re ready.';
   return (
-    <Problem title={s.wifiOnFailed ? 'Wi-Fi didn’t turn on yet' : 'The install stopped'} safe={safe} safeTone={inFastboot ? 'info' : 'ok'} fix={<>
+    <Problem title={s.wifiOnFailed ? 'Wi-Fi didn’t turn on yet' : 'The install stopped'} safe={safe} safeTone={restoreOnly || inFastboot ? 'info' : 'ok'} fix={<>
       <p>{fix}</p>
       {s.flashFailed && !f.recipe.community && !f.inPlace && !s.noFill && <p className="small">{d.words['error.noFill']}</p>}
     </>} details={<><pre className="raw">{s.error}</pre><pre className="rawlog">{[...s.log].reverse().join('\n') || 'Nothing yet.'}</pre></>}>
@@ -547,8 +553,11 @@ export function ImageError({ f, s }: P) {
           {s.flashFailed && !f.recipe.community && !f.inPlace && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try compatibility write mode</button>}
           {s.wifiOnFailed && <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect again</button>}
         </span>
-        {/* the step that stopped, on its own screen: the first start over adb, a write over fastboot, else the download */}
-        {!s.wifiOnFailed && <button type="button" className="btn ember" onClick={() => f.tryAgain()}>Try again</button>}
+        {/* the step that stopped, on its own screen: the first start over adb, a write over fastboot, else the download. A
+            bundle lost after a write can't be built from again, and a system that didn't take the change can't be
+            installed on: the way back, on the restore point saved before it (the rail doesn't offer it twice) */}
+        {restoreOnly ? <button type="button" className="btn ember" onClick={() => void f.restoreAfterError()}>Restore the original system</button>
+          : !s.wifiOnFailed && <button type="button" className="btn ember" onClick={() => f.tryAgain()}>Try again</button>}
       </Foot>
     </Problem>
   );
@@ -708,8 +717,11 @@ export function imageActions({ f, s }: Pick<P, 'f' | 's'>): FlowActionSpec[] {
   if (s.screen === 'undo' || !f.idle()) return [];
   if (f.canStartOver() && f.frame.imageFlow.inPlace?.words['inPlace.startOver']) return [{ label: 'Start over', run: () => f.askStartOver() }];
   if (f.inPlace && f.written() === 'system') {
-    // a stop in the second fastboot session: the restore point from fastboot, where the device still is
-    const fromError = s.screen === 'error' && s.round === 2 && s.restorePoint?.status === 'ready';
+    // the error's own foot offers it as its one action: a bundle lost after a write, a system that didn't take the change
+    if (s.screen === 'error' && (s.bundleLost === 'restore' || s.notTaken)) return [];
+    // a stop in the second fastboot session: the restore point from fastboot, where the device still is. A stop in the
+    // app's install (after a reload too): this run's restore point, in this browser or in its zip
+    const fromError = s.screen === 'error' && s.round === 2 && (s.restorePoint?.status === 'ready' || s.work?.step === 'app-install');
     return [{ label: 'Restore the original system', icon: 'restore', run: () => (fromError ? f.restoreAfterError() : void f.startUndo()) }];
   }
   return [];

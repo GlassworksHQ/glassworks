@@ -94,6 +94,16 @@ workspace's dependencies resolve, to the one copy at the root.
 - **Backups come before writes, and writes are verified by read-back.** Keep the refusal points
   from the CLI: wrong SoC id, unexpected partition layout, a backup `boot` that is already patched,
   and on undo a backup whose splash is already ours (`test/refusals.test.ts`).
+  **Check as much as you possibly can, and where a write can't be checked one way, check it another.**
+  Read a write back where it was written when the device allows it. When it doesn't, verify it the
+  next place Kiln reaches the device, and say in the log and the docs which check ran where. The
+  example: the lululemon Mirror's bootloader has no fastboot upload, so its in-place install can't
+  read its system write back in fastboot. Once the Mirror has started and Kiln is on adb, Kiln reads
+  back each file the write changed (the frame's build names them, `InPlaceCode` `readBack`), hashes
+  it in the browser and compares it with what it built, before the app's install. A mismatch stops
+  there with the way back; a file Kiln can't read is logged as unchecked and the install goes on, since
+  a failed read says nothing about the write. Which files and paths to check is the frame's data or
+  code, never Kiln's.
 - Assets (U-Boot, Magisk, the APK) are pinned by SHA-256 in `assets.lock.json` and checked on download.
   Bump the hash and the source together.
 - Only `app/` touches the DOM. Other modules talk through their exports, so `test/flow.test.ts` can

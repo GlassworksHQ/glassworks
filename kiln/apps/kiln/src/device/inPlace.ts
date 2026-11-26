@@ -325,7 +325,7 @@ export class InPlaceReceiver {
   /** A bundle file the person picked (downloaded from the agent's own page), checked the same way. */
   async receiveFile(file: Blob, o: { secret: Uint8Array; serial: string; signal?: AbortSignal } & ReceiveEvents): Promise<Received> {
     o.onChannel?.('file');
-    const bytes = await readBundleFromFile(file, (p) => { if (!o.signal?.aborted) o.onProgress?.(p); });
+    const bytes = await readBundleFromFile(file, (p) => { if (!o.signal?.aborted) o.onProgress?.(p); }, o.signal);
     return this.accept(bytes, 'file', o);
   }
 
@@ -339,6 +339,9 @@ export class InPlaceReceiver {
     o.onVerifying?.();
     const kept = channel === 'cache';
     const signed = !kept && !unsigned;
+    // the agent's description only binds bytes from the same agent's channels: a file is bound by this run's signature
+    // and the serial, never by what another attempt (another device's agent, say) described
+    const described = channel === 'file' ? undefined : this.meta;
     try {
       // the payload's hash and the serial are checked before the signature: a signature error means they held
       await verifyGwsbBundle(bytes, { ...(signed ? { secret: o.secret } : {}), expectedSerial: o.serial, requireSerial: true, requireHmac: signed });
@@ -348,7 +351,7 @@ export class InPlaceReceiver {
     }
     const r = await this.d.code.readBundle(bytes, { secret: o.secret, serial: o.serial, ...(kept ? { kept } : {}), ...(unsigned ? { unsigned } : {}) });
     check();
-    if (this.meta?.digest && this.meta.digest.toLowerCase() !== r.digest.toLowerCase()) {
+    if (described?.digest && described.digest.toLowerCase() !== r.digest.toLowerCase()) {
       throw new BundleFormatError('This bundle is from another device or an older run. Get it again from the device.');
     }
     if (!kept) await this.d.store.putBundle(o.serial, r.digest, bytes);
@@ -363,8 +366,12 @@ export class InPlaceReceiver {
 
   /** Stops a transfer in flight. */
   async cancel(): Promise<void> {
-    try { await this.conn?.abort(); } catch { /* nothing running */ }
-    try { this.conn?.disconnect(); } catch { /* gone already */ }
+    // the connection this Cancel stopped: a new attempt that connects while the abort winds down keeps its own
+    const c = this.conn;
+    if (!c) return;
+    if (this.conn === c) this.conn = undefined;
+    try { await c.abort(); } catch { /* nothing running */ }
+    try { c.disconnect(); } catch { /* gone already */ }
   }
 }
 

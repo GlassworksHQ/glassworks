@@ -349,6 +349,7 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
       const restore = buildSurgicalSparseImageFiles(systemBytes, [{ extents, data: jar }, ...(boot ? [{ extents: boot.extents, data: boot.data }] : [])]);
       const userdata = await cleanUserdata(o);
       const originalSha256 = await sha256Hex(jar);
+      const patchedSha256 = await sha256Hex(patched.patched);
       // the same manifest as tools/mirror's surgical-adb --backup-dir, so its --undo restores from the download too
       const manifest = {
         version: 1,
@@ -360,7 +361,7 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
           path: STOCK_SERVICES_JAR_PATH,
           size: jar.length,
           originalSha256,
-          patchedSha256: await sha256Hex(patched.patched),
+          patchedSha256,
           fingerprint: patched.fingerprint,
           extents,
           origFile: ORIGINAL_JAR,
@@ -370,7 +371,10 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
         ...(boot ? { bootAnimation: { path: STOCK_BOOT_ANIMATION_PATH, size: boot.data.length, originalSha256: boot.sha256, patchedSha256: await sha256Hex(boot.ours), extents: boot.extents, origFile: ORIGINAL_BOOT } }
           : { bootAnimationLeft: bootSkipped }),
       };
-      return { writes: { 'system-in-place': blob(write), userdata }, restore: blob(restore), manifest, files: { [ORIGINAL_JAR]: jar, ...(boot ? { [ORIGINAL_BOOT]: boot.data } : {}) } };
+      // the Mirror's bootloader can't read a partition back (no fastboot upload): Kiln reads services.jar back over adb
+      // once the Mirror has started into it, before the app's install (kiln/AGENTS.md, writes are verified)
+      const readBack = [{ path: STOCK_SERVICES_JAR_PATH, sha256: patchedSha256, size: patched.patched.length }];
+      return { writes: { 'system-in-place': blob(write), userdata }, restore: blob(restore), manifest, files: { [ORIGINAL_JAR]: jar, ...(boot ? { [ORIGINAL_BOOT]: boot.data } : {}) }, readBack };
     },
     keptMatches: keptBundleFits,
     appInstall: (p, o) => installInPlace(p, o),

@@ -188,7 +188,15 @@ export async function connectBleAgent(config: BleChannelConfig, opts: BleConnect
   const step = <T>(p: Promise<T>) => within(p, META_TIMEOUT_MS).catch((e: unknown) => {
     throw e instanceof Stalled ? new BleTransferError('The device didn\'t answer over Bluetooth. Keep this computer near it and try again.') : e;
   });
-  const server = await step(device.gatt.connect());
+  const gattServer = device.gatt;
+  let server: BleServerLike;
+  try {
+    server = await step(gattServer.connect());
+  } catch (e) {
+    // a connect that timed out may still finish later: disconnecting aborts it (Web Bluetooth), so nothing is left open
+    try { gattServer.disconnect?.(); } catch { /* nothing to close */ }
+    throw e;
+  }
   try {
     check();
     const service = await step(server.getPrimaryService(uuid(config.service)));
@@ -226,8 +234,11 @@ export function createBleAgentConnection(
   };
   device.addEventListener?.('gattserverdisconnected', onDisconnected);
   /** A GATT operation that never settled: the link is given up, so the next try connects afresh. */
+  let closed = false;
   const close = () => {
     lost = true;
+    if (closed) return;
+    closed = true;
     try { server.disconnect(); } catch { /* gone already */ }
   };
 
@@ -247,6 +258,8 @@ export function createBleAgentConnection(
     const poke = () => { const w = wake; wake = null; w?.(); };
     /** GATT waits in flight: a failure or a cancel releases them at once (their promises take no signal). */
     const waiting = new Set<(e: Error) => void>();
+    /** GATT operations started and not settled yet, released or not: the link can't be handed on while one runs. */
+    const unsettled = new Set<Promise<unknown>>();
     const fail = (e: Error) => { failure ??= e; poke(); for (const r of [...waiting]) r(failure); };
     // the connection is this download's from here, before the first await: a second call is turned away, and a drop or
     // a cancel reaches this one through every wait below
@@ -265,7 +278,10 @@ export function createBleAgentConnection(
         fail(new BleTransferError(`The device stopped answering over Bluetooth (${what}). Keep this computer near it and try again.`));
       }, stallMs);
       waiting.add(release);
-      op().then((v) => { clearTimeout(timer); waiting.delete(release); resolve(v); }, (e: unknown) => release(e instanceof Error ? e : new BleTransferError(String(e))));
+      const running = op();
+      unsettled.add(running);
+      running.then(() => unsettled.delete(running), () => unsettled.delete(running));
+      running.then((v) => { clearTimeout(timer); waiting.delete(release); resolve(v); }, (e: unknown) => release(e instanceof Error ? e : new BleTransferError(String(e))));
     });
 
     let chunkSize = 0;
@@ -315,17 +331,18 @@ export function createBleAgentConnection(
       return len;
     };
 
-    const applyInfo = (cs: number, bs: number, tc: number) => {
-      if (buf && cs === chunkSize && bs === bundleSize && tc === total) return;
+    /** Whether this INFO set the transfer up (a repeat of the one in hand changes nothing). */
+    const applyInfo = (cs: number, bs: number, tc: number): boolean => {
+      if (buf && cs === chunkSize && bs === bundleSize && tc === total) return false;
       // what INFO says is the device's word, so it is bounded before Kiln allocates for it: a chunk fits one notification,
       // and the bundle fits what Kiln takes in
       if (cs < MIN_CHUNK_BYTES || cs > MAX_CHUNK_BYTES || bs <= 0 || tc !== Math.ceil(bs / cs)) {
         fail(new BleTransferError(`The device's agent described a bundle Kiln can't follow (chunk ${cs}, size ${bs}, ${tc} chunks)`));
-        return;
+        return false;
       }
       if (bs > maxBytes) {
         fail(new BleTransferError(`The device's agent offered a bundle of ${bs} bytes, more than the ${maxBytes} Kiln takes in`));
-        return;
+        return false;
       }
       chunkSize = cs; bundleSize = bs; total = tc;
       buf = new Uint8Array(bs);
@@ -341,6 +358,7 @@ export function createBleAgentConnection(
       for (const [i, d] of pending) store1(i, d, true);
       pending.clear();
       report(true);
+      return true;
     };
 
     const onFrame = (ev: Event) => {
@@ -348,14 +366,15 @@ export function createBleAgentConnection(
       if (!view) return;
       const f = parseDataFrame(view);
       if (!f) return;
-      lastFrameAt = now();
-      if (f.kind === 'info') applyInfo(f.chunkSize, f.bundleSize, f.totalChunks);
+      // the stall watchdog restarts only on progress: the transfer set up, or a chunk Kiln didn't have. Repeats of
+      // chunks already in hand (or of INFO) don't keep a batch alive; END wakes the wait on its own
+      if (f.kind === 'info') { if (applyInfo(f.chunkSize, f.bundleSize, f.totalChunks)) lastFrameAt = now(); }
       else if (f.kind === 'end') { endSeen = true; poke(); }
       // before INFO, a bounded few are held (a resend pass fetches any past that); none longer than a notification carries
-      else if (!buf) { if (pending.size < MAX_PENDING_CHUNKS) pending.set(f.idx, f.bytes.slice(0, MAX_CHUNK_BYTES)); }
+      else if (!buf) { if (pending.size < MAX_PENDING_CHUNKS && !pending.has(f.idx)) { pending.set(f.idx, f.bytes.slice(0, MAX_CHUNK_BYTES)); lastFrameAt = now(); } }
       else {
         const got = store1(f.idx, f.bytes, true);
-        if (got) { sessionBytes += got; report(); }
+        if (got) { lastFrameAt = now(); sessionBytes += got; report(); }
         if (complete()) poke();
       }
     };
@@ -424,12 +443,18 @@ export function createBleAgentConnection(
         for (let i = 0; i < missing.length && !complete(); i += batchSize) {
           await send(encodeResend(missing.slice(i, i + batchSize)));
           outcome = await waitBatch();
+          // a batch that brought nothing ends this pass: the next one (of maxRounds) asks again, so a device that answers
+          // the commands but sends no data fails after a few stalls, not one per batch of what's missing
+          if (outcome === 'stall') break;
         }
       }
       report(true);
       if (store) await store.s.clear(store.digest).catch(() => {});
       return buf!;
     } catch (e) {
+      // a GATT operation the cancel left running (its promise takes no signal) gives the link up: it may still turn
+      // notifications on after a stop, and the next download would read this one's frames
+      if (unsettled.size) close();
       if (isAbortError(e) || o.signal?.aborted) {
         if (!lost) await within(ctrlWrite(encodeAbort()), stallMs).catch((x: unknown) => { if (x instanceof Stalled) close(); });
         throw isAbortError(e) ? e : abortError();

@@ -26,7 +26,7 @@ export type { Mm, RecoveryData, Rect, Screw, Shown } from './recovery';
 export {
   DEVICE_WORDS, IN_PLACE_WORDS, ProxyError, WrongImage, cap, pickInList, deviceWords, inPlaceWords,
   type AppOverAdb, type AppVersion, type DeviceCheck, type DeviceEntry, type DeviceFrame, type KilnEntry, type DevicePhase, type DeviceReport, type DeviceSim, type DeviceWord,
-  type FastbootLike, type FastbootReport, type FirstStart, type HomeCheck, type ImageMaker, type InPlaceCode, type InPlaceSim, type InPlaceSimDevice, type InPlaceWord, type ImageOverFastboot, type Installed, type PrepareStep, type Removed,
+  type FastbootLike, type FastbootReport, type FirstStart, type HomeCheck, type ImageMaker, type InPlaceCode, type InPlaceSim, type InPlaceSimDevice, type InPlaceWord, type ReadBackFile, type ImageOverFastboot, type Installed, type PrepareStep, type Removed,
 } from './device';
 export {
   OwnFrameRefused, Refused,

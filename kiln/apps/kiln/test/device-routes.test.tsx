@@ -72,6 +72,15 @@ describe('a device frame\'s addresses', () => {
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await vi.waitFor(() => expect(location.pathname).toBe(MIRROR_BASE)); // the address follows the screen it is on
   });
+
+  it('a load at the in-place flow\'s fastboot step, with nothing to resume, opens that flow on its first screen', async () => {
+    at(`${MIRROR_BASE}/stock/fastboot`);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
+    const image = await vi.waitFor(() => { const e = registry.activity(MIRROR_BASE) as DeviceActivity | undefined; expect(e).toBeTruthy(); return e!.sessions.image; });
+    expect(image.inPlace).toBe(true);
+    // the flow's first screen, where its inputs are, on its route: never the Glassworks image's
+    await vi.waitFor(() => expect(location.pathname).toBe(`${MIRROR_BASE}/stock`));
+  });
 });
 
 describe('sessions kept from an earlier visit', () => {

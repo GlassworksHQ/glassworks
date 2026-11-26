@@ -51,11 +51,11 @@ function tab(): DeviceProgress & { mark?: ProgressMark } {
 interface Rig { image: ImageSession; dev: InPlaceSimDevice; store: InPlaceStore; progress: ReturnType<typeof tab>; flashed: string[]; adb: () => PanelShell }
 
 /** A session on a simulated stock Mirror; `store` and `progress` carry over to a second browser load or a second run. */
-function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampered?: boolean; refusedBuild?: boolean; store?: InPlaceStore; progress?: ReturnType<typeof tab>;
+function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampered?: boolean; refusedBuild?: boolean; systemNotTaken?: boolean; unreadable?: boolean; store?: InPlaceStore; progress?: ReturnType<typeof tab>;
   dev?: InPlaceSimDevice; deps?: Partial<ImageDeps>; code?: Partial<InPlaceCode>;
   /** a write (`flash <partition>`) or a restart (`reboot`) that fails, by what it is and how many such calls came before it */
   fail?: (what: string, n: number) => boolean } = {}): Rig {
-  const dev = o.dev ?? sim.device({ lan: o.lan ?? 'ok', tampered: o.tampered, refusedBuild: o.refusedBuild });
+  const dev = o.dev ?? sim.device({ lan: o.lan ?? 'ok', tampered: o.tampered, refusedBuild: o.refusedBuild, systemNotTaken: o.systemNotTaken, unreadable: o.unreadable });
   const store = o.store ?? memoryInPlaceStore();
   const progress = o.progress ?? tab();
   const flashed: string[] = [];
@@ -149,6 +149,9 @@ describe('Glassworks on the stock software', () => {
     const log = r.image.state.log.join('\n');
     expect(log).not.toContain(FAKE_SERIAL);
     expect(log).toContain('Device Owner: set');
+    // the bootloader can't read the system write back: Kiln reads services.jar back over adb before the app goes on
+    expect(log).toContain('services.jar on the Mirror matches what Kiln wrote');
+    expect(log.indexOf('matches what Kiln wrote')).toBeLessThan(log.indexOf('Installing'));
   });
 
   it('asks the person to join the Mirror\'s own Wi-Fi, sees when this computer has, and keeps their Wi-Fi out of the stage', async () => {
@@ -365,7 +368,7 @@ describe('Start over', () => {
     await r.image.continueInstall();
     expect(r.image.state.screen).toBe('error');
     expect(r.image.canStartOver()).toBe(false);
-    expect(r.progress.mark?.started).toContain('system-in-place');
+    expect(r.progress.mark?.began).toContain('system-in-place');
     const b = rig({ dev: r.dev, store: r.store, progress: r.progress });
     expect(b.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
     expect(b.image.canStartOver()).toBe(false);
@@ -496,6 +499,8 @@ describe('the way back (restore-blocks)', () => {
 
   it('writes this browser\'s restore point over the blocks it changed, then a fresh userdata, so nothing the app set stays', async () => {
     const { r } = await installed();
+    const device = () => r.dev.adb() as unknown as { installed?: number; owner?: string };
+    expect(device().owner).toBeTruthy(); // the install made Glassworks the Device Owner
     await r.image.startUndo();
     expect(r.image.state).toMatchObject({ screen: 'undo', undo: { at: 'start', source: 'browser' } });
     await r.image.undoRestart();
@@ -505,6 +510,50 @@ describe('the way back (restore-blocks)', () => {
     expect(r.image.state.undo?.at).toBe('done');
     expect(r.flashed.slice(before)).toEqual(['system', 'userdata']);
     expect(r.image.state.log.join('\n')).toContain('as after a factory reset');
+    expect(device()).toMatchObject({ installed: undefined, owner: undefined }); // the fresh userdata took the app and its owner
+  });
+
+  it('a stop after its system write: a reload opens the way back again, never the install, and writes only what is left', async () => {
+    const dev = sim.device({});
+    const store = memoryInPlaceStore();
+    const progress = tab();
+    // the stage's userdata is n 0, the install's n 1, the way back's n 2
+    const a = rig({ dev, store, progress, fail: (what, n) => what === 'flash userdata' && n === 1 });
+    await toReceive(a);
+    await toRestorePoint(a);
+    await a.image.continueInstall();
+    expect(progress.mark).toMatchObject({ at: 'received', wrote: ['system-in-place'] });
+    const b = rig({ dev, store, progress, fail: (what) => what === 'flash userdata' });
+    await b.image.startUndo();
+    b.image.undoByHand();
+    await b.image.undoFlash();
+    expect(b.flashed).toEqual(['system']);
+    expect(b.image.state.undo?.at).toBe('error');
+    expect(progress.mark).toMatchObject({ at: 'undo', wrote: ['system'] });
+    // the page reloads: the way back, on the restore point kept here, with its system write done
+    const c = rig({ dev, store, progress });
+    expect(c.image.state).toMatchObject({ screen: 'undo', changed: true });
+    await vi.waitFor(() => expect(c.image.state.undo?.source).toBe('browser'));
+    c.image.undoByHand();
+    await c.image.undoFlash();
+    expect(c.image.state.undo?.at).toBe('done');
+    expect(c.flashed).toEqual(['userdata']);
+    expect(c.image.state.log.join('\n')).toContain('already written by an earlier try');
+    expect(progress.mark).toBeUndefined();
+  });
+
+  it('Try again after a restart that failed writes nothing again', async () => {
+    const { r } = await installed();
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress, fail: (what, n) => what === 'reboot' && n === 0 });
+    await b.image.startUndo();
+    b.image.undoByHand();
+    await b.image.undoFlash();
+    expect(b.image.state.undo?.at).toBe('error');
+    expect(b.flashed).toEqual(['system', 'userdata']);
+    b.image.undoByHand();
+    await b.image.undoFlash();
+    expect(b.image.state.undo?.at).toBe('done');
+    expect(b.flashed).toEqual(['system', 'userdata']);
   });
 
   it('runs the frame\'s undo over adb only on the device the restore point was made on', async () => {
@@ -657,6 +706,263 @@ describe('a stop in the second fastboot session', () => {
   });
 });
 
+describe('the app\'s install on the device it wrote', () => {
+  it('turns away another device that trusts this browser, and stays on the step to connect the right one', async () => {
+    const r = rig();
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    expect(r.progress.mark).toMatchObject({ at: 'flashed', serial: FAKE_SERIAL });
+    const other = () => { const a = r.adb(); const run = a.run.bind(a); return Object.assign(a, { run: async (c: string) => (c === 'getprop ro.serialno' ? { out: '0000fake02\n', code: 0 } : run(c)) }); };
+    // after a reload, on the mark
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress, deps: { requestAdb: async () => other() } });
+    expect(b.image.state.screen).toBe('adb');
+    await b.image.connectAdb();
+    expect(b.image.state).toMatchObject({ screen: 'adb', connectError: expect.stringMatching(/another device/) });
+    expect((r.dev.adb() as unknown as { installed?: number }).installed).toBeUndefined();
+    await r.image.connectAdb();
+    expect(r.image.state.firstBoot).toBeTruthy();
+  });
+
+  it('a stop in the app\'s install still opens the way back, on the restore point this browser saved', async () => {
+    const r = rig({ code: { appInstall: async () => { throw new Error('pm install failed'); } } });
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    await r.image.connectAdb();
+    expect(r.image.state).toMatchObject({ screen: 'error', work: { step: 'app-install' } });
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Restore the original system' })); });
+    await vi.waitFor(() => expect(r.image.state).toMatchObject({ screen: 'undo', undo: { at: 'start', source: 'browser' } }));
+  });
+});
+
+describe('the way back after the review\'s second round', () => {
+  it('a stop in the app\'s install after a reload opens this run\'s restore point, never a newer one of another device', async () => {
+    const dev = sim.device({});
+    const store = memoryInPlaceStore();
+    const progress = tab();
+    const a = rig({ dev, store, progress });
+    await toReceive(a);
+    await toRestorePoint(a);
+    await a.image.continueInstall();
+    expect(progress.mark).toMatchObject({ at: 'flashed', serial: FAKE_SERIAL, digest: expect.any(String) });
+    const own = (await store.latestRestore())!;
+    // another Mirror's restore point, kept in this browser after this one
+    await store.putRestore('0000fake02', 'other', own.files.map((f) => (f.filename === 'manifest.json' ? { ...f, data: new TextEncoder().encode('{"deviceIdHash":"' + '1'.repeat(64) + '"}') } : f)));
+    const b = rig({ dev, store, progress, code: { appInstall: async () => { throw new Error('pm install failed'); } } });
+    await b.image.connectAdb();
+    expect(b.image.state).toMatchObject({ screen: 'error', work: { step: 'app-install' } });
+    render(<ImageFlow image={b.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Restore the original system' })); });
+    await vi.waitFor(() => expect(b.image.state).toMatchObject({ screen: 'undo', undo: { at: 'start', source: 'browser' } }));
+    await b.image.undoRestart();
+    await b.image.undoFlash();
+    expect(b.image.state.undo?.at).toBe('done'); // this Mirror's own: the other one would have been refused
+  });
+
+  it('a way back from a picked zip that stops goes on with that zip after a reload, and only on the device it began', async () => {
+    const { r, zip } = await (async () => {
+      const x = rig();
+      await toReceive(x);
+      await toRestorePoint(x);
+      const z = await x.image.restoreZip();
+      await x.image.continueInstall();
+      await x.image.connectAdb();
+      return { r: x, zip: z };
+    })();
+    const store = memoryInPlaceStore(); // a browser that kept nothing
+    const progress = tab();
+    const a = rig({ dev: r.dev, store, progress, fail: (what) => what === 'flash userdata' });
+    await a.image.startUndo();
+    await a.image.pickRestoreZip(new NodeBlob([await bytesOf(zip.blob) as Uint8Array<ArrayBuffer>]) as unknown as Blob, zip.name);
+    a.image.undoByHand();
+    await a.image.undoFlash();
+    expect(a.flashed).toEqual(['system']);
+    expect(progress.mark).toMatchObject({ at: 'undo', serial: FAKE_SERIAL, wrote: ['system'], restore: expect.any(Object) });
+    const b = rig({ dev: r.dev, store, progress });
+    await vi.waitFor(() => expect(b.image.state).toMatchObject({ screen: 'undo', undo: { source: 'browser' } }));
+    // what was written belongs to the device it was written on: a mark from another one writes everything
+    const c = rig({ dev: r.dev, store, progress: Object.assign(tab(), { mark: { ...progress.mark!, serial: '0000fake02' } }) });
+    await vi.waitFor(() => expect(c.image.state.undo?.source).toBe('browser'));
+    c.image.undoByHand();
+    await c.image.undoFlash();
+    expect(c.flashed).toEqual(['system', 'userdata']);
+    b.image.undoByHand();
+    await b.image.undoFlash();
+    expect(b.image.state.undo?.at).toBe('done');
+    expect(b.flashed).toEqual(['userdata']);
+  });
+});
+
+describe('checkpoints before a restart or a write', () => {
+  it('the stage, once written, resumes on receive after a reload, even when its restart didn\'t happen', async () => {
+    const dev = sim.device({});
+    const progress = tab();
+    const a = rig({ dev, progress, fail: (what, n) => what === 'reboot' && n === 0 });
+    a.image.pick(RECIPE.id);
+    a.image.choose();
+    a.image.toFastboot();
+    await a.image.connectFastboot();
+    a.image.understand(true);
+    await a.image.flash();
+    expect(a.image.state.screen).toBe('error');
+    expect(progress.mark).toMatchObject({ at: 'staged', serial: FAKE_SERIAL, secret: expect.any(String) });
+    const b = rig({ dev, progress });
+    expect(b.image.state).toMatchObject({ screen: 'receive', round: 1 });
+  });
+
+  it('a system write that stopped partway counts: a lost bundle then offers the way back, not a new install', async () => {
+    const dev = sim.device({});
+    const store = memoryInPlaceStore();
+    const progress = tab();
+    const a = rig({ dev, store, progress, fail: (what, n) => what === 'flash system' && n === 0 });
+    await toReceive(a);
+    await toRestorePoint(a);
+    await a.image.continueInstall();
+    expect(progress.mark).toMatchObject({ at: 'received', wrote: [], began: ['system-in-place'] });
+    const b = rig({ dev, progress, store: Object.assign(memoryInPlaceStore(), { getRestore: store.getRestore }) });
+    await b.image.connectFastboot();
+    await vi.waitFor(() => expect(b.image.state.screen).toBe('error'));
+    expect(b.image.state.bundleLost).toBe('restore');
+  });
+});
+
+describe('a bundle this browser no longer has', () => {
+  it('a file from this run\'s agent is taken after a Bluetooth attempt that read another description', async () => {
+    const secret = new Uint8Array(32).fill(5);
+    const r = rig({ dev: sim.device({ lan: 'offline', bleFrameDelayMs: 40 }), deps: { secret: () => secret } });
+    await toReceive(r);
+    const p = r.image.receive();
+    await vi.waitFor(() => expect(r.image.state.receive?.pageUrl).toBeTruthy());
+    await r.image.cancelReceive();
+    await p;
+    const other = await buildFakeGwsbBundle({ secret, jarBytes: new Uint8Array(16384).fill(4) });
+    await r.image.receiveFile(new NodeBlob([other.bytes as Uint8Array<ArrayBuffer>]) as unknown as Blob);
+    expect(r.image.state.receive?.error ?? null).toBeNull();
+    expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+  }, 20_000);
+
+  it('with nothing of the second session written: Try again starts the install over from its first screen', async () => {
+    const dev = sim.device({});
+    const progress = tab();
+    const a = rig({ dev, progress });
+    await toReceive(a);
+    await a.image.receive();
+    // the page reloads in a browser that dropped the bundle
+    const b = rig({ dev, progress, store: memoryInPlaceStore() });
+    await b.image.connectFastboot();
+    await vi.waitFor(() => expect(b.image.state.screen).toBe('error'));
+    expect(b.image.state).toMatchObject({ bundleLost: 'restart', error: expect.stringMatching(/no longer has the bundle/) });
+    expect(b.image.tryAgainLands()).toBe('image');
+    b.image.tryAgain();
+    expect(b.image.state).toMatchObject({ screen: 'image', bundleLost: undefined });
+    expect(b.flashed).toEqual([]);
+  });
+
+  it('after a write, or a kept copy that isn\'t the one the writes came from: the way back, never staging again', async () => {
+    const dev = sim.device({});
+    const store = memoryInPlaceStore();
+    const progress = tab();
+    const a = rig({ dev, store, progress, fail: (what, n) => what === 'flash userdata' && n === 1 });
+    await toReceive(a);
+    await toRestorePoint(a);
+    await a.image.continueInstall();
+    expect(progress.mark).toMatchObject({ at: 'received', wrote: ['system-in-place'], bundle: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    progress.mark = { ...progress.mark!, bundle: '0'.repeat(64) }; // the same file's digest, another whole bundle
+    const b = rig({ dev, store, progress });
+    await b.image.connectFastboot();
+    await vi.waitFor(() => expect(b.image.state.screen).toBe('error'));
+    expect(b.image.state).toMatchObject({ bundleLost: 'restore', error: expect.stringMatching(/isn't the one this install wrote from/) });
+    expect(b.flashed).toEqual([]);
+    render(<ImageFlow image={b.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Restore the original system' })); });
+    await vi.waitFor(() => expect(b.image.state).toMatchObject({ screen: 'undo', undo: { at: 'fastboot', source: 'browser' } }));
+  });
+});
+
+describe('the system write, read back after the restart', () => {
+  async function toAppInstall(o: Parameters<typeof rig>[0] = {}) {
+    const r = rig(o);
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    expect(r.image.state.screen).toBe('adb');
+    return r;
+  }
+  const installed = (r: Rig) => (r.dev.adb() as unknown as { installed?: number }).installed;
+
+  it('keeps what to read back in the tab\'s mark: paths and hashes, from the frame\'s build', async () => {
+    const r = await toAppInstall();
+    expect(r.progress.mark).toMatchObject({ at: 'flashed', readBack: [{ path: '/system/framework/services.jar', sha256: expect.stringMatching(/^[0-9a-f]{64}$/) }] });
+  });
+
+  it('a file that isn\'t what Kiln wrote stops before the app\'s install, with the way back as its one action', async () => {
+    const r = await toAppInstall({ systemNotTaken: true });
+    await r.image.connectAdb();
+    expect(r.image.state).toMatchObject({ screen: 'error', notTaken: true, work: { step: 'app-install' } });
+    expect(r.image.state.error).toMatch(/services\.jar on the Mirror isn't what Kiln wrote \(SHA-256 [0-9a-f]{12}…, expected [0-9a-f]{12}…\)\. Nothing was installed\./);
+    expect(installed(r)).toBeUndefined();
+    expect(r.image.state.log.join('\n')).not.toContain('Installing');
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    const back = screen.getByRole('button', { name: 'Restore the original system' });
+    expect(back.className).toContain('ember');
+    await act(async () => { fireEvent.click(back); });
+    await vi.waitFor(() => expect(r.image.state).toMatchObject({ screen: 'undo', undo: { at: 'start', source: 'browser' } }));
+  });
+
+  it('a file Kiln can\'t read is said plainly in the log, and the install goes on', async () => {
+    const r = await toAppInstall({ unreadable: true });
+    await r.image.connectAdb();
+    expect(r.image.state.firstBoot).toBeTruthy();
+    const log = r.image.state.log.join('\n');
+    expect(log).toContain('Not read back: services.jar');
+    expect(log).toMatch(/couldn't read \/system\/framework\/services\.jar back from the Mirror \(.*Permission denied\), so this write is unchecked/);
+  });
+
+  it('a reload that resumes on the app\'s install still reads back, from the mark', async () => {
+    const r = await toAppInstall();
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress });
+    expect(b.image.state.screen).toBe('adb');
+    await b.image.connectAdb();
+    expect(b.image.state.firstBoot).toBeTruthy();
+    expect(b.image.state.log.join('\n')).toContain('services.jar on the Mirror matches what Kiln wrote');
+  });
+
+  it('a reload after a write that didn\'t take still stops there', async () => {
+    const r = await toAppInstall({ systemNotTaken: true });
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress });
+    await b.image.connectAdb();
+    expect(b.image.state).toMatchObject({ screen: 'error', notTaken: true });
+    expect(installed(r)).toBeUndefined();
+  });
+
+  it('a mark from before the read back says it can\'t check, and goes on', async () => {
+    const r = await toAppInstall();
+    const { readBack: _, ...old } = r.progress.mark!;
+    r.progress.mark = old;
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress });
+    await b.image.connectAdb();
+    expect(b.image.state.firstBoot).toBeTruthy();
+    expect(b.image.state.log.join('\n')).toContain('no record of which files the install changed');
+  });
+
+  it('the simulated Mirror\'s file follows the writes: Kiln\'s, then the way back\'s stock one', async () => {
+    const r = await toAppInstall();
+    const jar = () => r.dev.adb().pull!('/system/framework/services.jar').then(sha256Hex);
+    const stock = await sha256Hex((await buildFakeGwsbBundle()).jarBytes);
+    expect(await jar()).toBe(r.progress.mark?.readBack?.[0]?.sha256);
+    expect(await jar()).not.toBe(stock);
+    await r.image.startUndo();
+    await r.image.undoRestart();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.at).toBe('done');
+    expect(await jar()).toBe(stock);
+  });
+});
+
 describe('routes and screens', () => {
   it('each screen is on its step\'s route, and undo has its own', () => {
     const routes = installRoutes(mirrorFrame.id);
@@ -670,11 +976,13 @@ describe('routes and screens', () => {
     expect(at({ screen: 'receive', round: 1 })).toBe('receive');
     expect(at({ screen: 'restore-point', round: 2 })).toBe('install');
     expect(at({ screen: 'adb', round: 2 })).toBe('first-start');
+    // a kept session back on the choice after the app's install connected: the choice's route, not the install's
+    expect(at({ screen: 'choose', round: 2, work: { step: 'app-install', x: 1 } })).toBe('stock');
     expect(Object.keys(routesOf(mirrorFrame.id))).toEqual(expect.arrayContaining(['undo', 'undo/connect', 'undo/restore', 'undo/done']));
   });
 
   it.each(['place-start', 'place-fastboot', 'place-confirm', 'place-receive-file', 'place-restore-point', 'place-restore-copied', 'place-fastboot-again', 'place-connect', 'place-first-start', 'place-installing',
-    'place-error-write', 'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-error-bundle'] as const)('%s renders, with one ember button at most', async (d) => {
+    'place-error-write', 'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken'] as const)('%s renders, with one ember button at most', async (d) => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, d, true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
@@ -744,6 +1052,14 @@ describe('routes and screens', () => {
     expect(at({ at: 'error' })[2]!.mark).toBe('bad');
     expect(at({ at: 'done' }).every((x) => x.mark === 'done')).toBe(true);
   });
+
+  it('place-error-lost stops on the lost bundle after a write, with the way back as its one action', async () => {
+    const { image, app } = await imageDemo(mirrorEntry, 'place-error-lost', true, {}, handTo().handOver);
+    expect(image.state).toMatchObject({ screen: 'error', bundleLost: 'restore' });
+    render(<ImageFlow image={image} app={app} />);
+    expect(screen.getByRole('button', { name: 'Restore the original system' }).className).toContain('ember');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  }, 20_000);
 
   it('the restore point\'s Continue opens once it is saved and checked, and a copy is on the computer', async () => {
     const h = handTo();

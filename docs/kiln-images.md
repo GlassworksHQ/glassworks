@@ -127,6 +127,15 @@ The way back writes the restore point over the blocks it covers, then whatever e
 says it must write to put the device back (its `wayBack`). On the Mirror that is a fresh userdata,
 so the app, its Device Owner record and the hidden lululemon apps all go, as after a factory reset.
 
+Both directions pick up where they stopped. The install remembers which of its second-session writes
+are done, and which bundle they were built from, so a reload writes only what's left, from that same
+bundle. If the browser has lost the bundle, Kiln starts the install over while nothing of the second
+session is written yet, and offers the way back once something is. The app installs only on the
+device Kiln wrote. The way back marks its progress before its first write, and keeps a restore
+point picked from a zip in the browser first. A reload or a retry then goes on with the same way back,
+on the same device with the same restore point, and writes only what's left. It never resumes the
+install it is undoing.
+
 A new kind of step is a change to Kiln's code, with its own review and tests, not part of adding an
 image.
 
@@ -144,7 +153,15 @@ Kiln puts its own steps around every recipe. A recipe can't list, skip or move t
    reads it back and checks its SHA-256 before Continue opens. It is offered as a download too: a zip
    with the restore image, its `manifest.json` and a `SHA256SUMS`, which the Mirror's command-line
    tool (`tools/mirror`, `--undo --backup-dir`) can also restore from.
-5. **The way back**, on Done: how to put the other image back, or for an in-place recipe, the restore
+5. **The read back**, in an in-place recipe only: Kiln reads back every write it can where it wrote
+   it. Where the bootloader can't (the Mirror's has no way to read a partition back), Kiln checks the
+   write the next place it can. Once the device has started into what was written and lets this
+   browser in over adb, Kiln reads each file the write changed (the frame's build names them) back
+   over adb and compares its SHA-256 with what it built, before the app's install. A file that
+   differs stops the install there, with nothing installed and the way back offered. A file Kiln
+   can't read is noted in the log, and the install goes on. A reload that resumes on the app's
+   install reads the files back again.
+6. **The way back**, on Done: how to put the other image back, or for an in-place recipe, the restore
    point written over the blocks it changed (from this browser, or from the downloaded zip), on the
    device it was made on only. After a write in the install fails, the error screen offers it too.
 
