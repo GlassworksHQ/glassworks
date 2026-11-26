@@ -557,6 +557,93 @@ class VitroFallbackReturnTest {
 
     // ---- No half-native states ----
 
+    @Test fun aContentProcessLostBehindTheNativeViewRestartsOnlyTheHiddenPage() {
+        // A5: the native dashboard doesn't run in Gecko. A content process lost while the fallback page hides behind it
+        // restarts that page alone, not the activity's page (which would close the native connection and draw again).
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        page.load("$base/energy")
+        val fp = fb.fallbackPage()
+        val fpHost = fb.fallbackOpen().host
+        page.goBack()
+        idle()
+        assertNative(page, fp)
+        val restarts = fp.restarts
+        val connections = server.connectUrls.size
+        fpHost.onContentGone(killed = true)
+        idle()
+        assertTrue("the activity isn't told: ${host.contentGone}", host.contentGone.isEmpty())
+        assertEquals("the hidden page starts over", restarts + 1, fp.restarts)
+        assertNative(page, fp)
+        Thread.sleep(200)
+        idle()
+        assertEquals("the native dashboard keeps its connection", connections, server.connectUrls.size)
+
+        // In front, it's the page the user sees: the activity is told, as for any page.
+        page.load("$base/energy")
+        idle()
+        assertFallback(page, fp)
+        fpHost.onContentGone(killed = false)
+        assertEquals(listOf(false), host.contentGone.toList())
+    }
+
+    @Test fun aDashboardWhoseConfigFailsToReadIsVitrosAgainOnReload() {
+        // A12: an error other than config_not_found is asked again; once the retries are spent HA's frontend shows its
+        // error, but only for now: Reload dashboard (or the next connection) gives it back to Vitro.
+        server.configError = "error"
+        val fb = RecordingEngine()
+        val e = engine(fb).also { it.configRetryMs = longArrayOf(20, 20) }
+        val page = page(e)
+        page.load(living)
+        awaitMain("fallback") { fb.opens.isNotEmpty() && fb.fallbackPage().view.visibility == View.VISIBLE }
+        val fp = fb.fallbackPage()
+        assertEquals("the first ask and two retries", 3, server.commands("lovelace/config").size)
+        // HA's frontend says where it is: no hand-back to a dashboard whose config just failed.
+        fb.fallbackOpen().host.onLocationChange(living)
+        idle()
+        assertFallback(page, fp)
+
+        server.configError = null
+        page.reload()
+        awaitMain("native") { host.messages("ready").isNotEmpty() }
+        assertNative(page, fp)
+        assertEquals("not a reload of HA's page", 0, fp.reloads)
+    }
+
+    @Test fun aPageSentToTheFallbackRightAfterAHiddenLossStartsOverFirst() {
+        // The posted restart hasn't run yet when a page goes to the fallback: it restarts before it loads.
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        page.load("$base/energy")
+        val fp = fb.fallbackPage()
+        val fpHost = fb.fallbackOpen().host
+        page.goBack()
+        idle()
+        val restarts = fp.restarts
+        val loads = fp.loads.size
+        fpHost.onContentGone(killed = true)
+        page.load("$base/history") // before the main looper runs the posted restart
+        assertEquals("restarted before the load", restarts + 1, fp.restarts)
+        assertEquals(loads + 1, fp.loads.size)
+        idle()
+        assertEquals("and not again once it shows", restarts + 1, fp.restarts)
+        assertTrue(host.contentGone.isEmpty())
+    }
+
+    @Test fun aDashboardWhoseConfigFailedIsVitrosAgainOnTheNextConnection() {
+        server.configError = "error"
+        val fb = RecordingEngine()
+        val e = engine(fb).also { it.configRetryMs = longArrayOf(20, 20) }
+        val page = page(e)
+        page.load(living)
+        awaitMain("fallback") { fb.opens.isNotEmpty() && fb.fallbackPage().view.visibility == View.VISIBLE }
+        val fp = fb.fallbackPage()
+        server.configError = null
+        server.dropConnection()
+        awaitMain("native again") { host.messages("ready").isNotEmpty() }
+        assertNative(page, fp)
+    }
+
     @Test fun aFallbackPageBehindTheNativeViewReportsNothing() {
         val fb = RecordingEngine()
         val page = readyPage(fb)

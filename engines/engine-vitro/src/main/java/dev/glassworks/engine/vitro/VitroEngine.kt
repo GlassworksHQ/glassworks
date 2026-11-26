@@ -95,6 +95,9 @@ class VitroEngine(
     /** How often a page's connection is checked and its token asked for again ([HaDashboardClient]); tests shorten it. */
     internal var keepAliveMs: Long = HaDashboardClient.KEEP_ALIVE_MS
 
+    /** The waits between a page's retries of a dashboard config HA failed to give ([HaDashboardClient]); tests shorten them. */
+    internal var configRetryMs: LongArray = HaDashboardClient.CONFIG_RETRY_MS
+
     /** The app, once Vitro has seen it: where the island server keeps its port ([islandPort]). */
     @Volatile private var appContext: Context? = null
 
@@ -281,7 +284,7 @@ class VitroEngine(
          * What the fallback page reports, on its way to [host]. Only while it is in front: a page behind the native
          * dashboard shows no loading or offline screen and says nothing of where it is. A move of Home Assistant's own
          * frontend to a dashboard Vitro draws (a sidebar tap, a link) hands the page back to the native view. Loads,
-         * a crashed content process, permissions and ports always go through.
+         * permissions and ports always go through; a crashed content process only while the page is in front.
          */
         private val fallbackHost = object : PageHost {
             override fun onPageStart(url: String) { if (fallbackInFront()) host.onPageStart(url) }
@@ -315,7 +318,26 @@ class VitroEngine(
                 host.onLocationChange(url)
             }
             override fun redirect(url: String): String? = host.redirect(url)
-            override fun onContentGone(killed: Boolean) = host.onContentGone(killed)
+            override fun onContentGone(killed: Boolean) {
+                // In front, it's the page the user sees: the activity starts it over, as for any engine's page.
+                if (fallbackInFront()) {
+                    host.onContentGone(killed)
+                    return
+                }
+                // Behind the native dashboard (which doesn't run in Gecko), only the hidden page went with the content
+                // process (islands, in the same runtime, are reopened by their own hosts). It starts over in place,
+                // empty, as showVitroLayer leaves it. The activity isn't told: its answer, restart(), would close
+                // the native WebSocket and draw the whole dashboard again for a page the user wasn't looking at.
+                // Marked now: a page sent to the fallback before the restart below runs restarts it first (openInFallback),
+                // instead of loading into the session that went.
+                fallbackFresh = false
+                main.post {
+                    if (disposed || fallbackInFront()) return@post
+                    Log.w(logTag, "The hidden fallback page lost its content process (${if (killed) "killed" else "crashed"}); it starts over, the native dashboard stays")
+                    fallbackPage?.restart()
+                    fallbackFresh = true
+                }
+            }
             // Home Assistant's own frontend: the activity's host decides, as without Vitro (#847).
             override fun trusts(url: String): Boolean = host.trusts(url)
             override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) =
@@ -344,6 +366,13 @@ class VitroEngine(
         /** Dashboards (origin and path) whose config Home Assistant didn't have: its frontend draws them, not Vitro. */
         private val webDashboards = HashSet<Pair<String?, String?>>()
 
+        /**
+         * Dashboards whose config Home Assistant failed to read with an error that may pass (anything but
+         * `config_not_found`, after the client's retries): HA's frontend shows them, with its own error, for now. Unlike
+         * [webDashboards] they are Vitro's again on the next connection or Reload dashboard.
+         */
+        private val failedDashboards = HashSet<Pair<String?, String?>>()
+
         /** False until the fallback page shows a page: then the next one starts it over, without that page's history. */
         private var fallbackFresh = true
 
@@ -365,7 +394,8 @@ class VitroEngine(
 
         /** True when [url] is a dashboard HA had no config for: its frontend draws it, so it's no way back to Vitro. */
         private fun isWebDashboard(url: String): Boolean =
-            (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in webDashboards || isWebView(url)
+            (OAuth.origin(url) to LovelaceParser.parseRoute(url).first).let { it in webDashboards || it in failedDashboards } ||
+                isWebView(url)
 
         /**
          * True when [url] opens a view of the dashboard on screen that Vitro sends to HA's frontend (a strategy, a card
@@ -853,6 +883,7 @@ class VitroEngine(
                 store.clear()
                 VitroCardContext.clearImageCache()
                 webDashboards.clear()
+                failedDashboards.clear()
             }
             currentOrigin = origin
             displayedDashboard = null
@@ -897,6 +928,7 @@ class VitroEngine(
                 connect = socketFactory,
                 listener = WsListener(generation),
                 keepAliveMs = keepAliveMs,
+                configRetryMs = configRetryMs,
             )
             client = wsClient
             // Islands holding the registries keep them, now from this Home Assistant.
@@ -911,6 +943,8 @@ class VitroEngine(
          * page reload itself.
          */
         override fun reload() {
+            // Asked for: a dashboard whose config failed to read is tried again.
+            failedDashboards.clear()
             val activeFallback = fallbackPage
             if (activeFallback != null && fallbackInFront()) {
                 val target = returnTarget()
@@ -1166,6 +1200,13 @@ class VitroEngine(
                 // The islands' hass.connection is ready again: their subscriptions start over on this connection.
                 connectionIs(true, generation)
                 post {
+                    // A new connection tries again the dashboards whose config failed to read on the last one. The one
+                    // HA's frontend shows for that reason now goes back to the native view; other fallback pages stay.
+                    val retry = currentUrl?.takeIf { url ->
+                        fallbackInFront() && (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in failedDashboards
+                    }
+                    failedDashboards.clear()
+                    retry?.let(::load)
                     vitroView.setConnectionBanner(null)
                     vitroView.connectionRestored()
                 }
@@ -1253,6 +1294,7 @@ class VitroEngine(
                     displayedDashboard = currentOrigin to urlPath
                     // It has a config now (made in HA since it failed): Vitro's to draw again.
                     webDashboards -= currentOrigin to urlPath
+                    failedDashboards -= currentOrigin to urlPath
                     // Shown natively: a return target now (onViewSelected then narrows it to the view on screen).
                     val previousNative = lastNativeUrl
                     currentUrl?.let { lastNativeUrl = it }
@@ -1285,15 +1327,19 @@ class VitroEngine(
             }
 
             override fun onDashboardConfigFailed(urlPath: String?, code: String) {
-                Log.w(logTag, "Home Assistant has no dashboard config for ${urlPath ?: "the default dashboard"}: $code")
+                Log.w(logTag, "Home Assistant didn't give the dashboard config for ${urlPath ?: "the default dashboard"}: $code")
                 post {
                     if (urlPath != currentDashboardPath) return@post
                     // Only an answer from Home Assistant: a dropped connection reconnects and asks again.
                     if (code == HaDashboardClient.DISCONNECTED || code == HaDashboardClient.SEND_FAILED) return@post
-                    // HA's own frontend decides what such a dashboard shows (an auto-generated one, or its error page).
+                    // HA's own frontend decides what such a dashboard shows: it generates one HA has no config for
+                    // (`config_not_found`), and shows its error for any other failure (the client has retried those).
                     // The fallback owns the page now: a reconnect or lovelace_updated doesn't fetch this dashboard again.
+                    // A dashboard with no config stays HA's for the session; one that failed is Vitro's again on the
+                    // next connection or Reload dashboard.
                     val url = currentUrl
-                    webDashboards += currentOrigin to urlPath
+                    if (code == HaDashboardClient.CONFIG_NOT_FOUND) webDashboards += currentOrigin to urlPath
+                    else failedDashboards += currentOrigin to urlPath
                     leaveNativeDashboard()
                     forgetDisplayed(urlPath)
                     url?.let(::openInFallback)

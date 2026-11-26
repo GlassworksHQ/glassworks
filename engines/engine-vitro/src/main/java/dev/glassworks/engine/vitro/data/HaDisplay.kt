@@ -78,8 +78,29 @@ object HaDisplay {
     private val iconDomains = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val iconPlatforms = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
-    /** Forgets everything (a new connection, or tests). */
+    /** The Home Assistant (its origin) whose data this holds, set by [connectionTo]. */
+    @Volatile private var origin: String? = null
+
+    /**
+     * A connection to Home Assistant at [origin] begins. Another Home Assistant's data goes at once ([reset]). The same
+     * one's stays, so cards keep their names, precision and translated states while the new connection's entity
+     * snapshot draws them, and the connection's answers replace it as they arrive: only what was loaded is forgotten,
+     * so every domain's and integration's icons and words are asked for again.
+     */
+    @Synchronized
+    fun connectionTo(origin: String?) {
+        if (origin == null || origin != this.origin) {
+            reset()
+            this.origin = origin
+            return
+        }
+        translatedDomains.clear(); translatedPlatforms.clear(); iconDomains.clear(); iconPlatforms.clear()
+    }
+
+    /** Forgets everything (a new Home Assistant, or tests). */
+    @Synchronized
     fun reset() {
+        origin = null
         registry = emptyMap()
         devices = emptyMap()
         deviceAreas = emptyMap()
