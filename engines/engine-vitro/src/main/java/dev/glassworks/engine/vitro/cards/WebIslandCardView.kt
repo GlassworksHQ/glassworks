@@ -925,6 +925,13 @@ class WebIslandCardView(
                 ?: error("frontend-watch.js is missing from the engine's resources")
         }
 
+        /** HA's formatDuration for the island page's state text (`format-duration.js`, next to `frontend-watch.js`), read once. */
+        internal val FORMAT_DURATION_JS: String by lazy {
+            WebIslandCardView::class.java.getResourceAsStream("/dev/glassworks/engine/vitro/island/format-duration.js")
+                ?.use { it.readBytes().toString(Charsets.UTF_8) }
+                ?: error("format-duration.js is missing from the engine's resources")
+        }
+
         /**
          * What makes two builds of a card the same island: its whole config and whether it fills the view. A
          * rebuild that only changed the theme, or other cards, hands the island over ([handOff]) instead of opening
@@ -1603,6 +1610,9 @@ window.loadCardHelpers = () => Promise.resolve({
 <script>
 ${FRONTEND_WATCH_JS.replace(SCRIPT_END, "<\\\\/$1")}
 </script>
+<script>
+${FORMAT_DURATION_JS.replace(SCRIPT_END, "<\\\\/$1")}
+</script>
 $resourceScripts
 </head>
 <body>
@@ -1925,7 +1935,7 @@ function vitroStateLabel(stateObj, state) {
 // HA's computeStateDisplay and computeStateToParts (common/entity/compute_state_display.ts, frontend 20261028.5):
 // numbers in the user's format with the registry's display precision and the translated unit, money in its
 // currency, dates, times and timestamps in the user's language and time zone, then HA's translated state, then the
-// state as it is. A duration is a plain number here (HA's Intl.DurationFormat port is a later one).
+// state as it is. A duration in minutes, hours or days reads as one ("1h 30m"), through format-duration.js.
 const VITRO_NUMBER_DOMAINS = ['counter', 'input_number', 'number'];
 const VITRO_DATE_TIME_DOMAINS = new Set(['date', 'input_datetime', 'time']);
 const VITRO_TIMESTAMP_DOMAINS = new Set(['ai_task', 'button', 'conversation', 'event', 'image', 'infrared', 'input_button',
@@ -1998,6 +2008,13 @@ function vitroStateParts(stateObj, state) {
   const entry = registries.entities[id];
   if (attributes.unit_of_measurement || attributes.state_class || VITRO_NUMBER_DOMAINS.includes(domain) ||
       (domain === 'sensor' && VITRO_NUMERIC_SENSOR_CLASSES.has(attributes.device_class))) {
+    // A duration in minutes, hours or days at the entity's display precision; one DurationFormat refuses falls
+    // through to the number with its unit (format-duration.js).
+    if (attributes.device_class === 'duration' && attributes.unit_of_measurement && VITRO_DURATION_UNITS.includes(attributes.unit_of_measurement)) {
+      try {
+        return [{ type: 'value', value: vitroFormatDuration(haLocale, str, attributes.unit_of_measurement, entry ? entry.display_precision : undefined) }];
+      } catch (e) {}
+    }
     const options = vitroNumberOptions(str, attributes, entry);
     if (attributes.device_class === 'monetary') {
       let parts = [];
@@ -2710,8 +2727,23 @@ function moreInfo(id) {
 }
 
 function navigateTo(path) {
-  // Never the island's own address: only a dashboard path a card navigated to.
+  // Never the island's own address: only a dashboard path a card navigated to, or an outside page's full URL, which
+  // Vitro opens as a page (never in this island's own window).
   if (path && typeof path === 'string' && !path.startsWith('/__vitro/')) sendBridge({ type: 'navigate', path });
+}
+
+// A link the card's user tapped: the island's window never leaves the card for it. One to another site goes to
+// Vitro whole (it shows the page as it is); one on this page's origin is a path on Home Assistant, as on HA's page.
+function linkTarget(ev) {
+  const path = ev && typeof ev.composedPath === 'function' ? ev.composedPath() : [];
+  for (const el of path) {
+    if (!el || String(el.localName || '').toLowerCase() !== 'a' || !el.href) continue;
+    let u;
+    try { u = new URL(String(el.href), location.href); } catch (e) { return null; }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return u.origin === location.origin ? u.pathname + u.search + u.hash : u.href;
+  }
+  return null;
 }
 
 // HA's handleAction for a `hass-action` event: the card says which gesture, its config says what it does.
@@ -2760,6 +2792,14 @@ function wireEvents() {
   window.addEventListener('hass-navigate', (ev) => {
     const p = ev && ev.detail && ev.detail.path;
     navigateTo(p);
+  });
+  // After the card's own handlers: a link the card handles itself (preventDefault) stays the card's.
+  window.addEventListener('click', (ev) => {
+    if (!ev || ev.defaultPrevented || ev.button > 0) return;
+    const target = linkTarget(ev);
+    if (!target) return;
+    ev.preventDefault();
+    navigateTo(target);
   });
 }
 

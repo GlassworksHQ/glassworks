@@ -16,7 +16,8 @@
 //     ~/.t3/glassworks-m1/vitro-parity/ha.json). It WRITES ONE DASHBOARD ONLY: `vitro-harness` (admin-only,
 //     not in the sidebar), created if missing and overwritten on every run. It never changes an entity
 //     state or any other dashboard; everything else is read-only (states, themes, config, render_template, and
-//     HA's own Roboto from /static, which every captured page gets as a font from its start, kept in memory).
+//     HA's own Roboto from /static, which every captured page gets as a font from its start, kept in memory). The
+//     app's own Inter (core/src/main/res/font/inter.ttf, read only, checked by SHA-256) goes into every page the same way.
 //   - A case's own stylesheets and fonts (`resources`, #811): served to HA's page from the corpus's fixtures/ folder
 //     at /local/vitro-harness-fixtures/ (a route in the browser; the request never reaches HA) and put in the page
 //     as HA's loadCSS does. Nothing is added to HA's Lovelace resources.
@@ -548,12 +549,28 @@ async function robotoFaces() {
   for (const [name, weight] of ROBOTO_FACES) {
     const res = await fetch(`${creds.origin}/static/fonts/roboto/Roboto-${name}.woff2`);
     if (!res.ok) fail(`HA's Roboto ${name}: HTTP ${res.status}`);
-    faces.push({ weight, data: Buffer.from(await res.arrayBuffer()).toString('base64') });
+    faces.push({ family: 'Roboto', weight, data: Buffer.from(await res.arrayBuffer()).toString('base64') });
   }
   return faces;
 }
 
-async function newPage(browser, frame, dark, now, cardModUrl, tz, roboto) {
+/**
+ * Inter for a theme that names it (`Vitro Glass`'s font family): the variable Inter 4.001 Vitro draws with, the
+ * file the app bundles (`core/src/main/res/font/inter.ttf`, its license and source in THIRD-PARTY-NOTICES.md),
+ * pinned by SHA-256. Without it the page takes whatever Inter the capture host has installed: a static Inter
+ * collection resolves every weight under 400 to Inter Thin, and HA's light text came out hairline-thin. One face for
+ * the whole weight axis; Chromium sets the optical size from the font size, as Vitro does (Inter.opticalSize).
+ */
+const INTER_FILE = join(ROOT, 'core', 'src', 'main', 'res', 'font', 'inter.ttf');
+const INTER_SHA256 = '29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031';
+function interFace() {
+  const bytes = readFileSync(INTER_FILE);
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  if (digest !== INTER_SHA256) fail(`Inter: ${INTER_FILE} isn't the pinned file (SHA-256 ${digest})`);
+  return { family: 'Inter', weight: '100 900', data: bytes.toString('base64') };
+}
+
+async function newPage(browser, frame, dark, now, cardModUrl, tz, fonts) {
   const ctx = await browser.newContext({
     viewport: { width: frame.width, height: frame.height }, deviceScaleFactor: frame.density,
     // A touch frame's browser has a coarse pointer, which HA's chart legend styles for (40 px rows).
@@ -563,14 +580,15 @@ async function newPage(browser, frame, dark, now, cardModUrl, tz, roboto) {
   // Every page starts as a fresh browser's: HA's frontend keeps the last language it applied in localStorage
   // (`selectedLanguage`), and a case with no language of its own must not inherit the one before it.
   await ctx.addInitScript(() => { try { localStorage.removeItem('selectedLanguage'); } catch {} });
-  // Before anything else in the page (see robotoFaces). A face added from bytes is ready without a request.
+  // Before anything else in the page (see robotoFaces and interFace). A face added from bytes is ready without a
+  // request, and wins over a system font of the same name.
   await ctx.addInitScript((faces) => {
     for (const f of faces) {
       const bytes = Uint8Array.from(atob(f.data), (ch) => ch.charCodeAt(0));
-      const face = new FontFace('Roboto', bytes, { weight: f.weight, style: 'normal' });
+      const face = new FontFace(f.family, bytes, { weight: f.weight, style: 'normal' });
       document.fonts.add(face);
     }
-  }, roboto);
+  }, fonts);
   await ctx.addInitScript(([origin, token, dark, now, cardModUrl, css]) => {
     // Vitro's clock gets the same instant (refs/*.json "now"): the page's clock stands still.
     const RealDate = Date;
@@ -764,6 +782,50 @@ const FREEZE_JS = () => {
   }
 };
 
+/**
+ * Runs in the page: HA's media-control cards whose artwork isn't as wide as the card is tall yet. The card measures
+ * itself on its first draw and then on its ResizeObserver, which it attaches only if that first draw had an `ha-card`.
+ * In the capture a card can draw before its entity's state arrives (an `hui-warning`, no `ha-card`), so its observer
+ * never watches the card it draws once the state is there: the art keeps the first, wrong measure (165 px on a 201 px
+ * card). A fresh HA page, which has the states before the card draws, re-measures. Such a card is attached again
+ * once (`connectedCallback` attaches the observer to the drawn card, as when HA shows a cached view again), and the
+ * capture waits for the measure. Returns the cards still waiting.
+ */
+const MEDIA_MEASURE_JS = () => {
+  const waiting = [];
+  const walk = (root) => {
+    for (const el of root.querySelectorAll('*')) {
+      if (el.shadowRoot) walk(el.shadowRoot);
+      if (el.localName !== 'hui-media-control-card' || !el.shadowRoot) continue;
+      const card = el.shadowRoot.querySelector('ha-card');
+      const art = el.shadowRoot.querySelector('.image');
+      if (!card || !art || !el.isConnected) continue;
+      if (parseFloat(art.style.width) === card.offsetHeight) continue;
+      waiting.push(`${card.offsetWidth}x${card.offsetHeight} art ${art.style.width}`);
+      if (el.__gwMeasured) continue;
+      el.__gwMeasured = true;
+      const parent = el.parentNode;
+      const next = el.nextSibling;
+      parent.removeChild(el);
+      parent.insertBefore(el, next);
+    }
+  };
+  walk(document);
+  return waiting;
+};
+
+/** Waits (5 s at most) until every media-control card measured the card it draws (MEDIA_MEASURE_JS). */
+async function awaitMediaMeasure(page) {
+  const t0 = Date.now();
+  let waiting = await page.evaluate(MEDIA_MEASURE_JS);
+  while (waiting.length) {
+    if (Date.now() - t0 > 5000) throw new Error(`media-control card never measured its height: ${waiting.join(', ')}`);
+    // The card's observer measures 250 ms after the last resize (HA's debounce).
+    await page.waitForTimeout(300);
+    waiting = await page.evaluate(MEDIA_MEASURE_JS);
+  }
+}
+
 async function settle(page, expectType, timeoutMs, plain = false) {
   const t0 = Date.now();
   let info;
@@ -778,6 +840,7 @@ async function settle(page, expectType, timeoutMs, plain = false) {
   if (expectType && info.slots[0]?.type !== expectType) throw new Error(`expected <${expectType}>, the page shows <${info.slots[0]?.type}>`);
   await page.evaluate(async () => { await document.fonts.ready; });
   await page.waitForTimeout(800);
+  await awaitMediaMeasure(page);
   let prev = null;
   for (let i = 0; i < 8; i++) {
     await page.evaluate(FREEZE_JS);
@@ -947,7 +1010,7 @@ async function capture() {
     fail('HA\'s shared inputs (version, config or themes) changed since the references were taken: run a full --refresh, without --cases or --frames');
   }
 
-  const roboto = await robotoFaces();
+  const fonts = [...await robotoFaces(), interFace()];
   const browser = await launch();
   // The fake HA's fixed now (home.json); a real HA's pinned 10:08.
   const now = fakeNow ?? pinnedNow(haConfig.time_zone);
@@ -957,7 +1020,7 @@ async function capture() {
     for (const dark of [true, false]) {
       const group = mine.filter((c) => (c.dark ?? true) === dark);
       if (!group.length) continue;
-      const { ctx, page, states, images, graphs } = await newPage(browser, frame, dark, now, cardModUrl, haConfig.time_zone, roboto);
+      const { ctx, page, states, images, graphs } = await newPage(browser, frame, dark, now, cardModUrl, haConfig.time_zone, fonts);
       let loaded = false;
       for (const c of group) {
         const t0 = Date.now();

@@ -14,6 +14,8 @@ const SOURCE = readFileSync(process.env.ISLAND_MODULE, 'utf8');
 const SOURCE_NO_CONFIG = process.env.ISLAND_MODULE_NO_CONFIG ? readFileSync(process.env.ISLAND_MODULE_NO_CONFIG, 'utf8') : null;
 // The states the panel's bridge sends when it opens (its snapshot), unless a test says otherwise.
 const LAMP = { 'light.lounge': { entity_id: 'light.lounge', state: 'on', attributes: { friendly_name: 'Lounge' } } };
+// The page's own plain script that the module reads durations with (inlined before it, as the page has it).
+const DURATION = readFileSync(new URL('../../main/resources/dev/glassworks/engine/vitro/island/format-duration.js', import.meta.url), 'utf8');
 const TYPES = readFileSync(process.env.HASS_TYPES, 'utf8');
 const TAG = 'acme-island-card';
 const STRINGS = {
@@ -114,6 +116,7 @@ async function openPage({ card, strings = STRINGS, height = 40, mountHeight, sna
     throwInPage(err) { for (const fn of listeners.error || []) fn({ error: err }); },
     rejectInPage(err) { for (const fn of listeners.unhandledrejection || []) fn({ reason: err }); },
   };
+  vm.runInContext(DURATION, sandbox, { filename: 'format-duration.js' });
   vm.runInContext(source, sandbox, { filename: 'island-module.js' });
   await settle();
   return page;
@@ -412,6 +415,46 @@ test('a reconnect check that says no fails a subscription that never started, an
   page3.ws().push({ type: 'conn', connected: true });
   await assert.rejects(p3, /Pre-check failed/);
   assert.deepEqual(page3.sent('unsubscribe'), [{ type: 'unsubscribe', sid: sid3 }]);
+});
+
+test('a url action and a tapped link leave through Vitro, never in the island\'s own window', async () => {
+  const page = await openPage({ card: plainCard });
+  const fire = (type, ev) => { for (const fn of page.listeners[type] || []) fn(ev); };
+  fire('hass-action', { detail: { config: { tap_action: { action: 'url', url_path: 'https://example.com/events/1' } }, action: 'tap' } });
+  const link = (href, prevented = false) => {
+    const ev = {
+      button: 0, defaultPrevented: prevented, prevented: false,
+      composedPath: () => [{ localName: 'span' }, { localName: 'a', href }, { localName: 'div' }],
+      preventDefault() { this.prevented = true; },
+    };
+    fire('click', ev);
+    return ev.prevented;
+  };
+  assert.ok(link('https://example.com/news'), 'an outside link stays out of the island');
+  // A link on the page's own origin is a path on Home Assistant.
+  assert.ok(link('http://127.0.0.1:5/lovelace/1?x=1'));
+  assert.equal(link('https://example.com/handled', true), false, 'a link the card handled itself');
+  assert.equal(link('mailto:someone@example.com'), false, 'not a web page');
+  await settle();
+  assert.deepEqual(page.sent('navigate').map((m) => m.path), ['https://example.com/events/1', 'https://example.com/news', '/lovelace/1?x=1']);
+});
+
+test('formatEntityState writes a duration as HA does, at the entity\'s display precision', async () => {
+  const page = await openPage({ card: plainCard });
+  const { formatEntityState } = page.hass();
+  const duration = (id, state, unit) => ({ entity_id: id, state, attributes: { device_class: 'duration', unit_of_measurement: unit } });
+  assert.equal(formatEntityState(duration('sensor.dishwasher_left', '1.5', 'h')), '1h 30m');
+  assert.equal(formatEntityState(duration('sensor.dishwasher_left', '90', 'min')), '90m');
+  assert.equal(formatEntityState(duration('sensor.uptime', '2.25', 'd')), '2d 6h');
+  // Seconds aren't one of the units HA formats: the number with its unit.
+  assert.equal(formatEntityState(duration('sensor.timer', '42', 's')), '42 s');
+  // Nor is a state that isn't a number.
+  assert.equal(formatEntityState(duration('sensor.timer', 'unavailable', 'h')), 'Unavailable');
+  assert.equal(formatEntityState({ entity_id: 'sensor.boiler', state: '1.5', attributes: { unit_of_measurement: 'h' } }), '1.5 h');
+  // The registry's display precision rounds first, as HA's formatDuration does.
+  page.ws().push({ type: 'registries', registries: { entities: { 'sensor.dishwasher_left': { entity_id: 'sensor.dishwasher_left', display_precision: 1 } } } });
+  await settle();
+  assert.equal(page.hass().formatEntityState(duration('sensor.dishwasher_left', '1.999', 'h')), '2h');
 });
 
 test('formatEntityState asks for the registries once, for the integration\'s label', async () => {

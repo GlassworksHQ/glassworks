@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.AlertCardView
+import dev.glassworks.engine.vitro.cards.ButtonCardView
 import dev.glassworks.engine.vitro.cards.DateCardView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
 import dev.glassworks.engine.vitro.cards.HaErrorCardView
@@ -50,6 +51,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.util.Date
 import java.util.TimeZone
 
@@ -126,6 +128,18 @@ class NativeCardsAndRowsTest {
         assertTrue(icons(c).contains("mdi:bed"))
     }
 
+    @Test fun aScriptToggleStartsItWhenOffAndStopsItWhileRunning() {
+        // HA's toggleEntity: turn_on unless the state is off ("closed", "locked", "off"), so a running script stops.
+        put("script.wake_up", "off", "friendly_name" to "Wake up")
+        val c = ButtonCardView(ctx(), card("""{"type": "button", "entity": "script.wake_up", "tap_action": {"action": "toggle"}}"""))
+        c.performClick()
+        idle()
+        put("script.wake_up", "on", "friendly_name" to "Wake up")
+        c.performClick()
+        idle()
+        assertEquals(listOf("script" to "turn_on", "script" to "turn_off"), calls.map { it.first to it.second })
+    }
+
     @Test fun aCallServiceRowIsAButtonRowThatPerformsItsAction() {
         val c = entities("""{"type": "call-service", "name": "Ring", "action": "script.ring", "data": {"times": 2}}""", """{"type": "perform-action", "name": "Chime", "service": "script.chime"}""")
         assertEquals(listOf("Ring", "Run", "Chime", "Run"), texts(c))
@@ -148,6 +162,25 @@ class NativeCardsAndRowsTest {
         assertTrue("a link's text is underlined", docs.paintFlags and Paint.UNDERLINE_TEXT_FLAG != 0)
         (docs.parent as View).performClick()
         assertEquals(listOf("https://www.home-assistant.io/"), navigations)
+    }
+
+    // Native graphics: the line breaks need real text widths.
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) fun aButtonCardsLongNameWrapsAndTheCardGrowsWithIt() {
+        // hui-button-card's name is a plain span: a long one wraps ("Kitchen Island / Pendant"), never "…", and the card
+        // (no fixed height in masonry or a stack) is one 19.2 px line taller for each line it adds.
+        put("light.short", "on", "friendly_name" to "Hall")
+        put("light.long", "on", "friendly_name" to "Kitchen Island Pendant")
+        val short = ButtonCardView(ctx(), card("""{"type": "button", "entity": "light.short"}"""))
+        val long = ButtonCardView(ctx(), card("""{"type": "button", "entity": "light.long"}"""))
+        layout(short, 110)
+        layout(long, 110)
+        val name = all(long).filterIsInstance<TextView>().first { it.text.toString() == "Kitchen Island Pendant" }
+        assertTrue("the name wraps: ${name.lineCount} line(s)", name.lineCount >= 2)
+        assertNull("no ellipsis", name.ellipsize)
+        assertEquals("the whole name shows", 0, name.layout.getEllipsisCount(name.lineCount - 1))
+        val dp = activity.resources.displayMetrics.density
+        val extra = (long.measuredHeight - short.measuredHeight) / dp
+        assertEquals("one 19.2 px line per extra line", 19.2f * (name.lineCount - 1), extra, 1f)
     }
 
     @Test fun aButtonsRowHasOneChipPerEntity() {

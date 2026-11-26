@@ -20,10 +20,6 @@
   "owner": "#799",
   "reason": "Entity card: the value line sits about 12 px higher than HA's, as in the `entity` case (listed in #928, not fixed there); name, state, icon color and dimming match"
  },
- "mirror/markdown-cardmod": {
-  "owner": "#799",
-  "reason": "Markdown with card-mod: HA's reference draws the 56 px weight-300 '21.4°' in Inter Thin, because the capture host's Chromium maps every weight under 400 of its installed static Inter 4 to Thin (measured 121.72 px wide at 100, 200 and 300); Vitro draws Inter Light, as a page with HA's fonts would. A capture-host artifact (the capture serves no Inter), not a Vitro bug: needs the capture to serve a pinned Inter"
- },
  "mirror/more-info-vacuum-cleaning": {
   "owner": "#799",
   "reason": "Vacuum More Info on the Mirror's tall sheet: HA centers the robot, its buttons and the fan speed in the sheet's height; Vitro puts them right under the header (found by the region check on #930's case)"
@@ -156,14 +152,6 @@
   "owner": "#928",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
- "s1/m-media-control-media-player-paused": {
-  "owner": "#799",
-  "reason": "Media control: the reference is a capture race, not Vitro. HA's card rendered first without its state, so its ResizeObserver never attached and the art box kept its first measure (165 px wide on a 201 px card). A settled HA page (fresh load, with or without card-mod) sizes it to the card's height, as Vitro does. The progress bar matches within 1 px. Needs a recapture once the capture waits for it"
- },
- "s1/m-media-control-media-player-playing": {
-  "owner": "#799",
-  "reason": "Media control: the reference is a capture race, not Vitro. HA's card rendered first without its state, so its ResizeObserver never attached and the art box kept its first measure (165 px wide on a 201 px card). A settled HA page (fresh load, with or without card-mod) sizes it to the card's height, as Vitro does. The progress bar matches within 1 px. Needs a recapture once the capture waits for it"
- },
  "s1/m-mushroom-alarm-alarm-control-panel-unavailable": {
   "owner": "#928",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
@@ -256,10 +244,6 @@
   "owner": "#927",
   "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
  },
- "s1/markdown-cardmod": {
-  "owner": "#799",
-  "reason": "Markdown with card-mod: HA's reference draws the 56 px weight-300 '21.4°' in Inter Thin, because the capture host's Chromium maps every weight under 400 of its installed static Inter 4 to Thin (measured 121.72 px wide at 100, 200 and 300); Vitro draws Inter Light, as a page with HA's fonts would. A capture-host artifact (the capture serves no Inter), not a Vitro bug: needs the capture to serve a pinned Inter"
- },
  "s1/mushroom-light-horizontal": {
   "owner": "#799",
   "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
@@ -295,10 +279,6 @@
  "tablet/entity-light-on": {
   "owner": "#799",
   "reason": "Entity card: the value line sits about 12 px higher than HA's, as in the `entity` case (listed in #928, not fixed there); name, state, icon color and dimming match"
- },
- "tablet/markdown-cardmod": {
-  "owner": "#799",
-  "reason": "Markdown with card-mod: HA's reference draws the 56 px weight-300 '21.4°' in Inter Thin, because the capture host's Chromium maps every weight under 400 of its installed static Inter 4 to Thin (measured 121.72 px wide at 100, 200 and 300); Vitro draws Inter Light, as a page with HA's fonts would. A capture-host artifact (the capture serves no Inter), not a Vitro bug: needs the capture to serve a pinned Inter"
  },
  "tablet/mushroom-light-horizontal": {
   "owner": "#799",
