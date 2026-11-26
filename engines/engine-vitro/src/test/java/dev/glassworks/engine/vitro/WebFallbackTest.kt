@@ -281,12 +281,12 @@ class WebFallbackTest {
         assertTrue(islandHost.allowsLoad("about:blank"))
         val origin = islandUrl.substringBefore("/__vitro/")
         assertFalse("another host that starts like the island's", islandHost.allowsLoad("$origin.example.com/"))
-        assertFalse("a calendar event's link", islandHost.allowsLoad("https://www.example.com/events/1"))
+        assertFalse("a calendar event's link", islandHost.allowsLoad("https://www.example.com/events/1.html"))
         assertFalse("nothing but a web address is opened elsewhere", islandHost.allowsLoad("javascript:alert(1)"))
         idle()
         assertEquals("the island stays on its page", listOf(islandUrl), fallback.pages[i].loads)
         // Web addresses open in the panel's page, as a native card's url action does, in the order they came.
-        assertEquals(listOf("$origin.example.com/", "https://www.example.com/events/1"), pageFallback()?.loads)
+        assertEquals(listOf("$origin.example.com/", "https://www.example.com/events/1.html"), pageFallback()?.loads)
     }
 
     @Test fun aBuiltInCardNestedInAStackOrAutoEntitiesCounts() {
