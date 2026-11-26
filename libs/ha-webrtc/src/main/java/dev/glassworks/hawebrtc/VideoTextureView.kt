@@ -32,7 +32,11 @@ public enum class VideoScaling {
  * Draws libwebrtc frames into a [TextureView] with libwebrtc's own [EglRenderer], so the picture is part of the view
  * tree: it scrolls, clips to rounded corners and fades with its card (a SurfaceView, libwebrtc's own renderer, is a
  * window of its own and does none of that on Android 6). It is transparent until the first frame, so whatever is
- * behind it (a still) shows while the stream connects.
+ * behind it (a still) shows while the stream connects; once a frame covers the whole view it is opaque, so the
+ * compositor doesn't blend it with what's behind on every frame.
+ *
+ * While [rendering] is false (the view is off screen) frames that come in aren't drawn, but the first one is: it's
+ * what says the stream plays.
  */
 @SuppressLint("ViewConstructor")
 internal class VideoTextureView(
@@ -84,10 +88,25 @@ internal class VideoTextureView(
     @Volatile
     var onDrawn: ((width: Int, height: Int) -> Unit)? = null
 
+    /** False: frames aren't drawn (off screen), once one has been. Any thread reads it. */
+    @Volatile
+    var rendering: Boolean = true
+
+    /** A frame has been drawn on this surface. */
+    @Volatile
+    internal var drawnOnce = false
+        private set
+
+    /** The picture covers the whole view (no letterbox): opaque once drawn. Main thread. */
+    private var coversView = true
+
     override fun onFrame(frame: VideoFrame) {
         frameSize(frame.rotatedWidth, frame.rotatedHeight)
-        renderer.onFrame(frame)
+        if (draws()) renderer.onFrame(frame)
     }
+
+    /** Whether a frame coming in now is drawn: while [rendering], and the first one in any case. */
+    internal fun draws(): Boolean = rendering || !drawnOnce
 
     /** The size of the frames coming in (rotation applied); the layout follows it. */
     internal fun frameSize(w: Int, h: Int) {
@@ -115,6 +134,9 @@ internal class VideoTextureView(
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         attached = false
+        // A new surface starts empty: transparent again until its first frame.
+        drawnOnce = false
+        updateOpaque()
         // The texture is ours to release (false), once the render thread has let go of it. Asking it to let go can
         // block (EglRenderer's lock, held through a buffer swap), so even the asking happens off the main thread.
         releaser.execute { handoff.whenReleased { surface.release() } }
@@ -124,7 +146,17 @@ internal class VideoTextureView(
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
         val w = frameWidth
         val h = frameHeight
-        if (w > 0 && h > 0) onDrawn?.invoke(w, h)
+        if (w > 0 && h > 0) {
+            drawnOnce = true
+            updateOpaque()
+            onDrawn?.invoke(w, h)
+        }
+    }
+
+    /** Opaque once a frame covers the whole view; transparent before, or while the picture is letterboxed. */
+    private fun updateOpaque() {
+        val opaque = drawnOnce && coversView
+        if (isOpaque != opaque) isOpaque = opaque
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -139,6 +171,8 @@ internal class VideoTextureView(
         renderer.setLayoutAspectRatio(if (scaling == VideoScaling.FILL) vw.toFloat() / vh else 0f)
         val (sx, sy) = fitScale(scaling, frameWidth, frameHeight, vw, vh)
         setTransform(Matrix().apply { setScale(sx, sy, vw / 2f, vh / 2f) })
+        coversView = sx >= 1f && sy >= 1f
+        updateOpaque()
     }
 
 }

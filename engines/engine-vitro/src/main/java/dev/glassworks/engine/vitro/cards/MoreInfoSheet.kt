@@ -1403,7 +1403,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
         var picture: String? = ctx.store[id]?.entityPicture
         // HA's ha-camera-stream (WebRTC, HLS, then MJPEG), snapshots every 1.5 s if none plays.
-        val feed = LiveCameraFeed(ctx, id, { picture }, host = streamHost, cardType = "more-info") { bmp -> image.setImageBitmap(bmp) }
+        // It comes first for a video slot: with every slot held by the cards behind, it takes one of theirs.
+        val feed = LiveCameraFeed(ctx, id, { picture }, host = streamHost, cardType = "more-info", foreground = true) { bmp ->
+            image.setImageBitmap(bmp)
+        }
         feedRef = feed
         releasers += {
             open = false
