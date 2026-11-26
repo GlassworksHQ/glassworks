@@ -431,6 +431,8 @@ with a byte-exact rollback using the original blocks read over HTTP beforehand.
     confirms stock `1.24.0` `adbd` rejects `/data/misc/adb/adb_keys` on its own.
   - Contains `com.android.server.MirrorApService`, which drives `/system/bin/mapd` (`running`) and
     `hostapd` to bring up the `mirror-<serial>` SoftAP at `192.168.43.1` (DHCP `192.168.43.2`–`254`).
+    With Glassworks in place this hotspot gets in the way, so the in-place patch empties
+    `MirrorApService.systemReady()`: [stock-softap.md](stock-softap.md).
 - **Init services (`init.svc.*`, 58 entries):** confirms `qcom-post-boot` (`stopped`),
   `flash_recovery` (`stopped`), and Mirror-specific `mapd` (`running`) and `cfgchkup` (`stopped`).
   `file_contexts` under `device/mirror/mirror/sepolicy/file_contexts` labels `/system/bin/mapd`
@@ -620,6 +622,13 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-onl
      [`frames/lululemon-mirror/installer/src/stock.ts`](../installer/src/stock.ts), shared by Kiln and
      the Node tool. USB MTP (`mUsbDataUnlocked=false` → 0 storages) and AOA v2 are dead ends, so the
      Stage 1 transport stays the SoftAP HTTP probe (or USB `adb forward`), not MTP.
+   - **Kiln's way back to stock (untested on a unit, 2026-11-24):** everything Kiln's app install
+     changes (the APK in `/data/app`, `device_owner.xml`, the `pm hide` state in
+     `package-restrictions.xml`, the preferred home activity, `user_rotation`) lives in `userdata`, so
+     Kiln's undo writes `restore-services.sparse` and then an empty ext4 `userdata` (root `0771
+     system:system`, `lost+found` only), the browser's version of `--undo --erase-userdata`. The
+     install's own fresh `userdata` is built the same way plus `/misc/adb`, so stock should take it
+     on first boot as after a factory reset, but no unit has booted Kiln's empty one yet.
 4. **Trust model for binding the SoftAP probe to the fastboot flash target — partially closed
    (2026-11-25, read):** a compatible but different Mirror in fastboot could otherwise receive
    writes computed from another unit's FIEMAP offsets (CodeRabbit, #769). `stock-surgical-adb.ts`

@@ -2,7 +2,7 @@
 // resume. Each step of each flow a frame declares has its address under the frame's route, every frame has the standard
 // flow's (its steps after the install), and none can have a page of its own. A reload at each step resumes there: the
 // contract's reload@<step> cases (contract.test.ts), one per declared step.
-import { INSTALLERS } from '@glassworks/frames/catalog';
+import { FLOW_TRANSPORTS, INSTALLERS } from '@glassworks/frames/catalog';
 import { describe, expect, it } from 'vitest';
 import { STANDARD_ROUTES, routesOf } from '../../src/app/[frame]/frames';
 import { generateStaticParams } from '../../src/app/[frame]/[...step]/page';
@@ -30,6 +30,13 @@ describe.each(WITH_A_PAGE)('%s', (id) => {
         expect(s.route, `${flow}/${s.id} has no route`).toBeTypeOf('string');
         if (s.route) expect(built.has(`${base}/${s.route}`), `${base}/${s.route}`).toBe(true);
       }
+    }
+  });
+
+  it('each step names a transport the engine knows (fel, fastboot, adb, usb, the device\'s own agent, or none)', () => {
+    expect([...FLOW_TRANSPORTS]).toEqual(['fel', 'fastboot', 'adb', 'usb', 'agent', 'none']);
+    for (const [flow, f] of Object.entries(data.flows)) {
+      for (const s of f.steps) expect(FLOW_TRANSPORTS as readonly string[], `${flow}/${s.id}`).toContain(s.transport);
     }
   });
 

@@ -41,6 +41,7 @@ class SettingsMockups {
     private fun menu(
         radioRunning: Boolean, deviceSettings: Boolean = true, facts: RadioFollowUp.Facts = off,
         extra: List<dev.glassworks.pane.PaneDefinition> = emptyList(), panelIp: String? = null,
+        volume: dev.glassworks.audio.MasterVolume = MenuFixture.volume(),
     ): KioskSettingsOverlay {
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         val app = RuntimeEnvironment.getApplication()
@@ -54,7 +55,7 @@ class SettingsMockups {
             ),
             radio,
         ) + MenuFixture.switchOnly(app) + extra
-        o.show(MenuFixture.model(app, radio, deviceSettings, status = "screen on · presence near · voice=idle", panes = panes, panelIp = { panelIp }))
+        o.show(MenuFixture.model(app, radio, deviceSettings, status = "screen on · presence near · voice=idle", panes = panes, panelIp = { panelIp }, volume = volume))
         Mockup.idle()
         return o
     }
@@ -95,6 +96,9 @@ class SettingsMockups {
         KioskPrefs(RuntimeEnvironment.getApplication()).apply { closeLanSetup(); haSeen = false }
         shot("settings-02-radio", menu(radioRunning = true), "radio")
         shot("settings-03-screen", menu(radioRunning = true), "screen")
+        // The master volume: everything the panel plays, at 60 %, then muted.
+        shot("settings-03a-sound", menu(radioRunning = true), CoreSettings.SOUND)
+        shot("settings-03a2-sound-muted", menu(radioRunning = true, volume = MenuFixture.volume(muted = true)), CoreSettings.SOUND)
         // #691: the Appearance page, Glassworks dark (the default), then Dusk light picked.
         shot("settings-03b-appearance", menu(radioRunning = true), CoreSettings.APPEARANCE)
         KioskPrefs(RuntimeEnvironment.getApplication()).overlayTheme = "dusk/light"

@@ -14,11 +14,8 @@ import {
 import { Fastboot } from '@glassworks/fastboot';
 import { FelDevice } from '@glassworks/fel';
 import { FakeBrom, FakeUboot, eq, makeSpl } from '@glassworks/fel/fakes';
+import { G, HAVE, MISSING, STALE, STOCK } from './s1-golden';
 
-const B = join(homedir(), 'src/aqara-panel-backups');
-const STOCK = join(B, 'install-4.5.80-20261109-203611');
-const G = process.env.S1_WEB_GOLDEN ?? join(B, 'web-golden');
-const HAVE = existsSync(join(STOCK, 'boot.img')) && existsSync(join(G, 'out/SHA256SUMS'));
 const rd = (p: string) => new Uint8Array(readFileSync(p));
 const SPL = join(homedir(), 'src/u-boot-s1/build-s1/u-boot-sunxi-with-spl.bin');
 const BACKUP_PARTS = s1Plus.backup.parts;
@@ -73,7 +70,11 @@ function expectBarsMonotone(all: Progress['bars'][]) {
   expect(hi).toMatchObject({ backup: 1, patch: 1, flash: 1, verify: 1 });
 }
 
-describe.skipIf(!HAVE)('install flow on simulated hardware with the real 4.5.80 partitions', () => {
+it.runIf(MISSING.length > 0)('S1 goldens are for another revision: the install flow tests are skipped', () => {
+  process.stderr.write(`[flow] SKIPPED: ${STALE}\n`);
+});
+
+describe.skipIf(!HAVE || MISSING.length > 0)('install flow on simulated hardware with the real 4.5.80 partitions', () => {
   it('backs up, patches, flashes exactly what the CLI flashed, reboots, provisions', async () => {
     const a = assets();
     const layout: [string, number | Uint8Array][] = [
