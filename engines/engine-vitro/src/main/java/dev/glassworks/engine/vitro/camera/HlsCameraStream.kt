@@ -65,9 +65,10 @@ class HlsCameraStream internal constructor(
     /** A [SurfaceView] (true) or a [TextureView]. */
     surfaceView: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N,
 ) : CameraStream, CameraStreamVideoSize {
-    constructor(host: CameraStreamHost, entityId: String) : this(
+    constructor(host: CameraStreamHost, entityId: String, surfaceView: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) : this(
         host.context, host.main, entityId, host.haBase, host.callWs, ::defaultPlayer, ::defaultSource,
         attachOutput = { p, v -> if (v is SurfaceView) p.setVideoSurfaceView(v) else p.setVideoTextureView(v as TextureView) },
+        surfaceView = surfaceView,
     )
 
     private val appContext = context

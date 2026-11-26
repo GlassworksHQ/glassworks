@@ -47,9 +47,16 @@ object VitroWebRtc {
         view = VideoViewKind.AUTO,
     )
 
+    /** [OPTIONS] on a TextureView: More Info's camera ([Factory.createForeground]). */
+    internal val FOREGROUND_OPTIONS = HaWebRtcPlayer.Options(stream = OPTIONS.stream, scaling = OPTIONS.scaling, view = VideoViewKind.TEXTURE_VIEW)
+
     internal class Factory(private val host: CameraStreamHost) : CameraStreamFactory {
         override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
             if (kind == CameraStreamKind.WEB_RTC) WebRtcCameraStream(HaWebRtcPlayer(host.context, HostChannel(host), entityId, OPTIONS)) else null
+
+        /** More Info's camera: its sheet slides in on a layer, which a SurfaceView's picture doesn't follow. */
+        override fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? =
+            if (kind == CameraStreamKind.WEB_RTC) WebRtcCameraStream(HaWebRtcPlayer(host.context, HostChannel(host), entityId, FOREGROUND_OPTIONS)) else null
 
         /** libwebrtc's factory and EGL get made off the main thread while the view builds. */
         override fun prewarm() = HaWebRtcPlayer.prewarm(host.context)
