@@ -12,6 +12,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Fixed
+- **Wi-Fi setup over Bluetooth finishes on the Mirror.** When Home Assistant or its phone app sent the Wi-Fi
+  details over Bluetooth, the Mirror joined the network, but the phone or Home Assistant kept saying it was
+  connecting because the Mirror dropped the Bluetooth connection before it could report back. It now stays
+  connected and reports the join, so the setup finishes. In the legacy build.
 - **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
