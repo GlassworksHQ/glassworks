@@ -804,7 +804,9 @@ export class ImageSession {
   private async ownWifiGone(p: PanelShell): Promise<boolean> {
     const c = this.inPlace ? this.d.frame.imageFlow.inPlace : undefined;
     if (!c?.channels.lan?.hotspot || !c.ownWifiGone) return false;
-    const gone = await c.ownWifiGone(p).catch(() => false);
+    // bounded like every read before the restart: a device that stops answering ends the check (as no: the hotspot
+    // path, as before this check), and the restart goes on
+    const gone = await c.ownWifiGone(bounded(p, this.d.frame)).catch(() => false);
     if (gone) {
       this.log(`${cap(this.d.frame.the)}'s own Wi-Fi network is off since its earlier install`);
       this.log('', 'the setup helper joins your Wi-Fi network instead, and Kiln reaches it there or over Bluetooth');

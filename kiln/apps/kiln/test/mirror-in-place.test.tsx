@@ -53,6 +53,10 @@ interface Rig { image: ImageSession; dev: InPlaceSimDevice; store: InPlaceStore;
 /** A session on a simulated stock Mirror; `store` and `progress` carry over to a second browser load or a second run. */
 function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampered?: boolean; refusedBuild?: boolean; systemNotTaken?: boolean; unreadable?: boolean; store?: InPlaceStore; progress?: ReturnType<typeof tab>;
   dev?: InPlaceSimDevice; deps?: Partial<ImageDeps>; code?: Partial<InPlaceCode>;
+  /** the frame's limit on one adb read (its `timings.readMs`) */
+  readMs?: number;
+  /** adb commands the device never answers (it stops answering partway, say) */
+  hangs?: (cmd: string) => boolean;
   /** a write (`flash <partition>`) or a restart (`reboot`) that fails, by what it is and how many such calls came before it */
   fail?: (what: string, n: number) => boolean } = {}): Rig {
   const dev = o.dev ?? sim.device({ lan: o.lan ?? 'ok', tampered: o.tampered, refusedBuild: o.refusedBuild, systemNotTaken: o.systemNotTaken, unreadable: o.unreadable });
@@ -67,8 +71,13 @@ function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampere
       flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { failing(`flash ${p}`); await fb.flashBlob(p, b, on); flashed.push(p); },
       reboot: async () => { failing('reboot'); await fb.reboot(); } };
   };
-  const frame_ = o.code ? { ...frame, imageFlow: { ...frame.imageFlow, inPlace: { ...sim.code, ...o.code } } } : frame;
-  const adb = () => { const a = dev.adb(); return Object.assign(withAppStreams(a, { online: true, radio: false }), { rebootToBootloader: () => a.rebootToBootloader!() }); };
+  const withCode = o.code ? { ...frame, imageFlow: { ...frame.imageFlow, inPlace: { ...sim.code, ...o.code } } } : frame;
+  const frame_ = o.readMs ? { ...withCode, timings: { ...withCode.timings, readMs: o.readMs } } : withCode;
+  const adb = () => {
+    const a = dev.adb();
+    const hung: PanelShell = o.hangs ? { ...a, run: (cmd, signal) => (o.hangs!(cmd) ? new Promise(() => {}) : a.run(cmd, signal)) } : a;
+    return Object.assign(withAppStreams(hung, { online: true, radio: false }), { rebootToBootloader: () => a.rebootToBootloader!() });
+  };
   const app = new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true);
   const apk = mirrorEntry.sim.apk();
   const image = new ImageSession({
@@ -185,6 +194,27 @@ describe('Glassworks on the stock software', () => {
     expect(r.progress.mark).toMatchObject({ at: 'staged', noOwnWifi: true });
     await toRestorePoint(r, 'ble');
     expect(r.image.state.receive?.channel).toBe('lan');
+  });
+
+  it('a Mirror that stops answering the Wi-Fi check still restarts, within the read limit, and keeps the network out of the stage', async () => {
+    // the Mirror's own check (pm list packages) on a shell that never answers it
+    const r = rig({ code: { ownWifiGone: sim.code.ownWifiGone }, readMs: 50, hangs: (c) => c.startsWith('pm list packages') });
+    r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
+    r.image.pick(RECIPE.id);
+    r.image.choose();
+    r.image.toFastboot();
+    const t0 = Date.now();
+    await r.image.restartToFastboot();
+    expect(Date.now() - t0).toBeLessThan(5_000);
+    expect(r.image.state).toMatchObject({ restarted: true, connecting: false });
+    expect(r.image.state.connectError).toBeUndefined();
+    await r.image.connectFastboot();
+    r.image.understand(true);
+    await r.image.flash();
+    // unknown counts as no: the Mirror's own Wi-Fi, as before the check
+    expect(r.image.state.receive).toMatchObject({ network: `mirror-${FAKE_SERIAL}` });
+    expect(r.image.state.log.join('\n')).toContain('the setup agent, this browser\'s adb key and its signing secret, on a fresh userdata');
+    expect(r.progress.mark?.noOwnWifi).toBeUndefined();
   });
 
   it('keeps the stage free of the person\'s network when the Mirror\'s own Wi-Fi is still there', async () => {
