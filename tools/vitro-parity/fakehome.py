@@ -375,8 +375,13 @@ class Series:
             self.changes, self.attrs = None, {}
         else:
             pts = spec.get("points") or spec.get("steps") or []
-            self.changes = sorted((at(p[0]), str(p[1])) for p in pts)
-            self.attrs = {at(p[0]): resolve(p[2]) for p in pts if len(p) > 2}
+            # Points at one instant: the last one in the fixture holds, state and attributes, as the recorder keeps
+            # it. Collapsed here once, so the state, the history and the statistics all read the same timeline.
+            last = {}
+            for p in pts:
+                last[at(p[0])] = p
+            self.changes = sorted((t, str(p[1])) for t, p in last.items())
+            self.attrs = {t: resolve(p[2]) for t, p in last.items() if len(p) > 2}
 
     def attributes(self, t):
         """The attributes the last point at or before t gave, or None."""
@@ -510,11 +515,11 @@ def statistics_metadata(ids):
 def _held(s, b, e):
     """[(t, value, seconds held)]: every numeric value series [s] holds in the bucket [b, e), as HA's recorder
     compiles one: the value at b, then each change before e (a change at e itself starts the next bucket). A value
-    that isn't a number (`unavailable`) holds its own time, which counts for none. Of points at one instant only the
-    last holds, as the recorder keeps it: an earlier one there lasts no time and is never read."""
+    that isn't a number (`unavailable`) holds its own time, which counts for none. (Points at one instant are one
+    point already: Series keeps the last.)"""
     pts = s.changes_between(b, e - 1e-6)
     spans = [(t, v, (pts[i + 1][0] if i + 1 < len(pts) else e) - t) for i, (t, v) in enumerate(pts)]
-    return [(t, float(v), w) for t, v, w in spans if w > 0 and v is not None and _num(v)]
+    return [(t, float(v), w) for t, v, w in spans if v is not None and _num(v)]
 
 
 def statistics(ids, start, end, period, types):

@@ -128,6 +128,18 @@ class Home(unittest.TestCase):
                    "history": {"sensor.m": {"points": [["-3h08m", "10"], ["-2h38m", "0"], ["-2h38m", "30"]]}}})
         same = H.statistics(["sensor.m"], H.iso(start), None, "hour", ["mean", "min", "max"])["sensor.m"][0]
         self.assertEqual((same["min"], same["max"], same["mean"]), (10.0, 30.0, 20.0))
+        # The last at that instant is the value it had before: nothing changed, for the state, history and statistics.
+        self.case({"states": {"sensor.m": {"state": "10", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}}},
+                   "history": {"sensor.m": {"points": [["-3h08m", "10"], ["-2h38m", "0"], ["-2h38m", "10"]]}}})
+        same = H.statistics(["sensor.m"], H.iso(start), None, "hour", ["mean", "min", "max"])["sensor.m"][0]
+        self.assertEqual((same["min"], same["max"], same["mean"]), (10.0, 10.0, 10.0))
+        self.assertEqual([r["s"] for r in H.history(["sensor.m"], H.iso(start), None)["sensor.m"]], ["10"])
+        self.assertEqual((H.states()["sensor.m"]["state"], H.states()["sensor.m"]["last_changed"]), ("10", H.NOW - 3 * 3600 - 8 * 60))
+        # The last in the fixture's order, not the largest state: 30 then 0 at one instant is 0.
+        self.case({"states": {"sensor.m": {"state": "0", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}}},
+                   "history": {"sensor.m": {"points": [["-3h08m", "20"], ["-2h38m", "30"], ["-2h38m", "0"]]}}})
+        same = H.statistics(["sensor.m"], H.iso(start), None, "hour", ["min", "max"])["sensor.m"][0]
+        self.assertEqual((same["min"], same["max"], H.states()["sensor.m"]["state"]), (0.0, 20.0, "0"))
         self.case({"states": {"sensor.c": {"state": "15", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}}},
                    "history": {"sensor.c": {"points": [["-3h08m", "0"], ["-2h10m", "5"], ["-2h08m", "15"]]}}})
         c = H.statistics(["sensor.c"], H.iso(start), None, "hour", ["change", "state"])["sensor.c"]
