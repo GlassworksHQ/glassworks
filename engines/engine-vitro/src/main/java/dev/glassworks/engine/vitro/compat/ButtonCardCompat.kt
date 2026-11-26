@@ -46,6 +46,7 @@ internal object ButtonCardCompat {
         for ((key, why) in VitroSupport.BUTTON_CARD_IGNORED_OPTIONS) {
             if (key == "tooltip" && truthy(raw.opt(key))) notes += "button-card `tooltip:` is ignored: $why"
         }
+        checkTimer(raw, reasons)
         checkLayout(raw, reasons)
         checkTexts(raw, null, reasons)
         checkActions(raw, reasons)
@@ -91,6 +92,18 @@ internal object ButtonCardCompat {
     )
 
     private val STATE_OPERATORS = setOf("==", "<=", "<", ">=", ">", "!=", "regex", "template", "default")
+
+    /**
+     * A timer's state: button-card counts it down every second (`_buildStateString`: `secondsToDuration` of the time
+     * remaining, with "(Paused)" after it while paused), which the native card doesn't draw. Only when the card shows
+     * its state and no `state_display` of its own replaces it.
+     */
+    private fun checkTimer(raw: JSONObject, reasons: MutableSet<String>) {
+        val entity = raw.opt("entity") as? String ?: return
+        if (entity.substringBefore('.') != "timer" || !truthy(raw.opt("show_state"))) return
+        if ((raw.opt("state_display") as? String)?.isNotEmpty() == true) return
+        reasons += "button-card `show_state:` on a timer (its countdown) isn't drawn natively"
+    }
 
     private fun checkLayout(raw: JSONObject, reasons: MutableSet<String>) {
         raw.opt("layout")?.takeIf { it != JSONObject.NULL }?.let { l ->
