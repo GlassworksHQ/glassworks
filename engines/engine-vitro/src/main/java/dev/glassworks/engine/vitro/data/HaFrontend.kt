@@ -139,6 +139,16 @@ object HaFrontend {
         true
     }
 
+    /**
+     * Waits until every read asked for before this call has run, installs included (tests: one executor runs them in
+     * order, so a no-op queued now runs after them). False when they didn't finish in [timeoutMs].
+     */
+    internal fun awaitIdle(timeoutMs: Long = 5_000): Boolean {
+        val done = java.util.concurrent.CountDownLatch(1)
+        executor.execute { done.countDown() }
+        return done.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
+
     /** Forgets what is installed (a new server, or tests). */
     fun reset() {
         synchronized(lock) {

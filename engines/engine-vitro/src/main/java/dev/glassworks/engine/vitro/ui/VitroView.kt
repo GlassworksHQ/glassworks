@@ -529,8 +529,10 @@ class VitroView(
 
     /**
      * The user's language or formats changed ([HaLocale]): every text, number, date and time was written with the
-     * old ones, so the view is built again, as a theme change does: each island keeps its page. Only a real change gets
-     * here: strings installed again unchanged (a reconnect) keep [HaText.version] as it was ([HaFrontend]).
+     * old ones, so the view is built again, as a theme change does. Each island's page loads again too: its `hass.locale`
+     * and `<html lang>` are written into the page when it loads, and its bridge carries no locale, so a kept page would
+     * stay in the old language. A language change is rare; a reconnect never gets here, as strings installed again
+     * unchanged keep [HaText.version] as it was ([HaFrontend]).
      */
     fun setLocale(locale: FrontendLocale, timeZone: String, strings: Long) {
         val next = Triple(locale, timeZone, strings)
@@ -541,7 +543,7 @@ class VitroView(
         // An open More Info sheet built its words once: it opens again in the new language.
         val reopen = moreInfoEntityId?.takeIf { moreInfo != null }
         closeMoreInfo()
-        dropBuiltViews(keepIslands = true)
+        dropBuiltViews(keepIslands = false)
         dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
         reopen?.let { openMoreInfo(it) }
     }

@@ -654,6 +654,9 @@ class HaDashboardClient(
     /** How many held subscriptions are live (tests). */
     internal fun heldCount(): Int = held.size
 
+    /** How many requests wait for their result (tests). */
+    internal fun pendingCount(): Int = pending.size
+
     // ---- Registries for web islands ----
 
     /** Guards the registry feed's state below. Taken before [queueLock] (start and stop send), never inside it. */
@@ -892,8 +895,12 @@ class HaDashboardClient(
             refreshToken(force = false) {}
             val sentAt = System.nanoTime()
             val answered = AtomicBoolean(false)
-            if (request(JSONObject().put("type", "ping")) { res -> if (!isTransportError(res)) answered.set(true) } <= 0) return@schedule
+            val pingId = request(JSONObject().put("type", "ping")) { res -> if (!isTransportError(res)) answered.set(true) }
+            if (pingId <= 0) return@schedule
             schedule(pongTimeoutMs) {
+                // The check is the ping's end: a pong that never came (the connection lived on other traffic) leaves no
+                // callback behind in [pending], one per check for as long as the connection lasts.
+                pending.remove(pingId)
                 // A pong held up behind a big message still counts: anything heard since the ping means it lives.
                 if (!live() || answered.get() || lastHeard - sentAt > 0) return@schedule
                 silent = ws

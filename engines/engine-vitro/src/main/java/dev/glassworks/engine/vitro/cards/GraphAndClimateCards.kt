@@ -1075,6 +1075,8 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 renewing {
                     ctx.subscribeForecast(eid, type) { days ->
                         ctx.main.post {
+                            // An empty push keeps what shows: before the first list, the legacy `forecast` attribute;
+                            // after it, the last list the integration sent.
                             if (days.isEmpty()) return@post
                             forecastFromSocket = true
                             val u = (ctx.store[eid]?.attributes?.get("temperature_unit") as? String) ?: "°C"

@@ -544,8 +544,9 @@ class IslandSessionsTest {
             val card = islandCards(p).single()
             val rebuilds = view.localeRebuilds
 
-            server.dropConnection()
+            // Counted before the drop: the reconnect's read can't land before the baseline.
             val reads = indexReads.get()
+            server.dropConnection()
             awaitMain("reconnected, strings read again") { readyCount() >= 2 && indexReads.get() > reads }
             Thread.sleep(200)
             idle()
@@ -557,6 +558,27 @@ class IslandSessionsTest {
             HaFrontend.reset()
             HaText.reset()
         }
+    }
+
+    @Test fun aRealLanguageChangeLoadsTheIslandsPageAgainInTheNewLocale() {
+        // An island's hass.locale and <html lang> are written into its page when it loads: a kept page would keep the
+        // old language while the native cards switch, so a real locale change loads the page again.
+        val p = page()
+        p.load("$base/wall-test/wall")
+        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
+        val first = islandPages().single()
+        val view = vitroView(p)
+        view.setLocale(dev.glassworks.engine.vitro.data.FrontendLocale(language = "de"), "UTC", HaText.version)
+        idle()
+        assertEquals(1, view.localeRebuilds)
+        assertTrue("the old page goes", first.closed)
+        assertEquals("one new page for the island", 2, islandPages().size)
+        assertOnePagePerIsland(p)
+        // The same locale again (a reconnect, a repeated report) changes nothing.
+        view.setLocale(dev.glassworks.engine.vitro.data.FrontendLocale(language = "de"), "UTC", HaText.version)
+        idle()
+        assertEquals(1, view.localeRebuilds)
+        assertEquals(2, islandPages().size)
     }
 
     @Test fun aReconnectWithANewTokenAndTheSameConfigSendsTheTokenToTheKeptIsland() {

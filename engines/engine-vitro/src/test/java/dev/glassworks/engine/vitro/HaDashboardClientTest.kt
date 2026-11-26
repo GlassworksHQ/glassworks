@@ -1680,9 +1680,37 @@ class HaDashboardClientTest {
         val c = newClient(keepAliveMs = 100, pongTimeoutMs = 300)
         c.start(null)
         awaitCondition("connected") { listener.connected.size == 1 }
-        awaitCondition("several pings", timeoutMs = 5_000) { server.commands("ping").size >= 3 }
+        // Past several pong timeouts (the first lands with the fourth ping): each answered ping kept the connection.
+        awaitCondition("several pings", timeoutMs = 5_000) { server.commands("ping").size >= 6 }
         assertTrue(listener.disconnected.isEmpty())
         assertEquals(1, server.connectUrls.size)
+    }
+
+    @Test
+    fun aConnectionLivingOnOtherTrafficWithoutPongsLeavesNoPingBehind() {
+        // HA streams events but never answers a ping: the connection lives, and no ping's callback piles up.
+        val c = newClient(keepAliveMs = 50, pongTimeoutMs = 50)
+        c.start(null)
+        awaitCondition("connected") { listener.connected.size == 1 && server.commands("subscribe_events").isNotEmpty() }
+        server.answerPings = false
+        val traffic = Thread {
+            try {
+                while (true) {
+                    // An event for no subscription: the reader hears it and drops it.
+                    server.pushEvent(99_999, JSONObject().put("event_type", "noise"))
+                    Thread.sleep(10)
+                }
+            } catch (_: InterruptedException) {
+            }
+        }.apply { isDaemon = true; start() }
+        try {
+            awaitCondition("many unanswered pings", timeoutMs = 5_000) { server.commands("ping").size >= 10 }
+            assertTrue("kept alive by the traffic", listener.disconnected.isEmpty())
+            // At most the pings whose checks haven't run yet (a tick and the last check may meet), not one per ping.
+            assertTrue("pending: ${c.pendingCount()}", c.pendingCount() <= 2)
+        } finally {
+            traffic.interrupt()
+        }
     }
 
     @Test

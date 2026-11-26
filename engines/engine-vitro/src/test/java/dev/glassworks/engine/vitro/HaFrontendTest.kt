@@ -43,6 +43,8 @@ class HaFrontendTest {
     }
 
     @After fun tearDown() {
+        // Nothing queued runs on into the next test.
+        HaFrontend.awaitIdle()
         HaFrontend.reset()
         HaFrontend.cacheDir = null
         HaText.reset()
@@ -212,11 +214,12 @@ class HaFrontendTest {
         val told = java.util.concurrent.atomic.AtomicInteger(0)
         HaFrontend.ensureCached(next, origin, "de") { told.incrementAndGet() }
         asked.clear()
+        assertTrue(HaFrontend.awaitIdle())
         repeat(3) { n ->
             HaFrontend.ensure(next, origin, "de", revalidate = true) { told.incrementAndGet() }
-            // HA's index read again each time; the install (or not) follows on the same thread.
-            awaitCondition("index read ${n + 1}") { asked.count { it == "$origin/" } == n + 1 }
-            Thread.sleep(100)
+            // Each reconnect's work done, the install (or not) included, before anything is read.
+            assertTrue(HaFrontend.awaitIdle())
+            assertEquals("HA's index read again", n + 1, asked.count { it == "$origin/" })
         }
         assertEquals("nobody is told of unchanged strings", 0, told.get())
         assertEquals("HaText keeps its version", version, HaText.version)
