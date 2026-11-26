@@ -305,4 +305,167 @@ class CameraHubTest {
         assertEquals(0L, b.silence())
         assertEquals(1, b.attempt)
     }
+
+    // ------------------------------------------------------------ blank frames are no frames (the Mirror, 2026-11-25)
+
+    private fun onHub(hub: CameraHub, run: () -> Unit) { android.os.Handler(hub.looper).post(run); settled(hub) }
+
+    private val noStill: () -> ByteArray = { throw AssertionError("a blank frame was made into a still") }
+    private val noLuma: () -> LumaFrame = { throw AssertionError("a blank frame reached presence") }
+
+    private fun blank(hub: CameraHub) = onHub(hub) { hub.onFrame(android.os.SystemClock.elapsedRealtime(), blank = true, luma = noLuma, jpeg = noStill) }
+
+    /** A session that sends only blank frames is reopened like one that sends nothing, and presence never sees them. */
+    @Test fun blankFramesCountAsNoFrames() {
+        val hub = silentCamera()
+        val events = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val sink = object : FrameSink {
+            override fun frame(frame: LumaFrame) { events += "frame" }
+            override fun lost(why: String) { events += "lost: $why" }
+        }
+        hub.open(5f, sink).use {
+            opened(); settled(hub)
+            blank(hub); blank(hub)
+            assertEquals("logged once a session", 1, lines("camera: blank frame"))
+            advance(hub, CameraHub.FIRST_FRAME_MS)
+            assertEquals(1, reopens())
+            assertEquals("camera: reopen 1 now (no first frame in 10 s, 2 blank)", synchronized(logs) { logs.first { it.startsWith("camera: reopen ") } })
+            assertEquals(listOf("lost: no first frame in 10 s, 2 blank"), events.toList())
+        }
+    }
+
+    /** Blank frames after good ones: the mid-run silence catches them, and the backoff isn't reset by them. */
+    @Test fun blankFramesAfterGoodOnesAreASilence() {
+        val hub = silentCamera()
+        hub.open(5f, presence()).use {
+            opened(); settled(hub)
+            onHub(hub) { hub.onFrame(android.os.SystemClock.elapsedRealtime(), false, { LumaFrame(2, 2, 2, ByteArray(4)) }, noStill) }
+            advance(hub, 1_000)
+            blank(hub)
+            advance(hub, CameraHub.SILENT_MS - 1_000)
+            assertEquals("camera: reopen 1 now (no frames for 5 s, 1 blank)", synchronized(logs) { logs.first { it.startsWith("camera: reopen ") } })
+        }
+    }
+
+    /** A still waits past a blank frame for a good one: Home Assistant never gets the green picture. */
+    @Test fun aStillSkipsBlankFrames() {
+        val hub = silentCamera()
+        val got = java.util.concurrent.atomic.AtomicReference<ByteArray?>()
+        val still = Thread { got.set(hub.jpeg()) }.apply { start() }
+        // The still's request is on the hub's queue once its thread waits; frames posted after it come after it.
+        eventually("the still waits") { still.state == Thread.State.TIMED_WAITING }
+        opened(); settled(hub)
+        blank(hub)
+        assertTrue("a blank frame answers nothing", still.isAlive)
+        onHub(hub) { hub.onFrame(android.os.SystemClock.elapsedRealtime(), false, { LumaFrame(2, 2, 2, ByteArray(4)) }, { byteArrayOf(1, 2, 3) }) }
+        still.join(5_000)
+        assertTrue(byteArrayOf(1, 2, 3).contentEquals(got.get()))
+    }
+
+    /** Only blank frames: the still fails as one with no frame does (null after [CameraHub.STILL_WAIT_MS]). */
+    @Test fun aStillWithOnlyBlankFramesFails() {
+        val hub = silentCamera()
+        var got: ByteArray? = byteArrayOf(9)
+        val still = Thread { got = hub.jpeg() }.apply { start() }
+        eventually("the still waits") { still.state == Thread.State.TIMED_WAITING }
+        opened(); settled(hub)
+        blank(hub); blank(hub)
+        still.join(CameraHub.STILL_WAIT_MS + 3_000)
+        assertEquals(null, got)
+    }
+
+    // ------------------------------------------------------------ the reader on a streaming LEGACY camera
+
+    @Test fun theReaderIsInEveryRequestUnlessALegacyCameraStreams() {
+        assertEquals("presence alone", 1, readerEvery(legacy = true, streaming = false, minFps = 15))
+        assertEquals("not LEGACY: as before", 1, readerEvery(legacy = false, streaming = true, minFps = 15))
+        assertEquals("not LEGACY, presence alone", 1, readerEvery(legacy = false, streaming = false, minFps = 0))
+    }
+
+    /** The Mirror streams at a steady 15 fps: the reader gets 1 frame in 5 (3 fps), the encoder all 15. */
+    @Test fun aStreamingLegacyCameraGivesTheReaderAFewFrames() {
+        assertEquals(5, readerEvery(legacy = true, streaming = true, minFps = 15))
+        assertEquals("a camera that may drop to 7 fps: 1 in 2, still 3.5 fps at its slowest", 2, readerEvery(legacy = true, streaming = true, minFps = 7))
+        assertEquals("a fast one is capped at 1 in 30", 30, readerEvery(legacy = true, streaming = true, minFps = 120))
+    }
+
+    /**
+     * CodeRabbit on #924: with no rate asked, the camera picks its own and may slow down in the dark, so the interval
+     * comes from its slowest rate, never an assumed one. Too slow for the reader to keep 3 fps, or unknown: every request.
+     */
+    @Test fun aSlowOrUnknownFloorKeepsTheReaderInEveryRequest() {
+        assertEquals("floor 5: 1 in 2 would be 2.5 fps", 1, readerEvery(legacy = true, streaming = true, minFps = 5))
+        assertEquals("floor 1", 1, readerEvery(legacy = true, streaming = true, minFps = 1))
+        assertEquals("unknown", 1, readerEvery(legacy = true, streaming = true, minFps = 0))
+    }
+
+    // ------------------------------------------------------------ a camera that won't open is tried at a pace
+
+    @Test fun theConnectBackoffDoublesAndIsCapped() {
+        val b = ConnectBackoff(firstMs = 5_000, capMs = 60_000, minGapMs = 2_000)
+        assertEquals(listOf(5_000L, 10_000L, 20_000L, 40_000L, 60_000L, 60_000L), List(6) { b.failed(0) })
+        assertEquals(6, b.attempt)
+        repeat(100) { b.failed(0) }
+        assertEquals("no overflow", 60_000L, b.failed(0))
+        b.reset()
+        assertEquals(0, b.attempt)
+        assertEquals(5_000L, b.failed(0))
+    }
+
+    /** A freed camera is tried at once, but never sooner than the gap after the last failure. */
+    @Test fun aFreedCameraIsTriedAfterTheGap() {
+        val b = ConnectBackoff(firstMs = 5_000, capMs = 60_000, minGapMs = 2_000)
+        assertEquals("no failure yet: now", 100L, b.freed(100))
+        b.failed(1_000)
+        assertEquals(3_000L, b.freed(1_500))
+        assertEquals(4_000L, b.freed(4_000))
+    }
+
+    /**
+     * The Mirror, 2026-11-25: a camera another app held was tried every 5 s in bursts, and Android 6's media server
+     * crashed. Now each failure waits longer, and nothing else that asks for the camera meanwhile tries it.
+     */
+    @Test fun aCameraThatWontOpenIsTriedAtAPace() {
+        val hub = hub() // no camera: every open fails
+        val tries = { lines("camera: this device has no camera") }
+        hub.open(5f, presence()).use {
+            settled(hub)
+            assertEquals(1, tries())
+            assertTrue(synchronized(logs) { "camera: try 1 failed; next in 5 s or once the camera is free" in logs })
+            // More users while it waits (presence restarting, a still's linger): no extra tries.
+            repeat(5) { hub.open(5f, presence()) }
+            settled(hub)
+            advance(hub, 4_999)
+            assertEquals(1, tries())
+            advance(hub, 1)
+            assertEquals(2, tries())
+            advance(hub, 9_999)
+            assertEquals("the second wait doubles", 2, tries())
+            advance(hub, 1)
+            assertEquals(3, tries())
+            advance(hub, 20_000)
+            assertEquals("then 20 s", 4, tries())
+            advance(hub, 39_999)
+            assertEquals(4, tries())
+            advance(hub, 1)
+            assertEquals("then 40 s", 5, tries())
+            advance(hub, 60_000)
+            assertEquals("capped at 60 s", 6, tries())
+        }
+    }
+
+    /** A camera that comes while the hub waits is opened at once, without the rest of the wait. */
+    @Test fun aCameraThatComesDuringTheWaitOpensAtOnce() {
+        val hub = hub()
+        hub.open(5f, presence()).use {
+            settled(hub)
+            advance(hub, ConnectBackoff.FIRST_MS) // a second failure: the wait is now 10 s
+            assertEquals(0, opens())
+            advance(hub, ConnectBackoff.MIN_GAP_MS)
+            camera("0", CameraCharacteristics.LENS_FACING_FRONT)
+            settled(hub)
+            opened()
+            assertTrue(synchronized(logs) { "camera: 0 is free again; opening now" in logs })
+        }
+    }
 }
