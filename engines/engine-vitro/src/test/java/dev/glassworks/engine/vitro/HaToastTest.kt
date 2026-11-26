@@ -205,6 +205,23 @@ class HaToastTest {
         assertTrue(view.toastMessages.isEmpty())
     }
 
+    @Test
+    fun aToastOnScreenStaysAboveAMoreInfoSheetOpenedAfterIt() {
+        val store = EntityStore().apply { putLocal(EntityState("light.desk", "on", mapOf("friendly_name" to "Desk"))) }
+        val view = VitroView(activity, store, Color.BLACK)
+        view.contextFactory = { context(store, ArrayList(), ArrayList()) }
+        activity.setContentView(view)
+        view.showToast(HaToast("Update failed", durationMs = -1L))
+        idle()
+        val host = (0 until view.childCount).map(view::getChildAt).single { it is HaToastHost }
+        view.openMoreInfo("light.desk")
+        idle()
+        val sheet = (0 until view.childCount).map(view::getChildAt).single { it is MoreInfoSheet }
+        assertTrue("the sheet is under the toasts", view.indexOfChild(sheet) < view.indexOfChild(host))
+        assertEquals(view.childCount - 1, view.indexOfChild(host))
+        assertEquals(listOf("Update failed"), view.toastMessages)
+    }
+
     private companion object {
         const val UPDATE = "update.hallway_display_firmware"
     }

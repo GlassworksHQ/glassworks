@@ -496,6 +496,15 @@ class VitroView(
     }
 
     /**
+     * HA's toasts sit above its dialogs: a layer added over the view after the toasts (a More Info sheet opened while
+     * one shows) goes under them, so a toast on screen stays in sight until it closes.
+     */
+    override fun onViewAdded(child: View) {
+        super.onViewAdded(child)
+        if (child !== toasts && toasts.parent === this && indexOfChild(toasts) != childCount - 1) toasts.bringToFront()
+    }
+
+    /**
      * The connection to HA dropped ([message]: HA's "Connection lost. Reconnecting…") or came back (null): HA's toast
      * for it, shown a second after the drop until the connection is back, as `disconnect-toast-mixin` does.
      */
