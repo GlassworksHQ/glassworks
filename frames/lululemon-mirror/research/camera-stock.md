@@ -11,8 +11,12 @@ blank ones. The camera pane now asks every camera for its top rate's steadiest r
 frame and reopens the session, keeps the frame reader off most of every stream's frames (on every camera, not only
 LEGACY ones), paces its retries while another app holds the camera, and turns stills and the stream upright. On the
 Mirror (2026-11-26, verified; attempts 6 and 7) Home Assistant's still is a real, upright picture and the RTSP stream
-is 720×1280, upright, in real color. Still owed: a run on a non-LEGACY camera (the Pixel Tablet) of the GPU path at a
-turn of 0, and the long-run questions at the end.
+is 720×1280, upright, in real color. On a full Camera2 camera (the Pixel Tablet's front camera, 2026-11-26, verified)
+the GPU path at a turn of 0 first gave a stream on its side and squeezed into 1280×720, while the still was upright:
+the camera puts its sensor's quarter turn in the texture's own transform, and the GPU step applied that on top of the
+turn worked out for the raw buffer. It now keeps only that transform's crop. After the fix the tablet's stream is
+1280×720, upright and matching the still, and the Mirror's is still 720×1280 and upright, matching its still. Still
+owed: the long-run questions at the end.
 
 Device: lululemon Studio Mirror, original Qualcomm MSM8916 board, stock Android 6.0.1 with a 5 MP front camera behind
 Qualcomm's HAL1 (`mm-camera`). Camera2 sees it as LEGACY (hardware level 2), through Android's Camera1 shim.
@@ -216,7 +220,7 @@ series of connects from another crashed `mediaserver`.
 | Green stills | The pane asked the camera for 15–15, which it lists but runs broken: a third of streaky picture over two thirds of green | Every camera is asked for the steadiest range at its top rate (30–30 on the Mirror, its own default). As a safety net, a frame with a quarter of its sampled rows dead (zero in Y and both chroma planes, or the green a LEGACY camera draws zero as) counts as no frame: it doesn't reach presence, doesn't answer a still, and the session is reopened by the silence watchdog and backoff. A dark room is never blank: its Y has noise and its chroma is near 128 |
 | No pictures in the stream | The same blank or empty sessions | The reopen above. The reader stays in a few of the stream's requests, so the check still sees the stream's session |
 | Stream at 7 fps | The shim reads back every frame the reader gets | While streaming, the repeating request is a burst on every camera: the encoder gets every frame, the reader one in ten at the Mirror's steady 30 fps (3 fps), enough for presence and stills. The interval comes from the slowest rate the camera may run at, so the reader keeps at least 3 fps; a camera that may run slower than 6 fps keeps the reader in every request |
-| Upside-down stills, stream on its side | The camera reports its sensor at 0 degrees, but it sits at 180; the stream wasn't turned at all | The frame says 180 (`camera.sensorDegrees`). Stills and the stream turn by one rule from that and the screen's rotation; the stream turns on the GPU on its way to the encoder |
+| Upside-down stills, stream on its side | The camera reports its sensor at 0 degrees, but it sits at 180; the stream wasn't turned at all | The frame says 180 (`camera.sensorDegrees`). Stills and the stream turn by one rule from that and the screen's rotation; the stream turns on the GPU on its way to the encoder, from the camera's raw buffer as a still does (a full Camera2 camera's own turn in the texture's transform is left out) |
 | `mediaserver` crashes | Bursts of connects while another app held the camera | A failed open waits 5 s, then 10, 20, 40, up to 60 s, and nothing else tries in the meantime. When Android reports that camera free again, it's tried at once, but never within 2 s of the last failure |
 
 ## How to reproduce
