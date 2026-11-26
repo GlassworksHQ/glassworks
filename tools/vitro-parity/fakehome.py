@@ -507,6 +507,15 @@ def statistics_metadata(ids):
     return [m for m in (_meta(e) for e in ids or []) if m]
 
 
+def _held(s, b, e):
+    """[(t, value, seconds held)]: every numeric value series [s] holds in the bucket [b, e), as HA's recorder
+    compiles one: the value at b, then each change before e (a change at e itself starts the next bucket). A value
+    that isn't a number (`unavailable`) holds its own time, which counts for none."""
+    pts = s.changes_between(b, e - 1e-6)
+    spans = [(t, v, (pts[i + 1][0] if i + 1 < len(pts) else e) - t) for i, (t, v) in enumerate(pts)]
+    return [(t, float(v), w) for t, v, w in spans if v is not None and _num(v)]
+
+
 def statistics(ids, start, end, period, types):
     """recorder/statistics_during_period: hourly (or 5-minute, daily, ...) buckets of each entity's series."""
     step = {"5minute": 300, "hour": 3600, "day": 86400, "week": 604800, "month": 2592000}.get(period or "hour", 3600)
@@ -521,15 +530,21 @@ def statistics(ids, start, end, period, types):
         rows, b = [], math.floor(t0 / step) * step
         total = 0.0
         while b + step <= t1 + 1e-6:
-            samples = [float(v) for v in (s.value(b + k * step / 12) for k in range(12)) if v is not None and _num(v)]
-            if samples:
+            held = _held(s, b, b + step)
+            if held:
+                samples = [v for _, v, _ in held]
                 row = {"start": int(b * 1000), "end": int((b + step) * 1000)}
                 if m["has_mean"]:
-                    for k, v in (("mean", sum(samples) / len(samples)), ("min", min(samples)), ("max", max(samples))):
+                    # HA's mean is weighted by how long each value held; min and max are over every value held.
+                    mean = sum(v * w for _, v, w in held) / sum(w for _, _, w in held)
+                    for k, v in (("mean", mean), ("min", min(samples)), ("max", max(samples))):
                         if k in types:
                             row[k] = round(v, 6)
                 else:
-                    change = max(0.0, samples[-1] - samples[0])
+                    # HA's change runs from the previous hour's close: a step right at b belongs to this bucket.
+                    before = s.value(b - 1e-6)
+                    opening = float(before) if before is not None and _num(before) else samples[0]
+                    change = max(0.0, samples[-1] - opening)
                     total += change
                     for k, v in (("change", change), ("state", samples[-1]), ("sum", total)):
                         if k in types:
