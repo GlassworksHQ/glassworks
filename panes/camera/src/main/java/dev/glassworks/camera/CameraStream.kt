@@ -56,7 +56,7 @@ class CameraStream(
     private val snapshot: () -> ByteArray?,
     private val log: (String) -> Unit = { Log.i(TAG, it) },
     private val encoders: EncoderFactory = EncoderFactory { size, au, failed ->
-        H264Encoder(size.width, size.height, fps = hub.streamFps.takeIf { it > 0 } ?: H264Encoder.FPS, onAccessUnit = au, onFailure = failed)
+        H264Encoder(size.width, size.height, turn = hub.streamTurn, fps = hub.streamFps.takeIf { it > 0 } ?: H264Encoder.FPS, onAccessUnit = au, onFailure = failed)
     },
     /** Tests use free ports and no WS-Discovery. */
     private val rtspPort: Int = RTSP_PORT,
@@ -97,7 +97,10 @@ class CameraStream(
             port = onvifPort,
             host = { host() ?: "0.0.0.0" },
             info = { identity().let { OnvifDeviceInfo(Build.MANUFACTURER, Build.MODEL, it.firmware, onvifMac(it.panelMac).replace(":", ""), Build.DEVICE, onvifMac(it.panelMac), it.name) } },
-            stream = { OnvifStreamInfo("rtsp://${host() ?: "0.0.0.0"}:$rtspPort/live", size.width, size.height, H264Encoder.FPS, H264Encoder.bitrateFor(size.width, size.height) / 1000) },
+            stream = {
+                val (w, h) = turnedSize(size.width, size.height, hub.streamTurn)
+                OnvifStreamInfo("rtsp://${host() ?: "0.0.0.0"}:$rtspPort/live", w, h, H264Encoder.FPS, H264Encoder.bitrateFor(w, h) / 1000)
+            },
             credentials = { this.signIn },
             snapshot = snapshot,
             onLog = { log("ONVIF: $it") },

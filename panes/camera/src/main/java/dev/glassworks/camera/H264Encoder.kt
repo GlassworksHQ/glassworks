@@ -15,7 +15,8 @@ import dev.glassworks.camera.onvif.H264AccessUnitAssembler
 import dev.glassworks.camera.onvif.H264ParameterSetCache
 
 /**
- * The stream's H.264 encoder: the camera draws into [surface], and each access unit goes to
+ * The stream's H.264 encoder: the camera draws [width] x [height] into [surface], which [TurnedInput] turns [turn]
+ * degrees clockwise on the GPU before encoding, so the stream stands as stills do. Each access unit goes to
  * [onAccessUnit] in Annex-B with its parameter sets before every keyframe (the ported
  * [H264ParameterSetCache]), on the encoder's own thread. A keyframe every second, so a new viewer
  * waits at most that long, and [requestKeyFrame] for one now.
@@ -27,6 +28,7 @@ import dev.glassworks.camera.onvif.H264ParameterSetCache
 class H264Encoder(
     width: Int,
     height: Int,
+    turn: Int = 0,
     fps: Int = FPS,
     bitrate: Int = bitrateFor(width, height),
     private val onAccessUnit: (annexB: ByteArray, key: Boolean) -> Unit,
@@ -35,20 +37,24 @@ class H264Encoder(
     private val log: (String) -> Unit = { Log.i(TAG, it) },
 ) : StreamEncoder {
     private val codec: MediaCodec
-    override val surface: Surface
+    /** The codec's own input, which [turned] draws into. */
+    private val input: Surface
+    private val turned: TurnedInput
+    override val surface: Surface get() = turned.surface
     @Volatile private var running = true
     private val drain: Thread
 
     init {
-        val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+        val (outWidth, outHeight) = turnedSize(width, height, turn)
+        val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, outWidth, outHeight).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
             setInteger(MediaFormat.KEY_FRAME_RATE, fps)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
         }
-        val tried = encoderOrder(avcEncoders(), width, height)
-        log("camera: H.264 encoders for ${width}x$height: ${tried.joinToString { it.describe() }.ifEmpty { "none listed" }}")
+        val tried = encoderOrder(avcEncoders(), outWidth, outHeight)
+        log("camera: H.264 encoders for ${outWidth}x$outHeight (turned $turn°): ${tried.joinToString { it.describe() }.ifEmpty { "none listed" }}")
         var opened: Pair<MediaCodec, Surface>? = null
         for (e in tried) {
             opened = try { open(MediaCodec.createByCodecName(e.name), format) } catch (x: Exception) {
@@ -61,7 +67,12 @@ class H264Encoder(
         val (c, made) = opened ?: open(MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC), format)
             .also { log("camera: H.264 encoder ${it.first.name} (Android's pick)") }
         codec = c
-        surface = made
+        input = made
+        turned = try { TurnedInput(made, width, height, turn) } catch (e: Exception) {
+            try { c.stop() } catch (_: Exception) {}
+            c.release(); made.release()
+            throw e
+        }
         drain = Thread(::drainLoop, "glassworks-h264").apply { isDaemon = true; start() }
     }
 
@@ -85,7 +96,8 @@ class H264Encoder(
     }
 
     /**
-     * Stops the encoder and frees it. Take [surface] out of the camera session first. An interrupted
+     * Stops the encoder and frees it, the GPU step first so nothing draws into a stopped codec. Take [surface] out of
+     * the camera session first. An interrupted
      * wait for the drain thread still frees the codec and the surface, then sets the interrupt again.
      */
     override fun release() {
@@ -95,9 +107,10 @@ class H264Encoder(
             try { drain.join(1_000) } catch (_: InterruptedException) { interrupted = true }
         }
         try {
+            try { turned.release() } catch (_: Exception) {}
             try { codec.stop() } catch (_: Exception) {}
             try { codec.release() } catch (_: Exception) {}
-            surface.release()
+            input.release()
         } finally {
             if (interrupted) Thread.currentThread().interrupt()
         }
