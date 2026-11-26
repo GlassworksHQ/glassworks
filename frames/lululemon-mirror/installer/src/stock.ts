@@ -857,6 +857,59 @@ function patchDeviceOwner(
 }
 
 // ---------------------------------------------------------------------------
+// Boot animation in place: a zip padded to the stock file's exact length
+// ---------------------------------------------------------------------------
+
+/**
+ * Size of stock 1.24.0's `/system/media/bootanimation.zip` (its ext4 `i_size`, read 2026-11-24 from
+ * the stock system image): Glassworks' `branding/lululemon-mirror/bootanimation-compact.zip` is built
+ * within it so it can take the stock file's blocks in place.
+ */
+export const STOCK_BOOTANIMATION_BYTES = 22901;
+
+const EOCD_SIGNATURE = 0x06054b50;
+const EOCD_BYTES = 22;
+const MAX_ZIP_COMMENT = 0xffff;
+
+/**
+ * Pads a zip to exactly `targetLength` bytes by giving it a zip comment of zeros: the
+ * End-Of-Central-Directory record's comment length (its last two bytes) grows by the difference and
+ * the zeros follow it. Nothing else moves, so every entry, the central directory and its offset stay
+ * as they were, and the zip still reads the same in Android's `ZipFileRO` and `unzip`.
+ *
+ * `zip` must end in an EOCD with no comment (as Python's `zipfile` writes one). Throws if it doesn't,
+ * if it is already longer than `targetLength`, or if the gap is more than a zip comment holds
+ * (65,535 bytes). Returns a new array; `zip` is not changed.
+ */
+export function padZipToExactLength(zip: Uint8Array, targetLength: number): Uint8Array {
+  if (!Number.isSafeInteger(targetLength) || targetLength < 0) {
+    throw new Error(`padZipToExactLength: target length ${targetLength} is not a whole number of bytes`);
+  }
+  if (zip.length > targetLength) {
+    throw new Error(`padZipToExactLength: the zip is ${zip.length} B, longer than the ${targetLength}-byte target`);
+  }
+  const pad = targetLength - zip.length;
+  if (pad > MAX_ZIP_COMMENT) {
+    throw new Error(`padZipToExactLength: ${pad} B of padding is more than a zip comment holds (${MAX_ZIP_COMMENT} B)`);
+  }
+  const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const at = zip.length - EOCD_BYTES;
+  if (at < 0 || dv.getUint32(at, true) !== EOCD_SIGNATURE || dv.getUint16(at + 20, true) !== 0) {
+    // Say which: a comment already there, or no end record at all.
+    for (let i = at - 1; i >= Math.max(0, at - MAX_ZIP_COMMENT); i--) {
+      if (dv.getUint32(i, true) === EOCD_SIGNATURE && i + EOCD_BYTES + dv.getUint16(i + 20, true) === zip.length) {
+        throw new Error(`padZipToExactLength: the zip already has a ${dv.getUint16(i + 20, true)}-byte comment`);
+      }
+    }
+    throw new Error('padZipToExactLength: no End-Of-Central-Directory record with an empty comment at the end of the zip');
+  }
+  const out = new Uint8Array(targetLength); // zero-filled: the padding is zeros
+  out.set(zip, 0);
+  new DataView(out.buffer).setUint16(at + 20, pad, true);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Stage 1 single-file bundle: [4B "GWSB"][4B metaLen LE][4B jarLen LE][meta JSON][services.jar]
 // ---------------------------------------------------------------------------
 
