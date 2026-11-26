@@ -603,9 +603,33 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-onl
      sets `persist.sys.usb.config=mtp,adb` and `persist.fuse_sdcard=true`, and `MtpService` starts
      when `device_provisioned=1`, but `UsbDeviceManager` keeps `mUsbDataUnlocked=false` until a
      screen tap, so `GetStorageIDs` returns **0 storages** on untouched stock OOBE.
-   - **Home Wi-Fi fallback (untested):** pre-saving the user's home Wi-Fi in Stage 1 `userdata` +
+   - **Home Wi-Fi fallback (untested end to end):** pre-saving the user's home Wi-Fi in Stage 1 `userdata` +
      `enable_wifi` marker to see if stock joins home Wi-Fi cleanly instead of `mirror-<serial>`
-     SoftAP (still untested on stock `1.24.0`).
+     SoftAP. Kiln now takes this path on a reinstall over Glassworks, whose patched services.jar has no
+     SoftAP. Checked without USB on the dev Mirror (2026-11-26, Glassworks installed in place, network adb):
+     ```
+     $ adb shell 'id -u; pm list packages dev.glassworks.generic_android.legacy; echo "exit=$?"; ps | grep -c hostapd'
+     2000
+     package:dev.glassworks.generic_android.legacy
+     exit=0
+     0
+     $ adb shell cat /system/etc/wifi/wpa_supplicant.conf
+     update_config=1
+     eapol_version=1
+     ap_scan=1
+     fast_reauth=1
+     pmf=1
+     p2p_no_group_iface=1
+     ```
+     - **Verified:** as `shell` (uid 2000), the frame's `ownWifiGone` command prints exactly the one
+       `package:` line it looks for, with exit 0.
+     - **Verified:** no `hostapd` runs (count 0).
+     - **Verified:** the template is the stage's `DEFAULT_WIFI_TEMPLATE` line for line; `inplace.test.ts`
+       keeps this file as `MIRROR_WIFI_TEMPLATE` and fails if the constant changes.
+     - **Read:** the agent's `CHANGE_WIFI_STATE`, its `wlan*` address for `lanIp`, and the CORS and
+       `Access-Control-Allow-Private-Network` headers Chrome's local network access needs.
+     - **Still untested on a Mirror:** the agent joining the network on the stage's first boot, and
+       Kiln's local network fetch to it. Bluetooth stays the fallback for the transfer.
    - **Stock-in-place viability — verified (2026-11-25):** `/system/framework/oat/arm64/services.odex`
      is absent (2026-11-24), and the live Track A run on the dev Mirror answered the rest. (a) `pm
      disable-user` throws `SecurityException` as `shell`, but **`pm hide` works on all 8 lululemon
