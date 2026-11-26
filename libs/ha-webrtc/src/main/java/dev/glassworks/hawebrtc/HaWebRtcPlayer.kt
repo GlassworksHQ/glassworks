@@ -14,11 +14,13 @@ import androidx.annotation.MainThread
  *
  * Main thread only, and every [Listener] call comes on the main thread. The view is transparent until the first
  * frame. Each player runs its connection on a thread of its own; libwebrtc's factory and EGL context are shared by
- * every player in the process and freed with the last one.
+ * every player in the process and freed 30 s after the last one closes, so a player opened again
+ * soon (a view rebuilt, a dialog opened) doesn't make them again. [prewarm] makes them ahead of a player.
  *
  * - [start] connects and plays (once).
  * - [setActive] false stops drawing, and closes the connection after [HaWebRtcStream.Options.idleTeardownMs];
  *   true resumes.
+ * - [setRendering] false keeps playing but stops drawing (the view is off screen); true draws again at once.
  * - [close] frees everything: the connection, HA's session, the decoder, the render thread and the player's thread.
  *   No listener call comes after it.
  */
@@ -152,6 +154,17 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
     }
 
     /**
+     * False: the stream plays on (its connection and decoder stay, so it shows again at once) but its frames aren't
+     * drawn, as for a view off screen; the first frame is drawn anyway, as it's [Listener.onFirstFrame]. True draws
+     * again. Main thread.
+     */
+    @MainThread
+    public fun setRendering(rendering: Boolean) {
+        if (closed) return
+        video.rendering = rendering
+    }
+
+    /**
      * The [HaCommandChannel]'s connection to Home Assistant is back after a drop: a player waiting to reconnect tries
      * now ([HaWebRtcStream.connectionRestored]). Main thread.
      */
@@ -183,6 +196,19 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
                     t?.quitSafely()
                 }
             }
+        }
+    }
+
+    public companion object {
+        /**
+         * Makes libwebrtc's shared parts (its factory and EGL context) off the main thread, ahead of a player that is
+         * about to start: they stay 30 s for one to take them. Any thread; a failure is left
+         * for the player to report.
+         */
+        @JvmStatic
+        public fun prewarm(context: Context) {
+            val app = context.applicationContext ?: context
+            WebRtcRuntime.prewarm(app)
         }
     }
 
