@@ -70,7 +70,7 @@ class GlassworksRuntime(
 
     override val screen = ScreenPolicy(
         presence, frame.light, app.components.admin, settings = ::KioskPrefs,
-        logTag = "Glassworks.Screen", wakeLockTag = "glassworks:wake",
+        logTag = "Glassworks.Screen", wakeLockTag = "glassworks:wake", sleepMode = frame.sleepMode,
     )
 
     private var definitions: List<PaneDefinition>? = null

@@ -90,6 +90,7 @@ class S1Panes : AppParts {
             panePrefs.radio,
             setUpBefore = { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) },
             agent = runtime.frame.agent,
+            panelIp = { dev.glassworks.platform.PanelAddress.now(context) },
         ) { prefs.haBase }
         val notify = NotificationsDefinition(
             panePrefs.paneFile("notifications"), notifications,

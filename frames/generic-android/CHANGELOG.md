@@ -12,10 +12,16 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Fixed
+- **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
   you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in
   in progress across the restart.
+- **The first sign-in no longer fails with "Can't reach Home Assistant" when you enter a `.local` address.**
+  Android 11 and older can't look up names like `homeassistant.local`, so the panel reaches Home Assistant through
+  the address it finds on your network. A sign-in started before the panel had found that address kept the name and
+  failed, and it only worked when you tried again. The panel now finishes the sign-in through the address it has
+  found by then, waiting a few seconds for it if needed.
 - **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
   dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
   running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
@@ -24,11 +30,13 @@ line of each version is what Home Assistant shows on the update card. A change o
   Safari, Kiln's Mirror and Android pages now say so on their first screen, as the S1 page does. Before, the Mirror
   page let you download and build its whole system image first, then stopped at the first USB step. Comes with Kiln,
   not the app.
+- **The Mirror's setup screen no longer points at its own hotspot's address.** On a Mirror still running its stock setup mode with no Wi-Fi, the Wi-Fi step said to open `http://192.168.43.1:8099/setup` on a computer, an address no computer on your network can reach. It now waits for Wi-Fi and says why the setup Wi-Fi isn't up. On every device, the address Glassworks shows and hands to Home Assistant (setup page, sign-in code, Thread join, camera, *IP address*) comes only from the Wi-Fi or Ethernet network Android is connected to, never from a hotspot or tethering.
 - **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
   every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
   secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
-  is refused, and the panel's log says so, unless your dashboard explicitly shares a permission with that frame (an
-  `allow` attribute). Permissions an older version saved for other sites are forgotten when the app starts.
+  is refused, and the panel's log says so. An `allow` attribute on the frame doesn't change that: a site framed in
+  your dashboard needs to be one of the secure hosts too. Permissions an older version saved for other sites, including
+  framed ones, are forgotten when the app starts.
 - **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
   your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
   (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so once Home Assistant has

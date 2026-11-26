@@ -3,10 +3,8 @@ package dev.glassworks.discovery
 import dev.glassworks.auth.OAuth
 import org.json.JSONException
 import org.json.JSONObject
-import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
-import java.net.NetworkInterface
 
 /**
  * Pure logic for finding Home Assistant (unit-tested in HaUrlsTest).
@@ -64,16 +62,5 @@ object HaUrls {
         } catch (_: JSONException) {
             false
         }
-    }
-
-    /** The panel's IPv4 address (wlan0 first), for the QR code; null if offline. */
-    fun localIpv4(): String? = try {
-        NetworkInterface.getNetworkInterfaces().toList()
-            .filter { it.isUp && !it.isLoopback }
-            .sortedByDescending { it.name == "wlan0" }
-            .flatMap { it.inetAddresses.toList() }
-            .firstOrNull { it is Inet4Address && !it.isLinkLocalAddress }?.hostAddress
-    } catch (_: Exception) {
-        null
     }
 }

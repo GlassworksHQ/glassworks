@@ -300,7 +300,7 @@ class GeckoEngine(
                 session: GeckoSession,
                 perm: ContentPermission
             ): GeckoResult<Int> {
-                val frame = perm.thirdPartyOrigin?.substringBefore('^')?.takeIf { it.isNotBlank() } // an origin can carry Gecko's ^attributes
+                val frame = frameOf(perm)
                 if (!trusted(perm.uri) || (frame != null && !host.trusts(frame))) {
                     Log.w(logTag, "Refusing content permission ${perm.permission} for ${forLog(frame ?: perm.uri)} on ${forLog(shown)}: not Home Assistant or a secure host")
                     return GeckoResult.fromValue(ContentPermission.VALUE_PROMPT)
@@ -412,13 +412,30 @@ class GeckoEngine(
     }
 
     private companion object {
-        /** Sets [saved] grants for pages [host] doesn't trust back to asking. Holds nothing of the engine's. */
+        /**
+         * Sets [saved] grants that [host] doesn't trust back to asking: the page's, or the frame's of another site a
+         * storage-access grant names. Gecko answers such a grant itself, without asking the delegate. Holds nothing of
+         * the engine's.
+         */
         fun forget(saved: List<ContentPermission>, storage: StorageController, host: PageHost, tag: String) {
-            saved.filter { it.value == ContentPermission.VALUE_ALLOW && !host.trusts(it.uri) }.forEach {
-                Log.i(tag, "Forgetting content permission ${it.permission} for ${forLog(it.uri)}: not Home Assistant or a secure host")
+            saved.filter { it.value == ContentPermission.VALUE_ALLOW }.forEach {
+                val frame = frameOf(it)
+                val untrusted = when {
+                    !host.trusts(it.uri) -> it.uri
+                    frame != null && !host.trusts(frame) -> frame
+                    else -> return@forEach
+                }
+                Log.i(tag, "Forgetting content permission ${it.permission} for ${forLog(untrusted)}: not Home Assistant or a secure host")
                 storage.setPermission(it, ContentPermission.VALUE_PROMPT)
             }
         }
+
+        /**
+         * The frame a content permission is for, when it isn't the page's own: Gecko's thirdPartyOrigin (a storage-access
+         * request or grant), without the ^attributes an origin can carry. Null when there is none.
+         */
+        fun frameOf(perm: ContentPermission): String? =
+            perm.thirdPartyOrigin?.substringBefore('^')?.takeIf { it.isNotBlank() }
 
         /** A page in the log: its origin only, so a query or a path with a secret in it stays out (#847). */
         fun forLog(url: String?): String =

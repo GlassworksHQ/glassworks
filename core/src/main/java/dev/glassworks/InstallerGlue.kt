@@ -2,8 +2,6 @@ package dev.glassworks
 
 import android.os.Handler
 import android.os.Looper
-import java.net.Inet4Address
-import java.net.NetworkInterface
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -25,10 +23,4 @@ object InstallerGlue {
     }
 
     fun post(delayMs: Long = 0L, block: () -> Unit) { main.postDelayed(block, delayMs) }
-
-    /** The panel's Wi-Fi IPv4 address (interface wlan0), or null when it has none. */
-    fun wlanIpv4(): String? = runCatching {
-        NetworkInterface.getByName("wlan0")?.takeIf { it.isUp }?.inetAddresses?.toList()
-            ?.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }?.hostAddress
-    }.getOrNull()
 }

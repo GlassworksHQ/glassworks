@@ -85,7 +85,7 @@ These same credits are stored in [`design/frame.json`](design/frame.json) and di
 | Dimensions | About 1336 × 536 × 43 mm (40-inch model) |
 | Processor | Qualcomm MSM8916 |
 | Android | 6.0.1 (original stock software 1.x) |
-| Display | 40-inch 1080p portrait screen behind two-way mirror glass (no touchscreen) |
+| Display | 40-inch 1080p portrait screen behind two-way mirror glass (no touchscreen). When idle, Glassworks turns its backlight off rather than the display, which [comes back with lines](research/display-sleep-lines.md) after Android's own screen off |
 | Camera & presence | 5 MP front camera (used for motion presence) |
 | Audio | Built-in microphone and stereo speakers |
 | Mounting | Floor stand leaning against the wall, or flat wall mount |
@@ -171,6 +171,7 @@ Deep engineering notes from bringing up the Mirror (see [all research notes](../
 - [mirror-memory.md](research/mirror-memory.md) — Android 6 low-memory-killer tuning and GeckoView GPU memory budget
 - [option-c.md](research/option-c.md) — Notes on building a clean AOSP 6 image from on-device vendor files
 - [community-root-and-network-adb.md](research/community-root-and-network-adb.md) — Review of community root and network-adb methods
+- [display-sleep-lines.md](research/display-sleep-lines.md) — Why Android's screen off leaves lines across the display, and the backlight-only sleep that avoids it
 - [stock-firmware-probe.md](research/stock-firmware-probe.md) — Live probe of untouched stock 1.24.0 firmware via userdata-only HTTP app, `FS_IOC_FIEMAP`, and reversible surgical USB ADB
 - [stock-softap.md](research/stock-softap.md) — Why stock software keeps opening its `mirror-<serial>` hotspot, and the `services.jar` edit that turns it off
 
