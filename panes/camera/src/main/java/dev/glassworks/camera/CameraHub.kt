@@ -21,7 +21,7 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.display.DisplayManager
 import android.media.Image
 import android.media.ImageReader
-import android.media.MediaCodec
+import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
@@ -273,7 +273,19 @@ class CameraHub(
 
     override val streamFps: Int get() = announcedFps(cameraRange)
 
-    private class Sizes(val reader: Pair<Int, Int>, val fit: StreamFit)
+    /** The still's rule ([stillRotation]) on the camera the stream would use, with the screen as it stands now. */
+    override val streamTurn: Int get() = try {
+        val s = sizes.kept() ?: read(cameraId())
+        stillRotation(s.sensorDegrees, displayDegrees(), s.front)
+    } catch (e: Exception) {
+        0
+    }
+
+    /** What [read] finds on a camera: its sizes, and how its sensor sits ([sensorOf]) and faces. */
+    private class Sizes(val reader: Pair<Int, Int>, val fit: StreamFit, val sensorDegrees: Int = 0, val front: Boolean = false)
+
+    /** How [c]'s sensor sits: the frame's word ([frameSensorDegrees]) over Android's. */
+    private fun sensorOf(c: CameraCharacteristics): Int = frameSensorDegrees ?: c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
 
     /**
      * The last sizes [read], with the camera they were read from. Dropped when opening a camera fails ([fail]) and
@@ -323,15 +335,20 @@ class CameraHub(
             val sensor = if (c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) != CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY) null
                 else map?.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width.toLong() * it.height }?.let { it.width to it.height }
             val yuv = map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }
-            val surfaces = map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }
-            val reader = yuvSizeFor(yuv, width to height, maxPixels, sensor) { streamFitFor(it, surfaces, H264Encoder::encodes) is StreamFit.Size }
+            // The stream's camera output is the GPU step's texture ([TurnedInput]); the encoder takes the picture turned.
+            val surfaces = map?.getOutputSizes(SurfaceTexture::class.java)?.map { it.width to it.height }
+            val degrees = sensorOf(c)
+            val front = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+            val turn = stillRotation(degrees, displayDegrees(), front)
+            val encodes = { w: Int, h: Int -> turnedSize(w, h, turn).let { (tw, th) -> H264Encoder.encodes(tw, th) } }
+            val reader = yuvSizeFor(yuv, width to height, maxPixels, sensor) { streamFitFor(it, surfaces, encodes) is StreamFit.Size }
             if (sensor != null) {
                 log("camera: LEGACY, sensor ${sensor.first}x${sensor.second}, YUV ${yuv?.joinToString { "${it.first}x${it.second}" }}")
                 // No reader size bounds the shim's preview then: it takes the smallest sensor-shaped size that covers
                 // the reader, which is already the smallest there is, or with none its largest preview size.
                 if (!legacyAspect(reader, sensor)) log("camera: no size of the sensor's shape up to $maxPixels px; the preview may run larger than ${reader.first}x${reader.second}")
             }
-            Sizes(reader, streamFitFor(reader, surfaces, H264Encoder::encodes))
+            Sizes(reader, streamFitFor(reader, surfaces, encodes), degrees, front)
         }
     }
 
@@ -376,7 +393,7 @@ class CameraHub(
         val id = cameraId() ?: return null
         val c = manager.getCameraCharacteristics(id)
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-        sensorDegrees = frameSensorDegrees ?: c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+        sensorDegrees = sensorOf(c)
         fpsRange = cameraRange?.let { android.util.Range(it.first, it.last) }
         streamFloor = cameraRange?.first
             ?: c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.minOfOrNull { it.lower } ?: 0

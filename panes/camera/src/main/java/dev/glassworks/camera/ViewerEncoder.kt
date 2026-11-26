@@ -26,6 +26,9 @@ fun interface EncoderInput {
     /** The frame rate the encoder's input runs at while streaming, for the SDP; 0 when it can't say. */
     val streamFps: Int get() = 0
 
+    /** How far the stream turns the camera's picture clockwise to stand upright, as a still does ([stillRotation]). */
+    val streamTurn: Int get() = 0
+
     /** The size the camera can draw into an encoder at, or why it can't: [CameraHub] reads it from the camera. */
     val streamFit: StreamFit get() = StreamFit.Size(CameraHub.WIDTH, CameraHub.HEIGHT)
 }
