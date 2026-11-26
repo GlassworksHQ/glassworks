@@ -288,6 +288,9 @@ class EntityStore {
     private val listeners = ConcurrentHashMap<String, CopyOnWriteArrayList<(EntityState?) -> Unit>>()
     private val anyListeners = CopyOnWriteArrayList<(Set<String>) -> Unit>()
 
+    /** Told after every [markSnapshot] that lands: HA has answered for more entities ([isAnswered]). */
+    private val snapshotListeners = CopyOnWriteArrayList<() -> Unit>()
+
     /**
      * Clarity's harness (VitroClarity) while it measures: each changed entity of a `subscribe_entities` diff and the
      * change's context id, on the reader thread. Null otherwise.
@@ -326,6 +329,18 @@ class EntityStore {
     /** The subscription expected to answer next ([owner], any token) and, once it has, its [filter]. */
     private class Snapshot(val owner: Any?, val filter: Set<String>?)
 
+    /** True when HA's answer has covered [entityId]: it has a state, or HA said it has no such entity ([isMissing]). */
+    fun isAnswered(entityId: String): Boolean = states[entityId] != null || isMissing(entityId)
+
+    /** True once the current subscription's answer has landed, for some entities or every one. */
+    val anyAnswered: Boolean get() = snapshot.get().filter != null
+
+    /** Calls [listener] after each part of HA's answer lands ([markSnapshot]); returns its unsubscribe. */
+    fun subscribeSnapshot(listener: () -> Unit): () -> Unit {
+        snapshotListeners += listener
+        return { snapshotListeners -= listener }
+    }
+
     /** True when HA has answered for [entityId] and has no such entity: HA's cards show "Entity not found". */
     fun isMissing(entityId: String): Boolean {
         val f = snapshot.get().filter ?: return false
@@ -363,6 +378,9 @@ class EntityStore {
         } while (!snapshot.compareAndSet(current, Snapshot(owner, answered)))
         for ((id, list) in listeners) {
             if (states[id] == null && (filter.isEmpty() || id in filter)) list.forEach { notify(it, null) }
+        }
+        for (fn in snapshotListeners) {
+            try { fn() } catch (e: Exception) { /* one listener's throw doesn't stop the others */ }
         }
         return true
     }

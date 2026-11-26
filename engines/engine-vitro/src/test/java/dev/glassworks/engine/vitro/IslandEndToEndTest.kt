@@ -223,6 +223,9 @@ class IslandEndToEndTest {
                         .put("last_changed", Instant.now().minusSeconds(600).toString()).put("last_updated", Instant.now().minusSeconds(600).toString())
                 }.toList()
             }))
+            // HA's answer, as a subscription for every entity gives it: what the fixture lacks doesn't exist, and the
+            // island's seed is complete (the page makes its card with it).
+            store.markSnapshot(emptySet())
             val server = VitroIslandServer(session = { haOrigin to TOKEN }).also { islands += it }
             val ctx = context(
                 activity, store, server, listOf(resource(case.module)),

@@ -1484,6 +1484,43 @@ class VitroEngineTest {
     }
 
     @Test
+    fun anIslandSeededBeforeHasAnswerWaitsAndGetsTheStoreAgainOnceItIs() {
+        // HA's snapshot slower than the view's first build: the island's page is seeded from a store without its entity.
+        val store = EntityStore()
+        val server = VitroIslandServer(haBase = { base }, accessToken = { null })
+        try {
+            val ctx = VitroCardContext(
+                context = activity, haBase = base, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), true),
+                resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {},
+                openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+                islandServer = server, openIslandPage = { RecordingPage(activity) },
+            )
+            WebIslandCardView(ctx, LovelaceParser.parseCard(JSONObject("""{"type": "custom:button-card", "entity": "light.lounge_lamp"}""")))
+            @Suppress("UNCHECKED_CAST")
+            val handler = (server.javaClass.getDeclaredField("slots").apply { isAccessible = true }.get(server) as Map<String, VitroIslandServer.SlotHandler>).values.single()
+            val sent = CopyOnWriteArrayList<JSONObject>()
+            handler.onConnected { sent += it }
+            val first = sent.last { it.getString("type") == "snapshot" }
+            assertFalse("not HA's answer yet: the page doesn't make its card", first.getBoolean("complete"))
+            sent.clear()
+            // HA's answer lands: its state, then the mark that the part is answered.
+            val owner = Any()
+            store.resetSnapshot(owner)
+            store.applyCompressedEvent(JSONObject("""{"a": {"light.lounge_lamp": {"s": "on", "a": {}}}}"""), snapshotScope = setOf("light.lounge_lamp"))
+            store.markSnapshot(setOf("light.lounge_lamp"), owner)
+            val again = sent.last { it.getString("type") == "snapshot" }
+            assertTrue(again.getBoolean("complete"))
+            assertEquals("on", again.getJSONObject("states").getJSONObject("light.lounge_lamp").getString("state"))
+            // A card whose entity HA says doesn't exist is complete too: HA's card draws its warning.
+            val missing = islandWith(store, """{"type": "custom:button-card", "entity": "light.gone"}""")
+            store.markSnapshot(setOf("light.gone"), owner)
+            assertTrue(missing.statesComplete())
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun anIslandNamingItsEntitiesStillSeesTheWholeStoreButOnlyFollowsItsOwn() {
         val store = storeWith("light.lounge_lamp", "light.kitchen")
         val island = islandWith(store, """{"type": "custom:button-card", "entity": "light.lounge_lamp"}""")

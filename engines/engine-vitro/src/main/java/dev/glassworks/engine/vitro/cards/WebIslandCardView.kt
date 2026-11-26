@@ -232,6 +232,7 @@ class WebIslandCardView(
                         pageSubs.remove(send)?.values?.toList().orEmpty()
                     }
                     ended.forEach { it.cancel() }
+                    synchronized(seedLock) { incompleteSeeds -= send }
                 }
             }
             // The earlier build's page, if its slot is still there: the slot now answers to this card.
@@ -279,6 +280,8 @@ class WebIslandCardView(
                 // A new token (a reconnect refreshed it) goes to the page as it arrives, with no state change needed: a
                 // reconnect that changed no state sends no patch.
                 renewing { ctx.watchToken { synchronized(seedLock) { sendTokenIfChanged() } } }
+                // HA's answer for more entities landed: a page seeded before it gets the whole store, complete.
+                renewing { ctx.store.subscribeSnapshot { synchronized(seedLock) { completeSeeds() } } }
                 // The connection to HA went down or is back: the page's `hass.connection` hears of it, and its
                 // subscriptions start again on the new connection (HA dropped them with the old one). On while the
                 // card is detached too (a move in the layout): a drop then is never missed, and live ones stay live.
@@ -326,7 +329,32 @@ class WebIslandCardView(
         watchedEntities.addAll(referencedEntities())
         val seed = JSONObject()
         for ((id, state) in ctx.store.all()) seed.put(id, state.toHassJson())
-        send(JSONObject().put("type", "snapshot").put("states", seed))
+        val complete = statesComplete()
+        // Not HA's answer yet (the store fills as HA's snapshot lands): the page waits to make its card, and this
+        // socket gets the whole store again once it is ([completeSeeds]).
+        if (!complete) incompleteSeeds += send
+        send(JSONObject().put("type", "snapshot").put("states", seed).put("complete", complete))
+    }
+
+    /** Sockets seeded before HA had answered for this card's entities: they're seeded again once it has. */
+    private val incompleteSeeds = LinkedHashSet<(JSONObject) -> Unit>()
+
+    /**
+     * True when HA has answered for every entity the card names (a state, or HA's word that it has none); for a card
+     * that names none (a filter, a clock), once HA's answer is in at all. The snapshot the card may be made with, as HA's
+     * frontend makes cards once `hass.states` is in.
+     */
+    internal fun statesComplete(): Boolean {
+        val refs = referencedEntities()
+        return if (refs.isEmpty()) ctx.store.anyAnswered else refs.all(ctx.store::isAnswered)
+    }
+
+    /** Under [seedLock]: the sockets still waiting for HA's answer get it once it's in. */
+    private fun completeSeeds() {
+        if (incompleteSeeds.isEmpty() || !statesComplete()) return
+        val waiting = incompleteSeeds.filter { it in senders }
+        incompleteSeeds.clear()
+        waiting.forEach { seedInitialStates(it) }
     }
 
     /**
@@ -2548,11 +2576,13 @@ function connectBridge() {
         if (Object.keys(haConfig).length) configArrived();
         if (cardEl) cardEl.hass = makeHass();
       } else if (m.type === 'snapshot' && m.states) {
-        // A (re)connect: the whole store, replacing what the island had.
+        // A (re)connect: the whole store, replacing what the island had. Not `complete` while HA hasn't answered for
+        // the card's entities yet: the card isn't made with states the store doesn't have yet, and the panel sends
+        // the whole store again once HA's answer is in.
         for (const id of Object.keys(rawStates)) delete rawStates[id];
         Object.assign(rawStates, m.states);
         statesView = null;
-        statesArrived();
+        if (m.complete !== false) statesArrived();
         if (cardEl) cardEl.hass = makeHass();
       } else if (m.type === 'patch' && m.states) {
         for (const id of Object.keys(m.states)) {

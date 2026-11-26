@@ -665,6 +665,24 @@ test('the card is made once the panel\'s states are here, and an honest notice w
   assert.equal(page.card().got[0].states['light.lounge'].state, 'on', 'its first hass has them');
 });
 
+test('a seed sent before HA answered (complete: false) keeps the card waiting until the complete one', async () => {
+  // The panel's store may still be empty when the page's bridge opens (HA's snapshot slower than the view's build):
+  // the card isn't made with those states, it is made with the whole store once HA's answer is in.
+  const page = await openPage({ card: plainCard, snapshot: null });
+  page.ws().push({ type: 'snapshot', states: {}, complete: false });
+  await settle();
+  assert.equal(page.card(), null, 'not made with a store HA hasn\'t filled yet');
+  page.ws().push({ type: 'snapshot', states: LAMP, complete: true });
+  await settle();
+  assert.ok(page.card(), 'made with HA\'s answer');
+  assert.equal(page.card().got[0].states['light.lounge'].state, 'on');
+  // An answer that says the card's entity doesn't exist is complete too: the card is made, as HA's draws its warning.
+  const empty = await openPage({ card: plainCard, snapshot: null });
+  empty.ws().push({ type: 'snapshot', states: {}, complete: true });
+  await settle();
+  assert.ok(empty.card(), 'a complete, empty answer makes the card');
+});
+
 test('a page made before the config waits for it, and a card that reads hass.config.version draws', async (t) => {
   if (!SOURCE_NO_CONFIG) return t.skip('no page without a config');
   // Mushroom 5.3 compares hass.config.version on every render with the entity (mg -> ge(t.config.version, ...)).
