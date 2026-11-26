@@ -67,6 +67,9 @@ class IslandPageDumpTest {
             // HA's localStorage on the panel, when the case gives one (#881): the island takes it in before its card.
             pageStorage = { case.optJSONObject("storage") },
         )
+        // The view the card is in, when the case says (`"view_type": "sections"`): what the island hands a card that
+        // reads it from HA's page (WebIslandCardView.islandConfig).
+        ctx.viewType = case.optString("view_type").ifEmpty { null }
         val out = File(RepoFiles.root, "engines/engine-vitro/build/vitro-island/${caseFile.nameWithoutExtension}.html")
         out.parentFile.mkdirs()
         out.writeText(WebIslandCardView.buildIslandHtml(ctx, LovelaceParser.parseCard(case.getJSONObject("card"))))

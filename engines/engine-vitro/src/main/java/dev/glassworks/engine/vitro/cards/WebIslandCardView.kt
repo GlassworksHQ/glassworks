@@ -482,6 +482,11 @@ class WebIslandCardView(
                     }
                 }
             }
+            "cardSize" -> {
+                // The card's getCardSize, which HA's masonry view weighs it by ([IslandCardSizes]).
+                val size = msg.optDouble("size", 1.0).takeIf { it.isFinite() && it >= 0 } ?: 1.0
+                ctx.main.post { ctx.islandCardSize(config, size) }
+            }
             "callService" -> {
                 val domain = msg.optString("domain", "")
                 val service = msg.optString("service", "")
@@ -1146,6 +1151,37 @@ function vitroSeedStorage(store, origin, seed) {
             return "<script>\n$ISLAND_STORAGE_JS\ntry { vitroSeedStorage(window.localStorage, $originJson, $seedJson); } catch (e) {}\n</script>"
         }
 
+        /**
+         * The config an island hands its card: [raw], except for what the card reads from HA's page that an island
+         * has no part of. Bubble Card 3.4.3 (`setLayout`) takes `card_layout`, else `large` when HA's page shows a view
+         * other than masonry (it looks for `hui-sections-view` and the other views under `hui-root`), else `normal`; and
+         * in such a view it drops a `normal` set on a card with bottom sub-buttons. An island has no `hui-root`, so each
+         * Bubble card in it, however deep, gets the layout Bubble picks in [viewType] written in (null: outside a view,
+         * as Bubble outside HA's page). Tablet Vitro run 3: a slider in a sections view was 52 px in its island, 56 in HA.
+         */
+        internal fun islandConfig(raw: JSONObject, viewType: String?): JSONObject {
+            if (viewType == null || viewType == "masonry" || !raw.toString().contains(BUBBLE_TYPE)) return raw
+            fun bottomSubButtons(card: JSONObject): Boolean {
+                val sub = card.optJSONObject("sub_button") ?: return false
+                val bottom = sub.optJSONArray("bottom") ?: return false
+                return (0 until bottom.length()).any { bottom.opt(it).let { b -> b != null && b != JSONObject.NULL && b != false && b != "" && b != 0 } }
+            }
+            fun walk(v: Any?): Any? = when (v) {
+                is JSONObject -> JSONObject().also { out ->
+                    for (k in v.keys()) out.put(k, walk(v.get(k)))
+                    if (out.optString("type") == BUBBLE_TYPE) {
+                        val layout = out.opt("card_layout")
+                        if (layout == null || layout == JSONObject.NULL || (layout == "normal" && bottomSubButtons(out))) out.put("card_layout", "large")
+                    }
+                }
+                is org.json.JSONArray -> org.json.JSONArray().also { out -> for (i in 0 until v.length()) out.put(walk(v.get(i))) }
+                else -> v
+            }
+            return walk(raw) as JSONObject
+        }
+
+        private const val BUBBLE_TYPE = "custom:bubble-card"
+
         fun buildIslandHtml(
             ctx: VitroCardContext,
             config: CardConfig,
@@ -1163,7 +1199,7 @@ function vitroSeedStorage(store, origin, seed) {
                     else -> """<script src=${htmlAttr(r.url)}></script>"""
                 }
             }
-            val cfgJson = config.raw.toString()
+            val cfgJson = islandConfig(config.raw, ctx.viewType).toString()
             val haCfgJson = ctx.haConfig().toString()
             val haUserJson = islandUser(ctx.haUser())?.toString() ?: "null"
             // The user's language and formats, as HA's page holds them in `hass.locale` (HaLocale).
@@ -1192,7 +1228,6 @@ $themeCss</style>
 :root { --header-height: 0px; }
 html, body { margin: 0; padding: 0; background: transparent; color: var(--primary-text-color); font-family: Inter, system-ui, sans-serif; overflow: hidden; $heightRule }
 #mount { width: 100%; ${if (fillViewport) "height: 100vh;" else ""} }
-ha-card { display: block; background: var(--ha-card-background, var(--card-background-color)); border-radius: var(--ha-card-border-radius, 12px); color: var(--primary-text-color); }
 ha-card.vitro-fallback { padding: 12px 16px; }
 .vitro-title { font-size: 1.15em; font-weight: 500; padding-bottom: 8px; }
 .vitro-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; }
@@ -1200,8 +1235,58 @@ ha-card.vitro-fallback { padding: 12px 16px; }
 </style>
 <script>
 // Minimal HA custom-element shims for GeckoView Micro-Islands (zero HA SPA).
+// ha-card as HA's is (frontend 20261028.5, ha-card.ts): its look in its own shadow root (:host), so it holds wherever
+// the card puts it, in the card's shadow root too, where a rule in this page never reaches (tablet Vitro run 3: no
+// background, no corners, no border). HA's core tokens aren't in this page: their values are the fallbacks.
 if (!customElements.get('ha-card')) {
-  customElements.define('ha-card', class extends HTMLElement {});
+  const HA_CARD_CSS = ':host{background:var(--ha-card-background,var(--card-background-color,white));' +
+    'backdrop-filter:var(--ha-card-backdrop-filter,none);box-shadow:var(--ha-card-box-shadow,none);box-sizing:border-box;' +
+    'border-radius:var(--ha-card-border-radius,var(--ha-border-radius-lg,12px));border-width:var(--ha-card-border-width,1px);' +
+    'border-style:solid;border-color:var(--ha-card-border-color,var(--divider-color,#e0e0e0));color:var(--primary-text-color);' +
+    'transition:all .3s ease-out;display:block;position:relative}' +
+    ':host([raised]){box-shadow:var(--ha-card-box-shadow,0px 2px 1px -1px #0003, 0px 1px 1px 0px #00000024, 0px 1px 3px 0px #0000001f);border:none}' +
+    '.card-header,:host ::slotted(.card-header){color:var(--ha-card-header-color,var(--primary-text-color));' +
+    'font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,var(--ha-font-size-2xl,24px));' +
+    'letter-spacing:-.012em;line-height:var(--ha-line-height-condensed,1.2);' +
+    'padding:var(--ha-space-5,20px) var(--ha-space-4,16px) var(--ha-space-6,24px);font-weight:var(--ha-font-weight-normal,400);' +
+    'margin-block:0;display:block}' +
+    ':host ::slotted(.card-content:not(:nth-child(1 of .card-content,.card-header))),slot:not(:first-child)::slotted(.card-content)' +
+    '{margin-top:calc(var(--ha-space-2,8px) * -1);padding-top:0}' +
+    ':host ::slotted(.card-content){padding:var(--ha-space-4,16px)}' +
+    ':host ::slotted(.card-actions){border-top:1px solid var(--divider-color,#e8e8e8);padding:var(--ha-space-2,8px)}';
+  customElements.define('ha-card', class extends HTMLElement {
+    static get observedAttributes() { return ['header', 'raised']; }
+    constructor() {
+      super();
+      // As HA's render: the h1 only with a header, then the slot. The style goes last: HA's rules read whether the
+      // slot is the first child (`slot:not(:first-child)`), and Lit's styles are no child at all.
+      const root = this.attachShadow({ mode: 'open' });
+      root.innerHTML = '<slot></slot><style>' + HA_CARD_CSS + '</style>';
+      this._h = null;
+    }
+    connectedCallback() { vitroUpgradeCard(this); }
+    attributeChangedCallback(name, _old, v) { if (name === 'header') this.header = v; }
+    // HA: the header, when set, as an h1 above the card's content; none without one.
+    set header(v) {
+      this._header = v || '';
+      if (!this._header) { if (this._h) { this._h.remove(); this._h = null; } return; }
+      if (!this._h) {
+        this._h = document.createElement('h1');
+        this._h.className = 'card-header';
+        this.shadowRoot.insertBefore(this._h, this.shadowRoot.firstChild);
+      }
+      this._h.textContent = this._header;
+    }
+    get header() { return this._header || ''; }
+    set raised(v) { if (v) this.setAttribute('raised', ''); else this.removeAttribute('raised'); }
+    get raised() { return this.hasAttribute('raised'); }
+  });
+  // A property set before the element upgraded sits on the instance and hides the class accessor: move it over.
+  function vitroUpgradeCard(el) {
+    for (const p of ['header', 'raised']) {
+      if (Object.prototype.hasOwnProperty.call(el, p)) { const v = el[p]; delete el[p]; el[p] = v; }
+    }
+  }
 }
 if (!customElements.get('ha-icon')) {
   const iconCache = new Map();
@@ -1271,23 +1356,27 @@ vitroDefine('ha-state-icon', class extends HTMLElement {
   get stateObj() { return this._stateObj; }
   set hass(v) { this._hass = v; }
   get hass() { return this._hass; }
+  // HA's ha-state-icon: the icon set on it, else the entity's own, else its domain's; with neither an icon nor a state
+  // object, nothing (tablet Vitro run 3 drew a house). A domain HA has no icon for: DEFAULT_DOMAIN_ICON, mdi:bookmark.
   _resolve() {
     if (this.icon) return this.icon;
     const st = this._stateObj;
-    if (st && st.attributes && st.attributes.icon) return st.attributes.icon;
-    const domain = st && st.entity_id ? String(st.entity_id).split('.')[0] : '';
-    return VITRO_DOMAIN_ICONS[domain] || 'mdi:home';
+    if (!st) return '';
+    if (st.attributes && st.attributes.icon) return st.attributes.icon;
+    const domain = st.entity_id ? String(st.entity_id).split('.')[0] : '';
+    return VITRO_DOMAIN_ICONS[domain] || 'mdi:bookmark';
   }
   _render() {
     if (!this.isConnected) return;
     this.style.display = 'inline-flex';
+    const icon = this._resolve();
+    if (!icon) { this.textContent = ''; return; }
     let inner = this.firstElementChild;
     if (!inner || inner.localName !== 'ha-icon') {
       this.textContent = '';
       inner = document.createElement('ha-icon');
       this.appendChild(inner);
     }
-    const icon = this._resolve();
     if (inner.getAttribute('icon') !== icon) inner.setAttribute('icon', icon);
   }
 });
@@ -2911,7 +3000,21 @@ function settleCard(el) {
   Promise.race([Promise.resolve(first).catch(() => {}), sleep(CARD_SETTLE_MS)]).then(() => {
     cardSettled = true;
     if (resizeNow) resizeNow();
+    vitroCardSize(el).then((size) => {
+      const n = Number(size);
+      sendBridge({ type: 'cardSize', size: Number.isFinite(n) && n >= 0 ? n : 1 });
+    });
   });
+}
+// HA's computeCardSize, the weight its masonry view places a card by: the card's getCardSize(), 1 when it throws, has
+// none, or takes more than 500 ms.
+function vitroCardSize(el) {
+  if (!el || typeof el.getCardSize !== 'function') return Promise.resolve(1);
+  try {
+    return Promise.race([Promise.resolve(el.getCardSize()), sleep(500).then(() => { throw new Error('timeout'); })]).catch(() => 1);
+  } catch (e) {
+    return Promise.resolve(1);
+  }
 }
 boot();
 </script>

@@ -104,6 +104,7 @@ import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatChecker
 import dev.glassworks.engine.vitro.compat.BubbleFallback
 import dev.glassworks.engine.vitro.compat.IslandBudget
+import dev.glassworks.engine.vitro.compat.IslandCardSizes
 import dev.glassworks.engine.vitro.compat.IslandFrontend
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.WebFallback
@@ -464,6 +465,36 @@ class VitroView(
     }
 
     /**
+     * An island's [card] answered `getCardSize()` with [size] ([IslandCardSizes]). A masonry view places its cards by
+     * those sizes, as HA's does: the view on screen is laid out again (its islands kept) when the answer moves a card
+     * to another column or changes how many columns stay, and other built masonry views with the card are when next
+     * shown. A view that places its cards the same stays as it is.
+     */
+    fun islandCardSize(card: CardConfig, size: Double) {
+        val cfg = dashboard
+        val width = (resources.displayMetrics.widthPixels / dp).toInt()
+        fun holds(v: ViewConfig) = v.cards.any { root -> holdsCard(root, card.raw.toString()) }
+        val masonry = cfg?.views?.withIndex()?.filter { (i, v) -> viewCache[i] != null && isMasonry(v) && holds(v) }.orEmpty()
+        val before = masonry.associate { (i, v) -> i to HaMasonry.place(v.cards, width, ::stateForBuild).let { (p, n) -> p.toList() to n } }
+        if (!IslandCardSizes.record(card.raw, size)) return
+        for ((i, v) in masonry) {
+            val after = HaMasonry.place(v.cards, width, ::stateForBuild).let { (p, n) -> p.toList() to n }
+            if (after == before[i]) continue
+            Log.i(TAG, "View '${v.path ?: i}': ${card.type} weighs $size (its getCardSize): its masonry columns are placed again")
+            if (i == currentViewIndex && webViewIndex == null) renderView(i, forceRebuild = true, pushHistory = false) else staleViews += i
+        }
+    }
+
+    /** A view [buildViewTree] lays out as masonry (its last case): not a panel, sections, sidebar or layout-card view. */
+    private fun isMasonry(v: ViewConfig): Boolean =
+        !(v.type == "panel" && v.cards.isNotEmpty()) && !(v.type == "sections" && v.sections.isNotEmpty()) &&
+            v.type != "sidebar" && v.layoutCardType == null
+
+    /** True when [card], or a card inside it, has the config [raw]. */
+    private fun holdsCard(card: CardConfig, raw: String): Boolean =
+        card.raw.toString() == raw || CardRouter.producedCards(card, perEntity = false).any { holdsCard(it.value, raw) }
+
+    /**
      * The views that go to HA's frontend now ([fallbackReason]) leave: built ones go, islands and all (they never show
      * again), and the view on screen goes through [onWebView]. Without a page ([onWebView] null) nothing changes.
      */
@@ -627,6 +658,7 @@ class VitroView(
         islandLosses.clear()
         gaveUpIslands.clear()
         gaveUpViews.clear()
+        IslandCardSizes.clear()
         resourceHold?.let { mainHandler.removeCallbacks(it.timeout) }
         resourceHold = null
         webViewIndex = null
