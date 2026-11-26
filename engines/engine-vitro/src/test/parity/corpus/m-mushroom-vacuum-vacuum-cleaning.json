@@ -1,0 +1,51 @@
+{
+ "title": "mushroom-vacuum: vacuum cleaning (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "vacuum.vacuum_cleaning": "cleaning"
+ },
+ "card": {
+  "type": "custom:mushroom-vacuum-card",
+  "entity": "vacuum.vacuum_cleaning",
+  "commands": [
+   "start_pause",
+   "return_home"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "vacuum.vacuum_cleaning": {
+    "state": "cleaning",
+    "last_changed": "-12m",
+    "attributes": {
+     "fan_speed_list": [
+      "silent",
+      "standard"
+     ],
+     "fan_speed": "standard",
+     "battery_level": 64,
+     "supported_features": 14204,
+     "friendly_name": "Ground Floor Robot"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "vacuum.vacuum_cleaning",
+    "pl": "demo",
+    "di": "dev-ground-floor",
+    "en": "Robot",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-ground-floor",
+    "name": "Ground Floor"
+   }
+  ]
+ }
+}

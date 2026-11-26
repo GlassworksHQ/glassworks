@@ -1,0 +1,142 @@
+{
+ "title": "glance: every sensor state (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "sensor.sensor_temperature": "21.42",
+  "sensor.sensor_power": "1234.5",
+  "sensor.sensor_battery_low": "12",
+  "sensor.sensor_no_unit": "Washing",
+  "sensor.sensor_unknown": "unknown",
+  "sensor.sensor_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "glance",
+  "entities": [
+   "sensor.sensor_temperature",
+   "sensor.sensor_power",
+   "sensor.sensor_battery_low",
+   "sensor.sensor_no_unit",
+   "sensor.sensor_unknown",
+   "sensor.sensor_unavailable"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "sensor.sensor_temperature": {
+    "state": "21.42",
+    "last_changed": "-2m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Temperature"
+    }
+   },
+   "sensor.sensor_power": {
+    "state": "1234.5",
+    "last_changed": "-2m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "W",
+     "device_class": "power",
+     "friendly_name": "Living Room Temperature"
+    }
+   },
+   "sensor.sensor_battery_low": {
+    "state": "12",
+    "last_changed": "-2h",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "%",
+     "device_class": "battery",
+     "friendly_name": "Living Room Temperature"
+    }
+   },
+   "sensor.sensor_no_unit": {
+    "state": "Washing",
+    "last_changed": "-15m",
+    "attributes": {
+     "friendly_name": "Living Room Temperature"
+    }
+   },
+   "sensor.sensor_unknown": {
+    "state": "unknown",
+    "last_changed": "-2m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Temperature"
+    }
+   },
+   "sensor.sensor_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "restored": true,
+     "friendly_name": "Living Room Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.sensor_temperature",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device",
+    "dp": 1
+   },
+   {
+    "ei": "sensor.sensor_power",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device",
+    "dp": 0
+   },
+   {
+    "ei": "sensor.sensor_battery_low",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_no_unit",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_unknown",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device",
+    "dp": 1
+   },
+   {
+    "ei": "sensor.sensor_unavailable",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device",
+    "dp": 1
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room",
+    "name": "Living Room"
+   }
+  ]
+ }
+}

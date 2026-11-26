@@ -1,0 +1,42 @@
+{
+ "title": "button: person away (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "person.away": "not_home"
+ },
+ "card": {
+  "type": "button",
+  "entity": "person.away"
+ },
+ "fixture": {
+  "states": {
+   "person.away": {
+    "state": "not_home",
+    "last_changed": "-3h",
+    "attributes": {
+     "editable": true,
+     "id": "robin",
+     "device_trackers": [],
+     "friendly_name": "Robin"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "person.away",
+    "pl": "person"
+   }
+  ],
+  "persons": [
+   {
+    "id": "robin",
+    "name": "Robin",
+    "user_id": null,
+    "device_trackers": []
+   }
+  ]
+ }
+}

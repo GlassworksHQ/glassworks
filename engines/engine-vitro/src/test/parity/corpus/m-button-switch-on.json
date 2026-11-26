@@ -1,0 +1,40 @@
+{
+ "title": "button: switch on (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "switch.switch_on": "on"
+ },
+ "card": {
+  "type": "button",
+  "entity": "switch.switch_on"
+ },
+ "fixture": {
+  "states": {
+   "switch.switch_on": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "friendly_name": "Patio Heater"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "switch.switch_on",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-patio",
+    "name": "Patio"
+   }
+  ]
+ }
+}

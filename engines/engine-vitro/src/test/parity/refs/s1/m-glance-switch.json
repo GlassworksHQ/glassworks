@@ -1,0 +1,247 @@
+{
+ "case": "m-glance-switch",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 151
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 134.78,
+   "type": "hui-glance-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Patio Heater",
+   "x": 36.47,
+   "y": 20,
+   "w": 77.55,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 66.56,
+   "y": 98.39,
+   "w": 17.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Patio Heater",
+   "x": 152.97,
+   "y": 20,
+   "w": 77.55,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 182.06,
+   "y": 98.39,
+   "w": 19.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Patio Heater",
+   "x": 269.47,
+   "y": 20,
+   "w": 77.55,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 299.56,
+   "y": 98.39,
+   "w": 17.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Patio Heater",
+   "x": 385.97,
+   "y": 20,
+   "w": 77.55,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Unavailable",
+   "x": 388.89,
+   "y": 98.39,
+   "w": 71.7,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "switch.switch_off": {
+   "s": "off",
+   "a": {
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "switch.switch_on": {
+   "s": "on",
+   "a": {
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "switch.switch_outlet_on": {
+   "s": "on",
+   "a": {
+    "device_class": "outlet",
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "switch.switch_unavailable": {
+   "s": "unavailable",
+   "a": {
+    "restored": true,
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "switch.switch_off",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_on",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_outlet_on",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_unavailable",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Heater",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Patio"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "switch"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "switch": {
+     "_": {
+      "default": "mdi:toggle-switch-variant",
+      "state": {
+       "off": "mdi:toggle-switch-variant-off"
+      }
+     },
+     "outlet": {
+      "default": "mdi:power-plug",
+      "state": {
+       "off": "mdi:power-plug-off"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.switch.entity_component._.state.off": "Off",
+    "component.switch.entity_component._.state.on": "On",
+    "component.switch.entity_component.outlet.state.off": "Off",
+    "component.switch.entity_component.outlet.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

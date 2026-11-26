@@ -1,0 +1,92 @@
+{
+ "title": "glance: every switch state (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "switch.switch_on": "on",
+  "switch.switch_off": "off",
+  "switch.switch_outlet_on": "on",
+  "switch.switch_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "glance",
+  "entities": [
+   "switch.switch_on",
+   "switch.switch_off",
+   "switch.switch_outlet_on",
+   "switch.switch_unavailable"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "switch.switch_on": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "friendly_name": "Patio Heater"
+    }
+   },
+   "switch.switch_off": {
+    "state": "off",
+    "last_changed": "-2h",
+    "attributes": {
+     "friendly_name": "Patio Heater"
+    }
+   },
+   "switch.switch_outlet_on": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "device_class": "outlet",
+     "friendly_name": "Patio Heater"
+    }
+   },
+   "switch.switch_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "restored": true,
+     "friendly_name": "Patio Heater"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "switch.switch_on",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_off",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_outlet_on",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_unavailable",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-patio",
+    "name": "Patio"
+   }
+  ]
+ }
+}

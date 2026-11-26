@@ -1,0 +1,138 @@
+{
+ "title": "glance: every cover state (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "cover.cover_open_position": "open",
+  "cover.cover_closed_position": "closed",
+  "cover.cover_opening": "opening",
+  "cover.cover_open_no_position": "open",
+  "cover.cover_unknown": "unknown",
+  "cover.cover_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "glance",
+  "entities": [
+   "cover.cover_open_position",
+   "cover.cover_closed_position",
+   "cover.cover_opening",
+   "cover.cover_open_no_position",
+   "cover.cover_unknown",
+   "cover.cover_unavailable"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "cover.cover_open_position": {
+    "state": "open",
+    "last_changed": "-1h",
+    "attributes": {
+     "current_position": 40,
+     "device_class": "blind",
+     "supported_features": 15,
+     "friendly_name": "Office Blind"
+    }
+   },
+   "cover.cover_closed_position": {
+    "state": "closed",
+    "last_changed": "-5h",
+    "attributes": {
+     "current_position": 0,
+     "device_class": "blind",
+     "supported_features": 15,
+     "friendly_name": "Office Blind"
+    }
+   },
+   "cover.cover_opening": {
+    "state": "opening",
+    "last_changed": "-5s",
+    "attributes": {
+     "current_position": 60,
+     "device_class": "blind",
+     "supported_features": 15,
+     "friendly_name": "Office Blind"
+    }
+   },
+   "cover.cover_open_no_position": {
+    "state": "open",
+    "last_changed": "-1h",
+    "attributes": {
+     "device_class": "garage",
+     "supported_features": 3,
+     "friendly_name": "Office Blind"
+    }
+   },
+   "cover.cover_unknown": {
+    "state": "unknown",
+    "last_changed": "-1h",
+    "attributes": {
+     "device_class": "garage",
+     "supported_features": 3,
+     "friendly_name": "Office Blind"
+    }
+   },
+   "cover.cover_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "device_class": "blind",
+     "restored": true,
+     "supported_features": 15,
+     "friendly_name": "Office Blind"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.cover_open_position",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   },
+   {
+    "ei": "cover.cover_closed_position",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   },
+   {
+    "ei": "cover.cover_opening",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   },
+   {
+    "ei": "cover.cover_open_no_position",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   },
+   {
+    "ei": "cover.cover_unknown",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   },
+   {
+    "ei": "cover.cover_unavailable",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-office",
+    "name": "Office"
+   }
+  ]
+ }
+}

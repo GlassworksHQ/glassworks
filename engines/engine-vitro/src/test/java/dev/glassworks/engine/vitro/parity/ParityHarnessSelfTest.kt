@@ -142,6 +142,37 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun anOpenBugIsReportedNotFailedAndFailsOnceItMatches() {
+        val f = File.createTempFile("open", ".json")
+        f.writeText(JSONObject().put("s1/c", JSONObject().put("owner", "#928").put("reason", "the brightness bar is a square")).toString())
+        val open = ParityOpen(f)
+        assertEquals(null, open.judge("s1/other", listOf("pixels 30%"), false))
+        val (still, why) = open.judge("s1/c", listOf("pixels 30% > 2%"), false)!!
+        assertEquals(ParityStatus.OPEN, still)
+        assertTrue(why.toString(), why.any { "#928" in it && "square" in it })
+        assertTrue(fatalResults(listOf(result(still, measure(pixel = 0.3))), acceptDrift = false).isEmpty())
+        // Fixed: the entry must go, so the case guards the fix from then on.
+        assertEquals(ParityStatus.ERROR, open.judge("s1/c", emptyList(), false)!!.first)
+        // An open bug is never drift as well.
+        assertEquals(ParityStatus.ERROR, open.judge("s1/c", listOf("pixels 30% > 2%"), true)!!.first)
+    }
+
+    @Test
+    fun aBaselineUpdateNeverRecordsAnOpenBugAsDrift() {
+        val f = File.createTempFile("baseline", ".json")
+        f.writeText("{}")
+        ParityBaseline(f).write(listOf(result(ParityStatus.OPEN, measure(pixel = 0.3))))
+        assertFalse(JSONObject(f.readText()).has("s1/c"))
+    }
+
+    @Test
+    fun anOpenEntryNamesItsOwnerPr() {
+        val f = File.createTempFile("open", ".json")
+        f.writeText(JSONObject().put("s1/c", JSONObject().put("owner", "someone").put("reason", "x")).toString())
+        assertTrue(runCatching { ParityOpen(f).judge("s1/c", listOf("x"), false) }.isFailure)
+    }
+
+    @Test
     fun aBaselineUpdateStillFailsOnErrorsAndMissingReferences() {
         val results = listOf(
             result(ParityStatus.REGRESSION, measure(pixel = 0.5)),

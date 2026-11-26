@@ -1,0 +1,138 @@
+{
+ "title": "entities: every alarm state (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "alarm_control_panel.alarm_control_panel_disarmed": "disarmed",
+  "alarm_control_panel.alarm_control_panel_disarmed_no_code": "disarmed",
+  "alarm_control_panel.alarm_control_panel_armed_away": "armed_away",
+  "alarm_control_panel.alarm_control_panel_arming": "arming",
+  "alarm_control_panel.alarm_control_panel_triggered": "triggered",
+  "alarm_control_panel.alarm_control_panel_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "entities",
+  "entities": [
+   "alarm_control_panel.alarm_control_panel_disarmed",
+   "alarm_control_panel.alarm_control_panel_disarmed_no_code",
+   "alarm_control_panel.alarm_control_panel_armed_away",
+   "alarm_control_panel.alarm_control_panel_arming",
+   "alarm_control_panel.alarm_control_panel_triggered",
+   "alarm_control_panel.alarm_control_panel_unavailable"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "alarm_control_panel.alarm_control_panel_disarmed": {
+    "state": "disarmed",
+    "last_changed": "-2h",
+    "attributes": {
+     "code_format": "number",
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   },
+   "alarm_control_panel.alarm_control_panel_disarmed_no_code": {
+    "state": "disarmed",
+    "last_changed": "-2h",
+    "attributes": {
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   },
+   "alarm_control_panel.alarm_control_panel_armed_away": {
+    "state": "armed_away",
+    "last_changed": "-2h",
+    "attributes": {
+     "code_format": "number",
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   },
+   "alarm_control_panel.alarm_control_panel_arming": {
+    "state": "arming",
+    "last_changed": "-10s",
+    "attributes": {
+     "code_format": "number",
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   },
+   "alarm_control_panel.alarm_control_panel_triggered": {
+    "state": "triggered",
+    "last_changed": "-1m",
+    "attributes": {
+     "code_format": "number",
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   },
+   "alarm_control_panel.alarm_control_panel_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "restored": true,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_disarmed",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   },
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_disarmed_no_code",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   },
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_armed_away",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   },
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_arming",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   },
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_triggered",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   },
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_unavailable",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-house",
+    "name": "House"
+   }
+  ]
+ }
+}

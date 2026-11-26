@@ -52,7 +52,13 @@ class VitroParityHarnessTest {
         val badCases = roots.flatMap { (_, root) -> ParityCase.loadAll(root) }.mapNotNull { c ->
             c.unknownFrames(allFrames.map { it.id }.toSet()).takeIf { it.isNotEmpty() }?.let { "case ${c.id} lists unknown frame(s) $it" }
         }
-        if (unknown.isNotEmpty() || badCases.isNotEmpty()) fail("Vitro parity: " + (unknown + badCases).joinToString("; "))
+        // An open.json entry for a case or frame that no longer exists would never be checked again.
+        val staleOpen = roots.flatMap { (_, root) ->
+            val ids = ParityCase.loadAll(root).map { it.id }.toSet()
+            ParityOpen(File(root, "open.json")).keys.filter { k -> k.substringBefore('/') !in allFrames.map { it.id } || k.substringAfter('/') !in ids }
+                .map { "open.json lists $it, which isn't a frame/case of the corpus" }
+        }
+        if (unknown.isNotEmpty() || badCases.isNotEmpty() || staleOpen.isNotEmpty()) fail("Vitro parity: " + (unknown + badCases + staleOpen).joinToString("; "))
         val frames = allFrames.filter { ParityFiles.onlyFrames == null || it.id in ParityFiles.onlyFrames!! }
         val outDir = ParityFiles.out
         val tz = TimeZone.getDefault()
@@ -73,6 +79,7 @@ class VitroParityHarnessTest {
                 shared?.haConfig?.optString("time_zone")?.takeIf { it.isNotBlank() }?.let { TimeZone.setDefault(TimeZone.getTimeZone(it)) }
                 val cases = ParityCase.loadAll(root).filter { ParityFiles.onlyCases == null || it.id in ParityFiles.onlyCases!! }
                 val baseline = ParityBaseline(File(root, "baseline.json"))
+                val open = ParityOpen(File(root, "open.json"))
                 val wanted = LinkedHashMap<String, LinkedHashSet<String>>()
                 val mine = ArrayList<ParityResult>()
                 for (frame in frames) {
@@ -83,7 +90,7 @@ class VitroParityHarnessTest {
                     assertEquals("${frame.id}: density from ${frame.qualifiers}", frame.density, activity.resources.displayMetrics.density, 0.01f)
                     val renderer = ParityRenderer(activity, frame, root, shared)
                     for (case in runs) {
-                        val r = runCase(label, root, frame, case, renderer, baseline, outDir, wanted)
+                        val r = runCase(label, root, frame, case, renderer, baseline, open, outDir, wanted)
                         mine += r
                     }
                     // The last case's view leaves the window: a view still on screen would answer the next frame's
@@ -103,7 +110,7 @@ class VitroParityHarnessTest {
         if (staged.isNotEmpty() && fatalResults(results, acceptDrift = true).isEmpty()) staged.forEach { (b, r) -> b.write(r) }
         if (!ParityFiles.collect) ParityReportWriter.write(outDir, results, haVersion)
         println("Vitro parity: ${results.count { it.status == ParityStatus.MATCH }} match, " +
-            "${results.count { it.status == ParityStatus.DRIFT }} known drift, ${fatalResults(results, false).size} failing; report: ${File(outDir, "index.html")}")
+            "${results.count { it.status == ParityStatus.DRIFT }} known drift, ${results.count { it.status == ParityStatus.OPEN }} open (open.json), ${fatalResults(results, false).size} failing; report: ${File(outDir, "index.html")}")
         // A baseline update (and a collect run) accepts visual drift, never a case it couldn't measure.
         val fatal = fatalResults(results, acceptDrift = ParityFiles.collect || ParityFiles.updateBaseline)
             .map { r -> "${r.key} [${r.corpus}]: ${r.status.label}: ${(r.reasons + r.notes).joinToString("; ")}" }
@@ -119,6 +126,7 @@ class VitroParityHarnessTest {
         case: ParityCase,
         renderer: ParityRenderer,
         baseline: ParityBaseline,
+        open: ParityOpen,
         outDir: File,
         wanted: MutableMap<String, LinkedHashSet<String>>,
     ): ParityResult {
@@ -170,13 +178,16 @@ class VitroParityHarnessTest {
             File(outDir, img).apply { parentFile.mkdirs() }.outputStream().use { side.compress(Bitmap.CompressFormat.PNG, 100, it) }
             val over = m.over(case.threshold)
             val known = baseline.entry("${frame.id}/${case.id}")
+            open.judge("${frame.id}/${case.id}", over, known != null)?.let { (status, why) ->
+                return ParityResult(label, frame, case, status, m, why, notes, img)
+            }
             when {
                 over.isEmpty() -> {
                     if (known != null) notes += "now within threshold: drop it from baseline.json"
                     ParityResult(label, frame, case, ParityStatus.MATCH, m, emptyList(), notes, img)
                 }
                 else -> {
-                    val worse = baseline.worse("${frame.id}/${case.id}", m)
+                    val worse = baseline.worse("${frame.id}/${case.id}", m, case.threshold)
                     val reason = known?.optString("reason")?.takeIf { it.isNotBlank() }?.let { listOf("known: $it") }.orEmpty()
                     if (worse.isEmpty()) ParityResult(label, frame, case, ParityStatus.DRIFT, m, over + reason, notes, img)
                     else ParityResult(label, frame, case, ParityStatus.REGRESSION, m, over + worse, notes, img)

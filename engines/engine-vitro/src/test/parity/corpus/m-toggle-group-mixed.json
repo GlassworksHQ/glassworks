@@ -1,0 +1,170 @@
+{
+ "title": "toggle-group: every mixed state (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "light.light_on_dimmed": "on",
+  "light.light_on_color": "on",
+  "light.light_off": "off",
+  "light.light_unavailable": "unavailable",
+  "switch.switch_on": "on",
+  "switch.switch_off": "off"
+ },
+ "card": {
+  "type": "toggle-group",
+  "entities": [
+   "light.light_on_dimmed",
+   "light.light_on_color",
+   "light.light_off",
+   "light.light_unavailable",
+   "switch.switch_on",
+   "switch.switch_off"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.light_on_dimmed": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 40,
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_on_color": {
+    "state": "on",
+    "last_changed": "-12m",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "color_mode": "hs",
+     "brightness": 204,
+     "hs_color": [
+      24.0,
+      84.0
+     ],
+     "rgb_color": [
+      255,
+      129,
+      40
+     ],
+     "xy_color": [
+      0.594,
+      0.371
+     ],
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_off": {
+    "state": "off",
+    "last_changed": "-3h",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "restored": true,
+     "supported_features": 40,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "switch.switch_on": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "friendly_name": "Patio Heater"
+    }
+   },
+   "switch.switch_off": {
+    "state": "off",
+    "last_changed": "-2h",
+    "attributes": {
+     "friendly_name": "Patio Heater"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.light_on_dimmed",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_color",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_off",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_unavailable",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_on",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_off",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   },
+   {
+    "id": "dev-patio",
+    "name": "Patio"
+   }
+  ]
+ }
+}

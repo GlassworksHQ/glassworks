@@ -1,0 +1,42 @@
+{
+ "title": "tile: alarm_control_panel unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "alarm_control_panel.alarm_control_panel_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "alarm_control_panel.alarm_control_panel_unavailable"
+ },
+ "fixture": {
+  "states": {
+   "alarm_control_panel.alarm_control_panel_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "restored": true,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_unavailable",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-house",
+    "name": "House"
+   }
+  ]
+ }
+}
