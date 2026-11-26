@@ -748,9 +748,38 @@ test('a card whose host is inline but whose content drew is not blank', async ()
 
 test('a card whose every update fails on a missing member goes to HA\'s frontend, drawn or not', async () => {
   const page = await openPage({ card: plainCard });
-  for (let i = 0; i < 3; i++) page.rejectInPage(new TypeError("Cannot read properties of undefined (reading 'split')"));
+  const update = (state) => page.ws().push({ type: 'patch', states: { 'light.lounge': { entity_id: 'light.lounge', state, attributes: {} } } });
+  const split = () => page.rejectInPage(new TypeError("Cannot read properties of undefined (reading 'split')"));
+  // One update failing three times is one failed update.
+  split(); split(); split();
   await settle();
-  assert.deepEqual(page.sent('cardBroken'), [{ type: 'cardBroken', member: 'split' }]);
+  assert.deepEqual(page.sent('cardBroken'), [], 'one update');
+  update('off'); split();
+  update('on'); split();
+  await settle();
+  assert.deepEqual(page.sent('cardBroken'), [{ type: 'cardBroken', member: 'split' }], 'three updates in a row');
+});
+
+test('unrelated errors, or an update that works in between, never send a working card away', async () => {
+  const page = await openPage({ card: plainCard });
+  const update = (state) => page.ws().push({ type: 'patch', states: { 'light.lounge': { entity_id: 'light.lounge', state, attributes: {} } } });
+  // Three different members, one per update.
+  page.rejectInPage(new TypeError("Cannot read properties of undefined (reading 'split')"));
+  update('off'); page.rejectInPage(new TypeError('e.hass.someNewMember is not a function'));
+  update('on'); page.rejectInPage(new TypeError("Cannot read properties of undefined (reading 'icon')"));
+  await settle();
+  assert.deepEqual(page.sent('cardBroken'), [], 'different members');
+  // The same member, but an update between them ran clean: the count starts again.
+  update('off'); page.rejectInPage(new TypeError("Cannot read properties of undefined (reading 'split')"));
+  update('on');
+  update('off'); page.rejectInPage(new TypeError("Cannot read properties of undefined (reading 'split')"));
+  update('on'); page.rejectInPage(new TypeError("Cannot read properties of undefined (reading 'split')"));
+  await settle();
+  assert.deepEqual(page.sent('cardBroken'), [], 'a clean update reset it');
+  // A TypeError that names no member never counts as one, however often.
+  for (const s of ['off', 'on', 'off', 'on']) { update(s); page.rejectInPage(new TypeError('Illegal invocation')); }
+  await tick(1700);
+  assert.deepEqual(page.sent('cardBroken'), [], 'unnamed, and the card drew');
 });
 
 // ---- A slow script, links, an empty card (#799 D6-D8) ----

@@ -2351,7 +2351,7 @@ function vitroLoadBackendTranslation(category, integrations, configFlow) {
 }
 function stringsChanged() {
   hassBase.localize = makeLocalize();
-  if (cardEl) cardEl.hass = makeHass();
+  if (cardEl) feedCard();
 }
 
 // hass.services, as HA's frontend has them: read (once) when a card first reads them, then again when an integration
@@ -2363,7 +2363,7 @@ function loadServices() {
   vitroCallWS({ type: 'get_services' }).then((r) => {
     if (!r || typeof r !== 'object') return;
     haServices = r;
-    if (cardEl) cardEl.hass = makeHass();
+    if (cardEl) feedCard();
   }, () => {});
 }
 function askServices() {
@@ -2509,7 +2509,7 @@ function connectBridge() {
           hassBase.user = user;
           changed = true;
         }
-        if (changed && cardEl) cardEl.hass = makeHass();
+        if (changed && cardEl) feedCard();
         const waiter = typeof m.rid === 'number' ? tokenWaiters.get(m.rid) : undefined;
         if (waiter) { tokenWaiters.delete(m.rid); waiter(); }
       } else if (m.type === 'conn') {
@@ -2545,7 +2545,7 @@ function connectBridge() {
           }
           fireConn(up ? 'ready' : 'disconnected');
           if (up && servicesAsked) loadServices();
-          if (cardEl) cardEl.hass = makeHass();
+          if (cardEl) feedCard();
         }
       } else if (m.type === 'subAck') {
         const entry = pageSubs.get(m.sid);
@@ -2568,13 +2568,13 @@ function connectBridge() {
         const style = document.getElementById('vitro-theme');
         if (style && typeof m.css === 'string') style.textContent = m.css;
         hassBase.themes = Object.assign({}, hassBase.themes, { darkMode: !!m.dark, default_theme: String(m.name || '') });
-        if (cardEl) cardEl.hass = makeHass();
+        if (cardEl) feedCard();
       } else if (m.type === 'config' && m.config && typeof m.config === 'object') {
         // HA's config as the panel has it now (a page made before it arrived had none): hass.config follows it.
         haConfig = m.config;
         hassBase.config = haConfig;
         if (Object.keys(haConfig).length) configArrived();
-        if (cardEl) cardEl.hass = makeHass();
+        if (cardEl) feedCard();
       } else if (m.type === 'snapshot' && m.states) {
         // A (re)connect: the whole store, replacing what the island had. Not `complete` while HA hasn't answered for
         // the card's entities yet: the card isn't made with states the store doesn't have yet, and the panel sends
@@ -2583,19 +2583,19 @@ function connectBridge() {
         Object.assign(rawStates, m.states);
         statesView = null;
         if (m.complete !== false) statesArrived();
-        if (cardEl) cardEl.hass = makeHass();
+        if (cardEl) feedCard();
       } else if (m.type === 'patch' && m.states) {
         for (const id of Object.keys(m.states)) {
           if (m.states[id] === null) delete rawStates[id];
           else rawStates[id] = m.states[id];
         }
         statesView = null;
-        if (cardEl) cardEl.hass = makeHass();
+        if (cardEl) feedCard();
       } else if (m.type === 'registries' && m.registries) {
         // New objects every time: Lit cards compare them by reference.
         for (const key of Object.keys(registries)) registries[key] = m.registries[key] || {};
         registriesIn = true;
-        if (cardEl) cardEl.hass = makeHass();
+        if (cardEl) feedCard();
       } else if (m.type === 'wsReply') {
         const entry = wsPending.get(m.id);
         if (!entry) continue;
@@ -2656,21 +2656,35 @@ function vitroCardBlank() {
   return !(text.trim() && room(cardEl));
 }
 // Every update failing on the same missing member: the card shows what it drew before (HA's "Entity not found" from
-// a first render, say), never what it should. Handed over too, drawn or not.
+// a first render, say), never what it should. Handed over too, drawn or not. Counted per update the page gives the
+// card (feedCard): the same named member failing in BROKEN_REPEATS updates in a row. Other errors, or an update with
+// none, start the count again; an unnamed TypeError only counts for the blank-card grace above.
 const BROKEN_REPEATS = 3;
-const BROKEN_REPEAT_MS = 10000;
-let brokenThrows = [];
+let cardUpdate = 0;
+let streakMember = null;
+let streakUpdates = new Set();
+let threwThisUpdate = false;
+function feedCard() {
+  // The update before this one ran without failing: the card works, whatever it threw earlier.
+  if (cardUpdate > 0 && !threwThisUpdate) { streakMember = null; streakUpdates = new Set(); }
+  cardUpdate += 1;
+  threwThisUpdate = false;
+  cardEl.hass = makeHass();
+}
 function vitroOnCardThrow(err) {
   if (brokenSent || !cardEl) return;
   const member = vitroMissingMember(err);
   if (member === null) return;
-  const now = Date.now();
-  brokenThrows = brokenThrows.filter((t) => now - t < BROKEN_REPEAT_MS).concat([now]);
-  if (brokenThrows.length >= BROKEN_REPEATS) {
-    brokenSent = true;
-    if (brokenTimer) { clearTimeout(brokenTimer); brokenTimer = null; }
-    sendBridge({ type: 'cardBroken', member });
-    return;
+  if (member) {
+    threwThisUpdate = true;
+    if (member !== streakMember) { streakMember = member; streakUpdates = new Set(); }
+    streakUpdates.add(cardUpdate);
+    if (streakUpdates.size >= BROKEN_REPEATS) {
+      brokenSent = true;
+      if (brokenTimer) { clearTimeout(brokenTimer); brokenTimer = null; }
+      sendBridge({ type: 'cardBroken', member });
+      return;
+    }
   }
   if (brokenTimer) return;
   brokenTimer = setTimeout(() => {
@@ -2743,7 +2757,7 @@ async function boot() {
     return;
   }
   cardEl = el;
-  cardEl.hass = makeHass();
+  feedCard();
   document.getElementById('mount').appendChild(cardEl);
   wireEvents();
   if (!resizeWired) wireResize();
