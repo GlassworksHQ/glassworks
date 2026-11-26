@@ -8,6 +8,7 @@ import dev.glassworks.engine.vitro.compat.CardCompat
 import dev.glassworks.engine.vitro.compat.CardRoute
 import dev.glassworks.engine.vitro.compat.CardVerdict
 import dev.glassworks.engine.vitro.compat.IslandScripts
+import dev.glassworks.engine.vitro.compat.NativeOptions
 import dev.glassworks.engine.vitro.compat.VitroSupport
 import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.EntityState
@@ -182,7 +183,7 @@ data class EntityRowConfig(
         /** HA's `DOMAINS_TOGGLE` (`common/const.ts`): the domains a button row or button toggles by default. */
         val HA_DOMAINS_TOGGLE: Set<String> = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
 
-        /** The special row types Vitro draws ([parse]); `attribute` and `cast` go to HA's frontend ([WebFallback]). */
+        /** The special row types Vitro parses ([parse]); a row Vitro doesn't draw as HA does sends its view to HA's frontend ([WebFallback]). */
         val SPECIAL_TYPES: Set<String> get() = VitroSupport.ENTITIES_ROW_TYPES
 
         /**
@@ -259,8 +260,8 @@ data class EntityRowConfig(
                 }
                 else -> {
                     val id = item.str("entity") ?: return null
-                    // `attribute` and `cast` rows send their view to HA's frontend; any other row with an entity (an
-                    // explicit `*-entity` type, a custom row) is drawn as an entity row.
+                    // Any other row with an entity is parsed as an entity row. One Vitro doesn't draw as HA does (an
+                    // `attribute` row, a custom row, a domain whose control it lacks) sends its view to HA's frontend.
                     EntityRowConfig(
                         entity = id,
                         name = name,
@@ -726,6 +727,12 @@ data class CardConfig(
     /** [CardCompat.staysNative] for this card, decided once like [compat] (it walks the cards it produces). */
     internal val nativeOnly: Boolean by lazy { CardCompat.staysNative(this) }
 
+    /**
+     * The options and values in this card's config its native renderer doesn't draw as HA does ([NativeOptions]),
+     * decided once: empty when it draws all of them.
+     */
+    val unsupportedOptions: List<String> by lazy { NativeOptions.cardReasons(type, raw) }
+
     fun entities(): List<EntityRowConfig> {
         val arr = raw.optJSONArray("entities") ?: return emptyList()
         val out = ArrayList<EntityRowConfig>(arr.length())
@@ -1076,13 +1083,22 @@ object LovelaceParser {
         return dash to view
     }
 
-    /** True when [url] is a Home Assistant Lovelace dashboard path rather than login, settings, or blueprints. */
+    /**
+     * True when [url] is a Home Assistant Lovelace dashboard path rather than login, settings, blueprints or a file.
+     * A path ending in a web file (`…/page.html`, `…/card.js`) is a file a server hands out, not a dashboard view,
+     * wherever it is served from: Clarity's SurfaceFlinger check page (`/clarity/page/sfcheck.html`) opens in the
+     * fallback, so the check reads the page's SurfaceView.
+     */
     fun isDashboardUrl(url: String): Boolean {
         val path = runCatching { java.net.URI(url).path }.getOrNull().orEmpty().trim('/')
         if (path.isEmpty()) return true
         val first = path.substringBefore('/')
-        return first !in NON_DASHBOARD_PREFIXES
+        if (first in NON_DASHBOARD_PREFIXES) return false
+        return !WEB_FILE.containsMatchIn(path.substringAfterLast('/'))
     }
+
+    /** A file name a web server hands out: a page, script, stylesheet, data or picture. */
+    private val WEB_FILE = Regex("""\.(html?|m?js|json|css|xml|txt|png|jpe?g|gif|webp|svg|ico)$""", RegexOption.IGNORE_CASE)
 
     private val NON_DASHBOARD_PREFIXES = setOf(
         "auth", "config", "developer-tools", "profile", "hassio", "hacs",

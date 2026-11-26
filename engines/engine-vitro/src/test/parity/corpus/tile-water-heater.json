@@ -1,5 +1,6 @@
 {
  "title": "Tile: a water heater with its operation modes",
+ "route": "frontend",
  "card": {
   "type": "tile",
   "entity": "water_heater.boiler",

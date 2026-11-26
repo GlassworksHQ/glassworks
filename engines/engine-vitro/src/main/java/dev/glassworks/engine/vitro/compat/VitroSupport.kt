@@ -8,13 +8,15 @@ package dev.glassworks.engine.vitro.compat
  * The set Vitro draws natively, in one place. A custom card with anything outside it goes to a web island on
  * purpose ([CardCompat]), so it looks the way Home Assistant draws it and only that card pays for a web engine.
  *
- * Built-in cards are the exception: the island runs a custom card's own JavaScript but has no HA frontend, so it
- * would draw a built-in card (a `tile`, say) as a plain summary. A built-in card Vitro draws stays native even when
- * its config is outside this set (an unsupported option, card_mod path or selector), and so does a custom container
- * Vitro draws with a built-in card inside it. [CardCompat.check] records what it would have fallen back for as a
- * note instead of routing the card to the island.
+ * Which options and values each card draws exactly as HA does is declared in `native-options.json` and checked by
+ * [NativeOptions] (the strict compat rule): a card with anything else falls back. Built-in cards are the exception to
+ * the island: it runs a custom card's own JavaScript but has no HA frontend, so it would draw a built-in card (a `tile`,
+ * say) as a plain summary. A built-in card, or a custom container Vitro draws with a built-in card inside it, sends its
+ * view to HA's frontend for such an option instead ([WebFallback]). Its card_mod is different: a built-in card stays
+ * native even when its card_mod is outside this set, and [CardCompat.check] records what it would have fallen back for
+ * as a note.
  *
- * Three lists decide a card's route:
+ * Three lists decide a card_mod sheet's route:
  * - **Supported**: drawn natively and faithfully.
  * - **Benign** ([BENIGN_PROPERTIES], [BENIGN_PSEUDO_CLASSES]): unsupported, but it doesn't change how the card looks
  *   on a touch panel, so it never forces an island. Each entry says why.
@@ -29,7 +31,8 @@ package dev.glassworks.engine.vitro.compat
  * declarations. In Markdown and clock sheets Vitro strips the flag and keeps the value at normal precedence, so where
  * an `!important` card-mod rule beats HA's own styles in HA, HA's rule can win in Vitro. The checker notes it.
  *
- * When a renderer learns something new, add it here, and the README's "What Vitro draws natively" table with it.
+ * When a renderer learns something new, add it here or to `native-options.json`, and the README's "What Vitro draws
+ * natively" table with it.
  */
 object VitroSupport {
     // ---------------------------------------------------------------------------------------------------------
@@ -86,32 +89,13 @@ object VitroSupport {
     // Options per card type that change what is drawn
     // ---------------------------------------------------------------------------------------------------------
 
-    /** Tile card `features[].type` values Vitro draws. */
-    val TILE_FEATURES: Set<String> = setOf(
-        "light-brightness", "select-options", "cover-open-close", "climate-hvac-modes", "target-temperature",
-        "fan-speed", "cover-position", "light-color-temp", "media-player-volume-slider", "toggle",
-        "media-player-playback", "light-color-favorites", "numeric-input", "vacuum-commands",
-    )
-
     /**
-     * `entities` rows with a `type:` Vitro draws (`EntityRowConfig.parse`). A row without one is a plain entity row,
-     * which Vitro draws; `attribute` and `cast` send their view to HA's frontend ([WebFallback.UNDRAWN_ROW_TYPES]).
+     * `entities` rows with a `type:` Vitro parses as HA's special rows (`EntityRowConfig.parse`). Which of them, and
+     * which plain entity rows, Vitro draws exactly as HA does is `native-options.json`'s `entityRow` ([NativeOptions]).
      */
     val ENTITIES_ROW_TYPES: Set<String> = setOf(
         "divider", "section", "button", "call-service", "perform-action", "text", "weblink", "buttons", "conditional",
     )
-
-    /** `picture-elements` element types Vitro draws (`conditional` and `image` elements are not). */
-    val PICTURE_ELEMENT_TYPES: Set<String> = setOf("state-icon", "state-label", "state-badge", "icon", "service-button")
-
-    /** `custom:mushroom-chips-card` chip types Vitro draws; `conditional` wraps one of the others. */
-    val CHIP_TYPES: Set<String> = setOf("entity", "template", "weather", "light", "action", "menu", "back", "spacer", "conditional")
-
-    /** `custom:bubble-card` `card_type` values Vitro draws (the default is `button`). */
-    val BUBBLE_CARD_TYPES: Set<String> = setOf("button", "separator")
-
-    /** `custom:layout-card` `layout_type` values (with or without `custom:`). */
-    val LAYOUT_CARD_TYPES: Set<String> = setOf("masonry-layout", "horizontal-layout", "vertical-layout", "grid-layout")
 
     // ---------------------------------------------------------------------------------------------------------
     // custom:button-card (v7.0.1). Its JavaScript (`[[[ ]]]`) always goes to an island; this is the rest.
@@ -224,14 +208,6 @@ object VitroSupport {
     /** Swiper parameters that only matter with a pointer or are hints, never the look. */
     val SWIPE_CARD_BENIGN_PARAMETERS: Set<String> = setOf(
         "speed", "grabCursor", "keyboard", "mousewheel", "simulateTouch", "observer", "observeParents", "roundLengths",
-    )
-
-    /** Card options Vitro doesn't draw, by card type: having one sends the card to an island. */
-    val UNSUPPORTED_OPTIONS: Map<String, Map<String, String>> = mapOf(
-        "entities" to mapOf(
-            "header" to "an entities header (picture or buttons)",
-            "footer" to "an entities footer (buttons, graph or picture)",
-        ),
     )
 
     // ---------------------------------------------------------------------------------------------------------
@@ -418,7 +394,6 @@ object VitroSupport {
         "white-space: nowrap" to "Vitro may wrap the line; it only shows when the text doesn't fit",
         "position: relative" to "Vitro ignores the small offset (`top`, `left`, ...)",
         "box-shadow: glow" to "drawn as an elevation shadow, not a colored glow",
-        "tile features_position: inline" to "Vitro puts the features under the tile; #792",
         "card_mod.class" to "Vitro ignores card_mod classes; they only matter with a card-mod theme",
         "card variable" to "Vitro doesn't read this custom property on this card; HA's card may",
         "templated selector" to "a selector built by a template isn't checked",

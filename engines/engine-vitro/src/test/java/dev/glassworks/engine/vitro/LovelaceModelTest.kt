@@ -265,8 +265,14 @@ class LovelaceModelTest {
 
     @Test
     fun tierTwoIsThePopularCustomCardsWithNativeFastPaths() {
-        for (t in listOf("custom:mushroom-entity-card", "custom:bubble-card", "custom:mini-graph-card", "custom:clock-weather-card")) {
+        for (t in listOf("custom:mushroom-entity-card", "custom:mushroom-template-card", "custom:mushroom-chips-card", "custom:swipe-card")) {
             assertEquals("$t is Tier 2", CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "$t"}""")))
+        }
+        // A fast path that doesn't match its card (the strict compat rule) goes to the island when a Lovelace resource
+        // provides its script, and is drawn natively only when none does.
+        for (t in listOf("custom:bubble-card", "custom:mini-graph-card", "custom:clock-weather-card")) {
+            assertEquals("$t with its script", CardTier.WEB_ISLAND, CardRouter.tier(card("""{"type": "$t"}""")))
+            assertEquals("$t without one", CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "$t"}"""), dev.glassworks.engine.vitro.compat.IslandScripts.of(emptyList())))
         }
     }
 
@@ -293,7 +299,7 @@ class LovelaceModelTest {
                      {"type": "tile", "entity": "light.a"},
                      {"type": "custom:acme-floorplan-card"}
                    ]},
-                   {"type": "custom:mini-graph-card", "entities": ["sensor.kitchen_temp"]}
+                   {"type": "custom:mushroom-entity-card", "entity": "sensor.kitchen_temp"}
                  ]}
                ],
                "cards": [{"type": "entities", "entities": ["sensor.kitchen_temp"]}]}""",
@@ -604,6 +610,8 @@ class LovelaceModelTest {
             "http://192.0.2.10:8123/wall-test/living",
             "http://192.0.2.10:8123/clarity-ref",
             "https://homeassistant.local:8123/dashboard-wall/home?kiosk=1",
+            // A dot in a view's path isn't a file.
+            "http://192.0.2.10:8123/wall-test/v1.2",
         )) {
             assertTrue("$u is a dashboard", LovelaceParser.isDashboardUrl(u))
         }
@@ -625,6 +633,10 @@ class LovelaceModelTest {
             "http://192.0.2.10:8123/api/camera_proxy/camera.porch",
             "http://192.0.2.10:8123/local/page.html",
             "http://192.0.2.10:8123/hacsfiles/acme/acme-card.js",
+            // A page some other server hands out, such as Clarity's SurfaceFlinger check: the fallback draws it.
+            "http://127.0.0.1:8090/clarity/page/sfcheck.html",
+            "http://192.0.2.10:8123/wall-test/plan.HTM",
+            "http://192.0.2.10:8123/wall-test/report.json",
         )) {
             assertFalse("$u is not a dashboard", LovelaceParser.isDashboardUrl(u))
         }

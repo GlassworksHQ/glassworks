@@ -9,6 +9,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
+import com.sun.net.httpserver.HttpServer
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.model.LovelaceParser
@@ -25,6 +26,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
+import java.net.InetSocketAddress
 
 /**
  * Can one card config or one entity state Vitro doesn't expect throw on the main thread? Every native card type ×
@@ -147,12 +149,24 @@ class HostileConfigFuzzTest {
 
     @After fun stopListening() {
         VitroFailures.listener = null
+        ha.stop(0)
     }
+
+    /**
+     * Home Assistant for the cards' pictures (a media card's background, an image path): on loopback, with none, so
+     * each of the run's thousands of loads ends at once instead of waiting out a timeout on a real address.
+     */
+    private val ha = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+        createContext("/") { ex -> ex.sendResponseHeaders(404, -1); ex.close() }
+        start()
+    }
+    private val haBase = "http://127.0.0.1:${ha.address.port}"
 
     @Test fun everyNativeCardSurvivesHostileConfigsAndStates() {
         val failures = LinkedHashMap<String, String>()
         var cases = 0
         val only = System.getProperty("fuzzTypes")?.split(',')?.toSet()
+        val pendingBefore = VitroCardContext.pendingImageLoads.get()
         for (type in types.filter { only == null || it in only }) for (domain in domains) {
             val e = "$domain.fuzz"
             val configs = hostileConfigs(type, e)
@@ -172,6 +186,8 @@ class HostileConfigFuzzTest {
                 }
             }
         }
+        // The cards' picture loads, all answered: none is left to land in a later test.
+        awaitImageLoads(pendingBefore, timeoutMs = 30_000)
         println("HostileConfigFuzzTest: $cases cases, ${failures.size} distinct failures")
         failures.forEach { (k, v) -> println("  $k -> $v") }
         assertTrue("${failures.size} distinct throws over $cases cases:\n" + failures.entries.joinToString("\n") { "${it.key} -> ${it.value}" }, failures.isEmpty())
@@ -183,7 +199,7 @@ class HostileConfigFuzzTest {
         val vv = VitroView(activity, store, 0xFF000000.toInt())
         vv.contextFactory = { theme ->
             VitroCardContext(
-                context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
+                context = activity, haBase = haBase, store = store, theme = theme, resources = emptyList(),
                 accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
                 fetchHistory = { _, _, done -> done(emptyMap()) }, subscribeTemplate = { _, cb -> cb("x"); {} },
             )

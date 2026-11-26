@@ -8,13 +8,14 @@ import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.EntityFilterConfig
-import dev.glassworks.engine.vitro.model.EntityRowConfig
 import dev.glassworks.engine.vitro.model.NATIVE_VIEW_TYPES
 import dev.glassworks.engine.vitro.model.ViewConfig
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * What Vitro hands to Home Assistant's own frontend (the fallback page) instead of drawing it, so a panel never shows
- * an empty page, an empty card or a missing row where HA draws something.
+ * an empty page, an empty card, a missing row or a card drawn differently from HA's.
  *
  * - **Strategies.** A dashboard, view or section saved as a `strategy:` holds no cards: HA's frontend generates them
  *   in JavaScript (its built-in strategies, or a custom one from a Lovelace resource), and no WebSocket command returns
@@ -25,8 +26,11 @@ import dev.glassworks.engine.vitro.model.ViewConfig
  *   own script but has no HA frontend, so a built-in card there is an empty element that still costs a browser
  *   session. A view with one goes to HA's page, which draws every card in it. So does a `shortcut` card whose
  *   default label or icon is a panel's, a view's or an action's name, which only HA's frontend knows.
- * - **Special `entities` rows Vitro doesn't draw** ([UNDRAWN_ROW_TYPES]). Without this, an `attribute` row would
- *   show the entity's state instead of the attribute. A view with one goes to HA's page.
+ * - **The strict compat rule** ([NativeOptions]): a built-in card Vitro draws claims its config only when it draws
+ *   every option and value in it as HA does (an `entities` row of a domain whose control Vitro doesn't draw, a tile
+ *   feature, a double-tap action, ...). So does a custom card that holds built-in cards ([CardCompat.staysNative]),
+ *   which the island can't draw, and the view's own config: its header, footer and sidebar, its sections and badges.
+ *   Anything else sends the view to HA's page. A custom card the island can draw goes there instead ([CardCompat]).
  *
  * A custom card's island runs its own script, so it draws as in HA, with two exceptions that come here: a custom card
  * that wraps a built-in card Vitro doesn't draw (the reason walks every card a card builds, [CardRouter.producedCards]),
@@ -34,13 +38,6 @@ import dev.glassworks.engine.vitro.model.ViewConfig
  * ([IslandFrontend], the `learned` reasons of [viewReason]). No card is named here: the island finds them itself.
  */
 object WebFallback {
-    /**
-     * HA's special `entities` rows (`hui-*-row` in its frontend) Vitro doesn't draw yet: `attribute` (its value needs
-     * HA's attribute formatting) and `cast`. Rows Vitro does draw: plain entity rows (also with an explicit `*-entity`
-     * type), and [EntityRowConfig.SPECIAL_TYPES]. A `custom:` row with an `entity` is drawn as a plain entity row.
-     */
-    val UNDRAWN_ROW_TYPES: Set<String> = setOf("attribute", "cast")
-
     /** Why the whole [dashboard] goes to HA's page, or null when Vitro draws it. */
     fun dashboardReason(dashboard: DashboardConfig): String? =
         if (dashboard.strategy) "a strategy dashboard (HA's frontend generates its views)" else null
@@ -53,8 +50,9 @@ object WebFallback {
         if (view.strategy) return "a strategy view (HA's frontend generates its cards)"
         if (view.type !in NATIVE_VIEW_TYPES) return "a `${view.type}` view (a layout Vitro doesn't draw)"
         if (view.sections.any { it.strategy }) return "a strategy section (HA's frontend generates its cards)"
-        for (card in view.cards) cardReason(card, learned)?.let { return it }
-        for (section in view.sections) for (card in section.cards) cardReason(card, learned)?.let { return it }
+        NativeOptions.viewReasons(view.raw).firstOrNull()?.let { return it }
+        // Only the cards the view builds: a panel view's first card, a sections view's section cards.
+        for (root in CardRouter.viewRoots(view)) cardReason(root.card, learned)?.let { return it }
         return null
     }
 
@@ -62,30 +60,43 @@ object WebFallback {
      * Why [card], or a card it builds, needs HA's frontend, or null when Vitro or an island draws all of it.
      * [learned]: as for [viewReason].
      */
-    fun cardReason(card: CardConfig, learned: ((CardConfig) -> String?)? = null): String? {
+    fun cardReason(card: CardConfig, learned: ((CardConfig) -> String?)? = null): String? = cardReason(card, learned, true)
+
+    /**
+     * [cardReason]; [options]: false for a config Vitro made itself (entity-filter's and auto-entities' inner card),
+     * whose keys aren't all the user's.
+     */
+    private fun cardReason(card: CardConfig, learned: ((CardConfig) -> String?)?, options: Boolean): String? {
         val type = card.type
         if (!type.startsWith("custom:") && type !in VitroSupport.CORE_CARD_TYPES) return "the built-in `$type` card"
         learned?.invoke(card)?.let { return it }
-        if (type == "entities") undrawnRow(card)?.let { return it }
         if (type == "shortcut") shortcutReason(card)?.let { return it }
-        // Vitro has no double tap yet: a card it newly draws whose double-tap action does something stays HA's.
-        if ((type == "shortcut" || type == "alert") && hasDoubleTap(card.raw)) return "a `$type` card with a double-tap action"
         // An iframe of HA's own pages (a relative or root-relative `url`) needs HA's origin: HA sends
         // `X-Frame-Options: SAMEORIGIN`, so a frame in a loopback island page is refused. HA's frontend draws it.
         if (type == "iframe" && sameOriginIframe(card.raw.optString("url", ""))) return "an `iframe` card of a Home Assistant page"
-        // Vitro's actions don't open Assist.
-        if (type == "alert" && listOf("tap_action", "hold_action").any { card.raw.optJSONObject(it)?.optString("action") == "assist" }) {
-            return "an `alert` card that opens Assist"
+        // The island can't draw this card (it's built in, or holds built-in cards): what its native card doesn't draw
+        // as HA does goes to HA's frontend.
+        if (options && card.nativeOnly) card.unsupportedOptions.firstOrNull()?.let { return it }
+        if (type == "markdown") CardCompat.markdownReasons(card.raw.optString("content", "")).firstOrNull()?.let { return it }
+        // auto-entities' inner card holds what it matched in its `card_param` field, which Vitro wrote: the user's own
+        // options are the rest of it, and the explicit `entities:` entries, which it always lists there (the ones a
+        // filter adds depend on live states). Under `card_param: cards` those entries are cards, checked on their own.
+        val inner = if (type == "custom:auto-entities") CardRouter.builtChildren(card).size else -1
+        for (child in CardRouter.producedCards(card)) {
+            if (child.index == inner) {
+                val written = card.raw.optString("card_param", "entities").ifEmpty { "entities" }
+                val own = JSONObject(child.value.raw.toString()).apply {
+                    remove(written)
+                    if (written != "cards") card.raw.optJSONArray("entities")?.let { put(written, JSONArray(it.toString())) }
+                }
+                if (child.value.nativeOnly) NativeOptions.cardReasons(child.value.type, own).firstOrNull()?.let { return it }
+                cardReason(child.value, learned, false)?.let { return it }
+            } else {
+                cardReason(child.value, learned, true)?.let { return it }
+            }
         }
-        // A footer (a graph, buttons, a picture) under the statistic isn't drawn natively.
-        if (type == "statistic" && card.raw.has("footer") && !card.raw.isNull("footer")) return "a `statistic` card with a footer"
-        // The energy dashboard's date picker drives such a card: it lives in HA's frontend (an energy card).
-        if (type == "statistic" && (card.raw.optBoolean("energy_date_selection", false) || card.raw.optString("period") == "energy_date_selection")) {
-            return "a `statistic` card that follows the energy date picker"
-        }
-        val children = CardRouter.producedCards(card).map { it.value } +
-            (if (type == "entity-filter") listOf(EntityFilterConfig.innerCard(card)) else emptyList())
-        for (child in children) cardReason(child, learned)?.let { return it }
+        // HA builds the passing entities into the inner card; its options were checked with entity-filter's.
+        if (type == "entity-filter") cardReason(EntityFilterConfig.innerCard(card), learned, false)?.let { return it }
         return null
     }
 
@@ -93,42 +104,6 @@ object WebFallback {
     internal fun sameOriginIframe(url: String): Boolean {
         val u = url.trim()
         return !Regex("""^[A-Za-z][A-Za-z0-9+.\-]*://""").containsMatchIn(u)
-    }
-
-    /** A tap or hold action that opens Assist, which Vitro's actions can't. */
-    private fun opensAssist(o: org.json.JSONObject): Boolean =
-        listOf("tap_action", "hold_action").any { o.optJSONObject(it)?.optString("action") == "assist" }
-
-    /** A `double_tap_action` that does something (Vitro binds tap and hold, not double tap). */
-    private fun hasDoubleTap(o: org.json.JSONObject): Boolean =
-        o.optJSONObject("double_tap_action")?.optString("action", "none").let { it != null && it != "none" }
-
-    /**
-     * Why a row in [card]'s `entities` needs HA's frontend, a conditional row's row included, or null: a row type
-     * Vitro doesn't draw, or a button row (or a chip of a buttons row) with a double-tap action, which Vitro has no
-     * gesture for yet.
-     */
-    private fun undrawnRow(card: CardConfig): String? {
-        val rows = card.raw.optJSONArray("entities") ?: return null
-        fun walk(row: Any?): String? {
-            val o = row as? org.json.JSONObject ?: return null
-            val t = o.optString("type", "")
-            if (t in UNDRAWN_ROW_TYPES) return "an `$t` row in an entities card"
-            if (t in setOf("button", "call-service", "perform-action") && hasDoubleTap(o)) return "a `$t` row with a double-tap action"
-            if (t in setOf("button", "call-service", "perform-action") && opensAssist(o)) return "a `$t` row that opens Assist"
-            if (t == "buttons") {
-                val chips = o.optJSONArray("entities")
-                if (chips != null && (0 until chips.length()).any { chips.optJSONObject(it)?.let(::hasDoubleTap) == true }) {
-                    return "a `buttons` row with a double-tap action"
-                }
-                if (chips != null && (0 until chips.length()).any { chips.optJSONObject(it)?.let(::opensAssist) == true }) {
-                    return "a `buttons` row that opens Assist"
-                }
-            }
-            return if (t == "conditional") walk(o.opt("row")) else null
-        }
-        for (i in 0 until rows.length()) walk(rows.opt(i))?.let { return it }
-        return null
     }
 
     /**

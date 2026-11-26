@@ -110,6 +110,57 @@ class Home(unittest.TestCase):
         self.assertGreaterEqual(len(out), 5)
         self.assertTrue(all(r["min"] <= r["mean"] <= r["max"] and r["end"] - r["start"] == 3600000 for r in out))
 
+    def test_a_statistics_bucket_reads_every_value_it_held(self):
+        # A spike in the last minutes of an hour, and a gap: HA's hourly row sees both (12 fixed samples missed the spike).
+        self.case({"states": {"sensor.m": {"state": "20", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}},
+                              "sensor.c": {"state": "15", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}}},
+                   "history": {"sensor.m": {"points": [["-3h08m", "10"], ["-2h11m", "40"], ["-2h08m", "20"],
+                                                       ["-1h38m", "unavailable"], ["-1h08m", "20"]]},
+                               "sensor.c": {"points": [["-3h08m", "0"], ["-2h10m", "5"], ["-2h08m", "15"]]}}})
+        start = H.NOW - 3 * 3600 - 8 * 60     # 7:00, the top of an hour
+        m = H.statistics(["sensor.m"], H.iso(start), None, "hour", ["mean", "min", "max"])["sensor.m"]
+        # 7:00-8:00: 10 for 57 minutes, then 40 for the last 3 (the change at 8:00 starts the next hour).
+        self.assertEqual((m[0]["min"], m[0]["max"], m[0]["mean"]), (10.0, 40.0, round((10 * 57 + 40 * 3) / 60, 6)))
+        # 8:00-9:00: 20 for 30 minutes, then unavailable: the mean is over the time it held a number.
+        self.assertEqual((m[1]["min"], m[1]["max"], m[1]["mean"]), (20.0, 20.0, 20.0))
+        # Two points at one instant: only the last holds (10 straight to 30), so the 0 between them is never read.
+        self.case({"states": {"sensor.m": {"state": "30", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}}},
+                   "history": {"sensor.m": {"points": [["-3h08m", "10"], ["-2h38m", "0"], ["-2h38m", "30"]]}}})
+        same = H.statistics(["sensor.m"], H.iso(start), None, "hour", ["mean", "min", "max"])["sensor.m"][0]
+        self.assertEqual((same["min"], same["max"], same["mean"]), (10.0, 30.0, 20.0))
+        # The last at that instant is the value it had before: nothing changed, for the state, history and statistics.
+        self.case({"states": {"sensor.m": {"state": "10", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}}},
+                   "history": {"sensor.m": {"points": [["-3h08m", "10"], ["-2h38m", "0"], ["-2h38m", "10"]]}}})
+        same = H.statistics(["sensor.m"], H.iso(start), None, "hour", ["mean", "min", "max"])["sensor.m"][0]
+        self.assertEqual((same["min"], same["max"], same["mean"]), (10.0, 10.0, 10.0))
+        self.assertEqual([r["s"] for r in H.history(["sensor.m"], H.iso(start), None)["sensor.m"]], ["10"])
+        self.assertEqual((H.states()["sensor.m"]["state"], H.states()["sensor.m"]["last_changed"]), ("10", H.NOW - 3 * 3600 - 8 * 60))
+        # The last in the fixture's order, not the largest state: 30 then 0 at one instant is 0.
+        self.case({"states": {"sensor.m": {"state": "0", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}}},
+                   "history": {"sensor.m": {"points": [["-3h08m", "20"], ["-2h38m", "30"], ["-2h38m", "0"]]}}})
+        same = H.statistics(["sensor.m"], H.iso(start), None, "hour", ["min", "max"])["sensor.m"][0]
+        self.assertEqual((same["min"], same["max"], H.states()["sensor.m"]["state"]), (0.0, 20.0, "0"))
+        self.case({"states": {"sensor.c": {"state": "15", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}}},
+                   "history": {"sensor.c": {"points": [["-3h08m", "0"], ["-2h10m", "5"], ["-2h08m", "15"]]}}})
+        c = H.statistics(["sensor.c"], H.iso(start), None, "hour", ["change", "state"])["sensor.c"]
+        # The counter's step at 7:58 lands in 7:00-8:00; its step at 8:00 in the next hour.
+        self.assertEqual([(r["change"], r["state"]) for r in c[:2]], [(5.0, 5.0), (10.0, 15.0)])
+
+    def test_a_meter_reset_counts_its_new_value_as_the_recorder_does(self):
+        start = H.NOW - 3 * 3600 - 8 * 60     # 7:00, the top of an hour
+        self.case({"states": {"sensor.e": {"state": "5", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}}},
+                   "history": {"sensor.e": {"points": [
+                       ["-3h08m", "100"], ["-2h38m", "110"],                     # 7:00-8:00: +10
+                       ["-2h08m", "0"], ["-1h38m", "10"], ["-1h18m", "4"],     # 8:00-9:00: a reset at 8:00, +10, a reset to 4
+                       ["-58m", "3.8"], ["-38m", "5"]]}}})                     # 9:00-10:00: a drop under 10% is no reset
+        rows = H.statistics(["sensor.e"], H.iso(start), None, "hour", ["change", "state", "sum"])["sensor.e"]
+        self.assertEqual([(r["change"], r["state"], r["sum"]) for r in rows[:3]],
+                         [(10.0, 110.0, 10.0), (14.0, 4.0, 24.0), (1.0, 5.0, 25.0)])
+        # A total (with last_reset) never resets on a drop: it's a negative change.
+        self.case({"states": {"sensor.t": {"state": "4", "attributes": {"state_class": "total", "unit_of_measurement": "kWh"}}},
+                   "history": {"sensor.t": {"points": [["-3h08m", "10"], ["-2h38m", "4"]]}}})
+        self.assertEqual(H.statistics(["sensor.t"], H.iso(start), None, "hour", ["change"])["sensor.t"][0]["change"], -6.0)
+
     def test_statistic_during_period_reads_the_window_itself(self):
         # A measurement that drops from 100 to 20 at 9:30 (local): a rolling 30 minutes back from 10:08 holds 20 only.
         self.case({"states": {"sensor.m": {"state": "20", "attributes": {"state_class": "measurement", "unit_of_measurement": "W"}},

@@ -1,5 +1,6 @@
 {
  "title": "Calendar: the day view, an all-day event and a timed one",
+ "route": "frontend",
  "card": {
   "type": "calendar",
   "entities": [

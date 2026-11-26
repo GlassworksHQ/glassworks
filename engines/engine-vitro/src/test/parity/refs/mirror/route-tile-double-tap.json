@@ -1,0 +1,163 @@
+{
+ "case": "route-tile-double-tap",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "Hallway Ceiling Light Hallway Ceiling Ring",
+   "x": 56,
+   "y": 12.61,
+   "w": 266.11,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "5%",
+   "x": 56,
+   "y": 32,
+   "w": 16.33,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.hallway_ceiling_ring": {
+   "s": "on",
+   "a": {
+    "min_color_temp_kelvin": 2702,
+    "max_color_temp_kelvin": 6535,
+    "supported_color_modes": [
+     "color_temp",
+     "xy"
+    ],
+    "color_mode": "xy",
+    "brightness": 13,
+    "color_temp_kelvin": null,
+    "hs_color": [
+     34.878,
+     96.471
+    ],
+    "rgb_color": [
+     255,
+     152,
+     9
+    ],
+    "xy_color": [
+     0.579995,
+     0.4
+    ],
+    "off_with_transition": false,
+    "off_brightness": null,
+    "friendly_name": "Hallway Ceiling Light Hallway Ceiling Ring",
+    "supported_features": 40
+   },
+   "lc": 1794484080,
+   "lu": 1794484080
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.hallway_ceiling_ring",
+    "pl": "zha",
+    "tk": "light",
+    "di": "device-1",
+    "en": "Hallway Ceiling Ring",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Hallway Ceiling Light"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

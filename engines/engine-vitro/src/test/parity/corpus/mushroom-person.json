@@ -1,5 +1,6 @@
 {
  "title": "Mushroom person card: a person at home, with their picture",
+ "route": "island",
  "expect": {
   "person.sam": "home"
  },

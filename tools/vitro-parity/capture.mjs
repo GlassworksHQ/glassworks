@@ -48,7 +48,7 @@ import { buildDisplay, referencedAreas } from './lib/display.mjs';
 import { wsRecorder, snapshotCalls, pendingOneShots, pendingFirstEvents, restHistoryRequest, keepCall } from './lib/wsdata.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 import { FIXTURE_PREFIX, fixtureFile, fixtureResources } from './lib/fixtures.mjs';
-import { captureMode, capturedWithTouch } from './lib/pointer.mjs';
+import { afterGrow, captureMode, capturedWithTouch } from './lib/pointer.mjs';
 import { launch } from './lib/browser.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -1029,8 +1029,13 @@ async function capture() {
             // the slots and the texts below all describe that one layout (lib/pointer.mjs).
             mode = captureMode({ touch: touchPages.has(page), docHeight: info.docH, viewportHeight: page.viewportSize().height, slots: info.slots, dialog: Boolean(c.more_info) });
             if (mode === 'grow') {
-              await growTo(page, Math.ceil(info.docH));
-              ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
+              // The page may grow with the window (a height in vh): after it settles, it must fit the window it was
+              // grown for, or the screenshot would cut it short. Grown again if not, a few times at most.
+              for (let grows = 1; ; grows++) {
+                await growTo(page, Math.ceil(info.docH));
+                ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
+                if (afterGrow({ docHeight: info.docH, viewportHeight: page.viewportSize().height, grows }) === 'fits') break;
+              }
             }
             if (mode === 'pinned') {
               // The whole capture with a fine pointer, as its reference will say: touch off before anything is
