@@ -77,8 +77,9 @@ class MasterVolume(
             started = true
             val old = store.takeOldVolume()
             when {
-                // The app stopped mid-alert: the stream is still at full.
-                store.raised -> { store.raised = false; push() }
+                // The app stopped mid-alert: the stream is still at full. The mark goes once the stream is back, so a
+                // stop in between leaves it for the next start.
+                store.raised -> { push(); store.raised = false }
                 // The old volume scaled voice and announcements on top of the stream: keep them as loud as they were.
                 old != null -> { store.level = if (fixed()) old else streamLevel() * old.coerceIn(0f, 1f); push() }
                 // A first start: Android's level is the panel's. A mute saved before (Home Assistant's) still holds.
@@ -93,8 +94,11 @@ class MasterVolume(
 
     val muted: Boolean get() = read { store.muted }
 
-    /** For the players the app owns: 1 while Android's stream carries the volume, the level itself where the volume is fixed. */
-    val gain: Float get() = read { if (!fixed()) 1f else if (store.muted) 0f else store.level.coerceIn(0f, 1f) }
+    /**
+     * For the players the app owns: 1 while Android's stream carries the volume, the level itself where the volume
+     * is fixed (0 muted), and 1 there too while a critical alert plays ([full]).
+     */
+    val gain: Float get() = read { if (!fixed() || raises > 0) 1f else if (store.muted) 0f else store.level.coerceIn(0f, 1f) }
 
     fun set(level: Float) = write { store.level = level.coerceIn(0f, 1f) }
 
@@ -110,23 +114,32 @@ class MasterVolume(
     /**
      * Full volume, unmuted, until the returned call or [maxMs], whichever comes first (a sound cut short never calls
      * back). Overlapping raises share one; the stream goes back to the level, or to mute, when the last one ends.
-     * Changes meanwhile are kept for then. Nothing on a device whose volume is fixed.
+     * Changes meanwhile are kept for then. On a device whose volume is fixed the stream stays put: [gain] is 1
+     * instead, and [onChange] tells the players at the start and the end.
      */
     fun full(maxMs: Long): () -> Unit {
         start()
-        synchronized(lock) {
-            if (raises == 0 && !fixed()) {
+        val tell = synchronized(lock) {
+            val first = raises == 0
+            if (first && !fixed()) {
                 pull()
                 store.raised = true
                 stream.index = stream.max
             }
             raises++
+            first && fixed()
         }
+        if (tell) onChange?.invoke()
         val ended = AtomicBoolean()
         val end = {
-            if (ended.compareAndSet(false, true)) synchronized(lock) {
-                raises--
-                if (raises == 0 && store.raised) { store.raised = false; push() }
+            if (ended.compareAndSet(false, true)) {
+                val last = synchronized(lock) {
+                    raises--
+                    // As at start: the mark goes once the stream is back.
+                    if (raises == 0 && store.raised) { push(); store.raised = false }
+                    raises == 0 && fixed()
+                }
+                if (last) onChange?.invoke()
             }
         }
         after(maxMs, end)

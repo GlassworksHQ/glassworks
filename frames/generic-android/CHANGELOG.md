@@ -17,7 +17,8 @@ line of each version is what Home Assistant shows on the update card. A change o
   with a mute switch. It is Android's media volume, so the device's volume buttons move it too. Home Assistant's
   *Speaker* volume and mute now control the same thing, so turning the panel down in Home Assistant quiets all of
   it, not only announcements. The Music page's slider is now called
-  **Music volume** and sets Music Assistant's level under it.
+  **Music volume** and sets Music Assistant's level under it. On the few devices whose volume Android keeps fixed,
+  such as some TV boxes, it still sets everything but the dashboard's own sound.
 - **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 

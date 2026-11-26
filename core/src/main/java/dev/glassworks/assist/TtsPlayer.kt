@@ -80,6 +80,8 @@ class TtsPlayer : AudioOutput {
     @Volatile private var gen = 0
     @Volatile private var track: AudioTrack? = null
     private val trackLock = Any()
+    /** Under [trackLock]: the gain every track plays at ([setVolume]). */
+    private var gain = 1f
     private val thread = Thread({ loop() }, "voice-tts").apply { isDaemon = true; start() }
 
     override fun begin(rate: Int, width: Int, channels: Int) {
@@ -100,6 +102,17 @@ class TtsPlayer : AudioOutput {
         synchronized(this) { ++gen }
         queue.clear()
         haltTrack()
+    }
+
+    /**
+     * The gain, 0 to 1, for this sound and the next ones: the master volume where the device keeps its volume fixed
+     * ([dev.glassworks.audio.MasterVolume.gain]), 1 elsewhere. Safe from any thread.
+     */
+    fun setVolume(gain: Float) {
+        synchronized(trackLock) {
+            this.gain = gain.coerceIn(0f, 1f)
+            try { track?.setVolume(this.gain) } catch (_: IllegalStateException) {}
+        }
     }
 
     fun release() {
@@ -182,7 +195,8 @@ class TtsPlayer : AudioOutput {
             .setBufferSizeInBytes(bufBytes) // >= 250 ms
             .build()
         t.play()
-        synchronized(trackLock) { track = t }
+        // Nothing is written yet: the gain is in place before the first sample. Under the lock, no change is lost.
+        synchronized(trackLock) { track = t; t.setVolume(gain) }
         VoiceLog.i("TTS stream: ${rate} Hz, ${width * 8}-bit, $channels ch")
     }
 

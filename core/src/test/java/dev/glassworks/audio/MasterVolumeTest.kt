@@ -25,8 +25,11 @@ class MasterVolumeTest {
             set(v) { at = v; writes += v }
     }
 
-    private class FakeStore(override var level: Float = -1f, override var muted: Boolean = false, var old: Float? = null) : VolumeStore {
+    private inner class FakeStore(override var level: Float = -1f, override var muted: Boolean = false, var old: Float? = null) : VolumeStore {
+        /** The stream's index each time the mark was cleared. */
+        val clearedAt = ArrayList<Int>()
         override var raised = false
+            set(v) { if (field && !v) clearedAt += stream.at; field = v }
         override fun takeOldVolume() = old.also { old = null }
     }
 
@@ -138,6 +141,31 @@ class MasterVolumeTest {
         volume.start()
         assertEquals(3, stream.at)
         assertFalse(store.raised)
+        assertEquals("the mark went once the stream was back: a stop in between retries", listOf(3), store.clearedAt)
+    }
+
+    @Test fun theMarkGoesOnlyOnceTheStreamIsBack() {
+        volume.set(0.2f)
+        volume.full(3_000)()
+        assertEquals(listOf(3), store.clearedAt)
+    }
+
+    @Test fun whereTheVolumeIsFixedACriticalAlertPlaysAtFullGainAndThePlayersHear() {
+        stream.fixed = true
+        volume.set(0.3f)
+        volume.mute(true)
+        var heard = 0
+        volume.onChange = { heard++ }
+        val a = volume.full(3_000)
+        val b = volume.full(3_000)
+        assertEquals("told once, at the start", 1, heard)
+        assertEquals(1f, volume.gain, 0f)
+        a()
+        assertEquals("one still plays", 1f, volume.gain, 0f)
+        b()
+        assertEquals("and at the end", 2, heard)
+        assertEquals("muted again", 0f, volume.gain, 0f)
+        assertTrue(stream.writes.isEmpty())
     }
 
     @Test fun theOldSpeakerVolumeKeepsVoiceAsLoudAsItWas() {

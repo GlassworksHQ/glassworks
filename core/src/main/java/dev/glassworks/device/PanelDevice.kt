@@ -556,7 +556,7 @@ class PanelDevice(
     }
 
     /** The chime player, made on first use (from the ESPHome, voice or main thread). */
-    private fun chimes(): TtsPlayer = synchronized(this) { chimePlayer ?: TtsPlayer().also { chimePlayer = it } }
+    private fun chimes(): TtsPlayer = synchronized(this) { chimePlayer ?: TtsPlayer().also { it.setVolume(volume.gain); chimePlayer = it } }
 
     /** Home Assistant is connected and listening to the panel's states now. */
     fun homeAssistantConnected(): Boolean = server?.hasSubscriber == true
@@ -810,12 +810,16 @@ class PanelDevice(
 
     /**
      * Android's media volume is the master ([volume]): the players play at full under it. Only where the device keeps
-     * its volume fixed do they scale themselves ([dev.glassworks.audio.MasterVolume.gain]).
+     * its volume fixed do they scale themselves ([dev.glassworks.audio.MasterVolume.gain]): the voice and media
+     * players, the chimes and notification sounds, and the panes' own players ([PanelEvent.VolumeGain]). The
+     * dashboard's audio can't be reached there.
      */
     private fun applyVolume() {
         val g = volume.gain
         voicePlayer.setVolume(g)
         mediaPlayer.setVolume(g)
+        synchronized(this) { chimePlayer }?.setVolume(g)
+        emit(PanelEvent.VolumeGain(g))
     }
 
     /**

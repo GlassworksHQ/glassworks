@@ -26,6 +26,13 @@ interface PanelEvent {
     /** Voice or an announcement holds the speaker (true) or let it go (false): other audio goes quiet locally. */
     data class SpeakerClaimed(val claimed: Boolean) : PanelEvent
 
+    /**
+     * The gain, 0 to 1, a pane's own audio players apply under the panel's master volume: 1 while Android's media
+     * stream carries the volume, the level itself (0 muted) on a device whose volume is fixed. Raised when the device
+     * starts and after each change.
+     */
+    data class VolumeGain(val gain: Float) : PanelEvent
+
     /** A timer reached zero. [name] is what Home Assistant sent ("" when unnamed). */
     data class TimerFinished(val name: String) : PanelEvent
 
