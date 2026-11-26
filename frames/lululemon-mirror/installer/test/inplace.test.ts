@@ -112,8 +112,17 @@ describe('a bundle this browser kept', () => {
     expect(keptBundleFits(old.bytes, { fiemap: fiemapOf(old), bootAnimationSize: 22_901 })).toBe(false); // Bluetooth's short description
     expect(keptBundleFits(old.bytes, { fiemap: fiemapOf(old), bootAnimation: { size: 22_901 } })).toBe(false);
     expect(keptBundleFits(old.bytes, { fiemap: fiemapOf(old), bootAnimation: null })).toBe(true); // a Mirror with none
-    const fresh = await buildFakeGwsbBundle({ secret: SECRET, metaPatch: { bootAnimation: { size: 22_901 } } });
-    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh), bootAnimationSize: 22_901 })).toBe(true);
+  });
+
+  it('fits with a boot animation only while the agent reports it, whole, in the same blocks', async () => {
+    const anim = { size: 22_901, extents: [{ logical: 0, physical: 4096 * 6000, length: 4096 * 6, flags: 1 }] };
+    const fresh = await buildFakeGwsbBundle({ secret: SECRET, metaPatch: { bootAnimation: { size: 22_901, fiemap: anim } } });
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh), bootAnimation: { size: 22_901, fiemap: anim } })).toBe(true);
+    const moved = { ...anim, extents: [{ logical: 0, physical: 4096 * 7000, length: 4096 * 6, flags: 1 }] };
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh), bootAnimation: { size: 22_901, fiemap: moved } })).toBe(false);
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh), bootAnimation: { size: 22_901, fiemap: { truncated: true } } })).toBe(false);
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh), bootAnimationSize: 22_901 })).toBe(false); // Bluetooth's: no file map to compare
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh) })).toBe(false);
   });
 
   it('doesn\'t fit when the agent\'s description carries no whole file map (it trims it for Bluetooth)', async () => {
@@ -207,6 +216,8 @@ describe('the build', () => {
       expect(Buffer.from(back.subarray(0, STOCK_BOOT_SIZE)).equals(Buffer.from(stockBoot))).toBe(true);
       expect(built.files?.['bootanimation.zip.orig']).toEqual(stockBoot);
       expect((built.manifest as { bootAnimation: { size: number; extents: unknown[] } }).bootAnimation).toMatchObject({ size: STOCK_BOOT_SIZE, extents: bootExtents });
+      // read back over adb after the restart, with services.jar
+      expect(built.readBack).toContainEqual({ path: '/system/media/bootanimation.zip', sha256: createHash('sha256').update(ours).digest('hex'), size: STOCK_BOOT_SIZE });
     }, 60_000);
 
     it.skipIf(!HAS_D8)('stays lululemon\'s when Kiln has no compact animation, and the write and restore leave its blocks alone', async () => {
@@ -219,6 +230,7 @@ describe('the build', () => {
       expect((await blocks(built.writes['system-in-place']!, 6000, 6)).every((x) => x === 0)).toBe(true); // untouched (DONT_CARE)
       expect((built.manifest as { bootAnimationLeft?: string }).bootAnimationLeft).toMatch(/compact boot animation/);
       expect(built.files?.['bootanimation.zip.orig']).toBeUndefined();
+      expect(built.readBack?.map((r) => r.path)).toEqual(['/system/framework/services.jar']);
     }, 60_000);
 
     it.skipIf(!HAS_D8)('stays lululemon\'s when the bundle\'s copy doesn\'t check out, and says why', async () => {

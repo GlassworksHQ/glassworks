@@ -143,18 +143,26 @@ function layoutOf(fiemap: unknown): string | undefined {
 /**
  * Whether a bundle this browser kept still fits the Mirror as its agent describes it now: the same services.jar can
  * sit in other blocks after a stock update or a reflash, so the kept bundle's file map must be the one the agent
- * reports today. When the agent's description carries no whole file map (it trims it to fit Bluetooth's 512 bytes),
- * Kiln can't tell, so it takes the bundle again.
+ * reports today. The same goes for the boot animation when the kept copy carries one: Kiln writes it in place too, so
+ * its file map must also be today's. When the agent's description carries no whole file map for either (it trims them
+ * to fit Bluetooth's 512 bytes), Kiln can't tell, so it takes the bundle again.
  */
 export function keptBundleFits(bundle: Uint8Array, agent: Record<string, unknown>): boolean {
   const now = layoutOf(agent.fiemap);
   if (!now) return false;
   // an agent that sends stock's boot animation (the whole object, or its size where the description is short) over a
   // copy from an agent that didn't: the fresh one lets Kiln change the boot animation too
-  const agentBoot = (agent.bootAnimation !== null && typeof agent.bootAnimation === 'object') || typeof agent.bootAnimationSize === 'number';
+  const agentAnim = agent.bootAnimation !== null && typeof agent.bootAnimation === 'object' ? agent.bootAnimation as { fiemap?: unknown } : undefined;
+  const agentBoot = !!agentAnim || typeof agent.bootAnimationSize === 'number';
   try {
     const meta = parseGwsbBundle(bundle).meta as BundleMeta;
-    if (agentBoot && !(meta.bootAnimation !== null && typeof meta.bootAnimation === 'object')) return false;
+    const keptAnim = meta.bootAnimation !== null && typeof meta.bootAnimation === 'object' ? meta.bootAnimation as { fiemap?: unknown } : undefined;
+    if (agentBoot && !keptAnim) return false;
+    if (keptAnim) {
+      // the kept animation's blocks must be the ones the agent reports now, from a whole file map
+      const animNow = layoutOf(agentAnim?.fiemap);
+      if (!animNow || layoutOf(keptAnim.fiemap) !== animNow) return false;
+    }
     return layoutOf(meta.fiemap) === now;
   } catch {
     return false;
@@ -350,6 +358,7 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
       const userdata = await cleanUserdata(o);
       const originalSha256 = await sha256Hex(jar);
       const patchedSha256 = await sha256Hex(patched.patched);
+      const bootPatchedSha256 = boot ? await sha256Hex(boot.ours) : '';
       // the same manifest as tools/mirror's surgical-adb --backup-dir, so its --undo restores from the download too
       const manifest = {
         version: 1,
@@ -368,12 +377,16 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
           restoreSparse: RESTORE_SPARSE,
         },
         // the restore sparse puts this back too: it covers every block the write changes
-        ...(boot ? { bootAnimation: { path: STOCK_BOOT_ANIMATION_PATH, size: boot.data.length, originalSha256: boot.sha256, patchedSha256: await sha256Hex(boot.ours), extents: boot.extents, origFile: ORIGINAL_BOOT } }
+        ...(boot ? { bootAnimation: { path: STOCK_BOOT_ANIMATION_PATH, size: boot.data.length, originalSha256: boot.sha256, patchedSha256: bootPatchedSha256, extents: boot.extents, origFile: ORIGINAL_BOOT } }
           : { bootAnimationLeft: bootSkipped }),
       };
-      // the Mirror's bootloader can't read a partition back (no fastboot upload): Kiln reads services.jar back over adb
+      // the Mirror's bootloader can't read a partition back (no fastboot upload): Kiln reads services.jar (and the boot
+      // animation, when written) back over adb
       // once the Mirror has started into it, before the app's install (kiln/AGENTS.md, writes are verified)
-      const readBack = [{ path: STOCK_SERVICES_JAR_PATH, sha256: patchedSha256, size: patched.patched.length }];
+      const readBack = [
+        { path: STOCK_SERVICES_JAR_PATH, sha256: patchedSha256, size: patched.patched.length },
+        ...(boot ? [{ path: STOCK_BOOT_ANIMATION_PATH, sha256: bootPatchedSha256, size: boot.ours.length }] : []),
+      ];
       return { writes: { 'system-in-place': blob(write), userdata }, restore: blob(restore), manifest, files: { [ORIGINAL_JAR]: jar, ...(boot ? { [ORIGINAL_BOOT]: boot.data } : {}) }, readBack };
     },
     keptMatches: keptBundleFits,
