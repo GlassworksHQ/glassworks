@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.AlertCardView
+import dev.glassworks.engine.vitro.cards.ButtonCardView
 import dev.glassworks.engine.vitro.cards.DateCardView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
 import dev.glassworks.engine.vitro.cards.HaErrorCardView
@@ -124,6 +125,18 @@ class NativeCardsAndRowsTest {
         all(c).filterIsInstance<TextView>().first { it.text == "Go" }.performClick()
         assertEquals(listOf("/lovelace/night"), navigations)
         assertTrue(icons(c).contains("mdi:bed"))
+    }
+
+    @Test fun aScriptToggleStartsItWhenOffAndStopsItWhileRunning() {
+        // HA's toggleEntity: turn_on unless the state is off ("closed", "locked", "off"), so a running script stops.
+        put("script.wake_up", "off", "friendly_name" to "Wake up")
+        val c = ButtonCardView(ctx(), card("""{"type": "button", "entity": "script.wake_up", "tap_action": {"action": "toggle"}}"""))
+        c.performClick()
+        idle()
+        put("script.wake_up", "on", "friendly_name" to "Wake up")
+        c.performClick()
+        idle()
+        assertEquals(listOf("script" to "turn_on", "script" to "turn_off"), calls.map { it.first to it.second })
     }
 
     @Test fun aCallServiceRowIsAButtonRowThatPerformsItsAction() {
