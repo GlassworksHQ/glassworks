@@ -252,6 +252,7 @@ class IframeCardView(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         ctx.main.removeCallbacks(releaseIfDetached)
+        dev.glassworks.engine.vitro.ui.VitroView.liftLayersAbove(this)
     }
 
     override fun onDetachedFromWindow() {

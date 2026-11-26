@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
+import dev.glassworks.engine.vitro.cards.IframeCardView
 import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.PictureCardView
@@ -320,6 +321,71 @@ class VitroPerfLeversTest {
             assertTrue("$type: the stack is big", VitroView.isBigCard(stack.width, stack.height, 1280, 800))
             assertEquals("$type: nor a stack around one", View.LAYER_TYPE_NONE, stack.layerType)
         }
+    }
+
+    // An island is a browser's SurfaceView: under a layer its picture never shows (every masonry island was blank on the
+    // S1 at 2bdca2e31, its page drawing and sizing the card behind the layer's pixels).
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun aCardHoldingAnIslandNeverGetsALayer() {
+        val store = EntityStore()
+        val cards = """{"type": "iframe", "url": "https://example.com/", "aspect_ratio": "60%"},
+            {"type": "vertical-stack", "cards": [{"type": "iframe", "url": "https://example.com/", "aspect_ratio": "60%"}]},
+            {"type": "markdown", "content": "# Big\n\nA\n\nB\n\nC\n\nD\n\nE\n\nF\n\nG\n\nH\n\nI"}"""
+        for (mode in VitroView.CardLayers.values()) for (type in listOf("masonry", "sidebar", "sections")) {
+            val vv = vitroView(store, """{"views": []}""")
+            vv.cardLayers = mode
+            val body = if (type == "sections") """"sections": [{"type": "grid", "cards": [$cards]}]""" else """"cards": [$cards]"""
+            vv.setDashboard(LovelaceParser.parseDashboard(JSONObject("""{"views": [{"title": "Home", "type": "$type", $body}]}""")), null)
+            vv.measure(View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY))
+            vv.layout(0, 0, 1280, 800)
+            val islands = all(vv).filterIsInstance<IframeCardView>()
+            assertEquals("$mode $type", 2, islands.size)
+            for (island in islands) {
+                // The card as its column or grid holds it (the stack's iframe inside the stack's view).
+                val held = generateSequence(island as View) { it.parent as? View }.takeWhile { it !== vv }.toList()
+                assertTrue("$mode $type: the iframe is big", VitroView.isBigCard(island.width, island.height, 1280, 800))
+                held.forEach { assertEquals("$mode $type: no layer on ${it.javaClass.simpleName} around an island", View.LAYER_TYPE_NONE, it.layerType) }
+            }
+            val markdown = generateSequence(all(vv).filterIsInstance<MarkdownCardView>().single() as View) { it.parent as? View }
+                .takeWhile { it !== vv }.toList()
+            assertTrue("$mode $type: the big card next to them keeps its layer", markdown.any { it.layerType == View.LAYER_TYPE_HARDWARE })
+        }
+    }
+
+    // An island a card makes later (an auto-entities match, a conditional's child) inside a card whose size can't change
+    // (sections, fixed grid_options.rows): the card's layer came first and no resize takes it off (Greptile on #947).
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun anIslandAddedLaterLiftsTheLayerOfACardOfFixedSize() {
+        val store = EntityStore()
+        val vv = vitroView(store, """{"views": []}""")
+        vv.cardLayers = VitroView.CardLayers.ALL
+        activity.setContentView(vv)
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject("""{"views": [{"title": "Home", "type": "sections",
+            "sections": [{"type": "grid", "cards": [{"type": "vertical-stack", "grid_options": {"rows": 4},
+                "cards": [{"type": "markdown", "content": "Nothing matches yet"}]}]}]}]}""")), null)
+        fun lay() {
+            vv.measure(View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY))
+            vv.layout(0, 0, 1280, 800)
+            idle()
+        }
+        lay()
+        val markdown = all(vv).filterIsInstance<MarkdownCardView>().single()
+        val above = generateSequence(markdown.parent as View) { it.parent as? View }.takeWhile { it !== vv }.toList()
+        assertTrue("the stack starts on a layer", above.any { it.layerType == View.LAYER_TYPE_HARDWARE })
+        val sizes = above.map { it.width to it.height }
+
+        // A match lands: the stack gains an iframe beside its markdown.
+        val island = IframeCardView(ctx(store), LovelaceParser.parseDashboard(JSONObject(
+            """{"views": [{"cards": [{"type": "iframe", "url": "https://example.com/", "aspect_ratio": "60%"}]}]}""",
+        )).views.single().cards.single())
+        (markdown.parent as ViewGroup).addView(island)
+        lay()
+
+        assertEquals("the stack kept its size (no resize to hear)", sizes, above.map { it.width to it.height })
+        val held = generateSequence(island as View) { it.parent as? View }.takeWhile { it !== vv }.toList()
+        held.forEach { assertEquals("no layer on ${it.javaClass.simpleName} over the island", View.LAYER_TYPE_NONE, it.layerType) }
     }
 
     @Test
