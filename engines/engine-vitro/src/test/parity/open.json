@@ -372,18 +372,6 @@
   "owner": "#928",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
- "s1/m-thermostat-climate-heat": {
-  "owner": "#799",
-  "reason": "Thermostat: HA's arcs are the dark heat/cool colors while idle and its numbers larger and higher; Vitro draws pastel arcs and smaller numbers, and its buttons sit lower (unavailable: HA greys the dial)"
- },
- "s1/m-thermostat-climate-heat-cool": {
-  "owner": "#799",
-  "reason": "Thermostat: HA's arcs are the dark heat/cool colors while idle and its numbers larger and higher; Vitro draws pastel arcs and smaller numbers, and its buttons sit lower (unavailable: HA greys the dial)"
- },
- "s1/m-thermostat-climate-unavailable": {
-  "owner": "#799",
-  "reason": "Thermostat: HA's arcs are the dark heat/cool colors while idle and its numbers larger and higher; Vitro draws pastel arcs and smaller numbers, and its buttons sit lower (unavailable: HA greys the dial)"
- },
  "s1/m-tile-alarm-control-panel-armed-away": {
   "owner": "#927",
   "reason": "Tile icon color: HA's stateColorCss (an unlocked or jammed lock red, a triggered alarm and a vacuum in error red, sunny weather yellow, a low battery red, an unknown or unavailable sensor grey); Vitro draws the domain's default color"

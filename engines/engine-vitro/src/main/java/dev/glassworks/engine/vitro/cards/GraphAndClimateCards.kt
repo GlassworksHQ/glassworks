@@ -807,6 +807,25 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
     private var currentMode: String? = null
     private var steppers: View? = null
     private var stepButtons: Pair<View, View>? = null
+    private var hasTarget = false
+
+    /** The dial's size class at the card's last width: HA shows the − and + only at the large size. */
+    private var dialSize = DialSize.LG
+
+    private fun showSteppers() {
+        val v = if (hasTarget && dialSize == DialSize.LG) VISIBLE else GONE
+        if (steppers?.visibility != v) steppers?.visibility = v
+    }
+
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            // The dial: the card's width inside its paddings (and the column's 12 px), at most its 262 px height.
+            val w = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight - ctx.px(24f)
+            dialSize = DialSize.of(minOf(w, ctx.px(262f)) / ctx.dp)
+            showSteppers()
+        }
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
+    }
 
     init {
         // hui-thermostat-card: a 48 px title row over the 262 px dial; the mode bar only when its feature is set
@@ -845,26 +864,30 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        fun stepBtn(symbol: String, sign: Int) = label(ctx, 22f, ctx.theme.primaryTextColor).apply {
-            text = symbol
-            gravity = Gravity.CENTER
+        // ha-outlined-icon-button: 48 px, a 1 px outline and a 24 px icon in the secondary text color.
+        fun stepBtn(icon: String, sign: Int) = FrameLayout(ctx.context).apply {
             contentDescription = stepperLabel(sign, null)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.TRANSPARENT)
-                setStroke(ctx.px(1f).coerceAtLeast(1), withAlpha(ctx.theme.secondaryTextColor, 0.5f))
+                setStroke(ctx.px(1f).coerceAtLeast(1), ctx.theme.secondaryTextColor)
             }
+            addView(MdiIconView(ctx.context).apply { setIcon(icon, ctx.theme.secondaryTextColor) },
+                LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
             isClickable = true
             applyHaRipple(this, 999f, ctx.theme.dark)
             setOnClickListener { dial.nudge(sign) }
         }
-        val btn = ctx.px(42f)
-        val minus = stepBtn("−", -1)
-        val plus = stepBtn("+", 1)
+        val btn = ctx.px(48f)
+        val minus = stepBtn("mdi:minus", -1)
+        val plus = stepBtn("mdi:plus", 1)
         stepButtons = minus to plus
-        steppers.addView(minus, LinearLayout.LayoutParams(btn, btn).apply { marginEnd = ctx.px(16f) })
+        // `.buttons`: 24 px apart, 10 px above the dial's bottom.
+        steppers.addView(minus, LinearLayout.LayoutParams(btn, btn).apply { marginEnd = ctx.px(24f) })
         steppers.addView(plus, LinearLayout.LayoutParams(btn, btn))
-        dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
+        dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            bottomMargin = ctx.px(10f)
+        })
         col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(262f)))
 
         if (showModes) col.addView(modeBar, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(46f)).apply { topMargin = ctx.px(8f) })
@@ -875,6 +898,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             bindHoldAction(holdFor(config.raw, eid), eid)
             // A water heater sets its tank through its own domain's service, and has no heat/cool range.
             val waterHeater = eid.startsWith("water_heater.")
+            dial.waterHeater = waterHeater
             dial.onCommit = commit@{ target ->
                 val domain = if (waterHeater) "water_heater" else "climate"
                 val s = ctx.store[eid]
@@ -910,9 +934,12 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                     stateLabel = s?.let { HaDisplay.stateLabel(it) } ?: mode.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) },
                     low = targets.low,
                     high = targets.high,
+                    hvacModes = (attrs["hvac_modes"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty(),
                 )
-                // HA shows the steppers only while there's a target (or a range) to step.
-                this.steppers?.visibility = if (targets.value != null || targets.isRange) VISIBLE else GONE
+                // HA shows the steppers only while there's a target (or a range) to step, and only at the dial's
+                // large size.
+                hasTarget = s?.state != "unavailable" && (targets.value != null || targets.isRange)
+                showSteppers()
                 styleSteppers()
                 val list = (attrs["hvac_modes"] as? List<*>)?.mapNotNull { it?.toString() }?.takeIf { it.isNotEmpty() }
                     ?: listOf("off", "heat", "cool")
@@ -928,8 +955,7 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
     private fun styleSteppers() {
         val (minus, plus) = stepButtons ?: return
         val handle = dial.selected.takeIf { dial.isRange }
-        val outline = handle?.let { dial.handleColor(it) }?.takeIf { it != ctx.theme.secondaryTextColor }
-            ?: withAlpha(ctx.theme.secondaryTextColor, 0.5f)
+        val outline = handle?.let { dial.handleColor(it) } ?: ctx.theme.secondaryTextColor
         for ((view, sign) in listOf(minus to -1, plus to 1)) {
             view.contentDescription = stepperLabel(sign, handle)
             (view.background as? GradientDrawable)?.setStroke(ctx.px(1f).coerceAtLeast(1), outline)

@@ -179,22 +179,6 @@
   "region": 0.47,
   "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
  },
- "mirror/thermostat-heat-cool": {
-  "pixel": 0.0892,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "region": 0.43,
-  "reason": "heat/cool with a range: since #821 Vitro draws both targets (20 and 24 °C, two handles, Idle) as HA does; left: Vitro's arcs are lighter and stop higher, its numbers and 'Idle' are ~20% smaller, and its +/- buttons smaller and lower (2026-11-25, fake HA, after #821/#824)"
- },
- "mirror/thermostat-water-heater": {
-  "pixel": 0.0485,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 3,
-  "region": 0.34,
-  "reason": "water heater on the thermostat card: HA labels the target 'Target' and 'Currently 48 °C' in green; Vitro shows the mode 'Eco' and '48.0 °C' in grey, and its handle and arc in grey (2026-11-25, fake HA)"
- },
  "mirror/tile-light": {
   "pixel": 0.022,
   "bounds": 0,
@@ -473,22 +457,6 @@
   "region": 0.47,
   "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
  },
- "s1/thermostat-heat-cool": {
-  "pixel": 0.0892,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "region": 0.43,
-  "reason": "heat/cool with a range: since #821 Vitro draws both targets (20 and 24 °C, two handles, Idle) as HA does; left: Vitro's arcs are lighter and stop higher, its numbers and 'Idle' are ~20% smaller, and its +/- buttons smaller and lower (2026-11-25, fake HA, after #821/#824)"
- },
- "s1/thermostat-water-heater": {
-  "pixel": 0.0485,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 3,
-  "region": 0.34,
-  "reason": "water heater on the thermostat card: HA labels the target 'Target' and 'Currently 48 °C' in green; Vitro shows the mode 'Eco' and '48.0 °C' in grey, and its handle and arc in grey (2026-11-25, fake HA)"
- },
  "s1/tile-light": {
   "pixel": 0.022,
   "bounds": 0,
@@ -653,22 +621,6 @@
   "missingText": 0,
   "region": 0.48,
   "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
- },
- "tablet/thermostat-heat-cool": {
-  "pixel": 0.0883,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 0,
-  "region": 0.43,
-  "reason": "heat/cool with a range: since #821 Vitro draws both targets (20 and 24 °C, two handles, Idle) as HA does; left: Vitro's arcs are lighter and stop higher, its numbers and 'Idle' are ~20% smaller, and its +/- buttons smaller and lower (2026-11-25, fake HA, after #821/#824)"
- },
- "tablet/thermostat-water-heater": {
-  "pixel": 0.0479,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 3,
-  "region": 0.34,
-  "reason": "water heater on the thermostat card: HA labels the target 'Target' and 'Currently 48 °C' in green; Vitro shows the mode 'Eco' and '48.0 °C' in grey, and its handle and arc in grey (2026-11-25, fake HA)"
  },
  "tablet/weather-forecast": {
   "pixel": 0.0137,

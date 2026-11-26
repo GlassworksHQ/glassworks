@@ -26,6 +26,7 @@ import android.view.accessibility.AccessibilityNodeProvider
 import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDisplay
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.KeyedText
 import dev.glassworks.engine.vitro.ui.MdiIcons
@@ -40,6 +41,23 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
+
+/** HA's size classes of a state control (`xs` < 130 px, `sm` < 190, `md` < 250, `lg`). */
+internal enum class DialSize {
+    XS, SM, MD, LG;
+
+    companion object {
+        fun of(widthCss: Float): DialSize = when {
+            widthCss < 130f -> XS
+            widthCss < 190f -> SM
+            widthCss < 250f -> MD
+            else -> LG
+        }
+    }
+}
+
+/** `ha-control-circular-slider`'s modes: from the start, to the end, or the whole ring. */
+internal enum class SliderMode { START, END, FULL }
 
 /** One end of a heat/cool range: HA's `low` (`target_temp_low`) and `high` (`target_temp_high`) targets. */
 internal enum class ClimateHandle { LOW, HIGH }
@@ -183,16 +201,18 @@ internal class ThermostatDialView(
         textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, size, ctx.context.resources.displayMetrics)
         typeface = VitroFonts.typeface(ctx.context, weight, size)
     }
-    private val labelPaint = textPaint(14f, Inter.MEDIUM).apply { textAlign = Paint.Align.CENTER }
-    private val bigPaint = textPaint(44f, Inter.REGULAR)
-    private val unitPaint = textPaint(13f, Inter.REGULAR)
-    private val decPaint = textPaint(20f, Inter.REGULAR)
-    private val curPaint = textPaint(14f, Inter.MEDIUM)
+    // The info texts: sized for the dial's size class in [sizeTexts].
+    private val labelPaint = textPaint(16f, Inter.MEDIUM).apply { textAlign = Paint.Align.CENTER }
+    private val bigPaint = textPaint(57f, Inter.REGULAR)
+    private val unitPaint = textPaint(57f * 0.33f, Inter.REGULAR)
+    private val decPaint = textPaint(57f * 0.42f, Inter.REGULAR)
+    private val curPaint = textPaint(16f, Inter.MEDIUM)
     private val offPaint = textPaint(36f, Inter.REGULAR).apply { textAlign = Paint.Align.CENTER }
     private val offCurPaint = textPaint(16f, Inter.MEDIUM)
-    private val bigSize = bigPaint.textSize
-    private val unitSize = unitPaint.textSize
-    private val decSize = decPaint.textSize
+    private var sizedFor: DialSize? = null
+
+    /** CSS px (`sp`, so the font scale applies as HA's `--ha-font-size-scale` does) to device px. */
+    private fun cssText(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, v, ctx.context.resources.displayMetrics)
 
     // What onDraw reuses instead of building: formatted texts (rebuilt only when their value changes), the font
     // metrics, the thermometer glyph and one point on the ring.
@@ -235,7 +255,18 @@ internal class ThermostatDialView(
     // The texts the dial draws, built once per value (onDraw and the description share them).
     private fun offCurText(cur: Double) =
         offCurMemo.of(cur) { v -> HaDisplay.formatFixed(v, 1) + " " + unit }
-    private fun curText(cur: Double) = curMemo.of(cur) { v -> HaDisplay.formatFixed(v, 1) + " " + unit }
+    private fun curText(cur: Double) = curMemo.of(cur) { v ->
+        // A water heater's line: "Currently" and the temperature as HA formats the attribute.
+        if (waterHeater) HaText.ui("ui.card.water_heater.currently") + " " + HaFormat.formatNumberWithUnit(v, unit)
+        else HaDisplay.formatFixed(v, 1) + " " + unit
+    }
+
+    /**
+     * A water heater's dial (`ha-state-control-water_heater-temperature`): the slider fills from the start in the
+     * state's color, the label says "Target", the current temperature is "Currently …" with no icon, and with no target
+     * the state is the label, not a big value.
+     */
+    var waterHeater = false
 
     /**
      * HA's label over the target: the HVAC action while it runs (anything but `off`), else the state as HA names it
@@ -244,6 +275,7 @@ internal class ThermostatDialView(
     private fun labelText() = labelMemo.of(action, mode) {
         val a = action
         when {
+            waterHeater -> if (target != null) HaText.ui("ui.card.water_heater.target") else stateLabel
             a != null && a != "off" -> humanize(a)
             stateLabel.isNotEmpty() -> stateLabel
             else -> humanize(a ?: mode)
@@ -304,6 +336,7 @@ internal class ThermostatDialView(
     private var shownTarget: Double? = null
     private var targetAnimator: ValueAnimator? = null
     private var mode = "off"
+    private var hvacModes: List<String> = emptyList()
     private var action: String? = null
     private var dragging = false
     private var glowKey = 0
@@ -380,8 +413,10 @@ internal class ThermostatDialView(
         stateLabel: String = "",
         low: Double? = null,
         high: Double? = null,
+        hvacModes: List<String> = emptyList(),
     ) {
         val wasRange = isRange
+        this.hvacModes = hvacModes
         this.stateLabel = stateLabel
         this.min = min
         this.max = if (max > min) max else min + 1.0
@@ -425,7 +460,8 @@ internal class ThermostatDialView(
             return
         }
         val t = target ?: return
-        val next = snap(t + sign * step)
+        // HA's _handleButton: the target plus a step, kept within the limits (not snapped to a grid).
+        val next = ClimateTargets.roundToStep(t + sign * step, step).coerceIn(min, max)
         if (next == t) return
         setTarget(next)
         describe()
@@ -493,17 +529,45 @@ internal class ThermostatDialView(
     }
 
     private fun snap(v: Double): Double {
-        val snapped = min + Math.round((v - min) / step) * step
+        // ha-control-circular-slider's _steppedValue: whole steps from 0, not from the minimum.
+        val snapped = Math.round(v / step) * step
         // Rounded to the step's decimals, then kept within the device's limits (a 30.25 maximum stays 30.25).
         return ClimateTargets.roundToStep(snapped, step).coerceIn(min, max)
     }
 
-    /** The heat, cool or auto/heat_cool accent this thermostat uses, or null when off. */
-    private fun accent(): Pair<Int, Int>? = when {
-        action == "heating" || mode == "heat" -> HEAT_COLOR to HEAT_SOFT
-        action == "cooling" || mode == "cool" -> COOL_COLOR to COOL_SOFT
-        mode == "heat_cool" || mode == "auto" -> AUTO_COLOR to AUTO_SOFT
+    /**
+     * HA's `stateColorCss` for a climate mode (`--state-climate-<mode>-color`): the slider's color for that mode, or
+     * null for one HA gives no color (off).
+     */
+    private fun modeColor(m: String?): Int? = if (waterHeater) when (m) {
+        // `--state-water_heater-<state>-color`.
+        "eco" -> AUTO_MODE_COLOR
+        "electric", "gas", "heat_pump" -> DRY_COLOR
+        "high_demand", "performance" -> HEAT_COLOR
         else -> null
+    } else when (m) {
+        "heat" -> HEAT_COLOR
+        "cool" -> COOL_COLOR
+        "heat_cool" -> AUTO_COLOR
+        "auto" -> AUTO_MODE_COLOR
+        "dry" -> DRY_COLOR
+        "fan_only" -> FAN_COLOR
+        else -> null
+    }
+
+    /**
+     * HA's `--action-color`: the running action's mode color (`CLIMATE_HVAC_ACTION_TO_MODE`) while the thermostat is
+     * on and the action is neither idle nor off. It colors the label, the current temperature and the glow.
+     */
+    private fun actionColor(): Int? {
+        if (!isActive) return null
+        return modeColor(when (action) {
+            "heating", "preheating", "defrosting" -> "heat"
+            "cooling" -> "cool"
+            "drying" -> "dry"
+            "fan" -> "fan_only"
+            else -> null
+        })
     }
 
     /** A range end's color: heat for the low end, cool for the high one, grey while the thermostat is off. */
@@ -514,6 +578,10 @@ internal class ThermostatDialView(
     }
 
     private fun angleOf(v: Double): Float = 135f + 270f * ((v - min) / (max - min)).toFloat().coerceIn(0f, 1f)
+
+    /** HA's size class (`createStateControlCircularSliderController`), from the dial's width in CSS px. */
+    private val sizeClass: DialSize get() = DialSize.of(minOf(width, height) / dp)
+
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
@@ -526,74 +594,91 @@ internal class ThermostatDialView(
         glowKey = 0
     }
 
+    /** One unit of the slider's 320-unit geometry, in px. */
+    private val unit320: Float get() = minOf(width, height) / 320f
+
+    /** `--disabled-color` at the slider background's 0.3 opacity: HA's track. */
+    private fun trackColor(): Int = CardSurface.withAlpha(
+        dev.glassworks.engine.vitro.theme.ThemeResolver.parseColor(ctx.theme.vars["disabled-color"])
+            ?: if (ctx.theme.dark) 0xFF464646.toInt() else 0xFFBDBDBD.toInt(),
+        0.3f,
+    )
+
+    /** `--clear-background-color`, under each half-strength arc. */
+    private fun clearColor(): Int =
+        dev.glassworks.engine.vitro.theme.ThemeResolver.parseColor(ctx.theme.vars["clear-background-color"])
+            ?: if (ctx.theme.dark) 0xFF111111.toInt() else Color.WHITE
+
+    /** The slider's mode (`SLIDER_MODES`): heat fills from the start, cool to the end, the rest the whole ring. */
+    private fun sliderMode(): SliderMode {
+        // The water heater's slider has no mode: ha-control-circular-slider fills from the start.
+        if (waterHeater) return SliderMode.START
+        val heatCool = hvacModes.filter { it == "heat" || it == "cool" || it == "heat_cool" }
+        val m = if (heatCool.size == 1 && (mode == "off" || mode == "auto")) heatCool[0] else mode
+        return when (m) {
+            "heat" -> SliderMode.START
+            "cool" -> SliderMode.END
+            else -> SliderMode.FULL
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         if (width <= 0 || height <= 0) return
         oval.set(cx - radius, cy - radius, cx + radius, cy + radius)
-        val accent = accent()
-        val activeTint = when (action) {
-            "heating" -> HEAT_COLOR
-            "cooling" -> COOL_COLOR
-            else -> null
+        sizeTexts()
+        val u = unit320
+        arcPaint.strokeWidth = 24f * u
+        arcPaint.color = trackColor()
+        canvas.drawArc(oval, 135f, 270f, false, arcPaint)
+        val cur = current
+        // The current temperature on the track (`.current`): the text color at half strength, under the arcs.
+        if (cur != null && cur != 0.0) {
+            fill.color = CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.5f)
+            pointAt(angleOf(cur))
+            canvas.drawCircle(pt[0], pt[1], 4f * u, fill)
         }
+        val unavailable = mode == "unavailable"
+        val actionTint = actionColor()
 
-        // Soft radial glow while the HVAC is actually running.
-        if (activeTint != null) {
-            if (glowKey != activeTint) {
-                glowKey = activeTint
-                glowPaint.shader = RadialGradient(
-                    cx, cy, radius,
-                    CardSurface.withAlpha(activeTint, 0.12f), Color.TRANSPARENT, Shader.TileMode.CLAMP,
-                )
-            }
-            canvas.drawCircle(cx, cy, radius, glowPaint)
-        }
-
-        if (isRange) {
-            drawRange(canvas, activeTint)
+        if (isRange && !unavailable) {
+            drawRange(canvas, actionTint)
             return
         }
 
-        val isAutoIdle = (mode == "heat_cool" || mode == "auto") && activeTint == null
-        arcPaint.color = when {
-            isAutoIdle -> AUTO_SOFT
-            ctx.theme.dark -> TRACK_DARK
-            else -> TRACK_LIGHT
-        }
-        canvas.drawArc(oval, 135f, 270f, false, arcPaint)
-
-        val cur = current
         val tgt = shownTarget ?: target
-        if (accent != null && tgt != null && !isAutoIdle) {
-            val (solid, soft) = accent
-            val low = if (cur != null) minOf(cur, tgt) else tgt
-            val lowAngle = angleOf(low)
-            if (lowAngle > 135f) {
-                arcPaint.color = soft
-                canvas.drawArc(oval, 135f, lowAngle - 135f, false, arcPaint)
+        if (tgt != null && !unavailable) {
+            val color = modeColor(mode)
+            if (isActive && color != null) {
+                val sm = sliderMode()
+                val limit = if (sm == SliderMode.END) max else min
+                val c = cur ?: limit
+                when (sm) {
+                    SliderMode.FULL -> halfArc(canvas, min, max, color)
+                    SliderMode.END -> halfArc(canvas, tgt, max, color)
+                    SliderMode.START -> halfArc(canvas, min, tgt, color)
+                }
+                val showActive = when (sm) {
+                    SliderMode.END -> tgt <= c
+                    SliderMode.START -> c <= tgt
+                    SliderMode.FULL -> false
+                }
+                if (showActive) {
+                    if (sm == SliderMode.END) arc(canvas, tgt, c, color) else arc(canvas, c, tgt, color)
+                }
+                if (cur != null && cur in min..max && (showActive || sm == SliderMode.FULL)) onArcMarker(canvas, cur)
             }
-            if (cur != null && cur != tgt) {
-                val a = angleOf(cur)
-                val b = angleOf(tgt)
-                arcPaint.color = solid
-                canvas.drawArc(oval, minOf(a, b), kotlin.math.abs(b - a), false, arcPaint)
-                fill.color = Color.WHITE
-                pointAt(a)
-                canvas.drawCircle(pt[0], pt[1], 2.5f * dp, fill)
-            }
-        } else if (isAutoIdle && cur != null) {
-            fill.color = CardSurface.withAlpha(Color.WHITE, 0.7f)
-            pointAt(angleOf(cur))
-            canvas.drawCircle(pt[0], pt[1], 3f * dp, fill)
-        } else if (tgt == null && cur != null) {
-            // With no target HA still marks the current temperature on the ring.
-            fill.color = ctx.theme.secondaryTextColor
-            pointAt(angleOf(cur))
-            canvas.drawCircle(pt[0], pt[1], 4f * dp, fill)
+            drawThumb(canvas, tgt, color ?: ctx.theme.secondaryTextColor, isFocused)
         }
-        if (tgt != null) drawThumb(canvas, tgt, accent?.first ?: ctx.theme.secondaryTextColor, isFocused)
+        drawGlow(canvas, actionTint)
 
-        // Centre: action label, split target temperature, current temperature.
-        if (target == null) {
+        if (target == null || unavailable) {
+            if (unavailable || stateLabel.isEmpty() || waterHeater) {
+                // HA's third control with the entity unavailable (or a water heater with no target): the state as the
+                // label (grey while unavailable), no big value.
+                val labelColor = if (unavailable) ctx.theme.secondaryTextColor else ctx.theme.primaryTextColor
+                drawInfo(canvas, stateLabel, labelColor, null, cur, ctx.theme.primaryTextColor)
+                return
+            }
             // ha-state-control-climate-temperature with no target: the state big (36 px) in the middle, the current
             // temperature (16 px / 500, primary color) 49 px under it, no label above.
             offPaint.color = ctx.theme.primaryTextColor
@@ -602,77 +687,170 @@ internal class ThermostatDialView(
             if (cur != null && showCurrentInDial) drawCurrent(canvas, cur, ctx.theme.primaryTextColor, offCurPaint, 16f * dp, cy + 48.8f * dp)
             return
         }
-        val labelText = labelText()
-        labelPaint.color = activeTint ?: ctx.theme.secondaryTextColor
-        canvas.drawText(labelText, cx, cy - 34f * dp, labelPaint)
+        val tint = actionTint ?: ctx.theme.primaryTextColor
+        drawInfo(canvas, labelText(), tint, Primary.SINGLE, cur, tint)
+    }
 
-        val baseline = cy + 16f * dp
-        bigPaint.color = ctx.theme.primaryTextColor
-        unitPaint.color = ctx.theme.primaryTextColor
-        decPaint.color = ctx.theme.primaryTextColor
-        val shownValue = target
-        if (shownValue == null) {
-            bigPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText("–", cx, baseline, bigPaint)
-        } else {
-            bigPaint.textAlign = Paint.Align.LEFT
-            if (shownValue != splitValue || step != splitStep) {
-                val parts = splitTemp(shownValue, step)
-                splitValue = shownValue
-                splitStep = step
-                splitWhole = parts.first
-                splitDec = parts.second
-            }
-            val whole = splitWhole
-            val dec = splitDec
-            val wholeW = bigPaint.measureText(whole)
-            val sideW = maxOf(unitPaint.measureText(unit), if (dec.isEmpty()) 0f else decPaint.measureText(dec))
-            val gap = 2f * dp
-            val x0 = cx - (wholeW + gap + sideW) / 2f
-            canvas.drawText(whole, x0, baseline, bigPaint)
-            val sideX = x0 + wholeW + gap
-            canvas.drawText(unit, sideX, baseline - 20f * dp, unitPaint)
-            if (dec.isNotEmpty()) canvas.drawText(dec, sideX, baseline, decPaint)
+    /** HA's radial glow in the running action's color (the slider's `::after`, 120 % of it, at 0.15), over the arcs. */
+    private fun drawGlow(canvas: Canvas, tint: Int?) {
+        if (tint == null) return
+        val r = 0.6f * minOf(width, height)
+        if (glowKey != tint) {
+            glowKey = tint
+            glowPaint.shader = RadialGradient(cx, cy, r, CardSurface.withAlpha(tint, 0.15f), Color.TRANSPARENT, Shader.TileMode.CLAMP)
         }
-
-        if (cur != null && showCurrentInDial) drawCurrentRow(canvas, cur)
+        canvas.drawCircle(cx, cy, r, glowPaint)
     }
 
-    /** The thermometer row under the target: 14 px, in the running action's color. */
-    private fun drawCurrentRow(canvas: Canvas, cur: Double) {
+    /** The current temperature on a colored arc (`.arc-current`): the clear background at half strength. */
+    private fun onArcMarker(canvas: Canvas, cur: Double) {
+        fill.color = CardSurface.withAlpha(clearColor(), 0.5f)
+        pointAt(angleOf(cur))
+        canvas.drawCircle(pt[0], pt[1], 4f * unit320, fill)
+    }
+
+    /** HA's half-strength arc (`.arc-clear` under `.arc-colored` at 0.5) from [from] to [to]. */
+    private fun halfArc(canvas: Canvas, from: Double, to: Double, color: Int) {
+        arc(canvas, from, to, clearColor())
+        arc(canvas, from, to, CardSurface.withAlpha(color, 0.5f))
+    }
+
+    private enum class Primary { SINGLE, RANGE }
+
+    /** Sets the texts' sizes for the dial's size class (`state-control-circular-slider-style`), once per class. */
+    private fun sizeTexts() {
+        val sc = sizeClass
+        if (sizedFor == sc) return
+        sizedFor = sc
+        val big = when (sc) { DialSize.LG -> 57f; DialSize.MD -> 44f; else -> 32f }
+        val info = if (sc == DialSize.SM) 14f else 16f
+        bigPaint.textSize = cssText(big)
+        decPaint.textSize = cssText(big * 0.42f)
+        unitPaint.textSize = cssText(big * 0.33f)
+        // ha-big-number's letter-spacing, -0.25 px; the info's, 0.1 px.
+        for (pp in listOf(bigPaint, decPaint, unitPaint)) pp.letterSpacing = -0.25f / (pp.textSize / dp)
+        labelPaint.textSize = cssText(info)
+        curPaint.textSize = cssText(info)
+        labelPaint.letterSpacing = 0.1f / info
+        curPaint.letterSpacing = 0.1f / info
+        lowWhole.reset(); lowDec.reset(); highWhole.reset(); highDec.reset()
+    }
+
+    /** The baseline of [p]'s text in a CSS line box of [lineH] px at [top]: Blink's half-leading. */
+    private fun lineBaseline(top: Float, lineH: Float, p: Paint): Float {
+        p.getFontMetrics(fmBuf)
+        val a = -fmBuf.ascent
+        val d = fmBuf.descent
+        return top + (lineH - (a + d)) / 2f + a
+    }
+
+    /**
+     * HA's `.info`: the label, the target (or the two ends of a range) and the current temperature, each a block, the
+     * size class's gap between them, centered on the dial (`.container.md .info { margin-top: 12px }` and the slider's
+     * `margin-bottom: -16px` below the large size). The label and the current-temperature line keep their
+     * `min-height` when empty.
+     */
+    private fun drawInfo(canvas: Canvas, label: String, labelColor: Int, primary: Primary?, cur: Double?, curColor: Int) {
+        val sc = sizeClass
+        val size = minOf(width, height).toFloat()
+        val infoLine = 1.6f * labelPaint.textSize
+        val bigLine = 1.12f * bigPaint.textSize
+        val gap = dp * when (sc) { DialSize.LG -> 8f; DialSize.MD -> 6f; DialSize.SM -> 2f; DialSize.XS -> 8f }
+        val dialTop = cy - size / 2f
+        val regionTop = dialTop + if (sc == DialSize.LG) 0f else 12f * dp
+        val regionBottom = dialTop + if (sc == DialSize.LG) size else size - 16f * dp
+        val showLabel = sc != DialSize.XS
+        var total = infoLine + (if (primary != null) gap + bigLine else 0f)
+        if (showLabel) total += infoLine + gap
+        var y = (regionTop + regionBottom) / 2f - total / 2f
+        if (showLabel) {
+            labelPaint.color = labelColor
+            if (label.isNotEmpty()) canvas.drawText(label, cx, lineBaseline(y, infoLine, labelPaint), labelPaint)
+            y += infoLine + gap
+        }
+        when (primary) {
+            Primary.SINGLE -> {
+                val t = target
+                if (t != null) {
+                    if (t != splitValue || step != splitStep) {
+                        val parts = splitTemp(t, step)
+                        splitValue = t
+                        splitStep = step
+                        splitWhole = parts.first
+                        splitDec = parts.second
+                    }
+                    val w = numberWidth(splitWhole, splitDec)
+                    drawNumber(canvas, splitWhole, splitDec, cx - w / 2f, y, 1f, lowRect)
+                }
+                y += bigLine + gap
+            }
+            Primary.RANGE -> {
+                val lo = low
+                val hi = high
+                if (lo != null && hi != null) {
+                    val between = dp * when (sc) { DialSize.LG -> 24f; DialSize.MD -> 16f; else -> 8f }
+                    val lw = lowWhole.of(lo) { splitTemp(it, step).first }
+                    val ld = lowDec.of(lo) { splitTemp(it, step).second }
+                    val hw = highWhole.of(hi) { splitTemp(it, step).first }
+                    val hd = highDec.of(hi) { splitTemp(it, step).second }
+                    val lowW = numberWidth(lw, ld)
+                    val highW = numberWidth(hw, hd)
+                    val x0 = cx - (lowW + between + highW) / 2f
+                    drawNumber(canvas, lw, ld, x0, y, if (selected == ClimateHandle.LOW) 1f else UNSELECTED_ALPHA, lowRect)
+                    drawNumber(canvas, hw, hd, x0 + lowW + between, y, if (selected == ClimateHandle.HIGH) 1f else UNSELECTED_ALPHA, highRect)
+                }
+                y += bigLine + gap
+            }
+            null -> Unit
+        }
+        if (cur != null && cur != 0.0 && showCurrentInDial) drawCurrentRow(canvas, cur, curColor, y, infoLine)
+    }
+
+    /**
+     * The current temperature's line (`.label.secondary`): the thermometer at the info's icon size (16 px, 14 px when
+     * small), the space the markup leaves, then the temperature, centered, in [color].
+     */
+    private fun drawCurrentRow(canvas: Canvas, cur: Double, color: Int, top: Float, lineH: Float) {
         val curText = curText(cur)
-        val curColor = if (action == "heating") HEAT_COLOR else if (action == "cooling") COOL_COLOR else ctx.theme.secondaryTextColor
-        curPaint.color = curColor
-        val iconSize = 14f * dp
-        val textW = curPaint.measureText(curText)
-        val total = iconSize + 4f * dp + textW
-        val left = cx - total / 2f
-        val rowBase = cy + 46f * dp
-        iconPath.set(thermometer)
-        iconMatrix.setScale(iconSize / 24f, iconSize / 24f)
-        iconMatrix.postTranslate(left, rowBase - iconSize + 2f * dp)
-        iconPath.transform(iconMatrix)
-        fill.color = curColor
-        canvas.drawPath(iconPath, fill)
+        curPaint.color = color
         curPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText(curText, left + iconSize + 4f * dp, rowBase, curPaint)
+        val iconSize = if (waterHeater) 0f else if (sizeClass == DialSize.SM) 14f * dp else 16f * dp
+        val space = if (waterHeater) 0f else curPaint.measureText(" ")
+        val textW = curPaint.measureText(curText)
+        val left = cx - (iconSize + space + textW) / 2f
+        val baseline = lineBaseline(top, lineH, curPaint)
+        // ha-svg-icon sits on the line's middle, raised 5 % (`bottom: 5%`).
+        if (iconSize > 0f) {
+            val iconTop = top + (lineH - iconSize) / 2f - 0.05f * iconSize
+            iconPath.set(thermometer)
+            iconMatrix.setScale(iconSize / 24f, iconSize / 24f)
+            iconMatrix.postTranslate(left, iconTop)
+            iconPath.transform(iconMatrix)
+            fill.color = color
+            canvas.drawPath(iconPath, fill)
+        }
+        canvas.drawText(curText, left + iconSize + space, baseline, curPaint)
     }
 
-    /** A thumb at [value]: a white dot in a [color] border, ringed while it has the keyboard's focus. */
+    /**
+     * A thumb at [value]: HA's `.target-border` (24 units, in [color]) under `.target` (18 units, white), ringed while it
+     * has the keyboard's focus.
+     */
     private fun drawThumb(canvas: Canvas, value: Double, color: Int, focused: Boolean) {
         pointAt(angleOf(value))
         val x = pt[0]
         val y = pt[1]
+        val u = unit320
         if (focused) {
             // :focus-visible: HA widens the thumb's stroke; a ring in the text color reads the same on a panel.
             ring.color = ctx.theme.primaryTextColor
             ring.strokeWidth = 2f * dp
-            canvas.drawCircle(x, y, 9.5f * dp, ring)
+            canvas.drawCircle(x, y, 14f * u + dp, ring)
         }
         fill.color = color
-        canvas.drawCircle(x, y, 6.5f * dp, fill)
+        canvas.drawCircle(x, y, 12f * u, fill)
         fill.color = Color.WHITE
-        canvas.drawCircle(x, y, 5f * dp, fill)
+        canvas.drawCircle(x, y, 9f * u, fill)
     }
 
     /** The ring's arc from [from] to [to] in [color] (nothing when it's empty). */
@@ -685,82 +863,46 @@ internal class ThermostatDialView(
     }
 
     /**
-     * The dual slider (`ha-control-circular-slider dual`): the low thumb's arc runs from the ring's start ("start"
-     * mode) and the high thumb's to its end ("end"), each at half strength, with a solid arc to the current temperature
-     * while the room is below the low target or above the high one. In the centre, HA's label and the two targets,
-     * the one not selected at 70 %.
+     * The dual slider (`ha-control-circular-slider dual`): the low end's arc from the ring's start ("start" mode) and the
+     * high end's to its end ("end"), each at half strength, with a solid one to the current temperature while the room
+     * is below the low target or above the high one (with no current temperature, the whole of each). Off, the arcs go
+     * and the thumbs turn grey. In the centre, HA's label and the two targets, the one not selected at 70 %.
      */
-    private fun drawRange(canvas: Canvas, activeTint: Int?) {
+    private fun drawRange(canvas: Canvas, actionTint: Int?) {
         val lo = low ?: return
         val hi = high ?: return
-        arcPaint.color = if (ctx.theme.dark) TRACK_DARK else TRACK_LIGHT
-        canvas.drawArc(oval, 135f, 270f, false, arcPaint)
-        val cur = current?.takeIf { it in min..max }
-        var curInArc = false
+        val cur = current
         if (isActive) {
-            arc(canvas, min, lo, HEAT_SOFT)
-            arc(canvas, hi, max, COOL_SOFT)
-            if (cur != null && cur <= lo) {
-                arc(canvas, cur, lo, HEAT_COLOR)
-                curInArc = cur < lo
+            halfArc(canvas, min, lo, HEAT_COLOR)
+            val cLow = cur ?: min
+            if (cLow <= lo) {
+                arc(canvas, cLow, lo, HEAT_COLOR)
+                if (cur != null && cur in min..max) onArcMarker(canvas, cur)
             }
-            if (cur != null && hi <= cur) {
-                arc(canvas, hi, cur, COOL_COLOR)
-                curInArc = cur > hi
+            halfArc(canvas, hi, max, COOL_COLOR)
+            val cHigh = cur ?: max
+            if (hi <= cHigh) {
+                arc(canvas, hi, cHigh, COOL_COLOR)
+                if (cur != null && cur in min..max) onArcMarker(canvas, cur)
             }
-        }
-        if (cur != null) {
-            // HA's current marker: an 8 px dot in the text color at half strength, cleared to white on a solid arc.
-            fill.color = if (curInArc) Color.WHITE else CardSurface.withAlpha(ctx.theme.primaryTextColor, 0.5f)
-            pointAt(angleOf(cur))
-            canvas.drawCircle(pt[0], pt[1], if (curInArc) 2.5f * dp else 4f * dp, fill)
         }
         drawThumb(canvas, lo, handleColor(ClimateHandle.LOW), isFocused && selected == ClimateHandle.LOW)
         drawThumb(canvas, hi, handleColor(ClimateHandle.HIGH), isFocused && selected == ClimateHandle.HIGH)
-
-        labelPaint.color = activeTint ?: ctx.theme.secondaryTextColor
-        canvas.drawText(labelText(), cx, cy - 34f * dp, labelPaint)
-
-        // The two targets side by side, 24 px apart (16 px in a medium dial, 8 px in a small one), shrunk to fit.
-        val baseline = cy + 16f * dp
-        val gap = when {
-            width < 190f * dp -> 8f * dp
-            width < 250f * dp -> 16f * dp
-            else -> 24f * dp
-        }
-        val lw = lowWhole.of(lo) { splitTemp(it, step).first }
-        val ld = lowDec.of(lo) { splitTemp(it, step).second }
-        val hw = highWhole.of(hi) { splitTemp(it, step).first }
-        val hd = highDec.of(hi) { splitTemp(it, step).second }
-        var lowW = numberWidth(lw, ld)
-        var highW = numberWidth(hw, hd)
-        val room = radius * 1.5f
-        val scale = (room / (lowW + gap + highW)).coerceAtMost(1f)
-        if (scale < 1f) {
-            bigPaint.textSize = bigSize * scale
-            unitPaint.textSize = unitSize * scale
-            decPaint.textSize = decSize * scale
-            lowW = numberWidth(lw, ld)
-            highW = numberWidth(hw, hd)
-        }
-        val x0 = cx - (lowW + gap + highW) / 2f
-        drawNumber(canvas, lw, ld, x0, baseline, if (selected == ClimateHandle.LOW) 1f else UNSELECTED_ALPHA, scale, lowRect)
-        drawNumber(canvas, hw, hd, x0 + lowW + gap, baseline, if (selected == ClimateHandle.HIGH) 1f else UNSELECTED_ALPHA, scale, highRect)
-        if (scale < 1f) {
-            bigPaint.textSize = bigSize
-            unitPaint.textSize = unitSize
-            decPaint.textSize = decSize
-        }
-        val cur2 = current
-        if (cur2 != null && showCurrentInDial) drawCurrentRow(canvas, cur2)
+        drawGlow(canvas, actionTint)
+        val tint = actionTint ?: ctx.theme.primaryTextColor
+        drawInfo(canvas, labelText(), tint, Primary.RANGE, cur, tint)
     }
 
-    /** One ha-big-number's width: the whole part, a 2 dp gap, then the wider of the unit and the decimals. */
+    /** One ha-big-number's width: the whole part, then the wider of the unit and the decimals, side by side. */
     private fun numberWidth(whole: String, dec: String): Float =
-        bigPaint.measureText(whole) + 2f * dp + maxOf(unitPaint.measureText(unit), if (dec.isEmpty()) 0f else decPaint.measureText(dec))
+        bigPaint.measureText(whole) + maxOf(unitPaint.measureText(unit), if (dec.isEmpty()) 0f else decPaint.measureText(dec))
 
-    /** Draws one ha-big-number at [x] and records the box a press on it selects into [hit]. */
-    private fun drawNumber(canvas: Canvas, whole: String, dec: String, x: Float, baseline: Float, alpha: Float, scale: Float, hit: RectF) {
+    /**
+     * Draws one ha-big-number with its box's top at [top] and its left at [x], and records the box a press on it
+     * selects into [hit]: the whole part on a 1.12 line, and beside it, bottom-aligned with 4 px of padding, the
+     * decimals (0.42 em on a 1.33 line) under the unit (0.33 em on a 1.2 line).
+     */
+    private fun drawNumber(canvas: Canvas, whole: String, dec: String, x: Float, top: Float, alpha: Float, hit: RectF) {
         val color = CardSurface.withAlpha(ctx.theme.primaryTextColor, alpha)
         bigPaint.color = color
         unitPaint.color = color
@@ -768,12 +910,15 @@ internal class ThermostatDialView(
         bigPaint.textAlign = Paint.Align.LEFT
         unitPaint.textAlign = Paint.Align.LEFT
         decPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText(whole, x, baseline, bigPaint)
-        val sideX = x + bigPaint.measureText(whole) + 2f * dp
-        canvas.drawText(unit, sideX, baseline - 20f * dp * scale, unitPaint)
-        if (dec.isNotEmpty()) canvas.drawText(dec, sideX, baseline, decPaint)
-        val fm = fmBuf.also { bigPaint.getFontMetrics(it) }
-        hit.set(x - 4f * dp, baseline + fm.ascent, x + numberWidth(whole, dec) + 4f * dp, baseline + fm.descent)
+        val bigLine = 1.12f * bigPaint.textSize
+        canvas.drawText(whole, x, lineBaseline(top, bigLine, bigPaint), bigPaint)
+        val sideX = x + bigPaint.measureText(whole)
+        val decLine = 1.33f * decPaint.textSize
+        val decTop = top + bigLine - 4f * dp - decLine
+        if (dec.isNotEmpty()) canvas.drawText(dec, sideX, lineBaseline(decTop, decLine, decPaint), decPaint)
+        val unitLine = 1.2f * unitPaint.textSize
+        canvas.drawText(unit, sideX, lineBaseline(decTop - unitLine, unitLine, unitPaint), unitPaint)
+        hit.set(x - 4f * dp, top, x + numberWidth(whole, dec) + 4f * dp, top + bigLine)
     }
 
     /** The point on the ring at [angleDeg], into [pt]. */
@@ -1243,14 +1388,13 @@ internal class ThermostatDialView(
     }
 
     companion object {
-        private const val TRACK_LIGHT = 0xFFE8E8E8.toInt()
-        private const val TRACK_DARK = 0xFF333333.toInt()
+        /** HA's `--state-climate-*-color`s: heat (deep orange), cool (blue), heat/cool (amber), auto, dry, fan. */
         private const val AUTO_COLOR = 0xFFFFC107.toInt()
-        private const val AUTO_SOFT = 0xFFFFE082.toInt()
+        private const val AUTO_MODE_COLOR = 0xFF4CAF50.toInt()
+        private const val DRY_COLOR = 0xFFFF9800.toInt()
+        private const val FAN_COLOR = 0xFF00BCD4.toInt()
         private const val HEAT_COLOR = 0xFFFF6F22.toInt()
-        private const val HEAT_SOFT = 0xFFFFAD7A.toInt()
         private const val COOL_COLOR = 0xFF2196F3.toInt()
-        private const val COOL_SOFT = 0xFF90CAF9.toInt()
         private const val TARGET_MS = 200L
 
         /** `.target-button`: the target not selected at 70 % opacity. */

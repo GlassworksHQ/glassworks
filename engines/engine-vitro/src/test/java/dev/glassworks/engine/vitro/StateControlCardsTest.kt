@@ -11,6 +11,8 @@ import android.view.ViewGroup
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.BrightnessDialView
 import dev.glassworks.engine.vitro.cards.GaugeCardView
+import dev.glassworks.engine.vitro.cards.ThermostatCardView
+import dev.glassworks.engine.vitro.cards.ThermostatDialView
 import dev.glassworks.engine.vitro.cards.LightCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -164,5 +166,50 @@ class StateControlCardsTest {
         // JavaScript's Number(): an attribute that is a number, or a numeric string, is a value.
         assertEquals(listOf("Ink"), visibleTexts(gauge("on", mapOf("level" to 3, "friendly_name" to "Ink"),
             """{"type": "gauge", "entity": "sensor.ink", "attribute": "level"}""")))
+    }
+
+    private fun thermostat(id: String, state: String, attrs: Map<String, Any?>, width: Int = 500): ThermostatCardView {
+        val store = EntityStore()
+        store.putLocal(EntityState(id, state, attrs))
+        val card = ThermostatCardView(context(store), LovelaceParser.parseCard(JSONObject("""{"type": "thermostat", "entity": "$id"}""")))
+        val px = (width * activity.resources.displayMetrics.density).toInt()
+        card.measure(View.MeasureSpec.makeMeasureSpec(px, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        card.layout(0, 0, px, card.measuredHeight)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        return card
+    }
+
+    private fun steppersShown(card: View) =
+        all(card).filter { it.contentDescription?.toString()?.endsWith("temperature") == true && it !is ThermostatDialView }
+            .count { v -> generateSequence(v) { if (it === card) null else it.parent as? View }.all { it.visibility == View.VISIBLE } }
+
+    private val heat = mapOf(
+        "hvac_modes" to listOf("off", "heat"), "min_temp" to 7, "max_temp" to 30, "target_temp_step" to 0.5,
+        "current_temperature" to 19.5, "temperature" to 21, "hvac_action" to "heating", "supported_features" to 385,
+    )
+
+    @Test
+    fun theThermostatsButtonsShowAtHasLargeSizeWithATarget() {
+        // HA's 262 px dial is its large size: − and + in its opening.
+        assertEquals(2, steppersShown(thermostat("climate.hall", "heat", heat)))
+        // Below 250 px (.container.md) HA hides them.
+        assertEquals(0, steppersShown(thermostat("climate.hall", "heat", heat, width = 250)))
+        // Unavailable: no target, no buttons; the dial says the state.
+        val gone = thermostat("climate.hall", "unavailable", emptyMap())
+        assertEquals(0, steppersShown(gone))
+        assertEquals("Unavailable", all(gone).filterIsInstance<ThermostatDialView>().single().contentDescription.toString())
+    }
+
+    @Test
+    fun aWaterHeatersDialSaysTargetAndCurrently() {
+        val card = thermostat("water_heater.boiler", "eco", mapOf(
+            "min_temp" to 43.3, "max_temp" to 60, "current_temperature" to 48, "temperature" to 50, "supported_features" to 15,
+        ))
+        val dial = all(card).filterIsInstance<ThermostatDialView>().single()
+        assertEquals("Target, 50.0 °C, Currently 48 °C", dial.contentDescription.toString())
+        // The − and + set the tank through water_heater.set_temperature.
+        all(card).single { it.contentDescription == "Increase temperature" }.performClick()
+        assertEquals("water_heater.set_temperature", calls.single().service)
+        assertEquals(50.5, calls.single().data!!.getDouble("temperature"), 0.0)
     }
 }

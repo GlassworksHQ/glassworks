@@ -34,6 +34,8 @@
  "ui.card.toggle-group.some_on": "{on_count} von {total_count} {on_count, plural, one {ein} other {ein}}",
  "ui.card.toggle-group.turn_all_off": "Alle ausschalten",
  "ui.card.toggle-group.turn_all_on": "Alle einschalten",
+ "ui.card.water_heater.currently": "Aktuell",
+ "ui.card.water_heater.target": "Ziel",
  "ui.common.cancel": "Abbrechen",
  "ui.common.close": "Schließen",
  "ui.common.none": "Kein",
