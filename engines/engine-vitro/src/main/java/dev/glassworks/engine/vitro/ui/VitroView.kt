@@ -23,6 +23,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import dev.glassworks.engine.vitro.VitroFailures
+import dev.glassworks.engine.vitro.cards.LiveCameraFeed
 import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
 import dev.glassworks.engine.vitro.cards.CustomButtonCardView
 import dev.glassworks.engine.vitro.cards.HaErrorCardView
@@ -639,9 +640,13 @@ class VitroView(
         }
     }
 
-    /** The connection to Home Assistant is up again: an open More Info sheet renews what it streams. */
+    /**
+     * The connection to Home Assistant is up again: an open More Info sheet renews what it streams, and live cameras
+     * (the cards' and the sheet's) try again what failed while it was down.
+     */
     fun connectionRestored() {
         moreInfo?.takeIf { !it.isDismissed }?.reconnected()
+        LiveCameraFeed.connectionRestored(store)
     }
 
     fun closeMoreInfo(): Boolean {
