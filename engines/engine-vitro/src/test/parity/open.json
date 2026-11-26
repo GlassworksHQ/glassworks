@@ -164,10 +164,6 @@
   "owner": "#928",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
- "s1/m-gauge-sensor-unknown": {
-  "owner": "#799",
-  "reason": "Gauge on an unknown state: HA replaces it with the 'Entity is non-numeric' warning; Vitro draws an empty gauge (as the baselined gauge-non-numeric)"
- },
  "s1/m-glance-light": {
   "owner": "#799",
   "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
