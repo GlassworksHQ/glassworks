@@ -166,11 +166,11 @@
  },
  "s1/m-gauge-sensor-power": {
   "owner": "#799",
-  "reason": "Gauge: the value's digits and the arc's end differ in color from HA's (region check)"
+  "reason": "Gauge: the value ('1,235 W', '21.4 °C') is drawn ~10 % larger and wider than HA's, which sizes it to the arc (canvas text, so only the region check sees it)"
  },
  "s1/m-gauge-sensor-temperature": {
   "owner": "#799",
-  "reason": "Gauge: the value's digits and the arc's end differ in color from HA's (region check)"
+  "reason": "Gauge: the value ('1,235 W', '21.4 °C') is drawn ~10 % larger and wider than HA's, which sizes it to the arc (canvas text, so only the region check sees it)"
  },
  "s1/m-gauge-sensor-unknown": {
   "owner": "#799",
