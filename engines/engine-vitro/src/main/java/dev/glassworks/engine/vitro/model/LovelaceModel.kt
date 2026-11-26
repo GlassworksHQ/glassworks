@@ -188,6 +188,8 @@ data class EntityRowConfig(
      * its text parts alone.
      */
     val nameSpec: Any? = null,
+    /** An entity row's `action_name`: the label of a script's Run and a scene's Activate button. */
+    val actionName: String? = null,
 ) {
     val isEntity: Boolean get() = rowType == "entity"
 
@@ -301,6 +303,7 @@ data class EntityRowConfig(
                         name = name,
                         icon = icon,
                         secondaryInfo = item.str("secondary_info"),
+                        actionName = item.str("action_name"),
                         tapAction = item.optJSONObject("tap_action")?.let { ActionConfig.parse(it) },
                         holdAction = item.optJSONObject("hold_action")?.let { ActionConfig.parse(it) },
                         raw = if (type.isEmpty()) null else item,

@@ -1329,7 +1329,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             isClickable = true
             ripple(this)
-            setOnClickListener { ctx.callService(domain, service, JSONObject().put("entity_id", id), null) }
+            // A script with fields never runs from here without them: HA's own dialog, with their form, takes More
+            // Info for such a script (VitroView.openMoreInfo), and this sheet doesn't start it.
+            setOnClickListener {
+                if (domain == "script") EntityRowControls.runScript(ctx, id, onFields = {})
+                else ctx.callService(domain, service, JSONObject().put("entity_id", id), null)
+            }
         }
         addCentered(button, topDp = 24f, heightDp = 52f)
         addCentered(timeLabel, topDp = 12f)

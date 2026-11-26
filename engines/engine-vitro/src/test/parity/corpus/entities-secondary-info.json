@@ -1,0 +1,151 @@
+{
+ "title": "Entities: secondary_info as last-triggered, entity-id, brightness and position",
+ "card": {
+  "type": "entities",
+  "entities": [
+   {
+    "entity": "automation.porch_at_dusk",
+    "secondary_info": "last-triggered"
+   },
+   {
+    "entity": "script.goodnight",
+    "secondary_info": "last-triggered"
+   },
+   {
+    "entity": "switch.coffee_maker",
+    "secondary_info": "entity-id"
+   },
+   {
+    "entity": "light.desk_lamp",
+    "secondary_info": "brightness"
+   },
+   {
+    "entity": "light.porch",
+    "secondary_info": "brightness"
+   },
+   {
+    "entity": "sensor.outdoor_temperature",
+    "secondary_info": "position"
+   },
+   {
+    "entity": "input_boolean.guest_mode",
+    "secondary_info": "tilt-position"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "automation.porch_at_dusk": {
+    "state": "on",
+    "last_changed": "-3000m",
+    "attributes": {
+     "id": "1700000000001",
+     "last_triggered": "@-185m",
+     "mode": "single",
+     "current": 0,
+     "friendly_name": "Porch at dusk"
+    }
+   },
+   "script.goodnight": {
+    "state": "off",
+    "last_changed": "-600m",
+    "attributes": {
+     "last_triggered": null,
+     "mode": "single",
+     "current": 0,
+     "icon": "mdi:weather-night",
+     "friendly_name": "Goodnight"
+    }
+   },
+   "switch.coffee_maker": {
+    "state": "off",
+    "last_changed": "-45m",
+    "attributes": {
+     "friendly_name": "Coffee maker"
+    }
+   },
+   "light.desk_lamp": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "brightness": 166,
+     "color_mode": "brightness",
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 0,
+     "friendly_name": "Desk lamp"
+    }
+   },
+   "light.porch": {
+    "state": "off",
+    "last_changed": "-200m",
+    "attributes": {
+     "brightness": null,
+     "color_mode": null,
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 0,
+     "friendly_name": "Porch"
+    }
+   },
+   "sensor.outdoor_temperature": {
+    "state": "12.4",
+    "last_changed": "-4m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Outdoor temperature"
+    }
+   },
+   "input_boolean.guest_mode": {
+    "state": "off",
+    "last_changed": "-1440m",
+    "attributes": {
+     "editable": true,
+     "icon": "mdi:account-multiple",
+     "friendly_name": "Guest mode"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "automation.porch_at_dusk",
+    "pl": "automation",
+    "en": "Porch at dusk"
+   },
+   {
+    "ei": "script.goodnight",
+    "pl": "script",
+    "en": "Goodnight"
+   },
+   {
+    "ei": "switch.coffee_maker",
+    "pl": "demo",
+    "en": "Coffee maker"
+   },
+   {
+    "ei": "light.desk_lamp",
+    "pl": "demo",
+    "en": "Desk lamp"
+   },
+   {
+    "ei": "light.porch",
+    "pl": "demo",
+    "en": "Porch"
+   },
+   {
+    "ei": "sensor.outdoor_temperature",
+    "pl": "demo",
+    "en": "Outdoor temperature"
+   },
+   {
+    "ei": "input_boolean.guest_mode",
+    "pl": "input_boolean",
+    "en": "Guest mode"
+   }
+  ]
+ }
+}

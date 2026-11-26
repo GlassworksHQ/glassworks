@@ -2113,7 +2113,8 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(ctx.px(16f), ctx.px(20f), ctx.px(16f), ctx.px(16f))
-                minimumHeight = ctx.px(20f + 28.8f + 16f)
+                // Rounded, not truncated: at 2x a truncated 64.8 px puts every row half a pixel high (entities-select).
+                minimumHeight = ((20f + 28.8f + 16f) * ctx.dp).roundToInt()
             }
             header.addView(textView(ctx, 24f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
                 text = title.orEmpty()
@@ -2157,6 +2158,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }.toSet()
         }
         val rowViews = ArrayList<LinearLayout>()
+        // Rows whose secondary line is a relative time: redrawn every second while the card is shown, as HA's
+        // `hui-timestamp-display` does, so an idle entity's "1 minute ago" keeps counting.
+        val relativeLines = ArrayList<() -> Unit>()
         // The rows (entity or special) that take the 8 px gap after another row.
         val gapRows = HashSet<View>()
         val rowVisible = ArrayList<Boolean>()
@@ -2205,8 +2209,10 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             val switchView = HaSwitchView(ctx)
             val isSwitchable = rowCfg.entity.substringBefore('.') in SWITCH_DOMAINS
             val isCover = rowCfg.entity.startsWith("cover.")
+            // A slider, a dropdown or HA's plain buttons (EntityRowControls), for the domains HA draws with one.
+            val control = EntityRowControls.build(ctx, rowCfg, { nameView.text.toString() }, { row.contentWidth })
             // HA's `.secondary` line: 14 px, as HA's page draws it (the locale-* cases measure it).
-            val secondaryView = if (rowCfg.secondaryInfo == "last-changed" || rowCfg.secondaryInfo == "last-updated") {
+            val secondaryView = if (control?.hideName != true && rowCfg.secondaryInfo !in setOf(null, "", "none")) {
                 textView(ctx, 14f, ctx.theme.secondaryTextColor).apply {
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
@@ -2214,25 +2220,29 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             } else {
                 null
             }
+            control?.rowHeightDp?.let { row.minimumHeight = ctx.px(it) }
 
-            // state-badge: a 24 px icon in a 40 px box, then the name 16 px after it.
+            // state-badge: a 24 px icon in a 40 px box, then the name 16 px after it (a dropdown takes the name's
+            // place right after the box: HA's `hide-name`).
             row.addView(iconView, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply {
-                marginStart = ctx.px(8f); marginEnd = ctx.px(24f)
+                marginStart = ctx.px(8f); marginEnd = ctx.px(if (control?.hideName == true) 8f else 24f)
             })
-            if (secondaryView != null) {
-                val labels = LinearLayout(ctx.context).apply {
-                    orientation = LinearLayout.VERTICAL
-                    // HA's name and `.secondary` lines as its page lays them out (measured by the locale-* cases).
-                    setPadding(0, ctx.px(3f), 0, ctx.px(3f))
-                    addView(nameView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-                    addView(secondaryView, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(6.4f) })
-                }
+            if (control?.hideName == true) {
+                row.addView(control.view, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            } else if (secondaryView != null) {
+                // HA's name and `.secondary` lines as its page lays them out (the locale-* and entities-secondary-info
+                // cases measure them), placed at fractional positions so no density rounds a row off.
+                val labels = TwoLineLabels(ctx, nameView, secondaryView)
                 row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
             } else {
                 row.addView(nameView, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = ctx.px(8f) })
                 row.name = nameView
             }
             when {
+                control != null -> if (!control.hideName) {
+                    row.addView(control.view, (control.view.layoutParams as? LinearLayout.LayoutParams)
+                        ?: LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+                }
                 isSwitchable -> row.addView(switchView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
                 // ha-cover-controls: 48 px icon buttons (24 px icons) with a space between them (inline buttons), the
                 // group 8 px into the row's end padding, so a cover row is 48 px tall where a plain one is 40.
@@ -2274,23 +2284,33 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                     refreshFilter()
                 }
                 val active = s?.isActive == true
-                val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
+                val tint = when {
+                    control != null -> controlRowTint(ctx, s)
+                    active -> s.lightTintColor() ?: ctx.theme.activeColor(s.domain)
+                    else -> ctx.theme.stateIconColor
+                }
                 iconView.setIcon(MdiIcons.resolveIconName(rowCfg.icon, s), tint)
                 nameView.text = rowCfg.nameFor(s) ?: s?.displayName ?: rowCfg.entity
                 // ha-entity-toggle's label: "Toggle Desk lamp".
                 if (isSwitchable) switchView.contentDescription = "Toggle ${nameView.text}"
-                secondaryView?.text = if (rowCfg.secondaryInfo == "last-updated") {
-                    s?.copy(lastChanged = s.lastUpdated.takeIf { it > 0.0 } ?: s.lastChanged)?.relativeLastChanged(ctx.now() / 1000.0)
-                } else {
-                    s?.relativeLastChanged(ctx.now() / 1000.0)
-                }.orEmpty()
+                // A dropdown row shows its name in the field (HA's `hide-name`): the row, which opens More Info,
+                // is named by it for TalkBack.
+                if (control?.hideName == true) row.contentDescription = nameView.text
+                secondaryView?.text = EntityRowControls.secondaryText(s, rowCfg.secondaryInfo, ctx.now()).orEmpty()
                 when {
+                    control != null -> control.update(s)
                     isSwitchable -> {
                         switchView.setOn(active)
                         refreshMaster()
                     }
                     isCover -> Unit
                     else -> valueView.text = s?.formattedState() ?: "…"
+                }
+            }
+            if (secondaryView != null && rowCfg.secondaryInfo in EntityRowControls.RELATIVE_SECONDARY_INFO) {
+                relativeLines += {
+                    val text = EntityRowControls.secondaryText(ctx.store[rowCfg.entity], rowCfg.secondaryInfo, ctx.now()).orEmpty()
+                    if (secondaryView.text.toString() != text) secondaryView.text = text
                 }
             }
             gapRows += row
@@ -2401,14 +2421,80 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             col.addView(entityRow(rowCfg), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (gapAbove) topMargin = ctx.px(8f) })
         }
         refreshFilter()
+        if (relativeLines.isNotEmpty()) {
+            renewing {
+                val tick = object : Runnable {
+                    override fun run() {
+                        relativeLines.forEach { it() }
+                        ctx.main.postDelayed(this, 1_000L)
+                    }
+                }
+                ctx.main.postDelayed(tick, 1_000L)
+                ({ ctx.main.removeCallbacks(tick) })
+            }
+        }
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
     }
 
     private companion object {
         val SWITCH_DOMAINS = setOf("light", "switch", "input_boolean", "fan", "automation", "humidifier", "siren")
+
+        /**
+         * state-badge's icon color on a row with a control: `--state-unavailable-color` when unavailable, else HA's
+         * `stateColorCss` for the state-colored domains among them (a lock's locked, unlocked and jammed colors, a
+         * running script's active color), where an inactive state (`--state-inactive-color: initial` in the badge)
+         * keeps `--state-icon-color`.
+         */
+        fun controlRowTint(ctx: VitroCardContext, s: EntityState?): Int {
+            if (s == null) return ctx.theme.stateIconColor
+            if (s.state == "unavailable") return HaStateColor.of(ctx, s) ?: ctx.theme.stateIconColor
+            if (s.domain != "lock" && s.domain != "script") return ctx.theme.stateIconColor
+            val key = s.state.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "_")
+            val activeKey = if (s.isActive) "active" else "inactive"
+            val props = buildList {
+                s.deviceClass?.let { add("state-${s.domain}-$it-$key-color") }
+                add("state-${s.domain}-$key-color")
+                add("state-${s.domain}-$activeKey-color")
+                if (s.isActive) add("state-active-color")
+            }
+            for (p in props) HaStateColor.property(ctx, p)?.let { return it }
+            return ctx.theme.stateIconColor
+        }
         val COVER_BUTTONS = listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
 
         fun dividerLine(ctx: VitroCardContext): View = View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) }
+    }
+}
+
+/**
+ * `hui-generic-entity-row`'s `.info` with a `.secondary` line, as HA's page lays it out: a 44.78 px box with the name's
+ * 16 px line 3 px down and the secondary's 6.39 px under it (line boxes that grow with the theme's text size). Each
+ * line is centered where HA's is, at fractional positions.
+ */
+private class TwoLineLabels(private val ctx: VitroCardContext, private val first: TextView, private val second: TextView) : ViewGroup(ctx.context) {
+    init {
+        addView(first)
+        addView(second)
+    }
+
+    private val line: Float get() = 16f * ctx.theme.fontScale
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        val child = MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY)
+        val unspecified = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        first.measure(child, unspecified)
+        second.measure(child, unspecified)
+        setMeasuredDimension(w, ((3f + line + 6.39f + line + 3.39f) * ctx.dp).roundToInt())
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        fun place(v: View, centerCss: Float) {
+            val top = (centerCss * ctx.dp - v.measuredHeight / 2f).roundToInt()
+            v.layout(0, top, r - l, top + v.measuredHeight)
+        }
+        place(first, 3f + line / 2f)
+        place(second, 3f + line + 6.39f + line / 2f)
     }
 }
 
@@ -2420,6 +2506,15 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
  */
 private class EntityRowLayout(context: android.content.Context, private val endPadPx: Int) : LinearLayout(context) {
     var name: TextView? = null
+
+    /** The row's width inside its padding, as last measured: what HA's flex row shares between a name and a slider. */
+    var contentWidth: Int = 0
+        private set
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        contentWidth = (MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight).coerceAtLeast(0)
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         super.onLayout(changed, l, t, r, b)

@@ -300,7 +300,8 @@ class VitroEngine(
             if (!VitroCardContext.sameOrigin(origin, proxyOrigin)) return false
             if (!LovelaceParser.isDashboardUrl(url)) return false
             val query = runCatching { java.net.URI(url).rawQuery }.getOrNull().orEmpty()
-            if ("auth_callback" in query || "edit=" in query) return false
+            // HA's own More Info dialog over the view (a script's fields): it stays HA's until the dialog closes.
+            if ("auth_callback" in query || "edit=" in query || "more-info-entity-id=" in query) return false
             return !isWebDashboard(url)
         }
 
@@ -626,6 +627,20 @@ class VitroEngine(
                         leaveNativeDashboard()
                         currentUrl = url
                         openInFallback(url)
+                    }
+                }
+            }
+            vitroView.onMoreInfoInFrontend = { v, entityId, reason ->
+                // As onWebView, with HA's own More Info dialog open over the view (its `more-info-entity-id`). When the
+                // dialog closes, HA drops the parameter, and the plain view hands the page back (handsBack).
+                if (!disposed && nativeActive && displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)) {
+                    val url = buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString())
+                    if (url != null) {
+                        val withDialog = "$url?more-info-entity-id=${java.net.URLEncoder.encode(entityId, "UTF-8")}"
+                        Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows ${forLog(url)} with its dialog")
+                        leaveNativeDashboard()
+                        currentUrl = withDialog
+                        openInFallback(withDialog)
                     }
                 }
             }
