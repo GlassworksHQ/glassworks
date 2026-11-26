@@ -229,6 +229,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     private val pictureView = ImageView(ctx.context).apply {
         scaleType = ImageView.ScaleType.FIT_XY
         visibility = GONE
+        isClickable = false
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
     private var pictureUrl: String? = null
 
@@ -1448,8 +1450,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             }
             else -> s.formattedState()
         }
-        updateBadge(s, active = s?.isActive == true)
         if (isTile) renderPicture(s)
+        updateBadge(s, active = s?.isActive == true)
         // The icon's own action, named for TalkBack: "Toggle Desk lamp" for HA's default toggle, else the entity.
         if (iconInteractive) iconWrap.contentDescription = if (iconToggles) "Toggle ${titleView.text}" else titleView.text
     }
@@ -1551,10 +1553,23 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         }
     }
 
+    /**
+     * The picture over the icon: the glyph and its tinted shape go (HA's `.container.background` only without an
+     * image), but the icon's box stays to take its own actions; the picture takes no touches of its own.
+     */
     private fun showPicture(on: Boolean) {
+        pictureShown = on
         pictureView.visibility = if (on) VISIBLE else GONE
-        iconWrap.visibility = if (on) INVISIBLE else VISIBLE
+        iconBadge.visibility = if (on) INVISIBLE else VISIBLE
+        if (on) {
+            badgeAnimator?.cancel()
+            badgeAnimator = null
+            badgeColor = null
+            iconWrap.background = null
+        }
     }
+
+    private var pictureShown = false
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -1576,7 +1591,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             iconWrap.setPadding(inset, inset, inset, inset)
             val color = tileColor(s)
             iconBadge.setIcon(iconName, iconBadge.tintColor)
-            if (!iconInteractive || s.state == "unavailable") {
+            if (!iconInteractive || s.state == "unavailable" || pictureShown) {
                 badgeAnimator?.cancel()
                 badgeAnimator = null
                 badgeColor = null
@@ -2869,6 +2884,9 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
     /** Every subscription as a way to make it again: a view that is detached and attached again listens again. */
     private val binders = ArrayList<() -> (() -> Unit)>()
 
+    /** Each badge drawn again from the store, which also starts its ticker (a timer, a relative time) once attached. */
+    private val refreshers = ArrayList<() -> Unit>()
+
     private fun bind(binder: () -> (() -> Unit)) {
         binders += binder
         unsubs += binder()
@@ -3025,12 +3043,14 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
             val unsub = ctx.store.subscribe(eid) { ctx.main.post { tick.render(ctx.store[eid]) } }
             ({ unsub(); ctx.main.removeCallbacks(tick) })
         }
+        refreshers += { tick.render(ctx.store[eid]) }
         return item
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (unsubs.isEmpty()) binders.forEach { unsubs += it() }
+        // Bound in the constructor, before attachment: the badges are drawn again so their tickers start.
+        if (unsubs.isEmpty()) binders.forEach { unsubs += it() } else refreshers.forEach { it() }
     }
 
     override fun onDetachedFromWindow() {

@@ -53,8 +53,10 @@ class TileNativeOptionsTest {
     private val opened = ArrayList<String>()
     private var now = 1_794_499_680_000L
 
+    private var haBase = FakeHaServer.BASE
+
     private fun context(store: EntityStore) = VitroCardContext(
-        context = activity, haBase = FakeHaServer.BASE, store = store,
+        context = activity, haBase = haBase, store = store,
         theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
         accessToken = { FakeHaServer.TOKEN },
         callService = { domain, service, data, _ -> calls += Call(domain, service, data ?: JSONObject()) },
@@ -285,5 +287,46 @@ class TileNativeOptionsTest {
         assertTrue(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("person.sam")))
         assertTrue(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("device_tracker.phone")))
         assertFalse(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("light.desk")))
+    }
+
+    @Test
+    fun aHeadingBadgeBuiltBeforeItsAttachedStillCountsDown() {
+        val finishes = EntityStore.formatHaIso((now + 125_000L) / 1000.0)
+        val timer = EntityState("timer.laundry", "active", mapOf("friendly_name" to "Laundry", "remaining" to "0:30:00", "finishes_at" to finishes))
+        // Constructed (and drawn) before it's attached, as a view is built: its ticker starts on attachment.
+        val view = heading("""{"type": "heading", "heading": "Utilities", "badges": [{"type": "entity", "entity": "timer.laundry"}]}""", timer)
+        assertTrue(view.texts().toString(), "2:05" in view.texts())
+        now += 1_000L
+        ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS)
+        assertTrue(view.texts().toString(), "2:04" in view.texts())
+    }
+
+    @Test
+    fun theIconKeepsItsActionUnderTheEntityPicture() {
+        // A 4 px PNG on a local server standing in for HA's /api/person picture.
+        val png = java.io.ByteArrayOutputStream().also {
+            javax.imageio.ImageIO.write(java.awt.image.BufferedImage(4, 4, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", it)
+        }.toByteArray()
+        val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/local/sam.png") { ex -> ex.sendResponseHeaders(200, png.size.toLong()); ex.responseBody.use { it.write(png) } }
+            start()
+        }
+        try {
+            haBase = "http://127.0.0.1:${server.address.port}"
+            val sw = EntityState("switch.fountain", "on", mapOf("friendly_name" to "Fountain", "entity_picture" to "/local/sam.png"))
+            val view = tile("""{"type": "tile", "entity": "switch.fountain", "show_entity_picture": true}""", sw)
+            val deadline = System.currentTimeMillis() + 5_000
+            while (view.all().none { it is android.widget.ImageView && it.isShown } && System.currentTimeMillis() < deadline) {
+                Thread.sleep(20)
+                ShadowLooper.idleMainLooper()
+            }
+            assertTrue("the picture shows", view.all().any { it is android.widget.ImageView && it.isShown })
+            // The icon's default toggle still runs from its box, under the picture.
+            val iconBox = view.all().first { it.isShown && it.isClickable && it.contentDescription?.toString() == "Toggle Fountain" }
+            iconBox.performClick()
+            assertEquals("switch.toggle", calls.lastOrNull()?.let { "${it.domain}.${it.service}" } ?: "none")
+        } finally {
+            server.stop(0)
+        }
     }
 }
