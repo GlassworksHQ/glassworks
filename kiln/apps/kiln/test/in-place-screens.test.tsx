@@ -50,6 +50,18 @@ describe('ReceiveScreen', () => {
     expect(p.onCancel).toHaveBeenCalledOnce();
   });
 
+  it('the hotspot join screen without Bluetooth: Continue stays the main action, and the helper\'s page is one click away', () => {
+    const onByHand = vi.fn();
+    receive({ stage: 'ready', network: 'Example-Setup', bluetoothAvailable: false, onByHand });
+    expect(screen.queryByRole('button', { name: 'Use Bluetooth instead' })).toBeNull();
+    fireEvent.click(button('Download it by hand instead'));
+    expect(onByHand).toHaveBeenCalledOnce();
+    expect(button('Continue')).toBeTruthy();
+    cleanup();
+    receive({ stage: 'ready', network: 'Example-Setup', bluetoothAvailable: true, onByHand });
+    expect(screen.queryByRole('button', { name: 'Download it by hand instead' })).toBeNull(); // Bluetooth is the other way there
+  });
+
   it('a frame\'s title and boot hint replace the defaults', () => {
     receive({ stage: 'waiting-boot', words: { title: 'Hold on', bootHint: 'It restarts twice.' } });
     expect(screen.getByRole('heading').textContent).toBe('Hold on');

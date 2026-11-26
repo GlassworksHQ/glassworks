@@ -550,8 +550,8 @@ details > summary, .disclose { cursor: pointer; }
 .road-list li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 5px 0; font-size: 14px; color: var(--muted); counter-increment: road; }
 .road-list li::before { content: counter(road); font: 600 12px/1 var(--f-sans); color: var(--faint); font-variant-numeric: tabular-nums; }
 .road-list li.you { color: var(--fg); }
-.road-m { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.road-list li.you .road-m { color: var(--turn-ink); font-weight: 500; padding: 2px 8px; border-radius: 999px; background: var(--turn-wash); }
+.road-m { font-size: 12px; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: baseline; gap: 8px; }
+.road-you { color: var(--turn-ink); font-weight: 500; padding: 2px 8px; border-radius: 999px; background: var(--turn-wash); }
 .checks { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; font-size: 13.5px; }
 .checks li.fail { color: var(--problem-ink); font-weight: 500; }
 
@@ -562,6 +562,7 @@ details > summary, .disclose { cursor: pointer; }
 .keep b { color: var(--fg); font-weight: 500; font-size: 15px; }
 .keep.kept { border: 1px solid color-mix(in srgb, var(--green) 40%, transparent); }
 .keep.kept .ico { background: var(--ok-wash); color: var(--ok-ink); }
+.keep .keep-confirm { margin-top: 8px; padding: 8px 10px; font-size: 13.5px; }
 @media (max-width: 760px) { .keep { grid-template-columns: auto minmax(0, 1fr); } .keep .btn { grid-column: 1 / -1; width: 100%; } }
 .note-more { display: block; margin-top: 4px; }
 

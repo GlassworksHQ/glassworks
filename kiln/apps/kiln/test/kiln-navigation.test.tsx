@@ -173,6 +173,18 @@ describe('on a phone', () => {
     expect(screen.queryByRole('dialog', { name: 'Steps' })).toBeNull(); // the sheet goes; Start over's dialog opens
     expect(screen.getByRole('dialog', { name: 'Start over?' })).toBeTruthy();
   });
+
+  it('Close on the Steps sheet gives focus back to Steps', async () => {
+    await showImage('place-restore-point');
+    const bar = document.querySelector('.stepbar') as HTMLElement;
+    const steps = within(bar).getByRole('button', { name: 'Steps' });
+    fireEvent.click(steps);
+    const sheet = screen.getByRole('dialog', { name: 'Steps' });
+    await act(async () => { fireEvent.click(within(sheet).getByRole('button', { name: 'Close' })); });
+    await act(() => new Promise((r) => setTimeout(r, 30)));
+    expect(screen.queryByRole('dialog', { name: 'Steps' })).toBeNull();
+    expect(document.activeElement).toBe(steps);
+  });
 });
 
 describe('the S1 wizard', () => {

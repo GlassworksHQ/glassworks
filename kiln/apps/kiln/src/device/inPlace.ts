@@ -116,8 +116,10 @@ const STAGE_SECRET_KEY = 'kiln:stage-secret';
  * the agent's signature. A browser that keeps nothing gets a new one each time, and its bundles then come with Kiln's
  * warning ([UnverifiedBundle]).
  */
-export function browserStageSecret(storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = globalThis.localStorage): Uint8Array {
+export function browserStageSecret(given?: Pick<Storage, 'getItem' | 'setItem'>): Uint8Array {
   try {
+    // inside the try: a browser that blocks storage throws from the localStorage getter itself
+    const storage = given ?? globalThis.localStorage;
     const kept = fromHexString(storage?.getItem(STAGE_SECRET_KEY) ?? '');
     if (kept?.length === 32) return kept;
     const made = newSecret();

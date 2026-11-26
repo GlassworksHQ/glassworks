@@ -119,7 +119,14 @@ async function toRestorePoint(r: Rig, via: 'wifi' | 'ble' = 'wifi', copy = true)
   expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
   await r.image.connectFastboot();
   await readyRestorePoint(r);
-  if (copy) await r.image.restoreZip();
+  if (copy) await saveCopy(r.image);
+}
+
+/** The person downloads the restore point's copy and says it's saved: Continue opens. */
+async function saveCopy(image: ImageSession) {
+  const zip = await image.restoreZip();
+  await image.confirmCopy();
+  return zip;
 }
 
 /** Waits for the restore point to be saved and checked. */
@@ -306,6 +313,12 @@ describe('Glassworks on the stock software', () => {
     expect(r.image.state.screen).toBe('restore-point');
     expect(r.flashed).toEqual(['userdata']); // the stage alone
     await r.image.restoreZip();
+    // offered, not counted: a browser can't say the download landed, so the person confirms it
+    expect(r.image.state.restorePoint).toMatchObject({ offered: true, downloaded: false });
+    expect(await r.store.copied(FAKE_SERIAL, r.progress.mark!.digest as string, r.image.state.restorePoint!.digest!)).toBe(false);
+    await r.image.continueInstall();
+    expect(r.flashed).toEqual(['userdata']);
+    await r.image.confirmCopy();
     expect(r.image.state.restorePoint?.downloaded).toBe(true);
     expect(await r.store.copied(FAKE_SERIAL, r.progress.mark!.digest as string, r.image.state.restorePoint!.digest!)).toBe(true);
     await r.image.continueInstall();
@@ -318,7 +331,7 @@ describe('Glassworks on the stock software', () => {
     await toRestorePoint(r);
     const { blob, name } = await r.image.restoreZip();
     expect(name).toMatch(/^glassworks-in-place-\d{8}-\d{6}\.zip$/);
-    expect(r.image.state.restorePoint?.downloaded).toBe(true);
+    expect(r.image.state.restorePoint).toMatchObject({ offered: true, downloaded: true }); // toRestorePoint confirmed the first copy
     const { files } = await readNamedBackupZip(new NodeBlob([await bytesOf(blob) as Uint8Array<ArrayBuffer>]) as unknown as Blob);
     expect(files.map((f) => f.filename).sort()).toEqual(['manifest.json', 'restore-services.sparse']);
     const manifest = JSON.parse(new TextDecoder().decode(files.find((f) => f.filename === 'manifest.json')!.data)) as { servicesJar: { restoreSparse: string } };
@@ -359,6 +372,36 @@ describe('Start over', () => {
     r.image.startOver();
     expect(r.image.state.screen).toBe('image');
     expect(r.flashed).toEqual(['userdata']); // the stage alone: the system was never written
+  });
+
+  it('a restore point still saving for the run before changes nothing in the new run, and Continue waits for the new one', async () => {
+    const inner = memoryInPlaceStore();
+    const gates: (() => void)[] = [];
+    const store: InPlaceStore = { ...inner, putRestore: async (...a: Parameters<InPlaceStore['putRestore']>) => { await new Promise<void>((x) => gates.push(x)); return inner.putRestore(...a); } };
+    const r = rig({ store });
+    await toReceive(r);
+    await r.image.receiveWifi();
+    await r.image.connectFastboot();
+    await vi.waitFor(() => expect(gates).toHaveLength(1)); // the first run's save, held
+    expect(r.image.state.restorePoint?.status).toBe('saving');
+    r.image.askStartOver();
+    r.image.startOver();
+    await toReceive(r);
+    await r.image.receiveWifi();
+    // the stand-in agent signs with the first run's secret (it reads it off its first stage only): taken unverified
+    if (r.image.state.screen === 'receive') await r.image.receiveUnverified();
+    await r.image.connectFastboot();
+    await vi.waitFor(() => expect(gates).toHaveLength(2)); // the new run's save, held too
+    gates[0]!(); // the old save finishes now
+    for (let i = 0; i < 20; i++) await new Promise((x) => setTimeout(x, 5));
+    expect(r.image.state.restorePoint?.status).toBe('saving'); // not the old run's "ready"
+    await r.image.continueInstall();
+    expect(r.image.state.screen).toBe('restore-point');
+    gates[1]!();
+    await readyRestorePoint(r);
+    await saveCopy(r.image);
+    await r.image.continueInstall();
+    expect(r.flashed).toEqual(['userdata', 'userdata', 'system', 'userdata']); // two stages, then this run's writes
   });
 
   it('not once a system write began: its error, and a reload after it, offer the restore point instead', async () => {
@@ -439,12 +482,12 @@ describe('a reload', () => {
     await b.image.continueInstall();
     expect(b.flashed).toEqual([]);
     // a copy, then a reload: the same restore point saved again goes on without asking twice
-    await b.image.restoreZip();
+    await saveCopy(b.image);
     const c = rig({ dev, store, progress });
     await c.image.connectFastboot();
     await readyRestorePoint(c);
     expect(c.image.state.restorePoint?.downloaded).toBe(true);
-    expect(c.image.state.log.join('\n')).toMatch(/a copy of it was downloaded from this browser before/);
+    expect(c.image.state.log.join('\n')).toMatch(/a copy of it was saved from this browser before/);
     await c.image.continueInstall();
     expect(c.flashed).toEqual(['system', 'userdata']);
   });
@@ -491,7 +534,7 @@ describe('the way back (restore-blocks)', () => {
     const r = rig();
     await toReceive(r);
     await toRestorePoint(r);
-    const zip = await r.image.restoreZip();
+    const zip = await saveCopy(r.image);
     await r.image.continueInstall();
     await r.image.connectAdb();
     return { r, zip };
@@ -510,6 +553,8 @@ describe('the way back (restore-blocks)', () => {
     expect(r.image.state.undo?.at).toBe('done');
     expect(r.flashed.slice(before)).toEqual(['system', 'userdata']);
     expect(r.image.state.log.join('\n')).toContain('as after a factory reset');
+    // the log says which check ran: fastboot's OKAY on each write, no read-back in fastboot
+    expect(r.image.state.log.join('\n')).toContain('Kiln doesn\'t read the restore back in fastboot');
     expect(device()).toMatchObject({ installed: undefined, owner: undefined }); // the fresh userdata took the app and its owner
   });
 
@@ -612,7 +657,7 @@ describe('the way back (restore-blocks)', () => {
     const slow = rig({ dev: { ...r.dev, fastboot: () => { const f = r.dev.fastboot(); return { ...f, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { await new Promise<void>((x) => { release = x; }); await f.flashBlob(p, b, on); } }; } }, store: r.store, progress: r.progress });
     await slow.image.connectFastboot();
     await readyRestorePoint(slow);
-    await slow.image.restoreZip();
+    await saveCopy(slow.image);
     const writing = slow.image.continueInstall();
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     await slow.image.startUndo();
@@ -766,7 +811,7 @@ describe('the way back after the review\'s second round', () => {
       const x = rig();
       await toReceive(x);
       await toRestorePoint(x);
-      const z = await x.image.restoreZip();
+      const z = await saveCopy(x.image);
       await x.image.continueInstall();
       await x.image.connectAdb();
       return { r: x, zip: z };
@@ -981,7 +1026,7 @@ describe('routes and screens', () => {
     expect(Object.keys(routesOf(mirrorFrame.id))).toEqual(expect.arrayContaining(['undo', 'undo/connect', 'undo/restore', 'undo/done']));
   });
 
-  it.each(['place-start', 'place-fastboot', 'place-confirm', 'place-receive-file', 'place-restore-point', 'place-restore-copied', 'place-fastboot-again', 'place-connect', 'place-first-start', 'place-installing',
+  it.each(['place-start', 'place-fastboot', 'place-confirm', 'place-receive-file', 'place-restore-point', 'place-restore-offered', 'place-restore-copied', 'place-fastboot-again', 'place-connect', 'place-first-start', 'place-installing',
     'place-error-write', 'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken'] as const)('%s renders, with one ember button at most', async (d) => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, d, true, {}, h.handOver);
@@ -989,16 +1034,22 @@ describe('routes and screens', () => {
     await act(async () => {});
     expect(document.querySelectorAll('.btn.ember').length).toBeLessThanOrEqual(1);
     expect(document.body.textContent).not.toContain(FAKE_SERIAL);
+    expect(document.body.textContent).not.toContain('Check every part'); // the restore isn't read back, so no screen says it is
   }, 20_000);
 
   it('the first screen says the whole road up front: every part, in order, the person\'s marked, with how long', async () => {
     const { image, app } = await imageDemo(mirrorEntry, 'place-start', true);
     render(<ImageFlow image={image} app={app} />);
-    const road = [...document.querySelectorAll('.road-list li')].map((li) => `${li.classList.contains('you') ? 'You: ' : ''}${li.querySelector('.road-t')!.textContent}${li.querySelector('.road-m')!.textContent && !li.classList.contains('you') ? ` (${li.querySelector('.road-m')!.textContent})` : ''}`);
+    const road = [...document.querySelectorAll('.road-list li')].map((li) => {
+      const time = li.querySelector('.road-time')?.textContent;
+      // the person's rows carry the marker and, when there is one, the estimate too
+      expect(!!li.querySelector('.road-you')).toBe(li.classList.contains('you'));
+      return `${li.classList.contains('you') ? 'You: ' : ''}${li.querySelector('.road-t')!.textContent}${time ? ` (${time})` : ''}`;
+    });
     expect(road).toEqual([
-      'You: Put the Mirror in fastboot mode',
+      'You: Put the Mirror in fastboot mode (about 10 minutes)',
       'Kiln adds a small setup helper. The original system isn’t touched',
-      'You: Join the Mirror’s own Wi-Fi, so Kiln can copy the parts of its system it will change',
+      'You: Join the Mirror’s own Wi-Fi, so Kiln can copy the parts of its system it will change (5–7 minutes)',
       'You: Fastboot mode once more',
       'Kiln prepares the changes and checks them',
       'You: Kiln saves a restore point, and you download a copy',
@@ -1061,7 +1112,7 @@ describe('routes and screens', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   }, 20_000);
 
-  it('the restore point\'s Continue opens once it is saved and checked, and a copy is on the computer', async () => {
+  it('the restore point\'s Continue opens once it is saved and checked, and the person confirms a copy is on the computer', async () => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, 'place-restore-point', true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
@@ -1072,6 +1123,12 @@ describe('routes and screens', () => {
     expect(go().getAttribute('aria-describedby')).toBe('continue-why');
     expect(document.getElementById('continue-why')!.textContent).toBe('Continue opens once a copy is on this computer.');
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Download a copy' })); });
+    // the browser can't say the download landed: Continue waits for the person to say it's saved
+    const saved = await vi.waitFor(() => screen.getByRole('checkbox', { name: 'I have the .zip saved on this computer' }));
+    expect(go().hasAttribute('disabled')).toBe(true);
+    expect(document.getElementById('continue-why')!.textContent).toBe('Continue opens once you confirm the copy is saved.');
+    expect(screen.getByRole('button', { name: 'Download again' })).toBeTruthy();
+    await act(async () => { fireEvent.click(saved); });
     await vi.waitFor(() => expect(go().hasAttribute('disabled')).toBe(false));
     expect(go().className).toContain('ember');
     expect(document.getElementById('continue-why')).toBeNull();

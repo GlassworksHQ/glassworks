@@ -29,4 +29,14 @@ describe('browserStageSecret', () => {
     expect(browserStageSecret(broken)).toHaveLength(32);
     expect(browserStageSecret(undefined)).toHaveLength(32);
   });
+
+  it('a browser whose localStorage getter itself throws (storage blocked by policy) still gets a secret', () => {
+    const was = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new DOMException('blocked', 'SecurityError'); } });
+    try {
+      expect(browserStageSecret()).toHaveLength(32);
+    } finally {
+      if (was) Object.defineProperty(globalThis, 'localStorage', was); else delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
+  });
 });

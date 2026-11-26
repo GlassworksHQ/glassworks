@@ -107,6 +107,21 @@ describe('connecting while the Mirror is still starting', () => {
     expect(f.state.log.some((l) => l.includes(`dropped the USB connection while it starts (${LOST}). Connecting again.`))).toBe(true);
   });
 
+  it('the 6 minutes are one deadline for the polls and the reconnects: a device that keeps dropping ends there', async () => {
+    const LOST = "Failed to execute 'transferOut' on 'USBDevice': A transfer error has occurred.";
+    const dropping = (): PanelShell => ({ run: async () => { throw new Error(LOST); }, push: async () => {} });
+    let refused = 0;
+    // it comes back each time, after refusing a few times, and drops again on the next poll
+    const reopen = vi.fn(async (): Promise<PanelShell> => { if (refused++ % 4 < 3) throw new Error(REFUSED); return dropping(); });
+    const { f, mirror } = setup({ request: async () => dropping(), reopen, tries: 1000 });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(f.state).toMatchObject({ screen: 'error', error: expect.stringMatching(/didn't finish starting in 6 minutes/) });
+    // every reconnect waits 5 s first: 6 minutes hold at most 72 of them, however many tries a reconnect may take
+    expect(reopen.mock.calls.length).toBeLessThanOrEqual(72);
+    expect(handed).toEqual([]);
+  });
+
   it('a USB reset Kiln can\'t connect back from ends on the error screen, as before', async () => {
     const LOST = "Failed to execute 'transferOut' on 'USBDevice': A transfer error has occurred.";
     const first: PanelShell = { run: async () => { throw new Error(LOST); }, push: async () => {} };

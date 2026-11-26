@@ -234,7 +234,8 @@ two, on `/lululemon-mirror`:
 | `?demo=place-fastboot` | The first fastboot: the drawing beside the steps, then the browser's list |
 | `?demo=place-confirm` | The checks passed, add the setup helper |
 | `?demo=place-restore-point` | The restore point saved; Continue waits for the copy |
-| `?demo=place-restore-copied` | The copy downloaded; Continue is the ember button |
+| `?demo=place-restore-offered` | The copy offered as a download; Continue waits for the person to confirm it's saved |
+| `?demo=place-restore-copied` | The copy confirmed saved; Continue is the ember button |
 | `?demo=place-connect` | The first start's Connect, with the whole list |
 | `?demo=place-first-start` | Picked, waiting for the first start: the Wait and the list |
 | `?demo=place-installing` | The first start on the working screen |

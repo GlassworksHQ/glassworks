@@ -204,7 +204,7 @@ export function InPlaceStart({ f, s, m, ms }: P) {
             {road.map((x) => (
               <li key={x.text} className={x.you ? 'you' : undefined}>
                 <span className="road-t">{x.text}</span>
-                <span className="road-m">{x.you ? 'You' : x.time ?? ''}</span>
+                <span className="road-m">{x.time && <span className="road-time">{x.time}</span>}{x.you && <span className="road-you">You</span>}</span>
               </li>
             ))}
           </ol>
@@ -596,9 +596,10 @@ export function InPlaceRestorePoint({ f, s }: P) {
   const [failed, setFailed] = useState<string | null>(null);
   return (
     <>
-      <RestorePointScreen log={<Log s={s} />} status={r.status} verifiedDigest={r.digest} downloaded={r.downloaded} restoreFilename={r.filename} errorMessage={r.error}
+      <RestorePointScreen log={<Log s={s} />} status={r.status} verifiedDigest={r.digest} downloaded={r.downloaded} offered={r.offered} restoreFilename={r.filename} errorMessage={r.error}
         words={inPlaceWordsOf(f.frame)} downloadError={failed}
         onDownload={() => { setFailed(null); void f.restoreZip().then(({ blob, name }) => saveFile(blob, name)).catch((e: Error) => setFailed(e.message)); }}
+        onConfirmCopy={() => void f.confirmCopy()}
         onContinue={() => void f.continueInstall()} onRetry={() => f.retryRestorePoint()} />
     </>
   );
@@ -614,7 +615,7 @@ export function InPlaceUndo({ f, s }: P) {
       <section className="card" aria-labelledby="h">
         <span className="okmark" aria-hidden="true">✓</span>
         <h2 id="h">{`${cap(d.the)} is back on its original system`}</h2>
-        <p className="lede">{`Every part Kiln changed is as it was before, and ${d.the} is restarting. Its first start takes a few minutes.`}</p>
+        <p className="lede">{`Kiln wrote back every part it changed, and ${d.the} is restarting. Its first start takes a few minutes.`}</p>
         <Foot back={null}>
           <button type="button" className="btn ghost" onClick={() => f.backToChoice()}>Install Glassworks again</button>
           <a className="btn ember" href="/">Back to Kiln</a>
@@ -634,7 +635,8 @@ export function InPlaceUndo({ f, s }: P) {
     );
   }
   if (u.at === 'working') {
-    const rows = rowsAt([{ id: 'write', label: 'Put the original parts back', x: u.x ?? 0 }, { id: 'check', label: 'Check every part it wrote' }, { id: 'restart', label: `Restart ${d.the}` }], 0);
+    // no check row: the restore isn't read back (fastboot's OKAY on each write is all Kiln has here, and the log says so)
+    const rows = rowsAt([{ id: 'write', label: 'Put the original parts back', x: u.x ?? 0 }, { id: 'restart', label: `Restart ${d.the}` }], 0);
     return (
       <section className="card" aria-labelledby="h">
         <h2 id="h">Putting the original system back</h2>

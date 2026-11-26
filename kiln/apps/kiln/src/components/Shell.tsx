@@ -131,6 +131,9 @@ export function Shell({ steps: given, level, error, chip, href, lock, actions, b
   const [sheet, setSheet] = useState(false);
   // an action from the Steps sheet runs once the sheet has gone: its own dialog (Start over) must not open under a closing one
   const after = useRef<FlowActionSpec | undefined>(undefined);
+  // set when the sheet closes for a step or a flow action: focus then goes to that step or the action's own dialog,
+  // not back to Steps (which would close the action's dialog). Close and Escape leave it unset, so focus returns.
+  const handOff = useRef(false);
   useEffect(() => {
     if (sheet || !after.current) return;
     const a = after.current;
@@ -191,12 +194,13 @@ export function Shell({ steps: given, level, error, chip, href, lock, actions, b
             <Dialog.Trigger className="btn ghost sm sb-steps">Steps</Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="overlay" />
-              {/* focus stays put when it closes: a flow action's own dialog opens as it does, and focus going back to Steps would close it */}
-              <Dialog.Content className="sheet steps-sheet" onCloseAutoFocus={(e) => e.preventDefault()}>
+              {/* after a step or a flow action, focus stays put: the action's own dialog opens as the sheet closes, and focus
+                  going back to Steps would close it. Close and Escape give focus back to Steps, as usual */}
+              <Dialog.Content className="sheet steps-sheet" onCloseAutoFocus={(e) => { if (handOff.current) e.preventDefault(); handOff.current = false; }}>
                 <Dialog.Title asChild><h3>Steps</h3></Dialog.Title>
                 <Dialog.Description className="visually-hidden">Where you are in the install, and the steps you can go back to</Dialog.Description>
-                <Rail steps={steps} onGo={() => setSheet(false)} />
-                <RailFoot steps={steps} lock={lock} actions={actions} run={(a) => { after.current = a; setSheet(false); }} />
+                <Rail steps={steps} onGo={() => { handOff.current = true; setSheet(false); }} />
+                <RailFoot steps={steps} lock={lock} actions={actions} run={(a) => { after.current = a; handOff.current = true; setSheet(false); }} />
                 <Dialog.Close className="btn ghost">Close</Dialog.Close>
               </Dialog.Content>
             </Dialog.Portal>

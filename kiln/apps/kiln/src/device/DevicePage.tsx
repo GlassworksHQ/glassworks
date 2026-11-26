@@ -301,12 +301,18 @@ function isSetUpPending(base: string): boolean {
   try { return sessionStorage.getItem(pendingKey(base)) === '1'; } catch { return false; }
 }
 
-/** The tab's mark of the credits the last install stood on, when they aren't the frame's: set-up's Done after a reload. */
+/**
+ * The credits the last install stood on, when they aren't the frame's: kept in memory for this page's set-up, and in the
+ * tab's storage only to find them again after a reload (so set-up's Done is right with storage off too).
+ */
+const USED = new Map<string, StepCredits | undefined>();
 const usedKey = (base: string) => `kiln:standard:${base}:credits`;
 function setUsedCredits(base: string, used?: StepCredits): void {
+  USED.set(base, used);
   try { if (used) sessionStorage.setItem(usedKey(base), JSON.stringify(used)); else sessionStorage.removeItem(usedKey(base)); } catch { /* storage off */ }
 }
 function usedCredits(base: string): StepCredits | undefined {
+  if (USED.has(base)) return USED.get(base);
   try { const v = sessionStorage.getItem(usedKey(base)); return v ? JSON.parse(v) as StepCredits : undefined; } catch { return undefined; }
 }
 

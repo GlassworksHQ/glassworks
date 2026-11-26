@@ -284,6 +284,18 @@ describe('the session', () => {
     expect(s.state.screen).toBe('debug');
     s.backFromSteps();
     expect(s.state.screen).toBe('named');
+    // a brand corrected from the named screen: Back from its steps is the brand list, and the list's Back is named again
+    s.brands();
+    s.pickBrand('other');
+    s.chooseBrand();
+    expect(s.state.screen).toBe('debug');
+    s.backFromSteps();
+    expect(s.state.screen).toBe('brand');
+    s.back();
+    expect(s.state.screen).toBe('named');
+    s.toSteps();
+    s.backFromSteps();
+    expect(s.state.screen).toBe('named');
     s.restart();
     expect(s.state).toMatchObject({ screen: 'find' });
     expect(s.state.identified).toBeUndefined();

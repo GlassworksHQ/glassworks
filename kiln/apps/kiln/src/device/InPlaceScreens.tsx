@@ -123,6 +123,8 @@ function JoinWifi(p: ReceiveScreenProps & { network: string }) {
         <span className="links">
           {p.onCancel && <button type="button" className="btn ghost" onClick={p.onCancel}>Stop</button>}
           {p.bluetoothAvailable && !connecting && <button type="button" className="btn ghost" onClick={() => p.onConnectBluetooth()}>Use Bluetooth instead</button>}
+          {/* no Bluetooth here: the helper's own page is the other way, without waiting for Continue to fail first */}
+          {!p.bluetoothAvailable && !connecting && p.agentPageUrl && p.onByHand && <button type="button" className="btn ghost" onClick={() => p.onByHand?.()}>Download it by hand instead</button>}
         </span>
         {!connecting && <button type="button" className={`btn ${p.joined ? 'ember pulsing' : 'ghost'}`} onClick={() => p.onContinueWifi?.()}>Continue</button>}
       </Foot>
@@ -259,8 +261,8 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
     return (
       <section className="card" aria-labelledby="h">
         <h2 id="h">Kiln can’t confirm where this came from</h2>
-        <p className="lede">{`It came from ${the} and arrived whole, but it isn’t signed by the setup helper this browser started. That happens when the install began in another browser, or this browser’s data was cleared since.`}</p>
-        <Note tone="turn" title="Go on only if you just took it from your own device">{`${capital(the)}’s system hasn’t changed, and Kiln saves a restore point before it changes anything.`}</Note>
+        <p className="lede">{`It names ${the}’s serial and arrived whole, but it isn’t signed by the setup helper this browser started, so Kiln can’t confirm who sent it. That happens when the install began in another browser, or this browser’s data was cleared since.`}</p>
+        <Note tone="turn" title="Go on only if you know it came from your own device">{`${capital(the)}’s system hasn’t changed, and Kiln saves a restore point before it changes anything.`}</Note>
         <Foot back={p.onRetry ? { run: p.onRetry } : undefined}>
           {p.onContinueUnverified && <button type="button" className="btn ember" onClick={p.onContinueUnverified}>Continue anyway</button>}
         </Foot>
@@ -409,11 +411,16 @@ export interface RestorePointScreenProps {
   status: 'saving' | 'verifying' | 'ready' | 'error';
   /** The restore point's SHA-256, as read back. */
   verifiedDigest: string | null;
+  /** The person confirmed the copy is saved on this computer. */
   downloaded: boolean;
+  /** The copy was offered as a download this time: the person can now confirm it's saved. */
+  offered?: boolean;
   restoreFilename: string;
   errorMessage: string | null;
   words: InPlaceWords;
   onDownload(): void;
+  /** The person says the copy is saved: a browser can't tell the page whether a download landed. */
+  onConfirmCopy?: () => void;
   onContinue(): void;
   onRetry?: () => void;
   /** Why the copy didn't download, when it didn't. */
@@ -444,7 +451,8 @@ export function RestorePointScreen(p: RestorePointScreenProps) {
   const ready = status === 'ready';
   const go = ready && p.downloaded;
   // what Continue waits for, in one line beside it
-  const wait = !ready ? 'Continue opens once the restore point is saved and checked.' : !p.downloaded ? 'Continue opens once a copy is on this computer.' : undefined;
+  const wait = !ready ? 'Continue opens once the restore point is saved and checked.'
+    : !p.downloaded ? (p.offered ? 'Continue opens once you confirm the copy is saved.' : 'Continue opens once a copy is on this computer.') : undefined;
   const digest = p.verifiedDigest;
   const rows = rowsAt([
     { id: 'save', label: 'Save it in this browser' },
@@ -465,8 +473,14 @@ export function RestorePointScreen(p: RestorePointScreenProps) {
             <b>{p.downloaded ? 'A copy is on this computer' : 'Keep a copy on this computer too'}</b>
             <span>{p.downloaded ? 'Keep it until you’re sure you won’t go back. The way back can open it.' : 'In case this browser’s storage is cleared. It downloads as a .zip, which the way back can open.'}</span>
             {p.downloadError && <span className="status err" role="alert">{`The copy didn’t download: ${p.downloadError}`}</span>}
+            {p.offered && !p.downloaded && !p.downloadError && (
+              <label className="check keep-confirm">
+                <input type="checkbox" checked={false} onChange={() => p.onConfirmCopy?.()} />
+                <span>I have the .zip saved on this computer</span>
+              </label>
+            )}
           </span>
-          <button type="button" className={`btn ${p.downloaded ? 'ghost' : 'ember'}`} onClick={() => p.onDownload()}>{p.downloaded ? 'Downloaded ✓' : 'Download a copy'}</button>
+          <button type="button" className={`btn ${p.downloaded || p.offered ? 'ghost' : 'ember'}`} onClick={() => p.onDownload()}>{p.downloaded ? 'Downloaded ✓' : p.offered ? 'Download again' : 'Download a copy'}</button>
         </div>
       )}
       <InPlaceNotice words={words} />

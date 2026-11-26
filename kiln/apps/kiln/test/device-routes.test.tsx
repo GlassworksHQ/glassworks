@@ -117,6 +117,22 @@ describe('the credits on set-up\'s Done', () => {
     expect(credits()).toEqual(mirrorFrame.credits);
     expect(sessionStorage.getItem(`kiln:standard:${MIRROR_BASE}:credits`)).toBeNull();
   });
+
+  it('are right with the tab\'s storage off: the hand-over carries them, not storage', async () => {
+    const credits = () => (registry.get()!.session as unknown as { standard: { credits: unknown } }).standard.credits;
+    const off = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
+    const offGet = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
+    try {
+      at(MIRROR_BASE);
+      render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
+      const m = new FakeMirror({ kiosk: 'app' });
+      await act(async () => { pageHandOver(MIRROR_BASE)(m, { credits: {} }); });
+      expect(credits()).toEqual({});
+    } finally {
+      off.mockRestore();
+      offGet.mockRestore();
+    }
+  });
 });
 
 describe('a community image written as published', () => {

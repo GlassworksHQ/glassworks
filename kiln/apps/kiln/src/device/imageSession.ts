@@ -175,7 +175,14 @@ export interface ReceiveView {
 }
 
 /** The restore point's screen (InPlaceScreens RestorePointScreen). */
-export interface RestoreView { status: 'saving' | 'verifying' | 'ready' | 'error'; digest: string | null; downloaded: boolean; error: string | null; filename: string }
+export interface RestoreView {
+  status: 'saving' | 'verifying' | 'ready' | 'error'; digest: string | null;
+  /** The person confirmed the copy is saved on this computer (this run, or before a reload): Continue opens. */
+  downloaded: boolean;
+  /** The copy was handed to the browser as a download; the browser can't say it landed, so the person confirms it. */
+  offered?: boolean;
+  error: string | null; filename: string;
+}
 
 /** The way back from an in-place install (installer.json `wayBack.how` restore-blocks). */
 export interface UndoView {
@@ -388,6 +395,10 @@ export class ImageSession {
   private began = new Set<string>();
   /** The files an in-place run's writes changed, as its build said: read back over adb before the app's install (the `flashed` mark's `readBack`). */
   private readBack?: ReadBackFile[];
+  /** This run's number: Start over begins another, and a save still running for the one before changes nothing. */
+  private run = 0;
+  /** The run whose restore point was saved here and read back: Continue writes only for it. */
+  private savedFor?: number;
 
   /** The frame this session installs. */
   get frame() { return this.d.frame; }
@@ -1240,13 +1251,19 @@ export class ImageSession {
   /** Saves the restore point in this browser and reads it back: Continue opens only once every byte checks out. */
   private async saveRestorePoint(): Promise<void> {
     const rp = this.restore, serial = this.serial, digest = this.bundle?.digest;
-    const fail = (why: string) => this.set({ restorePoint: { ...this.state.restorePoint!, status: 'error', error: why } });
+    // the run this save is for: after Start over, whatever it finishes changes nothing (the new run saves its own)
+    const run = this.run;
+    const stale = () => run !== this.run;
+    this.savedFor = undefined;
+    const fail = (why: string) => { if (!stale()) this.set({ restorePoint: { ...this.state.restorePoint!, status: 'error', error: why } }); };
     if (!rp || !serial || !digest) { fail('Kiln has nothing to keep yet. Connect fastboot again.'); return; }
     try {
       const persisted = await this.store().persist();
+      if (stale()) return;
       this.log('Saving the restore point');
       this.log('', persisted ? 'this browser keeps it until you clear this site\'s data' : 'this browser may clear it when space runs low: download a copy too');
       await this.store().putRestore(serial, digest, rp.files);
+      if (stale()) return;
       this.set({ restorePoint: { ...this.state.restorePoint!, status: 'verifying' } });
       const back = await this.store().getRestore(serial, digest);
       for (const f of rp.files) {
@@ -1254,12 +1271,16 @@ export class ImageSession {
         if (!got || await sha256Hex(got.data) !== await sha256Hex(f.data)) throw new Error(`${f.filename} didn't read back as it was saved`);
       }
       const sum = await sha256Hex(rp.files[0]!.data);
+      if (stale()) return;
       this.log('', `${rp.sparse}: saved and read back, SHA-256 ${sum}`);
-      // a copy of this same restore point already downloaded from this browser (before a reload): Continue doesn't wait again
+      // a copy of this same restore point the person confirmed saved from this browser (before a reload): Continue doesn't wait again
       const copied = await this.store().copied(serial, digest, sum).catch(() => false);
-      if (copied) this.log('', 'a copy of it was downloaded from this browser before');
+      if (stale()) return;
+      if (copied) this.log('', 'a copy of it was saved from this browser before');
+      this.savedFor = run;
       this.set({ restorePoint: { ...this.state.restorePoint!, status: 'ready', digest: sum, error: null, downloaded: copied || this.state.restorePoint!.downloaded } });
     } catch (e) {
+      if (stale()) return;
       this.log('', `restore point: ${(e as Error).message}`);
       fail((e as Error).message);
     }
@@ -1268,25 +1289,38 @@ export class ImageSession {
   /** The restore point screen's Try again. */
   retryRestorePoint() { if (this.state.screen === 'restore-point') { this.set({ restorePoint: { ...this.state.restorePoint!, status: 'saving', error: null } }); void this.saveRestorePoint(); } }
 
-  /** The restore point as a zip, for the person to keep: its files and a SHA256SUMS. */
+  /**
+   * The restore point as a zip, for the person to keep: its files and a SHA256SUMS. Only offered: a browser can't tell
+   * the page whether a download landed, so the copy counts once the person says it's saved (`confirmCopy`).
+   */
   async restoreZip(): Promise<{ blob: Blob; name: string }> {
+    const run = this.run;
     const files = this.restore?.files ?? (this.serial && this.bundle ? await this.store().getRestore(this.serial, this.bundle.digest) : undefined);
     if (!files) throw new Error('Kiln has no restore point to download yet.');
     const zip = await restorePointZip(this.recipe.id, files);
     const rp = this.state.restorePoint;
-    if (rp) {
-      this.set({ restorePoint: { ...rp, downloaded: true } });
-      // kept with the restore point, so a reload that saves it again doesn't ask for the copy twice
-      if (rp.digest && this.serial && this.bundle) await this.store().markCopied(this.serial, this.bundle.digest, rp.digest).catch(() => undefined);
-      this.log('', 'a copy of the restore point downloaded to this computer');
+    if (rp && run === this.run) {
+      this.set({ restorePoint: { ...rp, offered: true } });
+      this.log('', `a copy of the restore point offered as a download (${zip.name})`);
     }
     return zip;
   }
 
-  /** Continue on the restore point: the writes, once it is saved and checked and a copy is on the computer. */
+  /** The person says the copy is saved on this computer: Continue opens, and a reload remembers it. */
+  async confirmCopy(): Promise<void> {
+    const rp = this.state.restorePoint;
+    if (this.state.screen !== 'restore-point' || !rp || rp.status !== 'ready' || !rp.offered || rp.downloaded) return;
+    const run = this.run;
+    this.set({ restorePoint: { ...rp, downloaded: true } });
+    this.log('', 'you confirmed a copy of the restore point is saved on this computer');
+    // kept with the restore point, so a reload that saves it again doesn't ask for the copy twice
+    if (rp.digest && this.serial && this.bundle && run === this.run) await this.store().markCopied(this.serial, this.bundle.digest, rp.digest).catch(() => undefined);
+  }
+
+  /** Continue on the restore point: the writes, once it is saved and checked for this run and a copy is on the computer. */
   async continueInstall(): Promise<void> {
     const rp = this.state.restorePoint;
-    if (this.state.screen !== 'restore-point' || rp?.status !== 'ready' || !rp.downloaded || this.cursor === undefined) return;
+    if (this.state.screen !== 'restore-point' || rp?.status !== 'ready' || !rp.downloaded || this.cursor === undefined || this.savedFor !== this.run) return;
     this.set({ screen: 'working' });
     await this.runFrom(this.cursor + 1);
   }
@@ -1497,6 +1531,8 @@ export class ImageSession {
         for (const x of wayBack.partitions) await write(x, n++, () => after.writes[x]!, () => this.log(`Writing ${x}`));
         this.log('', after.what);
       }
+      // said in the log, as the rule asks: the restore has fastboot's OKAY on each write, and no read-back
+      this.log('', 'fastboot accepted every write; Kiln doesn\'t read the restore back in fastboot');
       this.log(`Restarting ${this.d.frame.the}`);
       await fb.reboot();
       this.d.progress?.set(undefined);
@@ -1854,13 +1890,21 @@ export class ImageSession {
    * Waits for Android to say it has started (`sys.boot_completed`), at most 6 minutes. A device can reset its USB
    * partway through its start, after Kiln is in (an Android 6 device did, 2026-11-25: "Failed to execute
    * 'transferOut' on 'USBDevice'"): the poll's next call fails, so Kiln lets go and connects to the same device again,
-   * with no list, as the first connect asks again. In: the device as connected. Out: the device as connected now.
+   * with no list, as the first connect asks again. The 6 minutes are one deadline for the polls and the reconnects
+   * together: a reconnect gets only what is left of it. In: the device as connected. Out: the device as connected now.
    */
   private async untilStarted(first: PanelShell, run: number, sleep: (ms: number) => Promise<void>): Promise<PanelShell> {
     let p = first;
     const { reopenAdb } = this.d;
-    for (let i = 0; ; i++) {
-      if (i > 180) throw new Error(`${this.d.frame.the} didn't finish starting in 6 minutes`);
+    const limit = 6 * 60_000;
+    // the time spent: the clock, or what was slept when sleeping takes no time (a simulated device)
+    const t0 = Date.now();
+    let slept = 0;
+    const wait = async (ms: number) => { await sleep(ms); slept += ms; };
+    const left = () => limit - Math.max(Date.now() - t0, slept);
+    const late = () => new Error(`${this.d.frame.the} didn't finish starting in 6 minutes`);
+    for (;;) {
+      if (left() <= 0) throw late();
       let started: boolean;
       try {
         started = (await p.run('getprop sys.boot_completed')).out.trim() === '1';
@@ -1870,21 +1914,26 @@ export class ImageSession {
         this.log('', `${cap(this.d.frame.the)} dropped the USB connection while it starts (${why}). Connecting again.`);
         const stale = p;
         void stale.close?.().catch(() => {});
-        p = await this.reconnect(reopenAdb, sleep, e);
+        try { p = await this.reconnect(reopenAdb, wait, e, left); } catch (e2) { if (left() <= 5000) throw late(); throw e2; }
         this.panel = p;
         continue;
       }
       if (started) return p;
-      await sleep(2000);
+      await wait(2000);
     }
   }
 
-  /** The device picked, again with no list, every 5 s until it lets in: as the first connect, at most `adbTries` times. */
-  private async reconnect(reopen: NonNullable<ImageDeps['reopenAdb']>, sleep: (ms: number) => Promise<void>, first: unknown): Promise<PanelShell> {
+  /**
+   * The device picked, again with no list, every 5 s until it lets in: as the first connect, at most `adbTries` times,
+   * and only while `left()` (the caller's deadline) has time; each try's wait for its key is cut to what is left.
+   */
+  private async reconnect(reopen: NonNullable<ImageDeps['reopenAdb']>, sleep: (ms: number) => Promise<void>, first: unknown, left: () => number = () => Infinity): Promise<PanelShell> {
     let last = first;
     for (let i = 0; i < (this.d.adbTries ?? 60); i++) {
+      if (left() <= 5000) break;
       await sleep(5000);
-      try { return await reopen.call(this.d, { authMs: this.d.frame.timings.authMs }); } catch (e) { last = e; }
+      const authMs = Math.min(this.d.frame.timings.authMs, Math.max(left(), 1000));
+      try { return await reopen.call(this.d, { authMs }); } catch (e) { last = e; }
       if (last instanceof AdbBusy) break;
     }
     throw last;
@@ -2029,6 +2078,8 @@ export class ImageSession {
     this.made = Object.create(null);
     this.cursor = undefined;
     this.fb = undefined;
+    this.run++;
+    this.savedFor = undefined;
     this.d.progress?.set(undefined);
     this.log('Started over', 'the setup agent stays in the app data until the next run writes it again');
     this.set({ startingOver: false, round: undefined, receive: undefined, restorePoint: undefined, leftHotspot: undefined, changed: true, connectError: undefined });

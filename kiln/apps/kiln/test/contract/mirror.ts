@@ -448,7 +448,7 @@ function inPlaceWorld(k: Knobs): World {
           case 'restore-point':
             if (s.restorePoint?.status === 'error') return { end: 'error' };
             // the person downloads the copy (Continue waits for it), then continues
-            return s.restorePoint?.status === 'ready' ? clicks.act('restore-point', () => f.restoreZip().then(() => f.continueInstall())) : 'wait';
+            return s.restorePoint?.status === 'ready' ? clicks.act('restore-point', () => f.restoreZip().then(() => f.confirmCopy()).then(() => f.continueInstall())) : 'wait';
           case 'adb':
             if (s.connectError && clicks.has('adb')) return { end: 'error' };
             return clicks.act('adb', () => f.connectAdb());
