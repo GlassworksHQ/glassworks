@@ -52,6 +52,8 @@ internal object CameraProbe {
                 object : CameraStreamFactory {
                     override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
                         inner.create(entityId, kind)?.let { Probed(it, entityId, kind).proxy }
+
+                    override fun prewarm() = inner.prewarm()
                 }
             }
             wrappers[kind] = wrapper

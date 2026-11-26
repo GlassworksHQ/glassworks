@@ -6,10 +6,12 @@ package dev.glassworks.engine.vitro.cards
 
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.camera.CameraFitFrame
+import dev.glassworks.engine.vitro.camera.CameraKnowledge
 import dev.glassworks.engine.vitro.camera.CameraStream
 import dev.glassworks.engine.vitro.camera.CameraStreamChoice
 import dev.glassworks.engine.vitro.camera.CameraStreamKind
@@ -42,6 +44,22 @@ import org.json.JSONObject
  * stills while HA restarts), when the camera shows after a hide of [LONG_HIDE_MS] or more (the screen woke up), and
  * every [VIDEO_RETRY_MS] while a camera that offers video plays MJPEG because its video failed. MJPEG stays on screen
  * until the video that replaces it draws.
+ *
+ * Where a wall panel departs from HA's frontend, it changes only how soon a camera plays, never what it shows:
+ * - HA's `camera/capabilities` answer is shared by every picture of the camera on the connection ([CameraKnowledge]),
+ *   and asked as soon as the card is built, before it's on screen; WebRTC's player gets ready ([CameraPlayers.prewarm])
+ *   once HA says the camera offers it.
+ * - HLS loads beside WebRTC only after WebRTC has gone [EXTRA_DELAY_MS] without video, and stops as soon as WebRTC
+ *   has video: HA runs both until both have loaded, and then shows WebRTC (muted, as here), so the second decoder and
+ *   HA's HLS stream worker would only cost.
+ * - WebRTC playing alone (no slot for HLS beside it) gets [ALONE_TIMEOUT_MS] to show video before HLS takes over,
+ *   rather than the player's own 20 s; a camera whose WebRTC failed to connect plays HLS first for a while
+ *   ([CameraKnowledge.webRtcFailedRecently]).
+ * - [foreground] (More Info's) takes a slot from a card behind it when every slot is held ([CameraVideoBudget]).
+ * - Off screen ([setOnScreen] false: its card scrolled out of sight) the players stop drawing, and after [PARK_MS]
+ *   its slot goes to a camera on screen that waits for one.
+ * - A player that keeps nothing worth keeping while paused ([CameraStream.closeWhenHidden]: WebRTC) is closed when
+ *   the camera hides, and opened again when it shows.
  */
 internal class LiveCameraFeed(
     private val ctx: VitroCardContext,
@@ -56,9 +74,58 @@ internal class LiveCameraFeed(
     private val onVideoSize: ((width: Int, height: Int) -> Unit)? = null,
     /** The card's type, for the log when a player throws. */
     private val cardType: String? = null,
+    /** More Info's camera: HA's dialog plays over the dashboard, so it takes a slot from a card behind it if it must. */
+    private val foreground: Boolean = false,
     private val onBitmap: (Bitmap) -> Unit,
 ) {
     private val pollMs = if (stream) POLL_MS else SNAPSHOT_MS
+
+    /** What the connection knows of its cameras: their capabilities, a WebRTC that failed to connect. */
+    private val knowledge = CameraKnowledge.of(ctx.store)
+
+    /** The kinds whose fallback was logged this run: one line each. */
+    private val logged = HashSet<CameraStreamKind>()
+
+    /** [setActive]'s ask: the card shows. [active] is that and not [offScreenOut]. */
+    private var shown = true
+
+    /** The card is on screen ([setOnScreen]). */
+    private var onScreen = true
+
+    /** Off screen for [PARK_MS]: its slots give way to a camera on screen ([CameraVideoBudget.park]). */
+    private var parked = false
+
+    /** Off screen, its main player's slot went to a camera on screen: it rests, as hidden, until it's on screen again. */
+    private var offScreenOut = false
+
+    private val parkTask = Runnable {
+        if (!running || !active || onScreen) return@Runnable
+        parked = true
+        held.toList().let { kinds -> if (kinds.isNotEmpty()) park(mainOf(kinds)) }
+    }
+
+    /** WebRTC has had [EXTRA_DELAY_MS] to show video: HLS may load beside it now. */
+    private var extraDue = false
+    private var extraDuePosted = false
+
+    private val extraDueTask = Runnable {
+        extraDuePosted = false
+        extraDue = true
+        recompute()
+    }
+
+    private var aloneDeadlinePosted = false
+
+    private val aloneDeadline = Runnable {
+        aloneDeadlinePosted = false
+        if (!running || !active || webRtcVideo != null || slots[CameraStreamKind.WEB_RTC] == null) return@Runnable
+        // WebRTC alone, still without video: it can't connect, most likely. HLS takes over, here and for a while on
+        // the camera's other pictures.
+        knowledge.webRtcFailed(entityId)
+        log(CameraStreamKind.WEB_RTC, "no video within $ALONE_TIMEOUT_MS ms with no HLS beside it")
+        closeSlot(CameraStreamKind.WEB_RTC)
+        failed(CameraStreamKind.WEB_RTC)
+    }
 
     private var running = false
     private var active = true
@@ -148,6 +215,11 @@ internal class LiveCameraFeed(
         recompute()
     }
 
+    init {
+        // Asked now, while the view builds: the answer is usually in when the card starts.
+        if (stream) prefetchCapabilities()
+    }
+
     val isPolling: Boolean get() = polling
 
     /** The kinds of player running now, in start order (tests, Clarity). */
@@ -162,6 +234,11 @@ internal class LiveCameraFeed(
         running = true
         live += this
         active = true
+        shown = true
+        offScreenOut = false
+        parked = false
+        extraDue = false
+        logged.clear()
         streamFrames = 0
         hlsVideo = null
         webRtcVideo = null
@@ -173,25 +250,87 @@ internal class LiveCameraFeed(
             startPolling()
             return
         }
+        if (capabilities == null) capabilities = knowledge.capabilities(entityId)
         if (capabilities == null) askCapabilities() else recompute()
+        if (!onScreen) schedulePark()
     }
 
     /** Hidden (false) or shown again (true): players pause and resume, and the video slot goes back meanwhile. */
     fun setActive(active: Boolean) {
-        if (!running || this.active == active) return
+        if (!running) return
+        shown = active
+        applyActive()
+    }
+
+    /**
+     * The card is on screen (true) or scrolled out of sight (false). Off screen its players stop drawing at once (they
+     * keep their connection, so they show again at once), and after [PARK_MS] its slot goes to the next camera on
+     * screen that needs one; if one does, it rests as hidden until it's back on screen.
+     */
+    fun setOnScreen(onScreen: Boolean) {
+        if (this.onScreen == onScreen) return
+        this.onScreen = onScreen
+        ctx.main.removeCallbacks(parkTask)
+        for (kind in slots.keys.toList()) {
+            val slot = slots[kind] ?: continue
+            if (guard(kind) { slot.stream.setRendering(onScreen) } == null) {
+                closeSlot(kind)
+                failed(kind)
+            }
+        }
+        if (!running) return
+        if (!onScreen) {
+            schedulePark()
+            return
+        }
+        parked = false
+        for (kind in held.toList()) CameraVideoBudget.park(this to kind, false)
+        if (offScreenOut) {
+            offScreenOut = false
+            // Its slot went while it was still active (the pause was posted): it asks for one again.
+            if (active) scheduleRecompute() else applyActive()
+        }
+    }
+
+    private fun schedulePark() {
+        ctx.main.removeCallbacks(parkTask)
+        ctx.main.postDelayed(parkTask, PARK_MS)
+    }
+
+    /** [kind]'s slot (the main player's) gives way, while off screen, to a camera on screen that needs one. */
+    private fun park(kind: CameraStreamKind) {
+        CameraVideoBudget.park(this to kind, true) {
+            held -= kind
+            closeSlot(kind)
+            offScreenOut = true
+            // Not from inside the budget's call: the rest of the camera rests as hidden, next.
+            ctx.main.post { if (running && offScreenOut) applyActive() }
+        }
+    }
+
+    /** Pauses or resumes the players as [shown] and [offScreenOut] say. */
+    private fun applyActive() {
+        val active = shown && !offScreenOut
+        if (this.active == active) return
         this.active = active
         if (!active) {
             hiddenAt = SystemClock.elapsedRealtime()
             stopPolling()
             cancelVideoRetry()
+            cancelTimers()
+            // Its slots go back: nothing to park until it shows again.
+            ctx.main.removeCallbacks(parkTask)
+            parked = false
             ctx.main.removeCallbacks(retry)
             ctx.main.removeCallbacks(askAgain)
             ctx.main.removeCallbacks(recomputeTask)
             recomputePosted = false
             // A player that can't pause is closed: it never keeps decoding once its slot goes back. (Not a failure of
-            // the kind: a failed MJPEG would start polling, and nothing polls while the camera is hidden.)
+            // the kind: a failed MJPEG would start polling, and nothing polls while the camera is hidden.) One that
+            // keeps nothing worth keeping paused (WebRTC's) is closed too, and opened again on show.
             for (kind in slots.keys.toList()) {
-                if (guard(kind) { slots[kind]?.stream?.setActive(false) } == null) closeSlot(kind)
+                val slot = slots[kind] ?: continue
+                if (slot.stream.closeWhenHidden || guard(kind) { slot.stream.setActive(false) } == null) closeSlot(kind)
             }
             releaseSlots()
             capped = false
@@ -204,6 +343,10 @@ internal class LiveCameraFeed(
         }
         // Hidden long enough for the screen to have slept: what failed before may play now (HA restarted meanwhile).
         if (SystemClock.elapsedRealtime() - hiddenAt >= LONG_HIDE_MS) forgetFailures()
+        // WebRTC connects afresh: HLS beside it waits its turn again.
+        extraDue = false
+        // Nothing of before is on screen (a closed player): a fresh still while the stream connects.
+        if (slots.values.none { it.hasFrame }) snapshot()
         // A video camera takes its slot again first; without one it goes to MJPEG (recompute closes the rest). A camera
         // that was capped before it hid starts over too: recompute asks for a slot, or waits for one, from its plan now.
         capped = false
@@ -237,6 +380,7 @@ internal class LiveCameraFeed(
         // Shown again after a failed capabilities request: ask now (the connection may be back).
         if (capabilities == null && !capabilitiesAsked) askCapabilities()
         recompute()
+        if (!onScreen) schedulePark()
     }
 
     fun stop() {
@@ -244,6 +388,10 @@ internal class LiveCameraFeed(
         live -= this
         stopPolling()
         cancelVideoRetry()
+        cancelTimers()
+        ctx.main.removeCallbacks(parkTask)
+        parked = false
+        offScreenOut = false
         inFlight = false
         generation++
         ctx.main.removeCallbacks(retry)
@@ -279,9 +427,12 @@ internal class LiveCameraFeed(
         retryFailed()
     }
 
-    /** Forgets what failed and runs the choice again: true when something had. */
+    /** Forgets what failed and runs the choice again: true when something had. WebRTC goes first again, alone a while. */
     private fun retryFailed() {
-        if (forgetFailures()) recompute()
+        if (!forgetFailures()) return
+        extraDue = false
+        cancelTimers()
+        recompute()
     }
 
     /** HLS's and WebRTC's failures and MJPEG's go: the choice starts over from what HA offers. True when any did. */
@@ -293,6 +444,7 @@ internal class LiveCameraFeed(
         }
         if (webRtcVideo == false) {
             webRtcVideo = null
+            knowledge.webRtcPlayed(entityId)
             any = true
         }
         if (mjpegDown) {
@@ -309,23 +461,68 @@ internal class LiveCameraFeed(
         ctx.main.removeCallbacks(videoRetry)
     }
 
+    /** The waits that belong to a run of the players: HLS's turn beside WebRTC, WebRTC's deadline alone. */
+    private fun cancelTimers() {
+        if (extraDuePosted) {
+            extraDuePosted = false
+            ctx.main.removeCallbacks(extraDueTask)
+        }
+        cancelAloneDeadline()
+    }
+
+    private fun cancelAloneDeadline() {
+        if (!aloneDeadlinePosted) return
+        aloneDeadlinePosted = false
+        ctx.main.removeCallbacks(aloneDeadline)
+    }
+
+    /** HA's frontend doesn't ask a camera without the STREAM feature for its capabilities. */
+    private fun offersStream(): Boolean {
+        val features = (ctx.store[entityId]?.attributes?.get("supported_features") as? Number)?.toInt() ?: 0
+        return features and CameraStreamChoice.FEATURE_STREAM != 0
+    }
+
+    /**
+     * Sends `camera/capabilities` for [entityId]; the answer comes on the main thread. Once per request, whoever
+     * waits for it: when HA offers WebRTC, its player gets ready while the rest of the view builds.
+     */
+    private fun sendCapabilities(answer: (Boolean, Any?) -> Unit) {
+        ctx.callWs(JSONObject().put("type", "camera/capabilities").put("entity_id", entityId)) { ok, result, _ ->
+            ctx.main.post {
+                if (ok) prewarmFor(CameraStreamChoice.kindsOf(result))
+                answer(ok, result)
+            }
+        }
+    }
+
+    /** Asks for the capabilities before the card is on screen ([knowledge] keeps the answer for [start]). */
+    private fun prefetchCapabilities() {
+        if (knowledge.capabilities(entityId) != null || !offersStream()) return
+        knowledge.ask(entityId, ::sendCapabilities) { _, _ -> }
+    }
+
+    /** HA offers WebRTC for the camera: its player gets ready while the rest of the view builds. */
+    private fun prewarmFor(kinds: List<CameraStreamKind>) {
+        if (CameraStreamKind.WEB_RTC !in kinds) return
+        val players = ctx.cameraPlayers ?: return
+        if (players.supports(CameraStreamKind.WEB_RTC)) runCatching { players.prewarm(CameraStreamKind.WEB_RTC) }
+    }
+
     private fun askCapabilities() {
         if (capabilitiesAsked) return
         capabilitiesAsked = true
-        val state = ctx.store[entityId]
-        val features = (state?.attributes?.get("supported_features") as? Number)?.toInt() ?: 0
-        if (features and CameraStreamChoice.FEATURE_STREAM == 0) {
+        if (!offersStream()) {
             // HA's frontend doesn't ask a camera without the STREAM feature: MJPEG.
             capabilities = emptyList()
             recompute()
             return
         }
-        val run = generation
-        ctx.callWs(JSONObject().put("type", "camera/capabilities").put("entity_id", entityId)) { ok, result, _ ->
-            ctx.main.post {
-                if (run != generation) return@post
-                if (ok) {
-                    capabilities = CameraStreamChoice.kindsOf(result)
+        val asked = generation
+        knowledge.ask(entityId, ::sendCapabilities) { ok, kinds ->
+            run {
+                if (asked != generation) return@run
+                if (ok && kinds != null) {
+                    capabilities = kinds
                     capabilitiesFailed = false
                     capabilitiesRetryMs = CAPABILITIES_RETRY_MS
                 } else {
@@ -355,7 +552,21 @@ internal class LiveCameraFeed(
         if (!running || !active || !stream) return
         val offered = capabilities ?: (if (capabilitiesFailed) emptyList() else return)
         val supported = CameraStreamChoice.playable(offered) { ctx.cameraPlayers?.supports(it) == true }
+        val both = CameraStreamKind.HLS in supported && CameraStreamKind.WEB_RTC in supported
+        // WebRTC failed to connect a moment ago, on this picture of the camera or another: HLS first.
+        if (both && webRtcVideo == null && knowledge.webRtcFailedRecently(entityId)) webRtcVideo = false
         var plan = CameraStreamChoice.streams(supported, hlsVideo, webRtcVideo)
+        if (both && webRtcVideo == true && hlsVideo == null) {
+            // WebRTC has video, which HA settles on once HLS has loaded too (muted): HLS needn't load.
+            plan = plan.filter { it.kind != CameraStreamKind.HLS }
+        } else if (both && webRtcVideo == null && hlsVideo == null && !extraDue) {
+            // Both loading: WebRTC alone, shown, for its first [EXTRA_DELAY_MS]; HLS joins if it has no video by then.
+            plan = listOf(PlannedStream(CameraStreamKind.WEB_RTC, true))
+            if (!extraDuePosted) {
+                extraDuePosted = true
+                ctx.main.postDelayed(extraDueTask, EXTRA_DELAY_MS)
+            }
+        }
         val video = plan.filter { it.kind != CameraStreamKind.MJPEG }
         if (video.isNotEmpty()) {
             // A player the plan dropped gives its slot back first, so the camera's next kind (HLS after WebRTC failed)
@@ -397,6 +608,16 @@ internal class LiveCameraFeed(
         }
         // The still polls only while nothing streams: once MJPEG (or video) draws, its frames are the picture.
         if (slots.values.any { it.hasFrame && it.frame.alpha > 0f }) stopPolling()
+        // WebRTC alone (no slot for HLS, its turn not come yet, or HLS not loaded) gets a shorter wait for video when
+        // HLS could take over.
+        val alone = extraDue && webRtcVideo == null && hlsVideo == null && both &&
+            slots[CameraStreamKind.WEB_RTC] != null && slots[CameraStreamKind.HLS] == null
+        if (!alone) {
+            cancelAloneDeadline()
+        } else if (!aloneDeadlinePosted) {
+            aloneDeadlinePosted = true
+            ctx.main.postDelayed(aloneDeadline, ALONE_TIMEOUT_MS - EXTRA_DELAY_MS)
+        }
         // On MJPEG because the camera's video failed (not for want of a slot): video is tried again after a while.
         val videoFailed = !capped && video.isEmpty() && supported.any { it != CameraStreamKind.MJPEG }
         if (!videoFailed) {
@@ -424,6 +645,7 @@ internal class LiveCameraFeed(
             requireNotNull(target).addView(frame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             created.listener = listenerFor(kind, slot)
             created.start()
+            if (!onScreen) created.setRendering(false)
         }
         if (ok == null) {
             closeSlot(kind)
@@ -442,7 +664,10 @@ internal class LiveCameraFeed(
             streamFrames++
             when (kind) {
                 CameraStreamKind.HLS -> hlsVideo = true
-                CameraStreamKind.WEB_RTC -> webRtcVideo = true
+                CameraStreamKind.WEB_RTC -> {
+                    webRtcVideo = true
+                    knowledge.webRtcPlayed(entityId)
+                }
                 CameraStreamKind.MJPEG -> Unit
             }
             sizeFrom(slot)
@@ -458,6 +683,10 @@ internal class LiveCameraFeed(
 
         override fun onError(reason: String) {
             if (!current()) return
+            // WebRTC that never showed video, and not for want of HA's connection: it can't connect. HLS first for a
+            // while, on every picture of the camera.
+            if (kind == CameraStreamKind.WEB_RTC && webRtcVideo != true && !notConnected(reason)) knowledge.webRtcFailed(entityId)
+            log(kind, reason)
             closeSlot(kind)
             failed(kind)
         }
@@ -510,7 +739,15 @@ internal class LiveCameraFeed(
             starved = true
             scheduleRecompute()
         })
-        val ok = CameraVideoBudget.acquire(this to kind, extra, onYield) {
+        // A card's main player gives its slot to More Info's camera when that one finds every slot held: the card
+        // plays MJPEG meanwhile, first in line for the next slot.
+        val onPreempt = if (extra || foreground) null else ({
+            held -= kind
+            closeSlot(kind)
+            capped = true
+            scheduleRecompute()
+        })
+        val ok = CameraVideoBudget.acquire(this to kind, extra, onYield, foreground, onPreempt) {
             // A slot freed: a camera that played MJPEG, or its main player alone, for want of one takes up video again.
             ctx.main.post {
                 if (running && active && (capped || starved)) {
@@ -520,7 +757,11 @@ internal class LiveCameraFeed(
                 }
             }
         }
-        if (ok) held += kind
+        if (ok) {
+            held += kind
+            // Off screen long enough already: the new slot gives way to a camera on screen too.
+            if (parked && !extra) park(kind)
+        }
         return ok
     }
 
@@ -544,6 +785,15 @@ internal class LiveCameraFeed(
     /** Gives back every slot and stops waiting for one. */
     private fun releaseSlots() {
         for (kind in CameraStreamKind.values()) if (kind != CameraStreamKind.MJPEG) releaseSlot(kind)
+    }
+
+    /**
+     * One line per kind and run when a player fails, with its error code only: HA's messages can carry a camera's
+     * stream address, and a WebRTC one its network's.
+     */
+    private fun log(kind: CameraStreamKind, reason: String) {
+        if (!logged.add(kind)) return
+        runCatching { Log.i(TAG, "$entityId: ${kind.name.lowercase()} fell back (${codeOf(reason)})") }
     }
 
     /** Runs a player's [block]; a throw is that player failing, logged once, never the card's crash. */
@@ -583,7 +833,18 @@ internal class LiveCameraFeed(
     }
 
     companion object {
+        private const val TAG = "VitroCamera"
+
         const val POLL_MS = 1_500L
+
+        /** How long WebRTC plays alone before HLS loads beside it, if it has no video by then. */
+        const val EXTRA_DELAY_MS = 1_500L
+
+        /** How long WebRTC playing alone has to show video, from its start, when HLS could take over. */
+        const val ALONE_TIMEOUT_MS = 8_000L
+
+        /** How long a card is off screen before its slot gives way to a camera on screen. */
+        const val PARK_MS = 2_000L
 
         /** HA's `hui-image` refresh of a camera snapshot (`camera_view: auto`). */
         const val SNAPSHOT_MS = 10_000L
@@ -607,7 +868,19 @@ internal class LiveCameraFeed(
          * (the cards' and More Info's, whichever context built them) hears it ([reconnected]). Main thread.
          */
         fun connectionRestored(store: EntityStore) {
+            CameraKnowledge.of(store).forget()
             for (feed in live.toList()) if (feed.ctx.store === store) feed.reconnected()
         }
+
+        /** The error codes leading a stream's reason (`start_failed: not_connected: …`): a word each, nothing else. */
+        private fun codesOf(reason: String): List<String> =
+            reason.split(": ").take(2).takeWhile { it.matches(CODE) }
+
+        internal fun codeOf(reason: String): String = codesOf(reason).joinToString(": ").ifEmpty { "error" }
+
+        /** The stream failed because there was no connection to Home Assistant, which isn't the camera failing. */
+        internal fun notConnected(reason: String): Boolean = "not_connected" in codesOf(reason)
+
+        private val CODE = Regex("[a-z][a-z0-9_]{0,39}")
     }
 }
