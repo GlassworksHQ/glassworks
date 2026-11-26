@@ -5,6 +5,10 @@
 package dev.glassworks.camera
 
 import android.view.Surface
+import java.util.concurrent.Executor
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /** An H.264 encoder as the stream drives it: [H264Encoder] on a device. */
 interface StreamEncoder {
@@ -44,7 +48,9 @@ fun interface EncoderInput {
  * [egress]. After [close], nothing more happens, so a stopped server's late reports change nothing. A camera
  * that can't stream ([StreamFit.Refused]) gets no encoder, and the indicator stays off.
  *
- * [watched] says whether the server still has viewers; [after] runs a callback later (a Handler).
+ * [watched] says whether the server still has viewers; [after] runs a callback later (a Handler, on the main thread).
+ * A posted try makes its encoder on [worker], never on [after]'s thread: making one waits for the GPU's input to set up
+ * (up to seconds when it can't), which must not freeze the panel. [close] shuts the worker down.
  */
 internal class ViewerEncoder(
     private val input: EncoderInput,
@@ -58,6 +64,7 @@ internal class ViewerEncoder(
     /** The turn and rate every encoder of this server runs at, fixed when the server starts, as ONVIF advertises them. */
     private val turn: Int = 0,
     private val fps: Int = H264Encoder.FPS,
+    private val worker: Executor = Executors.newSingleThreadExecutor { r -> Thread(r, "glassworks-encoder").apply { isDaemon = true } },
 ) {
     private val lock = Any()
     private var current: StreamEncoder? = null
@@ -85,6 +92,15 @@ internal class ViewerEncoder(
         synchronized(lock) {
             closed = true
             stop()
+        }
+        (worker as? ExecutorService)?.shutdown()
+    }
+
+    /** [go] on [worker], under the lock. After [close] the worker takes nothing, and that's fine: nothing more happens. */
+    private fun onWorker(go: () -> Unit) {
+        try {
+            worker.execute { synchronized(lock) { go() } }
+        } catch (_: RejectedExecutionException) {
         }
     }
 
@@ -140,9 +156,9 @@ internal class ViewerEncoder(
         if (retryPosted) return
         retryPosted = true
         after(retry.failed(clock()), Runnable {
-            synchronized(lock) {
+            onWorker {
                 retryPosted = false
-                if (closed || current != null || !watched()) return@synchronized
+                if (closed || current != null || !watched()) return@onWorker
                 lastRestartMs = clock()
                 start()
             }
@@ -156,8 +172,8 @@ internal class ViewerEncoder(
             stop()
             val wait = lastRestartMs + RESTART_MS - clock()
             val go = Runnable {
-                synchronized(lock) {
-                    if (closed || current != null || !watched()) return@synchronized
+                onWorker {
+                    if (closed || current != null || !watched()) return@onWorker
                     lastRestartMs = clock()
                     start()
                 }

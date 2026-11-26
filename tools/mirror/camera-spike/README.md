@@ -31,7 +31,7 @@ Each run is one fresh camera session. `run.sh <name>` passes `--es name <name>`;
 | `set` | `key=value;…` | Camera1 parameters to set first, e.g. `picture-size=1920x1080` or `recording-hint=true` |
 | `c2out` | `both` (default), `reader`, `enc` | Camera2's outputs: an ImageReader (YUV_420_888 1280x720) and the encoder's input surface, one of them, or both in one repeating request at 30 fps |
 | `fps` | `lower,upper`, e.g. `15,15`, or `template` | Camera2's AE target fps range, instead of the highest-floor range that tops out at 30; `template` keeps the request template's own range (the log prints it either way) |
-| `fmt` | a color format | `c1enc`'s encoder input format, instead of YUV420SemiPlanar |
+| `fmt` | `0x15` (default) or `0x27` | `c1enc`'s encoder input format: YUV420SemiPlanar or YUV420PackedSemiPlanar, the two whose layout the probe writes (semi-planar NV12). Any other format fails the run |
 
 The commands behind the note's table, in the order they ran. The spike grew during the session (the
 first runs came before the `disp` extra, with the SurfaceTexture target it now defaults to); with this source, these

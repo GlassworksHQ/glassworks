@@ -40,7 +40,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Throwaway camera spike. am start -n dev.glassworks.camspike/.Spike --es test c1|c1enc|c2 [--es c2out both|reader|enc]
- * [--es run <id>]: with a run id, the run's done file holds that id, and a launch it ignores writes ignored-<id>.
+ * [--es run <id>]: with a run id, the run's done file holds that id, and a launch it ignores writes ignored-<id> in the
+ * files folder itself, outside every run's folder, so no run's cleanup deletes it.
  */
 public class Spike extends Activity {
     static final String TAG = "CAMSPIKE";
@@ -62,20 +63,21 @@ public class Spike extends Activity {
         if (test == null || busy) {
             Log.i(TAG, "ignored test=" + test + " busy=" + busy);
             // Tell run.sh at once, so it fails instead of waiting for, or taking, another run's result.
-            if (run != null && name != null) {
-                File d = new File(getExternalFilesDir(null), name);
-                d.mkdirs();
-                try { new FileOutputStream(new File(d, "ignored-" + run)).close(); } catch (Exception e) {}
-            }
+            if (run != null) try { new FileOutputStream(new File(getExternalFilesDir(null), "ignored-" + run)).close(); } catch (Exception e) {}
             return;
         }
         busy = true;
         new Thread(new Runnable() { public void run() {
-            dir = new File(getExternalFilesDir(null), name);
-            dir.mkdirs();
-            for (File f : dir.listFiles()) f.delete();
+            PrintWriter w = null;
             try {
-                log = new PrintWriter(new FileOutputStream(new File(dir, "log.txt")), true);
+                // Setup fails like the test does: the run still says DONE, and the next launch isn't blocked.
+                dir = new File(getExternalFilesDir(null), name);
+                dir.mkdirs();
+                File[] old = dir.listFiles();
+                if (old == null) throw new java.io.IOException("can't use " + dir + " for the results");
+                for (File f : old) f.delete();
+                w = new PrintWriter(new FileOutputStream(new File(dir, "log.txt")), true);
+                log = w;
                 Thread.sleep(1500);
                 sets = i.getStringExtra("set");
                 previewTarget = i.getStringExtra("disp");
@@ -86,17 +88,21 @@ public class Spike extends Activity {
             } catch (Throwable t) {
                 p("FAILED: " + Log.getStackTraceString(t));
             } finally {
-                p("DONE");
-                log.close();
-                try (FileOutputStream done = new FileOutputStream(new File(dir, "done"))) {
-                    if (run != null) done.write(run.getBytes());
-                } catch (Exception e) {}
-                busy = false;
+                try {
+                    p("DONE");
+                    log = null;
+                    if (w != null) w.close();
+                    try (FileOutputStream done = new FileOutputStream(new File(dir, "done"))) {
+                        if (run != null) done.write(run.getBytes());
+                    } catch (Exception e) {}
+                } finally {
+                    busy = false;
+                }
             }
         }}, "spike").start();
     }
 
-    void p(String s) { Log.i(TAG, s); if (log != null) log.println(s); }
+    void p(String s) { Log.i(TAG, s); PrintWriter l = log; if (l != null) l.println(s); }
 
     // ---------- stats ----------
     String stats(byte[] y, int w, int h, int stride) {
@@ -147,7 +153,7 @@ public class Spike extends Activity {
     // ---------- encoder (shared) ----------
     class Enc {
         MediaCodec codec; FileOutputStream out; Thread drain; volatile boolean running = true;
-        int outBufs, keys; long bytes; int stride = W, slice = H; boolean surfaceMode;
+        int outBufs, keys; long bytes; int stride = W, slice = H; boolean surfaceMode, writeFailed;
         Surface surface;
 
         Enc(boolean surfaceMode, int colorFormat) throws Exception {
@@ -200,9 +206,17 @@ public class Spike extends Activity {
                 b.position(info.offset); b.limit(info.offset + info.size);
                 if (tmp.length < info.size) tmp = new byte[info.size];
                 b.get(tmp, 0, info.size);
-                try { out.write(tmp, 0, info.size); } catch (Exception e) {}
-                outBufs++; bytes += info.size;
-                if ((info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0) keys++;
+                // Only what reached out.h264 counts; after a failed write the capture is incomplete, and says so.
+                if (!writeFailed) {
+                    try {
+                        out.write(tmp, 0, info.size);
+                        outBufs++; bytes += info.size;
+                        if ((info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0) keys++;
+                    } catch (Exception e) {
+                        writeFailed = true;
+                        p("H.264 write failed after " + outBufs + " buffers: " + e + "; the capture is incomplete");
+                    }
+                }
                 if (outBufs <= 3) p("out buf " + outBufs + " size=" + info.size + " flags=" + info.flags + " firstBytes=" + hex(tmp, Math.min(info.size, 24)));
                 codec.releaseOutputBuffer(i, false);
             }
@@ -236,10 +250,14 @@ public class Spike extends Activity {
             try { Thread.sleep(300); } catch (Exception e) {}
             running = false;
             try { drain.join(2000); } catch (Exception e) {}
-            try { codec.stop(); } catch (Exception e) {}
-            codec.release();
-            try { out.close(); } catch (Exception e) {}
-            p(String.format("encoder: outBufs=%d keyframes=%d bytes=%d", outBufs, keys, bytes));
+            try {
+                try { codec.stop(); } catch (Exception e) {}
+                codec.release();
+            } finally {
+                if (surface != null) surface.release();
+                try { out.close(); } catch (Exception e) {}
+            }
+            p(String.format("encoder: outBufs=%d keyframes=%d bytes=%d%s", outBufs, keys, bytes, writeFailed ? " (INCOMPLETE: a write failed)" : ""));
         }
     }
 
@@ -274,6 +292,10 @@ public class Spike extends Activity {
             prm = c.getParameters();
             p("params now: picture-size=" + prm.get("picture-size") + " video-size=" + prm.get("video-size") + " recording-hint=" + prm.get("recording-hint") + " zsl=" + prm.get("zsl"));
             p("preview " + prm.getPreviewSize().width + "x" + prm.getPreviewSize().height + " fmt=" + prm.getPreviewFormat() + " fps=" + prm.get("preview-fps-range"));
+            // The probe reads 1280x720 NV21 only (its buffers, statistics and JPEGs): a `set` that changes the
+            // preview's size or format fails the run here rather than give numbers read at the wrong layout.
+            if (prm.getPreviewSize().width != W || prm.getPreviewSize().height != H || prm.getPreviewFormat() != ImageFormat.NV21)
+                throw new IllegalStateException("the camera took a preview the probe can't read; it needs " + W + "x" + H + " NV21");
             SurfaceTexture st0 = null;
             String disp = previewTarget == null ? "st" : previewTarget;
             p("preview target: " + disp);
@@ -309,10 +331,14 @@ public class Spike extends Activity {
                 MediaCodecInfo ci = find(CODEC);
                 int[] fmts = ci.getCapabilitiesForType("video/avc").colorFormats;
                 p("encoder colorFormats=" + fmtList(fmts));
-                int pick = -1;
-                for (int f : fmts) if (f == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) pick = f;
-                if (fmtPref != null) pick = Integer.decode(fmtPref);
-                if (pick < 0) pick = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible;
+                // feedNv21 writes semi-planar NV12 (Y, then interleaved UV rows): only formats with that layout.
+                int pick = fmtPref != null ? Integer.decode(fmtPref) : MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar;
+                if (pick != MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
+                        && pick != MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420PackedSemiPlanar)
+                    throw new IllegalArgumentException(String.format("color format 0x%x: the probe writes only semi-planar NV12 (0x15 or 0x27)", pick));
+                boolean listed = false;
+                for (int f : fmts) if (f == pick) listed = true;
+                if (!listed) p(String.format("the encoder doesn't list color format 0x%x; trying it (configure refuses it if it can't)", pick));
                 p(String.format("picked color format 0x%x", pick));
                 enc0 = new Enc(false, pick);
                 p("using stride=" + enc0.stride + " slice=" + enc0.slice);
@@ -326,6 +352,8 @@ public class Spike extends Activity {
             final int total = encode ? 160 : 80;
             final CountDownLatch done = new CountDownLatch(1);
             c.setPreviewCallbackWithBuffer(new Camera.PreviewCallback() { public void onPreviewFrame(byte[] data, Camera cc) {
+                // Android hands null when a frame doesn't fit the buffers given: the probe can't go on.
+                if (data == null) { p("FAILED: a preview frame didn't fit the probe's buffers"); done.countDown(); return; }
                 int k = ++n[0];
                 long now = System.nanoTime();
                 if (k == 1) t0[0] = now;
@@ -461,7 +489,13 @@ public class Spike extends Activity {
             if (s != null) { try { s.stopRepeating(); } catch (Exception e) {} s.close(); }
             if (got != null) { got.close(); Thread.sleep(500); }
             if (enc0 != null) enc0.stop();
-            if (reader0 != null) reader0.close();
+            if (reader0 != null) {
+                // On its callback thread, after any frame it is still copying, before the thread goes and the run says DONE.
+                final ImageReader r = reader0;
+                final CountDownLatch closed = new CountDownLatch(1);
+                h.post(new Runnable() { public void run() { r.close(); closed.countDown(); }});
+                closed.await(2, TimeUnit.SECONDS);
+            }
             ht.quitSafely();
         }
     }

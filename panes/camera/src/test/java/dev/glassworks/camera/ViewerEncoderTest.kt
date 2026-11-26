@@ -37,6 +37,9 @@ class ViewerEncoderTest {
         var watching = true
         /** How many more times making an encoder throws, as when the GPU's input can't set up. */
         var throwsLeft = 0
+        /** While set, work for the encoder's worker waits here instead of running at once. */
+        var holdWorker = false
+        val onWorker = mutableListOf<Runnable>()
         val egressSeen = mutableListOf<Boolean>()
         val egress = FrameEgress({ now }, { _, _ -> }) { egressSeen += it }
         val ve = ViewerEncoder(
@@ -49,6 +52,7 @@ class ViewerEncoderTest {
                 sizes += size; Encoder(made.size + 1, failed, releaseThrows).also { made += it; events += "made ${it.n}" } },
             egress = egress, onAccessUnit = { _, _ -> }, watched = { watching },
             clock = { now }, after = { ms, r -> posted += (now + ms) to r },
+            worker = { r -> if (holdWorker) onWorker += r else r.run() },
         )
 
         fun runPosted(to: Long) {
@@ -172,6 +176,48 @@ class ViewerEncoderTest {
         r.runPosted(r.posted[0].first)
         assertTrue(r.made.isEmpty())
         assertFalse(r.egress.leaving)
+    }
+
+    /** CodeRabbit and Greptile on #924: a posted try makes its encoder on the worker, not on the (main) thread that posted it. */
+    @Test fun aPostedTryMakesItsEncoderOnTheWorker() {
+        val r = Rig()
+        r.throwsLeft = 1
+        r.ve.viewers(1)
+        r.holdWorker = true
+        r.runPosted(r.posted[0].first)
+        assertTrue("nothing is made on the posting thread", r.made.isEmpty())
+        assertEquals(1, r.onWorker.size)
+        r.onWorker.removeAt(0).run()
+        assertEquals(1, r.made.size)
+        assertTrue(r.egress.leaving)
+    }
+
+    @Test fun theDefaultWorkerIsItsOwnThreadAndCloseStopsIt() {
+        val made = java.util.concurrent.CountDownLatch(1)
+        var thread: Thread? = null
+        var encoder: Encoder? = null
+        var throws = true
+        val posted = mutableListOf<Runnable>()
+        val ve = ViewerEncoder(
+            input = { }, egress = FrameEgress({ 0L }, { _, _ -> }) {}, onAccessUnit = { _, _ -> }, watched = { true },
+            encoders = { _, _, _, _, failed ->
+                if (throws) { throws = false; throw IllegalStateException("GL setup timed out") }
+                thread = Thread.currentThread(); Encoder(1, failed).also { encoder = it; made.countDown() }
+            },
+            clock = { 0L }, after = { _, go -> posted += go },
+        )
+        ve.viewers(1)
+        posted.removeAt(0).run()
+        assertTrue(made.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        assertEquals("glassworks-encoder", thread?.name)
+        // A restart posted before close runs after it: the shut-down worker takes nothing, and nothing throws. The
+        // failure report takes the lock, so it comes after the worker's start has made this encoder the current one.
+        val e = encoder!!
+        e.fail(e)
+        assertEquals("the restart waits for the limit", 1, posted.size)
+        ve.close()
+        posted.removeAt(0).run()
+        assertTrue(e.released)
     }
 
     @Test fun afterCloseNothingHappens() {

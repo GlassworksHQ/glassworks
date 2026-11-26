@@ -233,8 +233,10 @@ To see the pane's handling on a Mirror running Glassworks with the camera pane:
 2. Toggle camera privacy on and off a few times, waiting about 20 s each time. Each toggle closes the camera and
    opens a new session. On a blank session the app's log shows `camera: blank frame (zero or drawn-green rows); not used`
    and a `reopen` line, and Home Assistant gets no green still.
-3. To see the connect pacing, start the spike while the pane holds the camera. The log shows `try N failed; next
-   in …` with growing waits, and `is free again; opening now` when the spike closes the camera.
+3. To see the connect pacing, turn camera privacy on, start a spike run, and turn privacy off while the spike holds
+   the camera, as in the recorded run. The pane's opens fail, and the log shows `try N failed; next in …` with growing
+   waits, then `is free again; opening now` when the spike closes the camera. The other order, starting the spike
+   while the pane holds the camera, is untested.
 
 ## Open questions
 
