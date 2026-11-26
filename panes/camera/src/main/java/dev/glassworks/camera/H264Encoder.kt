@@ -172,11 +172,18 @@ class H264Encoder(
                     info.name,
                     hardware = !isSoftwareCodec(info.name),
                     listsSurface = caps?.colorFormats?.contains(MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) ?: false,
-                    takes = { w, h -> caps?.videoCapabilities?.let { v -> runCatching { v.isSizeSupported(w, h) }.getOrDefault(true) } ?: true },
+                    takes = { w, h -> caps?.videoCapabilities?.let { v -> takesEitherWay(w, h) { a, b -> runCatching { v.isSizeSupported(a, b) }.getOrDefault(true) } } ?: true },
                 )
             }
     }
 }
+
+/**
+ * Whether an encoder takes [width] x [height] either way round. Encoders list their sizes landscape (the Mirror's:
+ * up to 1920x1088), as phones record landscape and turn on playback, but what bounds the hardware is macroblocks a
+ * frame and a second. A stream turned upright ([TurnedInput]) is portrait, and the Mirror's encoder took 720x1280.
+ */
+fun takesEitherWay(width: Int, height: Int, listed: (Int, Int) -> Boolean): Boolean = listed(width, height) || listed(height, width)
 
 /** One H.264 encoder as [encoderOrder] weighs it: [listsSurface] when it names Surface input among its color formats. */
 class AvcEncoder(val name: String, val hardware: Boolean, val listsSurface: Boolean, val takes: (width: Int, height: Int) -> Boolean) {

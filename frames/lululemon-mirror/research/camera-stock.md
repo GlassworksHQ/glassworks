@@ -190,8 +190,12 @@ series of connects from another crashed `mediaserver`.
 
    The RTSP stream isn't turned at all: the encoder takes the camera's frames as they come, so a frame grabbed with
    `ffmpeg -rtsp_transport tcp -i rtsp://…:8554/ -frames:v 1` is 1280×720 with the room on its side, needing a
-   quarter turn counter-clockwise. Turning it in the app would mean drawing every frame through the GPU before the
-   encoder; see Open questions.
+   quarter turn counter-clockwise. Home Assistant's stream orientation option didn't help: set on the Mirror's camera
+   as UniFi Protect gives it to Home Assistant, neither "Rotate left" nor "Rotate right" changed the live view, and
+   Protect's own app reads the Mirror's stream directly anyway. So the app turns the stream itself: the camera draws
+   into a `SurfaceTexture`, and one GL draw a frame puts it into the encoder's input surface turned by the still's own
+   rule. Every stream takes that path, a turn of 0 included (maintainer's call: one encoder input on every camera).
+   The encoder and the ONVIF profile run at the turned size, 720×1280 on the Mirror.
 
 ## Result
 
@@ -200,7 +204,7 @@ series of connects from another crashed `mediaserver`.
 | Green stills | The pane asked the camera for 15–15, which it lists but runs broken: a third of streaky picture over two thirds of green | Every camera is asked for the steadiest range at its top rate (30–30 on the Mirror, its own default). As a safety net, a frame with a quarter of its sampled rows dead (zero in Y and both chroma planes, or the green a LEGACY camera draws zero as) counts as no frame: it doesn't reach presence, doesn't answer a still, and the session is reopened by the silence watchdog and backoff. A dark room is never blank: its Y has noise and its chroma is near 128 |
 | No pictures in the stream | The same blank or empty sessions | The reopen above. The reader stays in a few of the stream's requests, so the check still sees the stream's session |
 | Stream at 7 fps | The shim reads back every frame the reader gets | While streaming, the repeating request is a burst on every camera: the encoder gets every frame, the reader one in ten at the Mirror's steady 30 fps (3 fps), enough for presence and stills. The interval comes from the slowest rate the camera may run at, so the reader keeps at least 3 fps; a camera that may run slower than 6 fps keeps the reader in every request |
-| Upside-down stills | The camera reports its sensor at 0 degrees, but it sits at 180 | The frame says 180 (`camera.sensorDegrees`), and the still turns by that and the screen's rotation |
+| Upside-down stills, stream on its side | The camera reports its sensor at 0 degrees, but it sits at 180; the stream wasn't turned at all | The frame says 180 (`camera.sensorDegrees`). Stills and the stream turn by one rule from that and the screen's rotation; the stream turns on the GPU on its way to the encoder |
 | `mediaserver` crashes | Bursts of connects while another app held the camera | A failed open waits 5 s, then 10, 20, 40, up to 60 s, and nothing else tries in the meantime. When Android reports that camera free again, it's tried at once, but never within 2 s of the last failure |
 
 ## How to reproduce
@@ -222,9 +226,8 @@ To see the pane's handling on a Mirror running Glassworks with the camera pane:
 
 ## Open questions
 
-- How to stand the stream upright. It goes out as the sensor sees it, on its side on the Mirror. Home Assistant can
-  turn a camera's stream in the entity's settings (**untested** on this camera); turning it in the app needs a GPU pass
-  in front of the encoder, which costs the Mirror memory and CPU it is short of.
+- What the GPU step costs on the Mirror over time (memory for the GL context, GPU time at 30 fps). Measured once
+  below; a long run with the page open is still owed.
 
 - Why the HAL starts a third of its sessions this way. The `mm-camera` logs show nothing different before a bad
   session. Without the vendor's source this is a workaround, not a fix.

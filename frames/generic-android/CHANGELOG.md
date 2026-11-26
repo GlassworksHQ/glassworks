@@ -16,8 +16,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   green with a streaky band, in stills and in the video stream alike. The panel asked the camera for a slower frame
   rate than it runs well at; it now asks every camera for its normal rate. If a camera still sends empty frames, the
   panel never passes them on and restarts the camera.
-- **The Mirror's camera snapshots stand upright.** They used to come out upside down, because the Mirror's camera
-  reports the wrong mounting. The video stream still comes out on its side.
+- **The Mirror's camera stands upright.** Its snapshots used to come out upside down and its video stream on its
+  side, because the Mirror's camera reports the wrong mounting. Both now stand as you see the room, and the stream is
+  portrait on the Mirror. Every camera's stream now turns the same way its snapshots do.
 - **The panel waits its turn when another app has the camera.** It used to try for the camera every few seconds,
   several times at once, which on Android 6 could crash the system's camera and audio service. It now waits a
   little longer after each try, up to a minute, and takes the camera as soon as the other app lets it go.
