@@ -300,8 +300,9 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
 - `dev/glassworks/engine/vitro/locale/*.json` (Java resources, in APKs that carry the Vitro engine): Vitro's
   **locale tables**, the number marks, plural rules, relative-time patterns, month, weekday and day-period names and
   week data it formats numbers, dates and times with. They are **Unicode CLDR** data, captured by
-  `tools/vitro-parity/locale-data.mjs` from the `Intl` of Chromium 141.0.7390.37 (its ICU's CLDR, as
-  `languages.json` records) and, for the 16 languages whose tables say `"source":"node"`, from Node.js's ICU.
+  `tools/vitro-parity/locale-data.mjs` from the `Intl` of Chromium 141.0.7390.37, as `languages.json` records (ICU 74
+  data with CLDR 44.1, read from that build's `icudtl.dat`), and, for the 16 languages whose tables say
+  `"source":"node"`, from Node.js's ICU, whose version `languages.json` records from the next regeneration on.
   - Licence: Unicode-3.0 (`LICENSES/Unicode-3.0.txt`)
   - Copyright: © 1991-2025 Unicode, Inc.
   - Upstream: https://cldr.unicode.org

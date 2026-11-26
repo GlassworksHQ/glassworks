@@ -41,9 +41,15 @@ If Vitro turned itself off, please [report it](#report-a-card-that-looks-wrong) 
 
 ## What works
 
-Vitro draws 41 of Home Assistant's built-in card types and 30 popular HACS cards natively, including the whole Mushroom set, Bubble Card buttons, button-card (when it doesn't use JavaScript templates), mini-graph-card, auto-entities, swipe-card, stack-in-card and layout-card. It reads your themes, your fonts and the card-mod styles it can draw the way Home Assistant does.
+Vitro draws 41 of Home Assistant's built-in card types and many popular HACS cards natively, including most of the Mushroom set, Bubble Card's buttons and separators, button-card (when it doesn't use JavaScript templates), auto-entities, swipe-card, stack-in-card and layout-card. It reads your themes, your fonts and the card-mod styles it can draw the way Home Assistant does. Tapping an entity opens a native More Info dialog for lights, climate, covers, fans, locks, media players, vacuums, updates, sensors and more.
 
-A card Vitro can't draw yet still shows. A custom card opens in a small browser view of its own, so it looks the way it does in Home Assistant. A view with a built-in card Vitro doesn't have, such as the map, or a view Home Assistant generates from a strategy, opens the way Home Assistant draws it, in the app's browser.
+Vitro only draws what it can draw exactly the way Home Assistant does, and anything else still shows:
+
+- **A custom card** that Vitro can't draw, or one with an option it doesn't support, opens in a small browser view of its own, so it looks the way it does in Home Assistant.
+- **A view that needs Home Assistant itself** opens the way Home Assistant draws it, in the app's browser. That happens for a view with a built-in card Vitro doesn't have (such as the map), a built-in card with an option Vitro doesn't draw yet (such as an hourly forecast or a tile feature it lacks), a view Home Assistant generates from a strategy, and a view with more custom cards than the panel can run in small browser views at once.
+- **A More Info dialog** Vitro doesn't draw yet, such as a timer's or a person's, opens Home Assistant's own dialog over the same view.
+
+Vitro follows the whole dashboard from the moment it opens, starting with the view on screen so that one draws first, so switching views doesn't wait for Home Assistant. If a custom card can't get the panel's data, its place says **Connection lost. Reconnecting…** until it can, instead of showing an empty or wrong card.
 
 To see how your own dashboard will do, paste it into the [Vitro compatibility check](https://www.glassworks.dev/blueprints#vitro-check). It runs in your browser and lists every card that won't be drawn natively, and why. The full list of cards, and what each one leaves out, is in [Vitro's README](../engines/engine-vitro/README.md#what-works).
 

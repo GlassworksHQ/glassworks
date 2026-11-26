@@ -137,7 +137,7 @@ of the same release:
 | Local candidates | Held until the `session` event, then `camera/webrtc/candidate` | The same |
 | Remote candidates | `addIceCandidate`; neither `sdpMid` nor `sdpMLineIndex` means mid `"0"` | The same, held until the answer is set |
 | Errors | `error` events and refusals show `start_failed`; a bad answer `connect_failed` | The same codes, plus `ice_failed` and `timeout` |
-| ICE failure | `restartIce()` | A new connection (a new peer and a new HA session), up to 3 times in a row, backing off. Every offer to HA is a new session on the camera's side anyway |
+| ICE failure | `restartIce()` | A new connection (a new peer and a new HA session), up to 3 times in a row, backing off. Every offer to HA is a new session on the camera's side anyway. While the channel has no connection to HA (HA restarting, the device's Wi-Fi gone), a try doesn't count: the stream keeps waiting at the backed-off delay, as the frontend's offer waits for its socket, and `connectionRestored()` makes it try at once |
 | Hidden | Closes the connection after 60 s hidden | `setActive(false)`, the same 60 s by default |
 | No video | Keeps waiting | Fails after 20 s, so a caller can fall back |
 
@@ -145,7 +145,7 @@ of the same release:
 
 `HaWebRtcPlayer` is main-thread only, and its listener is called on the main thread. Each player runs its
 connection on a thread of its own. libwebrtc's factory and its EGL context are shared by every player in the
-process and freed with the last one. `close()` frees the peer connection, HA's session, the decoder, the render
+process and freed 30 s after the last one closes, so a player opened again soon (a view rebuilt, a dialog opened) doesn't make them again. `HaWebRtcPlayer.prewarm(context)` makes them ahead of a player. `close()` frees the peer connection, HA's session, the decoder, the render
 thread and the player's thread, and no listener call comes after it.
 
 `HaWebRtcStream` runs on the thread of the `StreamScheduler` you give it, and `HaWebRtcSignaling` on any thread.
