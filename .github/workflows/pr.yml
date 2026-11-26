@@ -199,10 +199,16 @@ jobs:
             ~/.cache/ms-playwright
             ~/.cache/glassworks-perf/cards
           key: vitro-islands-${{ hashFiles('tools/vitro-parity/package-lock.json', 'tools/vitro-parity/cards.json') }}
+      # The headless shell's one library the runner image lacks (Playwright's --with-deps also pulled fonts and Mesa
+      # through a fresh apt-get, about 97 s a run; the cards draw Latin text in the runner's own fonts).
+      - name: libgbm1
+        uses: ./.github/actions/apt-install
+        with:
+          packages: libgbm1
       - name: The island end to end's browser and cards
         run: |
           npm ci --prefix tools/vitro-parity
-          node tools/vitro-parity/node_modules/playwright-core/cli.js install --with-deps --only-shell chromium
+          node tools/vitro-parity/node_modules/playwright-core/cli.js install --only-shell chromium
           python3 tools/vitro-parity/cards.py fetch
 
       # --parallel: the modules' test tasks side by side on the runner's 4 cores (no test shares a port or a file).
