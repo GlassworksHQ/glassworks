@@ -170,7 +170,13 @@ it `MirrorApService` and the stock hotspot.
      const jar = new Uint8Array(readFileSync(process.env.STOCK_JAR!));
      const r = await patchStockServicesJar(jar, fakeAdbKey(1));
      writeFileSync('/tmp/services.patched.jar', r.patched);
-     console.log(JSON.stringify(r, (k, v) => (v instanceof Uint8Array ? undefined : v)));
+     const hex = (n: number) => `0x${n.toString(16)}`;
+     console.log(JSON.stringify({
+       inLen: jar.length, outLen: r.patched.length, padBytes: r.padBytes,
+       startConfirmationCodeOff: hex(r.startConfirmationCodeOff), patchedCodeUnits: r.patchedCodeUnits,
+       deviceOwner: r.deviceOwner,
+       stockAp: r.stockAp && { codeOff: hex(r.stockAp.codeOff), insnsSize: r.stockAp.insnsSize },
+     }));
    });
    ```
    ```
