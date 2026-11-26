@@ -1517,7 +1517,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 name.text = parts.entity ?: parts.device ?: s?.friendlyName ?: id
                 // No age without a last change (0: HA never sent one), as ha-relative-time shows nothing then.
                 time.text = s?.takeIf { it.lastChanged > 0.0 }?.let { HaFormat.relativeTime((it.lastChanged * 1000).toLong(), ctx.now()) }.orEmpty()
-                value.text = s?.formattedState() ?: HaText.ui("state.default.unknown")
+                value.text = s?.let { MoreInfoStateHeader.stateCardDisplay(it, ctx.now()) } ?: HaText.ui("state.default.unknown")
             }
         }
         // computeShowHistoryComponent: no history section when HA runs without its `history` integration.

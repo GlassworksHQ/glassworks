@@ -108,6 +108,21 @@ internal class MoreInfoStateHeader(private val ctx: VitroCardContext) : LinearLa
             return s.formattedState()
         }
 
+        /**
+         * `state-card-display`'s state, the dialog row's: a `timestamp` sensor's date and time (`hui-timestamp-display`
+         * `datetime`), an `uptime` sensor's time since (`total`, capitalized), else HA's formatted state.
+         */
+        fun stateCardDisplay(s: EntityState, nowMs: Long): String {
+            if (s.domain == "sensor" && (s.deviceClass == "timestamp" || s.deviceClass == "uptime") && !s.isUnavailable) {
+                val sec = EntityStore.parseIsoEpochSeconds(s.state)
+                    ?: return HaText.ui("ui.panel.lovelace.components.timestamp-display.invalid")
+                val ms = (sec * 1000).toLong()
+                return if (s.deviceClass == "uptime") HaFormat.capitalize(HaFormat.relativeTime(nowMs, ms, includeTense = false))
+                else HaFormat.formatDateTime(ms)
+            }
+            return s.formattedState()
+        }
+
         /** `absoluteTime`: the time today, the short date and time this year, else with the year. */
         fun absoluteTime(ms: Long, nowMs: Long, tz: TimeZone): String {
             fun day(t: Long) = (t + tz.getOffset(t)).floorDiv(86_400_000L)

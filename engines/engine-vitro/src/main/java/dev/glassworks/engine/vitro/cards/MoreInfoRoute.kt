@@ -31,7 +31,9 @@ internal object MoreInfoRoute {
             in NATIVE_CONTROLS -> null
             "vacuum" -> vacuumGap(s)
             "update" -> updateGap(entityId, s)
-            "number", "input_number" -> null
+            // Their state row's slider or box, the history, then HA's Activity (the logbook), whose entries open a
+            // detail dialog: the sheet has no Activity section yet.
+            "number", "input_number" -> "$domain's dialog (its Activity section)"
             in HA_DIALOGS, in HA_ROW_CONTROLS -> "$domain's dialog"
             else -> null
         }

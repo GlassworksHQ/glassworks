@@ -51,7 +51,8 @@ class MoreInfoRouteTest {
         web("light.kitchen", "entity_id" to listOf("light.a", "light.b"))
         // A custom more-info element.
         web("sensor.temp", "custom_ui_more_info" to "my-more-info")
-        native("number.volume")
-        native("input_number.target")
+        // HA's Activity section (the logbook) follows their slider or box.
+        web("number.volume")
+        web("input_number.target")
     }
 }
