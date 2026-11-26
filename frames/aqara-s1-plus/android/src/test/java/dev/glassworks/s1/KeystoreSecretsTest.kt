@@ -372,9 +372,9 @@ class KeystoreSecretsTest {
         // The others open only files without secrets: PaneFiles opens SecretFiles' files through it, the
         // wall base its energy counter (s1base), the timers their anchor (timers), setup its answers to the device's
         // own steps (setup, #403), the copy of Home Assistant's page storage without its credentials
-        // (ha_page_storage) and Vitro's island port (vitro_island, #881).
+        // (ha_page_storage) and Vitro's island port (vitro_island, #881), which the factory reset clears (HaPageData).
         assertEquals(
-            setOf("SecretFiles.kt", "PaneFiles.kt", "WallBase.kt", "TimerOverlay.kt", "SetupPrefs.kt", "HaPageStorage.kt", "VitroEngine.kt"),
+            setOf("SecretFiles.kt", "PaneFiles.kt", "WallBase.kt", "TimerOverlay.kt", "SetupPrefs.kt", "HaPageStorage.kt", "VitroEngine.kt", "HaPageData.kt"),
             opens,
         )
         for (literal in SecretFiles.SECRETS.keys) {

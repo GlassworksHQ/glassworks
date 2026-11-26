@@ -10,6 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -44,6 +45,27 @@ class HaPageStorageTest {
         // An earlier report never lands after the last one.
         Thread.sleep(200)
         assertEquals("last", HaPageStorage.of(app).items(ha)!!.getString("n"))
+    }
+
+    @After
+    fun reopen() {
+        HaPageStorage.closed = false // a reset's clear() closes it until the process ends: each test starts open
+    }
+
+    /** A factory reset clears the copy, and the page still open behind it can't write it back before the restart. */
+    @Test
+    fun afterTheResetClearsTheCopyLateReportsAreDropped() {
+        val s = HaPageStorage.of(app)
+        assertTrue(s.put(ha, """{"a":"1"}"""))
+        // Reports queued before the reset run first, and the clear still wins.
+        repeat(20) { HaPageStorage.putLater(app, ha, """{"n":"$it"}""") }
+        assertTrue(s.clear())
+        assertNull(s.items(ha))
+        // A report after the reset, as the page goes away or on its 5 s check, keeps nothing.
+        HaPageStorage.putLater(app, ha, """{"late":"1"}""")
+        Thread.sleep(300)
+        assertNull(s.items(ha))
+        assertTrue(app.getSharedPreferences("ha_page_storage", Context.MODE_PRIVATE).all.isEmpty())
     }
 
     @Test
