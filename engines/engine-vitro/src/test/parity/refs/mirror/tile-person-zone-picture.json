@@ -79,8 +79,6 @@
   "zone.work": {
    "s": "1",
    "a": {
-    "latitude": 41.88,
-    "longitude": -87.63,
     "radius": 100,
     "passive": false,
     "persons": [

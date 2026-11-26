@@ -257,7 +257,8 @@ class TileNativeOptionsTest {
     fun aHeadingWithAnActionShowsTheChevronAndNavigates() {
         val view = heading("""{"type": "heading", "heading": "Office", "tap_action": {"action": "navigate", "navigation_path": "/lovelace/office"}}""")
         assertTrue(view.icons().any { "chevron-right" in it.icon })
-        view.all().filterIsInstance<TextView>().first { it.text.toString() == "Office" }.performClick()
+        // One button, named by the heading, as HA's `.content` is.
+        view.all().single { it.isClickable }.also { assertEquals("Office", it.contentDescription) }.performClick()
         assertEquals(listOf("navigate /lovelace/office"), opened)
         assertTrue(heading("""{"type": "heading", "heading": "Office"}""").icons().none { "chevron-right" in it.icon })
     }

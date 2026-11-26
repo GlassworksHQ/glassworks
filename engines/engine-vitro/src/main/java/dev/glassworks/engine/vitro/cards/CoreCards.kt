@@ -2908,19 +2908,32 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
             hView.text = heading
         }
         row.addView(hView, LayoutParams(0, WRAP_CONTENT, 1f))
-        // HA's heading tap_action: the title row (icon, heading, and an ha-icon-next chevron after it) acts.
+        // HA's heading tap_action: `.content` (the icon, the heading and an ha-icon-next chevron after it) is one
+        // button, as wide as what it holds; the badges stay at the end.
         val headingAction = ActionConfig.parse(config.raw.optJSONObject("tap_action"), "none")
         if (headingAction.action != "none") {
-            (hView.layoutParams as LayoutParams).apply { width = WRAP_CONTENT; weight = 0f }
-            row.addView(MdiIconView(ctx.context).apply { setIcon("mdi:chevron-right", textColor) },
-                LayoutParams(ctx.px(18f), ctx.px(18f)).apply { marginStart = ctx.px(8f) })
-            row.addView(Space(ctx.context), LayoutParams(0, 0, 1f))
-            val content = (0 until row.childCount).map { row.getChildAt(it) }.filter { it !is Space }
-            for (v in content) {
-                v.isClickable = true
-                v.setOnClickListener { ctx.performAction(headingAction, null) }
+            val content = LinearLayout(ctx.context).apply {
+                orientation = HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
             }
-            row.contentDescription = heading
+            while (row.childCount > 0) {
+                val v = row.getChildAt(0)
+                val lp = v.layoutParams as LayoutParams
+                row.removeViewAt(0)
+                if (v === hView) { lp.width = WRAP_CONTENT; lp.weight = 0f }
+                content.addView(v, lp)
+            }
+            content.addView(MdiIconView(ctx.context).apply { setIcon("mdi:chevron-right", textColor) },
+                LayoutParams(ctx.px(18f), ctx.px(18f)).apply { marginStart = ctx.px(8f) })
+            content.isClickable = true
+            content.isFocusable = true
+            content.contentDescription = heading
+            VitroAccess.role(content, A11yRole.BUTTON)
+            content.setOnClickListener { ctx.performAction(headingAction, null) }
+            val slot = FrameLayout(ctx.context).apply {
+                addView(content, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.START or Gravity.CENTER_VERTICAL))
+            }
+            row.addView(slot, LayoutParams(0, WRAP_CONTENT, 1f))
         }
         val badgeConfigs = config.raw.optJSONArray("badges")
         for (i in 0 until (badgeConfigs?.length() ?: 0)) {
