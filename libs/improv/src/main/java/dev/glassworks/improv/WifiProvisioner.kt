@@ -402,19 +402,22 @@ public class WifiProvisioner(
             val existing = if (loc) runCatching {
                 wm.configuredNetworks.orEmpty().firstOrNull { WifiSecurityRules.unquote(it.SSID) == ssid }
             }.getOrNull() else null
+            // the ids saved before this attempt, read without the location gate: null when Android won't list them
+            val idsBefore = runCatching { wm.configuredNetworks?.map { it.networkId }?.toSet() }.getOrNull()
             netId = wm.addNetwork(conf)
             if (netId == -1) {
                 Log.w(TAG, "addNetwork refused (not device owner / no SYSTEM_ALERT_WINDOW?); trying a suggestion")
                 return false
             }
-            addedNew = existing == null || existing.networkId != netId
+            addedNew = if (idsBefore != null) netId !in idsBefore else existing == null || existing.networkId != netId
             val enabled = wm.enableNetwork(netId, true)
             wm.reconnect()
             method = if (isDeviceOwner) "device-owner" else "addNetwork"
             Log.i(TAG, "addNetwork -> $netId (new=$addedNew), enableNetwork -> $enabled")
             if (!enabled) {
-                // don't leave our new entry behind: a later save (below API 26) would keep it for good
-                if (addedNew) Log.i(TAG, "removeNetwork($netId) -> ${wm.removeNetwork(netId)}")
+                // don't leave our new entry behind: a later save (below API 26) would keep it for good. Only when the list
+                // from before proves this attempt made it, so a network saved earlier is never removed
+                if (idsBefore != null && netId !in idsBefore) Log.i(TAG, "removeNetwork($netId) -> ${wm.removeNetwork(netId)}")
                 finish(Outcome.Failed("enableNetwork refused", null))
                 return true
             }
