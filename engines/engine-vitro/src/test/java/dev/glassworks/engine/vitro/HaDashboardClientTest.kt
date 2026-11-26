@@ -104,6 +104,8 @@ class HaDashboardClientTest {
             done(FakeHaServer.TOKEN)
         },
         authTimeoutMs: Long = HaDashboardClient.AUTH_TIMEOUT_MS,
+        keepAliveMs: Long = HaDashboardClient.KEEP_ALIVE_MS,
+        pongTimeoutMs: Long = HaDashboardClient.PONG_TIMEOUT_MS,
     ): HaDashboardClient {
         val c = HaDashboardClient(
             haBase = haBase,
@@ -112,6 +114,8 @@ class HaDashboardClientTest {
             connect = connect,
             listener = listener,
             authTimeoutMs = authTimeoutMs,
+            keepAliveMs = keepAliveMs,
+            pongTimeoutMs = pongTimeoutMs,
         )
         clients += c
         return c
@@ -1512,5 +1516,189 @@ class HaDashboardClientTest {
         c.start("wall-test") // a closed client does not start again
         Thread.sleep(200)
         assertEquals(1, server.connectUrls.size)
+    }
+
+    // ---- Cards' subscriptions across connections (A §2, §4) ----
+
+    @Test
+    fun theForecastStaysSubscribedAndEveryListTheIntegrationPushesArrives() {
+        val c = connected()
+        val lists = LinkedBlockingQueue<List<dev.glassworks.engine.vitro.data.ForecastDay>>()
+        c.subscribeForecast("weather.home", "daily") { lists.put(it) }
+        assertEquals(14.0, lists.poll(10, TimeUnit.SECONDS)!!.single().temperature)
+        val sub = server.commands("weather/subscribe_forecast").single()
+        assertEquals("weather.home", sub.getString("entity_id"))
+        assertEquals("daily", sub.getString("forecast_type"))
+        // The integration's next update (an hour later, a new day): the card hears it, the subscription stays.
+        val next = JSONArray("""[{"datetime": "2026-11-26T12:00:00+00:00", "condition": "rainy", "temperature": 9.5}]""")
+        server.pushEvent(sub.getInt("id"), JSONObject().put("type", "daily").put("forecast", next))
+        val second = lists.poll(10, TimeUnit.SECONDS)!!.single()
+        assertEquals("2026-11-26T12:00:00+00:00", second.datetime)
+        assertEquals("rainy", second.condition)
+        assertTrue("nothing unsubscribed it", server.commands("unsubscribe_events").none { it.optInt("subscription") == sub.getInt("id") })
+    }
+
+    @Test
+    fun everyHeldSubscriptionIsSentAgainAfterAReconnectAndKeepsDelivering() {
+        val c = connected()
+        val rendered = LinkedBlockingQueue<String>()
+        val forecasts = LinkedBlockingQueue<List<dev.glassworks.engine.vitro.data.ForecastDay>>()
+        val todos = LinkedBlockingQueue<JSONObject>()
+        val errors = CopyOnWriteArrayList<JSONObject?>()
+        c.subscribeTemplate("{{ now() }}") { rendered.put(it) }
+        c.subscribeForecast("weather.home", "hourly") { forecasts.put(it) }
+        val stopTodo = c.subscribeWs(JSONObject().put("type", "todo/item/subscribe").put("entity_id", "todo.shopping"), { todos.put(it) }, { errors += it })
+        assertNotNull(rendered.poll(10, TimeUnit.SECONDS))
+        assertNotNull(forecasts.poll(10, TimeUnit.SECONDS))
+        assertNotNull(todos.poll(10, TimeUnit.SECONDS))
+
+        server.dropConnection()
+        awaitCondition("reconnected", timeoutMs = 15_000) { listener.connected.size == 2 }
+        // The new connection carries all three again, each under a new id, with the same request.
+        awaitCondition("resubscribed") {
+            server.sockets.last().received.map { it.optString("type") }
+                .containsAll(listOf("render_template", "weather/subscribe_forecast", "todo/item/subscribe"))
+        }
+        assertEquals("{{ now() }}", server.sockets.last().received.single { it.optString("type") == "render_template" }.getString("template"))
+        assertEquals("hourly", server.sockets.last().received.single { it.optString("type") == "weather/subscribe_forecast" }.getString("forecast_type"))
+        assertNotNull("the template renders again", rendered.poll(10, TimeUnit.SECONDS))
+        assertNotNull("the forecast comes again", forecasts.poll(10, TimeUnit.SECONDS))
+        assertNotNull("the list comes again", todos.poll(10, TimeUnit.SECONDS))
+        // And keeps following HA on the new connection.
+        server.pushEvent(server.lastId("render_template")!!, JSONObject().put("result", "later"))
+        assertEquals("later", rendered.poll(10, TimeUnit.SECONDS))
+        assertTrue("a lost connection is no error", errors.isEmpty())
+
+        // Its handle ends it on the connection it is on now.
+        stopTodo()
+        val todoId = server.lastId("todo/item/subscribe")!!
+        awaitCondition("unsubscribed on the new connection") {
+            server.sockets.last().received.any { it.optString("type") == "unsubscribe_events" && it.optInt("subscription") == todoId }
+        }
+        assertEquals(2, c.heldCount())
+    }
+
+    @Test
+    fun aSubscriptionAskedForWhileTheConnectionIsDownGoesOutOnceItIsBack() {
+        val c = connected()
+        server.refuseConnections = true
+        server.dropConnection()
+        awaitCondition("disconnected") { listener.disconnected.isNotEmpty() }
+        // A card built during "Reconnecting…" (a tab tap): its template waits, it isn't refused.
+        val rendered = LinkedBlockingQueue<String>()
+        val errors = CopyOnWriteArrayList<JSONObject?>()
+        c.subscribeTemplate("{{ 1 + 1 }}") { rendered.put(it) }
+        c.subscribeWs(JSONObject().put("type", "todo/item/subscribe").put("entity_id", "todo.shopping"), {}, { errors += it })
+        Thread.sleep(200)
+        assertTrue(errors.isEmpty())
+        server.refuseConnections = false
+        awaitCondition("reconnected", timeoutMs = 15_000) { listener.connected.size == 2 }
+        assertEquals("21.5 °C", rendered.poll(10, TimeUnit.SECONDS))
+        assertEquals(1, server.sockets.last().received.count { it.optString("type") == "render_template" })
+        assertTrue(errors.isEmpty())
+    }
+
+    @Test
+    fun aHeldSubscriptionCancelledWhileTheConnectionIsDownIsNeverSent() {
+        val c = connected()
+        server.refuseConnections = true
+        server.dropConnection()
+        awaitCondition("disconnected") { listener.disconnected.isNotEmpty() }
+        val stop = c.subscribeTemplate("{{ 1 + 1 }}") {}
+        stop()
+        server.refuseConnections = false
+        awaitCondition("reconnected", timeoutMs = 15_000) { listener.connected.size == 2 && server.commands("subscribe_entities").size == 2 }
+        Thread.sleep(200)
+        assertTrue(server.commands("render_template").isEmpty())
+        assertEquals(0, c.heldCount())
+    }
+
+    @Test
+    fun aHeldSubscriptionHomeAssistantRefusesIsReportedOnceAndNotSentAgain() {
+        val c = connected()
+        val errors = CopyOnWriteArrayList<JSONObject?>()
+        c.subscribeWs(JSONObject().put("type", "acme/unknown_subscribe"), {}, { errors += it })
+        awaitCondition("refused") { errors.size == 1 }
+        assertEquals("unknown_command", errors.single()?.optString("code"))
+        server.dropConnection()
+        awaitCondition("reconnected", timeoutMs = 15_000) { listener.connected.size == 2 && server.commands("subscribe_entities").size == 2 }
+        Thread.sleep(200)
+        assertEquals(1, server.commands("acme/unknown_subscribe").size)
+        assertEquals(1, errors.size)
+    }
+
+    @Test
+    fun aFreshSubscriptionIsBuiltAgainForEachConnectionAndSaysWhenItStartsOver() {
+        val c = connected()
+        val built = AtomicInteger(0)
+        val events = LinkedBlockingQueue<Pair<String, Boolean>>()
+        c.subscribeWsFresh({
+            // A history window that follows the clock: each connection asks for the one it has then.
+            JSONObject().put("type", "render_template").put("template", "window ${built.incrementAndGet()}")
+        }, { ev, first -> events.put(ev.optString("result") to first) }, {})
+        assertEquals("21.5 °C" to true, events.poll(10, TimeUnit.SECONDS))
+        server.pushEvent(server.lastId("render_template")!!, JSONObject().put("result", "more"))
+        assertEquals("more" to false, events.poll(10, TimeUnit.SECONDS))
+        server.dropConnection()
+        awaitCondition("reconnected", timeoutMs = 15_000) { listener.connected.size == 2 }
+        assertEquals("the new connection's first event starts the stream over", "21.5 °C" to true, events.poll(10, TimeUnit.SECONDS))
+        assertEquals(2, built.get())
+        assertEquals("window 2", server.sockets.last().received.single { it.optString("type") == "render_template" }.getString("template"))
+    }
+
+    @Test
+    fun aOneOffSubscriptionIsNotSentAgainOnTheNextConnection() {
+        // A camera's WebRTC offer belongs to its connection: it isn't replayed on the next one.
+        val c = connected()
+        c.subscribeWs(JSONObject().put("type", "todo/item/subscribe").put("entity_id", "todo.once"), {}, {}, resubscribe = false)
+        awaitCondition("sent") { server.commands("todo/item/subscribe").size == 1 }
+        server.dropConnection()
+        awaitCondition("reconnected", timeoutMs = 15_000) { listener.connected.size == 2 && server.commands("subscribe_entities").size == 2 }
+        Thread.sleep(200)
+        assertEquals(1, server.commands("todo/item/subscribe").size)
+    }
+
+    // ---- Liveness and the token on a live connection (A §1, §7) ----
+
+    @Test
+    fun aHalfOpenConnectionIsNoticedAndReconnected() {
+        // Nothing comes back, not even a close: HA's host lost power, or a router dropped the connection's state.
+        val c = newClient(keepAliveMs = 150, pongTimeoutMs = 150)
+        c.subscribeViewEntities(emptySet())
+        c.start(null)
+        awaitCondition("connected") { listener.connected.size == 1 && server.commands("subscribe_entities").isNotEmpty() }
+        server.answerPings = false
+        awaitCondition("dropped as silent", timeoutMs = 5_000) { listener.disconnected.isNotEmpty() }
+        assertEquals(HaDashboardClient.NO_ANSWER, listener.disconnected.first())
+        assertTrue(server.sockets[0].closed)
+        server.answerPings = true
+        awaitCondition("reconnected", timeoutMs = 15_000) { listener.connected.size == 2 }
+    }
+
+    @Test
+    fun aConnectionThatAnswersItsPingsIsKept() {
+        val c = newClient(keepAliveMs = 100, pongTimeoutMs = 300)
+        c.start(null)
+        awaitCondition("connected") { listener.connected.size == 1 }
+        awaitCondition("several pings", timeoutMs = 5_000) { server.commands("ping").size >= 3 }
+        assertTrue(listener.disconnected.isEmpty())
+        assertEquals(1, server.connectUrls.size)
+    }
+
+    @Test
+    fun theTokenIsAskedForAgainWhileTheConnectionLasts() {
+        // HA's access tokens last 30 minutes and an authenticated socket never asks again on its own: the client does,
+        // so the provider (which caches until a minute before expiry) hands its consumers a fresh one in time.
+        val given = CopyOnWriteArrayList<String?>()
+        val c = newClient(keepAliveMs = 100, tokens = { force, done ->
+            tokenCalls += force
+            val t = if (tokenCalls.size > 2) "refreshed-token" else FakeHaServer.TOKEN
+            given += t
+            done(t)
+        })
+        c.start(null)
+        awaitCondition("asked again on the live connection", timeoutMs = 5_000) { given.contains("refreshed-token") }
+        assertTrue("never forced: the provider decides when to refresh", tokenCalls.none { it })
+        assertEquals("the connection stays", 1, server.connectUrls.size)
     }
 }

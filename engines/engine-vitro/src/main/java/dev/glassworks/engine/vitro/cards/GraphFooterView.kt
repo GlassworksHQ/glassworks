@@ -131,10 +131,13 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
         ctx.main.postDelayed(redraw, if (hoursToShow > 24) HaGraph.HOUR_MS.toLong() else 60_000L)
         val s = HaGraph.Stream(hoursToShow)
         stream = s
-        val msg = HaGraph.historyStreamMessage(listOf(id), hoursToShow, ctx.now()) { ctx.store[it] != null }
-        unsubscribe = ctx.subscribeWs(msg, { ev ->
+        // Built again for each connection: a reconnect asks for the window as it is then, and the stream starts over.
+        unsubscribe = ctx.subscribeWsFresh({
+            HaGraph.historyStreamMessage(listOf(id), hoursToShow, ctx.now()) { ctx.store[it] != null }
+        }, { ev, first ->
             ctx.main.post {
                 if (stream !== s) return@post
+                if (first) s.restart()
                 if (error != null) {
                     // Recovered: the error and its description go with it.
                     error = null

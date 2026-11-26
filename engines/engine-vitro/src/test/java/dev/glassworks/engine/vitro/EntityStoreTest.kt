@@ -10,6 +10,7 @@ import dev.glassworks.engine.vitro.data.LightColor
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -156,6 +157,41 @@ class EntityStoreTest {
         assertEquals(listOf(setOf("light.a", "light.b")), batches)
         assertEquals(2, store.updatesReceived.get())
         assertNull(store["light.skipped"])
+    }
+
+    @Test
+    fun aSnapshotThatRepeatsAnEntityUnchangedTellsNoListener() {
+        // Every view switch and reconnect resubscribes, and HA's first event is a whole snapshot: an entity whose state
+        // is the same doesn't wake its cards (G L2).
+        val store = storeWithLamp()
+        val heard = ArrayList<EntityState?>()
+        val batches = ArrayList<Set<String>>()
+        store.subscribe("light.lounge_lamp") { heard += it }
+        store.subscribeAny { batches += it }
+        val before = store["light.lounge_lamp"]
+        val changed = store.applyCompressedEvent(
+            event(
+                """{"a": {"light.lounge_lamp": {
+                     "s": "on",
+                     "a": {"friendly_name": "Lounge Lamp", "brightness": 128, "rgb_color": [255, 180, 60], "effect_list": ["none", "colorloop"]},
+                     "lc": 1700000000.5, "lu": 1700000001.25}}}""",
+            ),
+            snapshotScope = setOf("light.lounge_lamp"),
+        )
+        assertEquals(emptySet<String>(), changed)
+        assertTrue(heard.isEmpty())
+        assertTrue(batches.isEmpty())
+        // HA's report is kept all the same: it, not the old instance, is what an optimistic write compares against.
+        assertEquals(before, store["light.lounge_lamp"])
+        assertNotSame(before, store["light.lounge_lamp"])
+        // A real change in the next snapshot still counts.
+        val dimmer = store.applyCompressedEvent(
+            event("""{"a": {"light.lounge_lamp": {"s": "on", "a": {"friendly_name": "Lounge Lamp", "brightness": 64}, "lc": 1700000000.5, "lu": 1700000009.0}}}"""),
+            snapshotScope = setOf("light.lounge_lamp"),
+        )
+        assertEquals(setOf("light.lounge_lamp"), dimmer)
+        assertEquals(64, store["light.lounge_lamp"]!!.attributes["brightness"])
+        assertEquals(1, heard.size)
     }
 
     @Test
