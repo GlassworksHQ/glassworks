@@ -233,7 +233,7 @@ object ParityRoute {
         // The first card the view builds in an island, at any depth, as the view builds its containers' children.
         fun island(card: dev.glassworks.engine.vitro.model.CardConfig): dev.glassworks.engine.vitro.model.CardConfig? =
             if (card.inIsland(dev.glassworks.engine.vitro.compat.IslandScripts.ANY)) card
-            else dev.glassworks.engine.vitro.model.CardRouter.builtChildren(card).firstNotNullOfOrNull { island(it.value) }
+            else dev.glassworks.engine.vitro.model.CardRouter.producedCards(card).firstNotNullOfOrNull { island(it.value) }
         val found = dev.glassworks.engine.vitro.model.CardRouter.viewRoots(view).firstNotNullOfOrNull { island(it.card) }
         return if (found != null) ISLAND to found.compat.reasons.firstOrNull() else NATIVE to null
     }

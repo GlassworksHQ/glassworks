@@ -576,6 +576,9 @@ function producedCards(card: Obj, perEntity: boolean): [number, Obj][] {
   const param = optString(card, "card_param", "entities") || "entities";
   // auto-entities replaces this field with what it matched, so what the config wrote there never shows.
   delete inner[param];
+  // Its explicit `entities:` entries are always among them (the ones a filter adds depend on live states), so the strict
+  // rule checks them as the inner card's own, as the engine's WebFallback does. Under `cards`, each is a card.
+  if (param !== "cards" && Array.isArray(card.entities)) inner[param] = card.entities;
   const generated = param === "cards" ? generatedCards(card) : [];
   // Vitro writes this field, so the strict rule doesn't judge it as the user's option (the engine's WebFallback drops it
   // too): it's there for the walk, but not among the card's keys.
@@ -608,8 +611,11 @@ function verdict(card: Obj): Verdict {
   const type = cardType(card);
   const reasons = new Set<string>();
   const notes = new Set<string>();
+  // A built-in card Vitro has no renderer for (`map`, the energy cards): the island can't draw it, so its view opens in
+  // HA's frontend (WebFallback). A custom card goes to its island.
+  if (!type.startsWith("custom:") && !CORE.has(type)) return { native: false, frontend: true, reasons: [`the built-in \`${type}\` card`], notes: [] };
   if (!CORE.has(type) && !HACS.has(type)) {
-    reasons.add(type.startsWith("custom:") ? `\`${type}\` is a custom card with no native renderer` : `\`${type}\` isn't a card type Vitro draws`);
+    reasons.add(`\`${type}\` is a custom card with no native renderer`);
     return { native: false, reasons: [...reasons], notes: [...notes] };
   }
   // The strict rule (NativeOptions): an option or value the native card doesn't draw as HA does. A card the island
@@ -1319,6 +1325,19 @@ function walkCard(card: Obj, loc: string, view: ViewAudit, holdsGenerated = -1) 
     else view.tier2++;
   }
   const explicit = generatesCards(card, type) ? (Array.isArray(card.entities) ? card.entities.length : 0) : -1;
+  if (type === "custom:auto-entities") {
+    // The cards a filter rule's `options` build aren't listed (they depend on live states), but the engine routes them,
+    // so one Vitro can't draw sends the view to HA's frontend or itself to an island, as listed cards do.
+    // The explicit entries come first, and the inner card's walk below lists them.
+    const entries = Array.isArray(card.entities) ? card.entities.filter((e) => typeof e === "string" || isObj(e)).length : 0;
+    for (const [, g] of producedCards(card, true).slice(children.length + (explicit >= 0 ? entries : 0))) {
+      const gv = verdict(g);
+      if (gv.native) continue;
+      view.tier3++;
+      view.triggers.push({ view: view.name, path: `${loc}.generated`, type: cardType(g), reasons: gv.frontend ? gv.reasons.map((r) => `${FRONTEND} ${r}`) : gv.reasons });
+      return;
+    }
+  }
   for (const [i, child] of children) {
     const where = type === "custom:auto-entities" ? `${loc}.card` : `${loc}.${type}[${i}]`;
     walkCard(child, where, view, explicit);

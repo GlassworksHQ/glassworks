@@ -58,7 +58,7 @@
     },
     "confirmation": {"anyOf": [{"values": [true, false, "true", "false"]}, {"keys": {"text": "any"}}]},
     "visibility": {"list": "@condition"},
-    "conditions": {"anyOf": [{"list": "@condition"}, "@condition"]},
+    "conditions": {"list": "@condition"},
     "condition": {
       "by": "condition",
       "default": "state",
@@ -1012,7 +1012,8 @@
             "box_shadow": {"values": [false]},
             "margin": {"values": [true, false]},
             "outer_padding": {"values": [true, false]}
-          }
+          },
+          "required": ["background"]
         },
         {
           "keys": {
@@ -1707,7 +1708,10 @@
           "list": {
             "anyOf": [
               {"pattern": "^[a-z0-9_]+\\.[a-z0-9_]+$"},
-              {"keys": {"entity": {"entity": ["*"]}, "type": "any", "name": "text", "icon": "any"}}
+              {
+                "keys": {"entity": {"entity": ["*"]}, "type": "any", "name": "text", "icon": "any"},
+                "required": ["entity"]
+              }
             ]
           },
           "why": "an entity id, or an entry with one: Vitro drops an entry without `entity` (a section or divider row) that auto-entities passes through"

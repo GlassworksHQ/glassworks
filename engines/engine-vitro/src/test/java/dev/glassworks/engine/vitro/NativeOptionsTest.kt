@@ -41,7 +41,7 @@ class NativeOptionsTest {
         val view = LovelaceParser.parseView(0, viewRaw)
         WebFallback.viewReason(view)?.let { return "frontend" to it }
         fun island(c: CardConfig): CardConfig? =
-            if (c.inIsland(IslandScripts.ANY)) c else CardRouter.builtChildren(c).firstNotNullOfOrNull { island(it.value) }
+            if (c.inIsland(IslandScripts.ANY)) c else CardRouter.producedCards(c).firstNotNullOfOrNull { island(it.value) }
         val found = CardRouter.viewRoots(view).firstNotNullOfOrNull { island(it.card) }
         return if (found != null) "island" to found.compat.reasons.first() else "native" to null
     }
@@ -93,10 +93,13 @@ class NativeOptionsTest {
                 is JSONObject -> {
                     val form = spec.keys().asSequence().filter { it in forms }.toList()
                     assertEquals("$at: one form per spec, not $form", 1, form.size)
-                    val extra = spec.keys().asSequence().filter { it !in forms && it != "why" && it != "note" && !(form.single() == "by" && it in setOf("default", "cases")) }.toList()
+                    val extra = spec.keys().asSequence().filter { it !in forms && it != "why" && it != "note" && !(form.single() == "by" && it in setOf("default", "cases")) && !(form.single() == "keys" && it == "required") }.toList()
                     assertTrue("$at: unknown fields $extra", extra.isEmpty())
                     when (form.single()) {
-                        "keys" -> spec.getJSONObject("keys").let { k -> k.keys().forEach { walk(k.get(it), "$at.$it") } }
+                        "keys" -> spec.getJSONObject("keys").let { k ->
+                            k.keys().forEach { walk(k.get(it), "$at.$it") }
+                            spec.optJSONArray("required")?.let { r -> (0 until r.length()).forEach { i -> assertTrue("$at: required `${r.get(i)}` isn't a key", k.has(r.getString(i))) } }
+                        }
                         "list" -> walk(spec.get("list"), "$at[]")
                         "anyOf" -> spec.getJSONArray("anyOf").let { a -> (0 until a.length()).forEach { walk(a.get(it), "$at|$it") } }
                         "by" -> spec.getJSONObject("cases").let { c -> c.keys().forEach { walk(c.get(it), "$at<$it>") } }
@@ -128,6 +131,19 @@ class NativeOptionsTest {
         for (r in reasons) for (secret in listOf("secret", "example.test", "token", "{{")) assertFalse(r, secret in r)
         val rows = NativeOptions.cardReasons("entities", JSONObject("""{"type": "entities", "entities": ["lock.secret_door"]}"""))
         assertTrue(rows.toString(), rows.single().contains("`lock` entity") && "secret" !in rows.single())
+    }
+
+    @Test
+    fun aRangeTakesFiniteNumbersOnlyAndARequiredKeyMustBeThere() {
+        assertTrue(NativeOptions.cardReasons("logbook", JSONObject("""{"type": "logbook", "hours_to_show": "NaN"}""")).isNotEmpty())
+        assertTrue(NativeOptions.cardReasons("logbook", JSONObject("""{"type": "logbook", "hours_to_show": 24}""")).isEmpty())
+        // stack-in-card keeps a child's rounded border only with its background: an omitted background is `false`.
+        fun keep(k: String) = NativeOptions.cardReasons("custom:stack-in-card", JSONObject("""{"type": "custom:stack-in-card", "cards": [], "keep": $k}"""))
+        assertEquals(keep("""{"border_radius": true}""").isEmpty(), keep("""{"background": false, "border_radius": true}""").isEmpty())
+        assertTrue(keep("""{"background": true, "border_radius": true}""").isEmpty())
+        // An auto-entities entry without `entity` (a divider row) is one Vitro drops.
+        val entry = NativeOptions.cardReasons("custom:auto-entities", JSONObject("""{"type": "custom:auto-entities", "entities": [{"type": "divider"}]}"""))
+        assertTrue(entry.toString(), entry.any { "entities[0].entity` (missing)" in it })
     }
 
     @Test

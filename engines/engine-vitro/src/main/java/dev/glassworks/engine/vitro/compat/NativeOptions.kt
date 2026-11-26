@@ -23,9 +23,10 @@ import org.json.JSONObject
  * - `"@name"`: the spec `defs.name`.
  * - `{"values": [...]}`: one of these JSON scalars.
  * - `{"pattern": "regex"}`: a string the expression finds a match in.
- * - `{"range": [min, max]}`: a number in the range (a null bound is open).
+ * - `{"range": [min, max]}`: a finite number in the range (a null bound is open).
  * - `{"entity": ["light", ...]}`: an entity id of one of these domains (`"*"`: any).
- * - `{"keys": {"key": spec}}`: an object; a key the spec doesn't list isn't drawn. A null value counts as absent.
+ * - `{"keys": {"key": spec}, "required": ["key"]}`: an object; a key the spec doesn't list isn't drawn, and neither is
+ *   an object without a `required` key. A null value counts as absent.
  * - `{"list": spec}`: a list whose items each pass `spec` (a single value that isn't a list is checked as one item).
  * - `{"anyOf": [spec, ...]}`: passes when one of them does.
  * - `{"by": "field", "default": "value", "cases": {"value": spec}}`: an object whose `field` (or `default`, when it
@@ -111,7 +112,7 @@ object NativeOptions {
                 spec.has("range") -> {
                     val r = spec.getJSONArray("range")
                     val n = (value as? Number)?.toDouble() ?: (value as? String)?.trim()?.toDoubleOrNull()
-                    val ok = n != null && (r.isNull(0) || n >= r.getDouble(0)) && (r.isNull(1) || n <= r.getDouble(1))
+                    val ok = n != null && n.isFinite() && (r.isNull(0) || n >= r.getDouble(0)) && (r.isNull(1) || n <= r.getDouble(1))
                     if (!ok) fail(join(path, shown(value)), why = why)
                 }
                 spec.has("entity") -> {
@@ -123,6 +124,12 @@ object NativeOptions {
                 spec.has("keys") -> {
                     val obj = value as? JSONObject ?: return fail(path, "not an object", why)
                     val keys = spec.getJSONObject("keys")
+                    spec.optJSONArray("required")?.let { req ->
+                        for (i in 0 until req.length()) {
+                            val k = req.getString(i)
+                            if (!obj.has(k) || obj.isNull(k)) fail(if (path.isEmpty()) k else "$path.$k", "missing", why)
+                        }
+                    }
                     for (k in obj.keys()) {
                         if (obj.isNull(k)) continue
                         val sub = keys.opt(k) ?: extra?.opt(k)

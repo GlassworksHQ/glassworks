@@ -13,6 +13,7 @@ checker (glassworks.dev/blueprints#vitro-check) and the panel's own report read 
 """
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -155,7 +156,7 @@ class _Walk:
                     n = float(value.strip())
                 except ValueError:
                     n = None
-            if n is None or (lo is not None and n < lo) or (hi is not None and n > hi):
+            if n is None or not math.isfinite(n) or (lo is not None and n < lo) or (hi is not None and n > hi):
                 self.fail(_join(path, _shown(value)), why=why)
         elif "entity" in spec:
             domain = value.split(".", 1)[0].strip() if isinstance(value, str) and "." in value else ""
@@ -164,6 +165,9 @@ class _Walk:
         elif "keys" in spec:
             if not isinstance(value, dict):
                 return self.fail(path, "not an object", why)
+            for k in spec.get("required", []):
+                if value.get(k) is None:
+                    self.fail(f"{path}.{k}" if path else k, "missing", why)
             for k, v in value.items():
                 if v is None:
                     continue
@@ -710,6 +714,11 @@ def produced_cards(card: dict, ctype: str, per_entity: bool) -> list[tuple[str, 
     param = raw_param if isinstance(raw_param, str) and raw_param else (
         "entities" if raw_param in (None, "") else json.dumps(raw_param))
     inner.pop(param, None)
+    # Its explicit `entities:` entries are always among them: the strict rule checks them as the inner card's own, as
+    # the engine's WebFallback does. Under `cards`, each is a card.
+    if param != "cards" and isinstance(card.get("entities"), list):
+        inner = _Inner(inner)
+        inner[param] = card["entities"]
     generated = []
     if param == "cards":
         for entry in as_list(card.get("entities")):
@@ -767,7 +776,11 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
     elif ctype.startswith("custom:"):
         reasons = ["a custom card with no native renderer"]
     else:
-        reasons = ["not a card type Vitro draws"]
+        # A built-in card Vitro has no renderer for (`map`, the energy cards): the island can't draw it, so its view
+        # opens in HA's frontend (WebFallback).
+        counts["tier3"] += 1
+        triggers.append(f"  TIER 3 [HA FRONTEND]  {loc}: type='{ctype}': the built-in `{ctype}` card")
+        return
 
     if ctype == "iframe" and not reasons:
         # The view stays native, but the frame's own page runs in a GeckoView island.
@@ -786,6 +799,17 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
         return
 
     children = produced_cards(card, ctype, False)
+    if ctype == "custom:auto-entities":
+        # The cards a filter rule's `options` build aren't listed (they depend on live states), but the engine routes
+        # them, so one Vitro can't draw sends the view to HA's frontend or itself to an island.
+        # The explicit entries come first, and the inner card's walk below lists them.
+        entries = sum(isinstance(e, (str, dict)) for e in as_list(card.get("entities"))) if card.get("card_param") == "cards" else 0
+        for label, _, gen in produced_cards(card, ctype, True)[len(children) + entries:]:
+            sub_counts = {"tier1": 0, "tier2": 0, "tier3": 0}
+            walk_card(gen, f"{loc}.generated", sub_counts, triggers, warnings)
+            if sub_counts["tier3"]:
+                counts["tier3"] += sub_counts["tier3"]
+                return
     if explicit >= 0 and ctype in CONTAINER_TYPES and ctype != "conditional":
         # auto-entities' inner card: only its explicit `entities:` entries are known before it runs.
         for _, i, child in children:

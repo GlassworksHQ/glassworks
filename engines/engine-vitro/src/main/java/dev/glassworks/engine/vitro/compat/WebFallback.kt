@@ -10,6 +10,7 @@ import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.model.NATIVE_VIEW_TYPES
 import dev.glassworks.engine.vitro.model.ViewConfig
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -50,8 +51,8 @@ object WebFallback {
         if (view.type !in NATIVE_VIEW_TYPES) return "a `${view.type}` view (a layout Vitro doesn't draw)"
         if (view.sections.any { it.strategy }) return "a strategy section (HA's frontend generates its cards)"
         NativeOptions.viewReasons(view.raw).firstOrNull()?.let { return it }
-        for (card in view.cards) cardReason(card, learned)?.let { return it }
-        for (section in view.sections) for (card in section.cards) cardReason(card, learned)?.let { return it }
+        // Only the cards the view builds: a panel view's first card, a sections view's section cards.
+        for (root in CardRouter.viewRoots(view)) cardReason(root.card, learned)?.let { return it }
         return null
     }
 
@@ -78,12 +79,16 @@ object WebFallback {
         if (options && card.nativeOnly) card.unsupportedOptions.firstOrNull()?.let { return it }
         if (type == "markdown") CardCompat.markdownReasons(card.raw.optString("content", "")).firstOrNull()?.let { return it }
         // auto-entities' inner card holds what it matched in its `card_param` field, which Vitro wrote: the user's own
-        // options are the rest of it.
+        // options are the rest of it, and the explicit `entities:` entries, which it always lists there (the ones a
+        // filter adds depend on live states). Under `card_param: cards` those entries are cards, checked on their own.
         val inner = if (type == "custom:auto-entities") CardRouter.builtChildren(card).size else -1
         for (child in CardRouter.producedCards(card)) {
             if (child.index == inner) {
                 val written = card.raw.optString("card_param", "entities").ifEmpty { "entities" }
-                val own = JSONObject(child.value.raw.toString()).apply { remove(written) }
+                val own = JSONObject(child.value.raw.toString()).apply {
+                    remove(written)
+                    if (written != "cards") card.raw.optJSONArray("entities")?.let { put(written, JSONArray(it.toString())) }
+                }
                 if (child.value.nativeOnly) NativeOptions.cardReasons(child.value.type, own).firstOrNull()?.let { return it }
                 cardReason(child.value, learned, false)?.let { return it }
             } else {

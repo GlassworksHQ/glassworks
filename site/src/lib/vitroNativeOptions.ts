@@ -78,7 +78,7 @@ class Walk {
     } else if (has(spec, "range")) {
       const [min, max] = spec.range as (number | null)[];
       const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value.trim()) : NaN;
-      const ok = !Number.isNaN(n) && (min === null || n >= min) && (max === null || n <= max);
+      const ok = Number.isFinite(n) && (min === null || n >= min) && (max === null || n <= max);
       if (!ok) this.fail(join(path, shown(value)), null, why);
     } else if (has(spec, "entity")) {
       const domains = spec.entity as string[];
@@ -88,6 +88,9 @@ class Walk {
     } else if (has(spec, "keys")) {
       if (!isObj(value)) return this.fail(path, "not an object", why);
       const keys = spec.keys as Obj;
+      for (const k of (spec.required as string[] | undefined) ?? []) {
+        if (value[k] === null || value[k] === undefined) this.fail(path === "" ? k : `${path}.${k}`, "missing", why);
+      }
       for (const k of Object.keys(value)) {
         const v = value[k];
         if (v === null || v === undefined) continue;

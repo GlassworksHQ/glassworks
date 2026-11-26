@@ -874,12 +874,7 @@
         "list": "@condition"
       },
       "conditions": {
-        "anyOf": [
-          {
-            "list": "@condition"
-          },
-          "@condition"
-        ]
+        "list": "@condition"
       },
       "condition": {
         "by": "condition",
@@ -3084,7 +3079,10 @@
                   false
                 ]
               }
-            }
+            },
+            "required": [
+              "background"
+            ]
           },
           {
             "keys": {
@@ -4929,7 +4927,10 @@
                     "type": "any",
                     "name": "text",
                     "icon": "any"
-                  }
+                  },
+                  "required": [
+                    "entity"
+                  ]
                 }
               ]
             },

@@ -69,6 +69,14 @@
       "card": { "type": "custom:auto-entities", "card": { "type": "entities" }, "filter": { "include": [{ "domain": "light", "label": "upstairs" }] } } },
     { "what": "B12/I7: auto-entities template filter", "route": "frontend",
       "card": { "type": "custom:auto-entities", "card": { "type": "entities" }, "filter": { "template": "{{ states.light | map(attribute='entity_id') | list }}" } } },
+    { "what": "auto-entities' explicit entries are rows of its entities card", "route": "frontend",
+      "card": { "type": "custom:auto-entities", "card": { "type": "entities" }, "entities": ["input_select.mode"] } },
+    { "what": "auto-entities' generated cards are checked too (a rule's options)", "route": "frontend",
+      "card": { "type": "custom:auto-entities", "card_param": "cards", "card": { "type": "grid" }, "filter": { "include": [{ "domain": "light", "options": { "color": "red" } }] } } },
+    { "what": "an auto-entities entry without an entity (Vitro drops it)", "route": "frontend",
+      "card": { "type": "custom:auto-entities", "card": { "type": "entities" }, "entities": ["light.a", { "type": "divider" }] } },
+    { "what": "a built-in card Vitro has no renderer for", "route": "frontend", "reason": "the built-in `map` card",
+      "card": { "type": "map", "entities": ["person.a"] } },
     { "what": "B5: clock-weather-card (no clock natively)", "route": "island",
       "card": { "type": "custom:clock-weather-card", "entity": "weather.home" } },
     { "what": "B5: Bubble Card slider button", "route": "island",
@@ -119,6 +127,8 @@
       "view": { "cards": [{ "type": "tile", "entity": "light.a", "visibility": [{ "condition": "view_columns", "min": 2 }] }] } },
     { "what": "a plain sections view with entity badges", "route": "native",
       "view": { "title": "Home", "path": "home", "icon": "mdi:home", "type": "sections", "max_columns": 4, "badges": [{ "type": "entity", "entity": "light.a", "show_name": true }, { "entity": "sensor.b", "show_name": false, "show_icon": true }], "sections": [{ "type": "grid", "cards": [{ "type": "tile", "entity": "light.a" }] }] } },
+    { "what": "a panel view builds its first card only", "route": "native",
+      "view": { "panel": true, "cards": [{ "type": "tile", "entity": "light.a" }, { "type": "tile", "entity": "light.a", "color": "red" }] } },
     { "what": "a plain masonry view", "route": "native",
       "view": { "title": "Home", "path": "home", "theme": "Backend-selected", "cards": [{ "type": "tile", "entity": "light.a" }] } }
   ]

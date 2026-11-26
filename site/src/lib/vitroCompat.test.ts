@@ -195,7 +195,7 @@ describe("auditDashboard with JSON", () => {
     expect(r.totals).toEqual({ tier1: 2, tier2: 0, tier3: 2 });
     expect(r.triggers).toEqual([
       { view: "a", path: "a/section[0]/card[1]", type: "custom:apexcharts-card", reasons: ["`custom:apexcharts-card` is a custom card with no native renderer"] },
-      { view: "a", path: "a/section[0]/card[2]", type: "map", reasons: ["`map` isn't a card type Vitro draws"] },
+      { view: "a", path: "a/section[0]/card[2]", type: "map", reasons: ["Home Assistant's frontend draws this view: the built-in `map` card"] },
     ]);
     expect(r.warnings).toEqual(["a/section[0]/card[3]: no `type`, so Vitro draws it as an entities card"]);
   });
@@ -636,7 +636,7 @@ describe("auditDashboard routes cards as the engine's CompatCheckerTest does", (
 
   it("falls back for unknown cards and for card_mod Vitro can't draw on a custom card", () => {
     island({ type: "custom:acme-floorplan-card" }, "custom card with no native renderer");
-    island({ type: "map" }, "isn't a card type Vitro draws");
+    frontend({ type: "map" }, "the built-in `map` card");
     const mushroom = (css: string | object) => ({ type: "custom:mushroom-template-card", card_mod: { style: css } });
     island(mushroom({ "mushroom-shape-icon$": ".shape { --icon-size: 64px }" }), "card_mod path `mushroom-shape-icon$`");
     island(mushroom({ ".": { "ha-card$": "x" } }), "nests further");
