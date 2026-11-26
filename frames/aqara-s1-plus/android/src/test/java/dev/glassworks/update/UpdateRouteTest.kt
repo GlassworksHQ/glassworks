@@ -102,13 +102,37 @@ class UpdateRouteTest {
     }
 
     @Test fun anOlderBootImageWithoutTheServiceFallsBackToPackageInstaller() {
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(true)
         val root = FakeRoot(present = false)
         val m = started(frame(root))
         assertEquals(UpdateManager.NO_HELPER_NOTE, m.model.installNote)
         assertEquals(SilentUpdates.NoRootService, m.silentUpdates)
-        installVerified(m)
+        assertEquals(
+            "Installing 1.2.3: confirm on the panel's screen (no root update service in this boot image)",
+            installVerified(m),
+        )
         assertEquals("the service is never asked", emptyList<String>(), root.installed)
         assertEquals(1, sessions())
+    }
+
+    @Test fun anOlderBootImageWithoutInstallUnknownAppsFailsFast() {
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
+        val root = FakeRoot(present = false)
+        val m = started(frame(root))
+        assertEquals("Install of 1.2.3 failed: ${UpdateManager.unknownAppsWithRootBackend(app.packageName)}", installVerified(m))
+        assertEquals("no PackageInstaller session", 0, sessions())
+    }
+
+    @Test fun installFailsBeforeDownloadingWhenInstallUnknownAppsIsOff() {
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
+        val m = started(frame(FakeRoot(present = false)))
+        val asset = ReleaseAsset("s1-kiosk-1.2.3.apk", "https://192.0.2.10/a.apk", 4)
+        m.model.onChecked(UpdateOffer(AppVersion.parse("1.2.3")!!, "v1.2.3", "", "https://192.0.2.10/r", asset, asset))
+        val a = m.model.beginInstall(0)!!
+        UpdateManager::class.java.getDeclaredMethod("installAttempt", UpdateModel.Attempt::class.java)
+            .apply { isAccessible = true }.invoke(m, a)
+        assertEquals("Install of 1.2.3 failed: ${UpdateManager.unknownAppsWithRootBackend(app.packageName)}", m.model.statusText())
+        assertEquals("no PackageInstaller session", 0, sessions())
     }
 
     @Test fun aFrameWithoutARootServiceInstallsWithPackageInstaller() {
@@ -120,12 +144,23 @@ class UpdateRouteTest {
         assertEquals(1, sessions())
     }
 
-    @Test fun withoutInstallUnknownAppsTheUpdateSaysItWaitsForConfirmation() {
+    @Test fun withoutInstallUnknownAppsTheUpdateFailsFast() {
         shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
         val m = started(frame(null))
         assertEquals(SilentUpdates.UnknownAppsOff, m.silentUpdates)
         assertEquals(UpdateManager.CONFIRM_NOTE, m.model.installNote)
+        assertEquals("Install of 1.2.3 failed: ${UpdateManager.UNKNOWN_APPS_GENERIC}", installVerified(m))
+        assertEquals("no PackageInstaller session", 0, sessions())
+    }
+
+    @Test fun withInstallUnknownAppsAndAnOldTargetTheUpdateSaysItWaitsForConfirmation() {
+        app.applicationInfo.targetSdkVersion = 30
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(true)
+        val m = started(frame(null))
+        assertEquals(SilentUpdates.TargetTooLow("14", 31, 30), m.silentUpdates)
+        assertEquals(UpdateManager.CONFIRM_NOTE, m.model.installNote)
         assertEquals("Installing 1.2.3: confirm on the screen", installVerified(m))
+        assertEquals(1, sessions())
     }
 
     /** A started manager on the generic frame, and each time it tells Home Assistant its state may have changed. */
