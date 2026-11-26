@@ -23,6 +23,19 @@ line of each version is what Home Assistant shows on the update card. A change o
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
 ### Fixed
+- **The Mirror's camera shows a real picture.** Home Assistant used to show the Mirror's camera as mostly solid
+  green with a streaky band, in stills and in the video stream alike. The panel asked the camera for a slower frame
+  rate than it runs well at; it now asks every camera for its normal rate. If a camera still sends empty frames, the
+  panel never passes them on and restarts the camera.
+- **The Mirror's camera stands upright.** Its snapshots used to come out upside down and its video stream on its
+  side, because the Mirror's camera reports the wrong mounting. Both now stand as you see the room, and the stream is
+  portrait on the Mirror. Every camera's stream now turns the same way its snapshots do.
+- **The panel waits its turn when another app has the camera.** It used to try for the camera every few seconds,
+  several times at once, which on Android 6 could crash the system's camera and audio service. It now waits a
+  little longer after each try, up to a minute, and takes the camera as soon as the other app lets it go.
+- **The Mirror's camera stream runs at full speed.** With the video stream on, the Mirror's camera slowed to about
+  7 frames a second, because it copied every frame for motion detection too. Motion detection now looks at a few
+  frames a second while the stream gets all of them.
 - **The Mirror keeps its Wi-Fi on after a restart.** On the Mirror's stock software, a quick restart could find
   the Wi-Fi chip not ready yet, and Android then switched Wi-Fi off and kept it off, so the panel stayed offline
   until someone turned Wi-Fi back on. Glassworks now turns Wi-Fi back on by itself when that happens, trying for a

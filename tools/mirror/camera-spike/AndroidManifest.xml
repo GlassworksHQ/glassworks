@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.glassworks.camspike" android:versionCode="1" android:versionName="1">
+  <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="23"/>
+  <uses-permission android:name="android.permission.CAMERA"/>
+  <application android:label="camspike" android:debuggable="true">
+    <!-- DUMP: only the shell (adb) holds it, so no other app can start a run and take pictures. -->
+    <activity android:name=".Spike" android:exported="true" android:launchMode="singleTask"
+        android:permission="android.permission.DUMP"/>
+  </application>
+</manifest>

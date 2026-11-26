@@ -50,6 +50,7 @@ class DeviceFrameTest {
         assertEquals("Studio Mirror", frame.hardware.model)
         assertEquals("the mDNS board record names its frame", "lululemon-mirror", frame.board)
         assertEquals("its camera is capped at 720p (#679)", 1280 * 720, frame.cameraMaxPixels)
+        assertEquals("its camera says 0 degrees but sits at 180", 180, frame.cameraSensorDegrees)
         assertEquals("it asks for portrait itself, whatever auto-rotate says (#686)", Orientation.PORTRAIT_FIXED, frame.orientation)
         assertEquals("its display comes back from Android's display off with lines across it", SleepMode.BACKLIGHT_OFF, frame.sleepMode)
     }
@@ -71,6 +72,7 @@ class DeviceFrameTest {
 
     @Test fun aDeviceWithoutAFrameKeepsTheCamerasOwnLimit() {
         assertEquals(null, device("Google", "Pixel Tablet").cameraMaxPixels)
+        assertEquals("and goes by Android's sensor orientation", null, device("Google", "Pixel Tablet").cameraSensorDegrees)
     }
 
     @Test fun thePixelTabletKeepsItsOwnName() {
@@ -131,7 +133,9 @@ class DeviceFrameTest {
             assertEquals(frame.id, "device", json.getString("kind"))
             assertEquals(frame.id, json.getString("name"), frame.name)
             assertEquals(frame.id, json.getString("brand"), frame.brand)
-            assertEquals("${frame.id}: camera.maxPixels", json.optJSONObject("camera")?.getInt("maxPixels"), frame.cameraMaxPixels)
+            val camera = json.optJSONObject("camera")
+            assertEquals("${frame.id}: camera.maxPixels", camera?.takeIf { it.has("maxPixels") }?.getInt("maxPixels"), frame.cameraMaxPixels)
+            assertEquals("${frame.id}: camera.sensorDegrees", camera?.takeIf { it.has("sensorDegrees") }?.getInt("sensorDegrees"), frame.cameraSensorDegrees)
             val display = json.getJSONObject("display")
             if (frame.orientation == Orientation.PORTRAIT_FIXED) {
                 assertTrue("${frame.id}: a fixed portrait needs a portrait display", display.getInt("height") > display.getInt("width"))
