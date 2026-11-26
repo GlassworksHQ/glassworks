@@ -40,6 +40,9 @@ interface NotificationScreen {
  *   ended: a sound cut short (`TtsPlayer.cancel`) never calls back. [stop] lets the speaker go and
  *   silences the alert, but a chime or doorbell already playing ends by itself (at most 3 s).
  *
+ * - The critical alert plays at full volume, even muted ([fullVolume]), one sound at a time: the volume comes back
+ *   when the sound ends or is silenced, and at the latest when its claim would be let go anyway.
+ *
  * [play] plays one sound and calls back when it ended; [silence] cuts it.
  */
 class NotificationsPane(
@@ -54,6 +57,11 @@ class NotificationsPane(
     private val now: () -> Long,
     /** Whether the panel's screen takes a tap (the frame's input). */
     private val touch: () -> Boolean = { true },
+    /**
+     * Raises the panel's volume to full for at most the given time; the call it returns puts it back
+     * ([dev.glassworks.audio.MasterVolume.full]). None: the alert plays at the panel's volume.
+     */
+    private val fullVolume: (maxMs: Long) -> () -> Unit = { {} },
 ) : Pane {
     override val id = "notifications" // ID; tools/size reads this literal
 
@@ -72,6 +80,8 @@ class NotificationsPane(
     private var claimed = false
     private var claimGen = 0
     private var claimTimer: Future<*>? = null
+    /** Puts the volume back after the alert's sound now playing at full; null while none does. */
+    private var lowerVolume: (() -> Unit)? = null
 
     private val entities = NotificationEntities(
         onNotify = { m, t, d ->
@@ -121,7 +131,7 @@ class NotificationsPane(
         }
     }
 
-    private fun sound(s: Sound) {
+    private fun sound(s: Sound, loud: Boolean = false) {
         // Claim, emit and arm the fallback in one step under the lock, and release the same way: the
         // emits then reach the other panes in the order the claim changed, so a release can't land
         // between a claim and its emit and leave the music ducked with nothing to let it go (#228, N1).
@@ -134,10 +144,17 @@ class NotificationsPane(
             val g = ++claimGen
             val ms = (NotificationSounds.seconds(s) * 1000).toLong() + RELEASE_SLACK_MS
             claimTimer = schedule(ms) { releaseSpeaker(g) }
+            if (loud) { lowerVolume?.invoke(); lowerVolume = fullVolume(ms) }
             g
         }
+        val lower = if (loud) synchronized(lock) { lowerVolume } else null
         // Released already before it starts (dismissed meanwhile): it plays unducked, and its end is ignored.
-        play(s) { releaseSpeaker(gen) }
+        try {
+            play(s) { lower?.invoke(); releaseSpeaker(gen) }
+        } catch (e: Throwable) {
+            lower?.invoke()
+            throw e
+        }
     }
 
     /**
@@ -208,7 +225,7 @@ class NotificationsPane(
     }
 
     private fun ring(s: Sound, gen: Int) {
-        sound(s)
+        sound(s, loud = true)
         alertTimer = schedule(ALERT_REPEAT_MS) {
             synchronized(lock) {
                 // A repeat that started waiting before stopAlert() or stop() finds a newer generation and ends.
@@ -226,6 +243,9 @@ class NotificationsPane(
         val ringing = alertTimer != null
         if (ringing) silence()
         alertTimer = null
+        // A sound cut short never calls back: the volume comes back now.
+        lowerVolume?.invoke()
+        lowerVolume = null
         return ringing
     }
 

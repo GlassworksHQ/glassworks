@@ -11,6 +11,16 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
+  page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
+  with a mute switch. It is Android's media volume, so the device's volume buttons move it too. Home Assistant's
+  *Speaker* volume and mute now control the same thing, so turning the panel down in Home Assistant quiets all of
+  it, not only announcements. The Music page's slider is now called
+  **Music volume** and sets Music Assistant's level under it.
+- **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
+  when the panel is turned down or muted, and the volume goes back to where it was after each tone.
+
 ### Fixed
 - **Wi-Fi setup over Bluetooth finishes on the Mirror.** When Home Assistant or its phone app sent the Wi-Fi
   details over Bluetooth, the Mirror joined the network, but the phone or Home Assistant kept saying it was

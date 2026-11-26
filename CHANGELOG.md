@@ -8,6 +8,15 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 
 ## [Unreleased]
 
+### Added
+- **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
+  page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
+  with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel
+  down in Home Assistant quiets all of it, not only announcements. The Music page's slider is now called
+  **Music volume** and sets Music Assistant's level under it.
+- **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
+  when the panel is turned down or muted, and the volume goes back to where it was after each tone.
+
 ### Fixed
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent

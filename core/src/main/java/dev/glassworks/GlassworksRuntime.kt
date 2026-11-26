@@ -77,6 +77,12 @@ class GlassworksRuntime(
 
     override val orbs = OrbBakes()
 
+    private var masterVolume: dev.glassworks.audio.MasterVolume? = null
+
+    override fun volume(context: Context): dev.glassworks.audio.MasterVolume = synchronized(this) {
+        masterVolume ?: dev.glassworks.audio.MasterVolume.of(context).also { masterVolume = it }
+    }
+
     /**
      * The app's panes in the order the settings list them, with the frame's among them, made once. A pane the
      * frame lacks the hardware for is [CantRun].
