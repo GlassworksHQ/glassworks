@@ -13,8 +13,8 @@ change is tested off the device only; a run on a Mirror is pending.
 
 Device: lululemon Studio Mirror, original Qualcomm MSM8916 board, stock Android 6.0.1 with a 5 MP front camera behind
 Qualcomm's HAL1 (`mm-camera`). Camera2 sees it as LEGACY (hardware level 2), through Android's Camera1 shim.
-Tools: a throwaway spike app (Camera1 and Camera2 paths, an ImageReader, the hardware H.264 encoder's input surface,
-a GL consumer) and logcat, over adb.
+Tools: a throwaway spike app, [`tools/mirror/camera-spike`](../../../tools/mirror/camera-spike/README.md) (Camera1
+and Camera2 paths, an ImageReader, the hardware H.264 encoder, a GL consumer), and logcat, over adb.
 
 ## Question
 
@@ -53,25 +53,39 @@ series of connects from another crashed `mediaserver`.
 
 1. **Twelve camera sessions, each a fresh open** (2026-11-25, verified). Each run opens the camera, runs for up to
    20 s, and logs frame statistics every 30 frames. Runs are named for what they did: `c1*` Camera1, `c2*` Camera2.
+   The exact `run.sh` command of each is in the spike's README; the rows are in the order they ran.
 
-   | Run | Path | Outputs | Result |
+   ```
+   $ tools/mirror/camera-spike/run.sh c1-pic2 --es test c1 --es set 'picture-size=1920x1080' --es disp st
+   set picture-size=1920x1080
+   params now: picture-size=1920x1080 video-size=1920x1080 recording-hint=null zsl=off
+   preview 1280x720 fmt=17 fps=7500,30000
+   preview target: st
+   preview started
+   TIMEOUT frames=0
+   ```
+
+   | Run | Path | Settings | Result |
    |---|---|---|---|
-   | c1 | Camera1 | preview callback | no frame in 20 s |
-   | c1-hint | Camera1 | preview callback, recording hint | no frame in 20 s |
-   | c1-pic2 | Camera1 | preview callback, picture size set | no frame in 20 s |
-   | c1-gl | Camera1 | GL consumer | 2 frames in 20 s, both all zero |
-   | c1-pic | Camera1 | GL consumer | 28 fps, real picture |
-   | c1b, c1c | Camera1 | GL consumer | 28–29 fps, Y mean 5.3, no zero rows |
-   | c1enc | Camera1 | buffers to the hardware encoder | 25.5 fps, Y mean 5.2, no zero rows |
-   | c2 | Camera2 | ImageReader 1280x720 + encoder surface | reader 0 frames; encoder gave only its parameter sets |
-   | c2b | Camera2 | ImageReader + encoder surface | reader 6.9 fps, encoder at the same rate, Y mean 4.4 |
-   | c2r | Camera2 | ImageReader alone | 8.8 fps, Y mean 4.2 |
-   | c2e | Camera2 | encoder surface alone | about 26 fps (146 output buffers in the run) |
+   | c1 | Camera1, preview callback | SurfaceTexture target | no frame in 20 s |
+   | c1-hint | Camera1, preview callback | `recording-hint=true` | no frame in 20 s |
+   | c1-pic | Camera1, preview callback | `picture-size=1920x1080` | 28 fps, real picture |
+   | c1-gl | Camera1, preview callback | GL consumer target | 2 frames in 20 s, both all zero |
+   | c1-pic2 | Camera1, preview callback | as c1-pic | no frame in 20 s |
+   | c1enc | Camera1, frames to the hardware encoder | as c1-pic | 25.5 fps, Y mean 5.2, no zero rows |
+   | c2 | Camera2, 30 fps | ImageReader 1280x720 + encoder surface | reader 0 frames; encoder gave only its parameter sets |
+   | c2b | Camera2, 30 fps | as c2 | reader 6.9 fps, encoder at the same rate, Y mean 4.4 |
+   | c1b | Camera1, preview callback | as c1-gl | 28.5 fps, Y mean 5.3, no zero rows |
+   | c2r | Camera2, 30 fps | ImageReader alone | 8.8 fps, Y mean 4.2 |
+   | c1c | Camera1, preview callback | SurfaceTexture target | 28.8 fps, real picture |
+   | c2e | Camera2, 30 fps | encoder surface alone | about 26 fps (146 output buffers in the run) |
 
    A bad frame logged `Ymean=0.0 zeroFrac=1.000 zeroRowFrac=0.999`: every row zero but one, which is the dark noisy
    strip Home Assistant showed. A good frame in the same dark room logged `Ymean=4.4 zeroFrac=0.000 zeroRowFrac=0.000`.
 
    What it showed: 5 of 12 sessions started with no frames or with blank ones, with either API and any consumer.
+   The same settings went both ways: c1-pic was good and c1-pic2 empty, c1-gl blank and c1b good, c2 empty and c2b
+   good.
    In those sessions `mm-camera` logged its stream on and the sensor counting frames, but only 0–2 buffers reached
    post-processing in 20 s. Nothing in the logs before a session told a bad one from a good one. It rules out
    Glassworks' conversion code, the encoder and the Camera2 shim as the cause.
@@ -103,21 +117,25 @@ series of connects from another crashed `mediaserver`.
 |---|---|---|
 | Green stills | About a third of sessions deliver all-zero frames, and a frame was a frame | A frame whose sampled rows are (nearly) all zero in Y and both chroma planes counts as no frame: it doesn't reach presence, doesn't answer a still, and the session is reopened by the existing silence watchdog and backoff. A dark room is never blank: its Y has noise and its chroma is near 128 |
 | No pictures in the stream | The same blank or empty sessions | The reopen above. The reader stays in a few of the stream's requests, so the check still sees the stream's session |
-| Stream at 7 fps | The shim reads back every frame the reader gets | On a LEGACY camera the repeating request is a burst: the encoder gets every frame, the reader one in five at 15 fps (about 3 fps), enough for presence and stills. Other cameras are unchanged |
+| Stream at 7 fps | The shim reads back every frame the reader gets | On a LEGACY camera the repeating request is a burst: the encoder gets every frame, the reader one in five at the Mirror's steady 15 fps (3 fps), enough for presence and stills. The interval comes from the slowest rate the camera may run at, so the reader keeps at least 3 fps; a camera that may run slower than 6 fps keeps the reader in every request. Other cameras are unchanged |
 | `mediaserver` crashes | Bursts of connects while another app held the camera | A failed open waits 5 s, then 10, 20, 40, up to 60 s, and nothing else tries in the meantime. When Android reports that camera free again, it's tried at once, but never within 2 s of the last failure |
 
 ## How to reproduce
 
-The spike was a throwaway, not kept in the repo. To see the problem again on a Mirror with the camera pane:
+The spike is in [`tools/mirror/camera-spike`](../../../tools/mirror/camera-spike/README.md): `build.sh` builds it
+without a device, and `run.sh <name> <extras>` runs one session on a Mirror and pulls its log. Turn camera privacy on
+in Glassworks first, so the spike isn't fighting the pane for the camera. Run any row of the table several times:
+about a third of the sessions come up empty or blank, whatever the settings. The spike writes only its own folder on
+the Mirror; uninstall it afterwards (`adb uninstall dev.glassworks.camspike`).
+
+To see the pane's handling on a Mirror running Glassworks with the camera pane:
 
 1. Turn on the camera pane with *Presence and snapshots* and look at the camera entity in Home Assistant.
 2. Toggle camera privacy on and off a few times, waiting about 20 s each time. Each toggle closes the camera and
-   opens a new session. With the fix, the app's log shows `camera: blank frame (every plane zero); not used` and a
-   `reopen` line instead of a green still.
-3. To see the connect pacing, open another camera app while the pane is on. The log shows `try N failed; next in
-   …` with growing waits, and `is free again; opening now` when the other app closes.
-
-All of this is read-only for the device: no storage is written outside the app's own data.
+   opens a new session. On a blank session the app's log shows `camera: blank frame (every plane zero); not used`
+   and a `reopen` line, and Home Assistant gets no green still.
+3. To see the connect pacing, start the spike while the pane holds the camera. The log shows `try N failed; next
+   in …` with growing waits, and `is free again; opening now` when the spike closes the camera.
 
 ## Open questions
 
