@@ -361,8 +361,10 @@ class VitroSentinel(
             ApplicationExitInfo.REASON_EXIT_SELF, ApplicationExitInfo.REASON_USER_REQUESTED,
             ApplicationExitInfo.REASON_USER_STOPPED, ApplicationExitInfo.REASON_PERMISSION_CHANGE,
             ApplicationExitInfo.REASON_DEPENDENCY_DIED, ApplicationExitInfo.REASON_FREEZER,
-            ApplicationExitInfo.REASON_PACKAGE_STATE_CHANGE, ApplicationExitInfo.REASON_PACKAGE_UPDATED -> ExitKind.STOPPED
-            // Unknown, signaled, initialization failure, excessive resource use, other: Android can't say it wasn't Vitro.
+            ApplicationExitInfo.REASON_PACKAGE_STATE_CHANGE, ApplicationExitInfo.REASON_PACKAGE_UPDATED,
+            // Android's "killed by the system for reasons that aren't the app's", e.g. it just finished an update.
+            ApplicationExitInfo.REASON_OTHER -> ExitKind.STOPPED
+            // Unknown, signaled, initialization failure, excessive resource use: Android can't say it wasn't Vitro.
             else -> ExitKind.OTHER
         }
 

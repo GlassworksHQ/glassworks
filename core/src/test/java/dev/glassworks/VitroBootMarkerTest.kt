@@ -106,6 +106,7 @@ class VitroBootMarkerTest {
         repeat(2) { start(); ended(ApplicationExitInfo.REASON_LOW_MEMORY) }
         repeat(2) { start(); ended(ApplicationExitInfo.REASON_USER_REQUESTED) } // am force-stop, a measuring run
         repeat(2) { start(); ended(ApplicationExitInfo.REASON_EXIT_SELF) }
+        repeat(2) { start(); ended(ApplicationExitInfo.REASON_OTHER) } // the system's own, e.g. after an update
         start()
         assertTrue(prefs().vitroEnabled)
         assertEquals(0, prefs().vitroCrashStrikes)

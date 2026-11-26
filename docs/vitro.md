@@ -26,7 +26,7 @@ These count as a failed start:
 | What happens | When it counts |
 |---|---|
 | The app crashes | Within a minute of starting, before or after the dashboard shows |
-| The app stops some other way, such as a crash inside a native library or closing it when Android says it "isn't responding" | Before the dashboard shows. After it shows, only on Android 11 and newer, where Android says it was a crash |
+| The app stops some other way, such as a crash inside a native library or closing it when Android says it "isn't responding" | Before the dashboard shows. After it shows, only on Android 11 and newer, where Android says it was a crash or that the app wasn't responding |
 | The app freezes | When it stops responding for 30 seconds within the first minute. The app then closes itself so it can start again |
 
 These never count: the panel restarting or losing power, an app update, Android closing the app to free memory, someone stopping the app, the app restarting itself after a settings change, and a start that shows the setup or sign-in screen instead of a dashboard. Turning Vitro off or on, or resetting the panel, starts the count over.
