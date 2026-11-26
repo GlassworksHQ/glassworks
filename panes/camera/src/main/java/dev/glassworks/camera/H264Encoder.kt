@@ -32,7 +32,7 @@ class H264Encoder(
     fps: Int = FPS,
     bitrate: Int = bitrateFor(width, height),
     private val onAccessUnit: (annexB: ByteArray, key: Boolean) -> Unit,
-    /** The encoder stopped by itself (a codec error), not through [release]. On the encoder's thread. */
+    /** The encoder stopped by itself (a codec error, or the GPU step failing a frame), not through [release]. On the encoder's thread. */
     private val onFailure: (StreamEncoder) -> Unit = {},
     private val log: (String) -> Unit = { Log.i(TAG, it) },
 ) : StreamEncoder {
@@ -42,6 +42,8 @@ class H264Encoder(
     private val turned: TurnedInput
     override val surface: Surface get() = turned.surface
     @Volatile private var running = true
+    /** Why the GPU step stopped drawing, set on its thread; the drain loop reports it, as it does a codec error. */
+    @Volatile private var inputFailed: String? = null
     private val drain: Thread
 
     init {
@@ -68,7 +70,7 @@ class H264Encoder(
             .also { log("camera: H.264 encoder ${it.first.name} (Android's pick)") }
         codec = c
         input = made
-        turned = try { TurnedInput(made, width, height, turn) } catch (e: Exception) {
+        turned = try { TurnedInput(made, width, height, turn) { why -> inputFailed = why } } catch (e: Exception) {
             try { c.stop() } catch (_: Exception) {}
             c.release(); made.release()
             throw e
@@ -121,6 +123,12 @@ class H264Encoder(
         val cache = H264ParameterSetCache()
         val assembler = H264AccessUnitAssembler()
         while (running) {
+            inputFailed?.let { why ->
+                Log.w(TAG, "H.264 encoder input stopped: $why")
+                running = false
+                onFailure(this)
+                return
+            }
             val i = try {
                 codec.dequeueOutputBuffer(info, 100_000)
             } catch (e: IllegalStateException) {

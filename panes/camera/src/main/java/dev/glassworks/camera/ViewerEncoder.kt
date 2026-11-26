@@ -14,9 +14,12 @@ interface StreamEncoder {
     fun release()
 }
 
-/** Makes an encoder at [size]. [onFailure] gets the encoder that failed, so a late report from a replaced one is told apart. */
+/**
+ * Makes an encoder at [size], turned [turn] degrees ([EncoderInput.streamTurn]) and run at [fps]. [onFailure] gets the
+ * encoder that failed, so a late report from a replaced one is told apart.
+ */
 fun interface EncoderFactory {
-    fun create(size: StreamFit.Size, onAccessUnit: (annexB: ByteArray, key: Boolean) -> Unit, onFailure: (StreamEncoder) -> Unit): StreamEncoder
+    fun create(size: StreamFit.Size, turn: Int, fps: Int, onAccessUnit: (annexB: ByteArray, key: Boolean) -> Unit, onFailure: (StreamEncoder) -> Unit): StreamEncoder
 }
 
 /** Where the encoder's input comes from: [CameraHub]. Detaching (null) returns once the camera no longer draws into the old one. */
@@ -51,6 +54,9 @@ internal class ViewerEncoder(
     private val clock: () -> Long,
     private val after: (delayMs: Long, Runnable) -> Unit,
     private val log: (String) -> Unit = {},
+    /** The turn and rate every encoder of this server runs at, fixed when the server starts, as ONVIF advertises them. */
+    private val turn: Int = 0,
+    private val fps: Int = H264Encoder.FPS,
 ) {
     private val lock = Any()
     private var current: StreamEncoder? = null
@@ -84,7 +90,7 @@ internal class ViewerEncoder(
             is StreamFit.Refused -> { log("no stream: ${fit.why}"); return }
         }
         val e = try {
-            encoders.create(size, onAccessUnit, ::failed)
+            encoders.create(size, turn, fps, onAccessUnit, ::failed)
         } catch (ex: Exception) {
             log("H.264 encoder failed: ${ex.javaClass.simpleName}")
             return

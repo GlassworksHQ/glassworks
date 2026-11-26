@@ -148,11 +148,11 @@ series of connects from another crashed `mediaserver`.
    out the 640×480 guess above. The camera spike, run with camera privacy on so the pane let go, got a clean picture
    with its reader alone. The difference was the rate: the spike always asked for 30–30, while the pane asked for
    15–15, for presence (the slowest range that covers 5 fps) and for the stream (the encoder's 15 fps). The spike got
-   an `fps` option, and fresh sessions (force-stopped between runs, since `am start` reuses the first launch's
-   extras otherwise) gave:
+   an `fps` option, and fresh sessions (force-stopped between runs: the spike then read `fps` from its first launch's
+   Intent, since fixed) gave:
 
    ```
-   $ /tmp/gw-mirror/spike-fps.sh a30:30,30 a15:15,15 a24:24,24 a730:7,30 b30:30,30 b15:15,15
+   $ tools/mirror/camera-spike/fps.sh a30:30,30 a15:15,15 a24:24,24 a730:7,30 b30:30,30 b15:15,15
    a30 want=30,30: session configured, fps [30, 30] reader frames=45 (9.2 fps)  green rows 0%
    a15 want=15,15: session configured, fps [15, 15] reader frames=44 (9.0 fps)  green rows 65%
    a24 want=24,24: session configured, fps [24, 24] reader frames=43 (8.7 fps)  green rows 0%

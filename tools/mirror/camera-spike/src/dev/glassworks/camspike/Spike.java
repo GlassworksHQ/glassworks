@@ -66,7 +66,7 @@ public class Spike extends Activity {
                 previewTarget = i.getStringExtra("disp");
                 if (test.equals("c1")) testC1(false, i.getStringExtra("fmt"));
                 else if (test.equals("c1enc")) testC1(true, i.getStringExtra("fmt"));
-                else if (test.equals("c2")) testC2(i.getStringExtra("c2out") == null ? "both" : i.getStringExtra("c2out"));
+                else if (test.equals("c2")) testC2(i.getStringExtra("c2out") == null ? "both" : i.getStringExtra("c2out"), i.getStringExtra("fps"));
                 else if (test.equals("info")) info();
             } catch (Throwable t) {
                 p("FAILED: " + Log.getStackTraceString(t));
@@ -227,91 +227,104 @@ public class Spike extends Activity {
             opened.countDown();
         }});
         opened.await();
-        if (cam[0] == null) return;
+        if (cam[0] == null) { ht.quitSafely(); return; }
         final Camera c = cam[0];
-        c.setErrorCallback(new Camera.ErrorCallback() { public void onError(int e, Camera cc) { p("camera error " + e); }});
-        Camera.Parameters prm = c.getParameters();
-        prm.setPreviewSize(W, H);
-        prm.setPreviewFormat(ImageFormat.NV21);
-        if (sets != null) for (String kv : sets.split(";")) { String[] a = kv.split("=", 2); prm.set(a[0], a[1]); p("set " + a[0] + "=" + a[1]); }
-        c.setParameters(prm);
-        prm = c.getParameters();
-        p("params now: picture-size=" + prm.get("picture-size") + " video-size=" + prm.get("video-size") + " recording-hint=" + prm.get("recording-hint") + " zsl=" + prm.get("zsl"));
-        p("preview " + prm.getPreviewSize().width + "x" + prm.getPreviewSize().height + " fmt=" + prm.getPreviewFormat() + " fps=" + prm.get("preview-fps-range"));
-        SurfaceTexture st0 = null;
-        String disp = previewTarget == null ? "st" : previewTarget;
-        p("preview target: " + disp);
-        if (disp.equals("gl")) {
-            st0 = GlConsumer.start(this);
-            c.setPreviewTexture(st0);
-        } else if (disp.equals("ir")) {
-            final ImageReader ir = ImageReader.newInstance(W, H, ImageFormat.YUV_420_888, 4);
-            final int[] irn = {0};
-            HandlerThread iht = new HandlerThread("ir"); iht.start();
-            ir.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() { public void onImageAvailable(ImageReader r) {
-                try { Image im = r.acquireLatestImage(); if (im == null) return;
-                    int k = ++irn[0];
-                    if (k == 1 || k % 30 == 0) { byte[] nv = toNv21(im); p("ir frame " + k + " fmt=" + im.getFormat() + " " + stats(nv, W, H, W));
-                        if (k == 60) saveJpeg(nv, "c1-ir-frame60.jpg"); }
-                    im.close();
-                } catch (Throwable t) { p("ir " + t); }
-            }}, new Handler(iht.getLooper()));
-            c.setPreviewDisplay(new Holder(ir.getSurface()));
-        } else {
-            st0 = new SurfaceTexture(10);
-            c.setPreviewTexture(st0);
-        }
-        final SurfaceTexture st = st0;
+        final Enc[] encOut = {null};
+        final SurfaceTexture[] stOut = {null};
+        try {
+            c.setErrorCallback(new Camera.ErrorCallback() { public void onError(int e, Camera cc) { p("camera error " + e); }});
+            Camera.Parameters prm = c.getParameters();
+            prm.setPreviewSize(W, H);
+            prm.setPreviewFormat(ImageFormat.NV21);
+            if (sets != null) for (String kv : sets.split(";")) { String[] a = kv.split("=", 2); prm.set(a[0], a[1]); p("set " + a[0] + "=" + a[1]); }
+            c.setParameters(prm);
+            prm = c.getParameters();
+            p("params now: picture-size=" + prm.get("picture-size") + " video-size=" + prm.get("video-size") + " recording-hint=" + prm.get("recording-hint") + " zsl=" + prm.get("zsl"));
+            p("preview " + prm.getPreviewSize().width + "x" + prm.getPreviewSize().height + " fmt=" + prm.getPreviewFormat() + " fps=" + prm.get("preview-fps-range"));
+            SurfaceTexture st0 = null;
+            String disp = previewTarget == null ? "st" : previewTarget;
+            p("preview target: " + disp);
+            if (disp.equals("gl")) {
+                st0 = GlConsumer.start(this);
+                c.setPreviewTexture(st0);
+            } else if (disp.equals("ir")) {
+                final ImageReader ir = ImageReader.newInstance(W, H, ImageFormat.YUV_420_888, 4);
+                final int[] irn = {0};
+                HandlerThread iht = new HandlerThread("ir"); iht.start();
+                ir.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() { public void onImageAvailable(ImageReader r) {
+                    try { Image im = r.acquireLatestImage(); if (im == null) return;
+                        int k = ++irn[0];
+                        if (k == 1 || k % 30 == 0) { byte[] nv = toNv21(im); p("ir frame " + k + " fmt=" + im.getFormat() + " " + stats(nv, W, H, W));
+                            if (k == 60) saveJpeg(nv, "c1-ir-frame60.jpg"); }
+                        im.close();
+                    } catch (Throwable t) { p("ir " + t); }
+                }}, new Handler(iht.getLooper()));
+                c.setPreviewDisplay(new Holder(ir.getSurface()));
+            } else {
+                st0 = new SurfaceTexture(10);
+                c.setPreviewTexture(st0);
+            }
+            final SurfaceTexture st = st0;
+            stOut[0] = st;
 
-        Enc enc0 = null;
-        if (encode) {
-            MediaCodecInfo ci = find(CODEC);
-            int[] fmts = ci.getCapabilitiesForType("video/avc").colorFormats;
-            p("encoder colorFormats=" + fmtList(fmts));
-            int pick = -1;
-            for (int f : fmts) if (f == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) pick = f;
-            if (fmtPref != null) pick = Integer.decode(fmtPref);
-            if (pick < 0) pick = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible;
-            p(String.format("picked color format 0x%x", pick));
-            enc0 = new Enc(false, pick);
-            p("using stride=" + enc0.stride + " slice=" + enc0.slice);
+            Enc enc0 = null;
+            if (encode) {
+                MediaCodecInfo ci = find(CODEC);
+                int[] fmts = ci.getCapabilitiesForType("video/avc").colorFormats;
+                p("encoder colorFormats=" + fmtList(fmts));
+                int pick = -1;
+                for (int f : fmts) if (f == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) pick = f;
+                if (fmtPref != null) pick = Integer.decode(fmtPref);
+                if (pick < 0) pick = MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible;
+                p(String.format("picked color format 0x%x", pick));
+                enc0 = new Enc(false, pick);
+                p("using stride=" + enc0.stride + " slice=" + enc0.slice);
+            }
+            final Enc enc = enc0;
+            encOut[0] = enc;
+            final int frameBytes = W * H * 3 / 2;
+            for (int i = 0; i < 4; i++) c.addCallbackBuffer(new byte[frameBytes]);
+            final int[] n = {0}; final int[] fed = {0}; final int[] dropped = {0};
+            final long[] t0 = {0};
+            final int total = encode ? 160 : 80;
+            final CountDownLatch done = new CountDownLatch(1);
+            c.setPreviewCallbackWithBuffer(new Camera.PreviewCallback() { public void onPreviewFrame(byte[] data, Camera cc) {
+                int k = ++n[0];
+                long now = System.nanoTime();
+                if (k == 1) t0[0] = now;
+                if (data.length != frameBytes) p("frame len " + data.length);
+                if (k <= 5 || k % 15 == 0) p("frame " + k + " " + stats(data, W, H, W));
+                if (k == 30 || k == 45 || k == 60) {
+                    try { saveJpeg(data, "c1-frame" + k + ".jpg"); } catch (Exception e) { p("jpeg " + e); }
+                }
+                if (enc != null) {
+                    if (enc.feedNv21(data, (now - t0[0]) / 1000, true)) fed[0]++; else dropped[0]++;
+                }
+                if (k >= total) {
+                    p(String.format("frames=%d in %.2fs (%.1f fps) fed=%d dropped=%d", k, (now - t0[0]) / 1e9, (k - 1) / ((now - t0[0]) / 1e9), fed[0], dropped[0]));
+                    done.countDown();
+                } else cc.addCallbackBuffer(data);
+            }});
+            c.startPreview();
+            p("preview started");
+            if (!done.await(20, TimeUnit.SECONDS)) p("TIMEOUT frames=" + n[0]);
+        } finally {
+            // Whatever failed (a parameter the camera rejects, say), the camera goes back before the run says DONE.
+            final CountDownLatch released = new CountDownLatch(1);
+            h.post(new Runnable() { public void run() {
+                try { c.setPreviewCallbackWithBuffer(null); c.stopPreview(); } catch (Exception e) { p("stop " + e); }
+                c.release();
+                released.countDown();
+            }});
+            released.await(5, TimeUnit.SECONDS);
+            if (encOut[0] != null) encOut[0].stop();
+            if (stOut[0] != null) stOut[0].release();
+            ht.quitSafely();
         }
-        final Enc enc = enc0;
-        final int frameBytes = W * H * 3 / 2;
-        for (int i = 0; i < 4; i++) c.addCallbackBuffer(new byte[frameBytes]);
-        final int[] n = {0}; final int[] fed = {0}; final int[] dropped = {0};
-        final long[] t0 = {0};
-        final int total = encode ? 160 : 80;
-        final CountDownLatch done = new CountDownLatch(1);
-        c.setPreviewCallbackWithBuffer(new Camera.PreviewCallback() { public void onPreviewFrame(byte[] data, Camera cc) {
-            int k = ++n[0];
-            long now = System.nanoTime();
-            if (k == 1) t0[0] = now;
-            if (data.length != frameBytes) p("frame len " + data.length);
-            if (k <= 5 || k % 15 == 0) p("frame " + k + " " + stats(data, W, H, W));
-            if (k == 30 || k == 45 || k == 60) {
-                try { saveJpeg(data, "c1-frame" + k + ".jpg"); } catch (Exception e) { p("jpeg " + e); }
-            }
-            if (enc != null) {
-                if (enc.feedNv21(data, (now - t0[0]) / 1000, true)) fed[0]++; else dropped[0]++;
-            }
-            if (k >= total) {
-                p(String.format("frames=%d in %.2fs (%.1f fps) fed=%d dropped=%d", k, (now - t0[0]) / 1e9, (k - 1) / ((now - t0[0]) / 1e9), fed[0], dropped[0]));
-                done.countDown();
-            } else cc.addCallbackBuffer(data);
-        }});
-        c.startPreview();
-        p("preview started");
-        if (!done.await(20, TimeUnit.SECONDS)) p("TIMEOUT frames=" + n[0]);
-        h.post(new Runnable() { public void run() { c.setPreviewCallbackWithBuffer(null); c.stopPreview(); c.release(); }});
-        Thread.sleep(500);
-        if (enc != null) enc.stop();
-        if (st != null) st.release();
-        ht.quitSafely();
     }
 
     // ---------- test 3: Camera2, like the pane ----------
-    void testC2(String outs) throws Exception {
+    void testC2(String outs, String want) throws Exception {
         final boolean useReader = !outs.equals("enc"), useEnc = !outs.equals("reader");
         HandlerThread ht = new HandlerThread("c2"); ht.start();
         final Handler h = new Handler(ht.getLooper());
@@ -322,7 +335,7 @@ public class Spike extends Activity {
         p("fps ranges=" + Arrays.toString(ranges));
         Range<Integer> fps = null;
         for (Range<Integer> r : ranges) if (r.getUpper() == 30 && (fps == null || r.getLower() > fps.getLower())) fps = r;
-        String want = getIntent().getStringExtra("fps"); // e.g. "15,15": the AE target range to ask for instead
+        // want, the run's own fps extra: e.g. "15,15", the AE target range to ask for instead
         if ("template".equals(want)) fps = null; // keep the template's own range
         else if (want != null) { String[] a = want.split(","); fps = new Range<>(Integer.parseInt(a[0].trim()), Integer.parseInt(a[1].trim())); }
         final Enc enc = useEnc ? new Enc(true, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) : null;
@@ -348,15 +361,28 @@ public class Spike extends Activity {
         }}, h);
 
         final CameraDevice[] dev = new CameraDevice[1];
+        final boolean[] gaveUp = {false};
         final CountDownLatch opened = new CountDownLatch(1);
         m.openCamera("0", new CameraDevice.StateCallback() {
-            public void onOpened(CameraDevice d) { dev[0] = d; opened.countDown(); }
+            public void onOpened(CameraDevice d) {
+                // Opened after the wait gave up: nobody will close it, so close it here.
+                synchronized (dev) { if (gaveUp[0]) { d.close(); return; } dev[0] = d; }
+                opened.countDown();
+            }
             public void onDisconnected(CameraDevice d) { p("disconnected"); d.close(); opened.countDown(); }
             public void onError(CameraDevice d, int e) { p("camera2 error " + e); d.close(); opened.countDown(); }
         }, h);
         opened.await(10, TimeUnit.SECONDS);
-        if (dev[0] == null) { p("open failed"); return; }
-        final CameraDevice d = dev[0];
+        CameraDevice got;
+        synchronized (dev) { got = dev[0]; if (got == null) gaveUp[0] = true; }
+        if (got == null) {
+            p("open failed");
+            if (enc != null) enc.stop();
+            if (reader != null) reader.close();
+            ht.quitSafely();
+            return;
+        }
+        final CameraDevice d = got;
         final List<Surface> targets = new ArrayList<>();
         if (reader != null) targets.add(reader.getSurface());
         if (enc != null) targets.add(enc.surface);

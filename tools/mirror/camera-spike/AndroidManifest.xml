@@ -3,6 +3,8 @@
   <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="23"/>
   <uses-permission android:name="android.permission.CAMERA"/>
   <application android:label="camspike" android:debuggable="true">
-    <activity android:name=".Spike" android:exported="true" android:launchMode="singleTask"/>
+    <!-- DUMP: only the shell (adb) holds it, so no other app can start a run and take pictures. -->
+    <activity android:name=".Spike" android:exported="true" android:launchMode="singleTask"
+        android:permission="android.permission.DUMP"/>
   </application>
 </manifest>
