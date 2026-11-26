@@ -2,7 +2,7 @@
  "_comment": "Cases Vitro draws wrong today, each with the PR that owns its fix (#799: filed on the exp/vitro list, no fixer yet) and what's wrong. Not drift: the harness reports them as open and fails once one matches, so the fix drops its entry (ParityOpen in ParityReport.kt).",
  "mirror/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the light card, thermostat and header-toggle differences"
+  "reason": "Masonry dashboard: placement and card heights match (the media-control stretch is fixed); the light card's \"65%\" and ring, the thermostat, weather high/low, the gauge's value size, the button names HA wraps onto two lines (Vitro ellipsizes them, so the column runs shorter) and the media art (see m-media-control-*) differ, each on its own card"
  },
  "mirror/d-mushroom-dense": {
   "owner": "#928",
@@ -10,7 +10,7 @@
  },
  "mirror/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
+  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color, tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
  },
  "mirror/entity": {
   "owner": "#928",
@@ -34,7 +34,7 @@
  },
  "s1/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the light card, thermostat and header-toggle differences"
+  "reason": "Masonry dashboard: placement and card heights match (the media-control stretch is fixed); the light card's \"65%\" and ring, the thermostat, weather high/low, the gauge's value size, the button names HA wraps onto two lines (Vitro ellipsizes them, so the column runs shorter) and the media art (see m-media-control-*) differ, each on its own card"
  },
  "s1/d-mushroom-dense": {
   "owner": "#928",
@@ -42,7 +42,7 @@
  },
  "s1/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
+  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color, tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
  },
  "s1/entities-special-rows": {
   "owner": "#928",
@@ -226,11 +226,11 @@
  },
  "s1/m-media-control-media-player-paused": {
   "owner": "#799",
-  "reason": "Media control: the cover art sits further left and the progress bar ends ~2 % later than HA's"
+  "reason": "Media control: the reference is a capture race, not Vitro. HA's card rendered first without its state, so its ResizeObserver never attached and the art box kept its first measure (165 px wide on a 201 px card). A settled HA page (fresh load, with or without card-mod) sizes it to the card's height, as Vitro does. The progress bar matches within 1 px. Needs a recapture once the capture waits for it"
  },
  "s1/m-media-control-media-player-playing": {
   "owner": "#799",
-  "reason": "Media control: the cover art sits further left and the progress bar ends ~2 % later than HA's"
+  "reason": "Media control: the reference is a capture race, not Vitro. HA's card rendered first without its state, so its ResizeObserver never attached and the art box kept its first measure (165 px wide on a 201 px card). A settled HA page (fresh load, with or without card-mod) sizes it to the card's height, as Vitro does. The progress bar matches within 1 px. Needs a recapture once the capture waits for it"
  },
  "s1/m-mushroom-alarm-alarm-control-panel-unavailable": {
   "owner": "#928",
@@ -504,21 +504,9 @@
   "owner": "#799",
   "reason": "To-do list: a completed item's due date is orange in Vitro and grey in HA (found by the region check)"
  },
- "s1/view-layout-fixed": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
- },
- "s1/view-layout-fixed-first": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
- },
- "s1/view-layout-fixed-grid": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
- },
  "tablet/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: Vitro stretches the media-control card to the column's height and pushes the gauge out; also the light card, thermostat and header-toggle differences"
+  "reason": "Masonry dashboard: placement and card heights match (the media-control stretch is fixed); the light card's \"65%\" and ring, the thermostat, weather high/low, the gauge's value size, the button names HA wraps onto two lines (Vitro ellipsizes them, so the column runs shorter) and the media art (see m-media-control-*) differ, each on its own card"
  },
  "tablet/d-mushroom-dense": {
   "owner": "#928",
@@ -526,7 +514,7 @@
  },
  "tablet/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color and Plugs header toggle differ (each listed on its own case)"
+  "reason": "Sections dashboard: placement matches; the thermostat colors, weather high/low, glance lock color, tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
  },
  "tablet/entities-special-rows": {
   "owner": "#928",
@@ -551,17 +539,5 @@
  "tablet/todo-list": {
   "owner": "#799",
   "reason": "To-do list: a completed item's due date is orange in Vitro and grey in HA (found by the region check)"
- },
- "tablet/view-layout-fixed": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
- },
- "tablet/view-layout-fixed-first": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
- },
- "tablet/view-layout-fixed-grid": {
-  "owner": "#799",
-  "reason": "card-mod position: fixed in a layout-card view: HA pins the card mid-right in a tall slot; Vitro pins it at the bottom-right (found by the region check)"
  }
 }

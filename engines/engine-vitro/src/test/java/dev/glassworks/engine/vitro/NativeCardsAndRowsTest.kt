@@ -467,6 +467,26 @@ class NativeCardsAndRowsTest {
         assertEquals(Math.round(800 * activity.resources.displayMetrics.density), cols[1].width)
     }
 
+    @Test fun aMasonryColumnNeverStretchesACardToTheRoomLeft() {
+        // The view's ScrollView fills the screen, so a short view hands the row an exact height. HA's column never
+        // limits a card's height: a card whose background matches its parent (media control's) stays its own height
+        // instead of taking the room left, and the card under it shows right below it.
+        val row = dev.glassworks.engine.vitro.ui.MasonryColumnsLayout(activity, 10_000)
+        val col = dev.glassworks.engine.vitro.ui.CardColumn(activity, 0, 0)
+        row.addView(col, android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT))
+        val card = android.widget.FrameLayout(activity).apply {
+            addView(View(activity), android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(View(activity), android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 100))
+        }
+        col.addView(card, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        val after = View(activity).also { col.addView(it, android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 50)) }
+        row.measure(View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.EXACTLY))
+        row.layout(0, 0, 800, 2000)
+        assertEquals(100, card.height)
+        assertEquals(100, after.top)
+        assertEquals(150, col.height)
+    }
+
     @Test fun theHeaderSwitchFollowsAButtonRowsLight() {
         put("light.a", "on", "friendly_name" to "A")
         put("light.b", "on", "friendly_name" to "B")
