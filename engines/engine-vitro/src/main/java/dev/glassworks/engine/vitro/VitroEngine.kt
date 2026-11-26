@@ -412,9 +412,16 @@ class VitroEngine(
             if (!LovelaceParser.isDashboardUrl(url)) return false
             val query = runCatching { java.net.URI(url).rawQuery }.getOrNull().orEmpty()
             // HA's own More Info dialog over the view (a script's fields): it stays HA's until the dialog closes.
-            if ("auth_callback" in query || "edit=" in query || "more-info-entity-id=" in query) return false
+            if (inFrontendWorkflow(query)) return false
             return !isWebDashboard(url)
         }
+
+        /**
+         * A sign-in callback, HA's dashboard editor or its More Info dialog (a script's fields) on the page: the user is
+         * in the middle of something there, which neither a hand-back nor a reconnect's retry may reload.
+         */
+        private fun inFrontendWorkflow(query: String): Boolean =
+            "auth_callback" in query || "edit=" in query || "more-info-entity-id=" in query
 
         /** True when [url] is a dashboard HA had no config for: its frontend draws it, so it's no way back to Vitro. */
         private fun isWebDashboard(url: String): Boolean =
@@ -620,7 +627,9 @@ class VitroEngine(
             readyOnBuild = null
             stopClarity()
             // The islands' pages and the fallback's go with the activity: nothing of this page keeps running.
-            // closeIslands() cancels the pending builds too.
+            // closeIslands() cancels the pending builds too; closeMoreInfo() dismisses the sheet and makes a script-fields
+            // lookup still out answer into nothing, so a disposed page opens no sheet.
+            vitroView.closeMoreInfo()
             vitroView.closeIslands()
             fallbackPage?.close()
             fallbackPage = null
@@ -1254,8 +1263,10 @@ class VitroEngine(
                     // A new connection tries again the dashboards whose config failed to read on the last one. The one
                     // HA's frontend shows for that reason now goes back to the native view; other fallback pages stay.
                     // Where HA's page is now: the user may have moved on from the failed dashboard inside it.
+                    // Not while HA's editor or a dialog is open in it: a reload would lose what the user was doing.
                     val retry = (fallbackLocation ?: currentUrl)?.takeIf { url ->
-                        fallbackInFront() && (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in failedDashboards
+                        fallbackInFront() && (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in failedDashboards &&
+                            !inFrontendWorkflow(runCatching { java.net.URI(url).rawQuery }.getOrNull().orEmpty())
                     }
                     failedDashboards.clear()
                     retry?.let(::load)

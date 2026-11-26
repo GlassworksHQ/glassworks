@@ -2065,6 +2065,20 @@ internal class HaHorizontalSliderView(
         if (!gainFocus) access.cancel()
     }
 
+    /**
+     * Disabled mid-drag (the entity went unavailable): the drag ends as a cancel does, sending nothing, so the value
+     * Home Assistant reports later is shown again. Android keeps a custom view's drag state when it's disabled.
+     */
+    override fun setEnabled(enabled: Boolean) {
+        super.setEnabled(enabled)
+        if (!enabled && dragging) {
+            dragging = false
+            parent?.requestDisallowInterceptTouchEvent(false)
+            setValue(boundFraction, boundActive)
+            invalidate()
+        }
+    }
+
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // Disabled (an unavailable entity): no drag and nothing sent.

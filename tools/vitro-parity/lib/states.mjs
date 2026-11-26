@@ -29,10 +29,23 @@ export function applyEntityEvent(states, ev, first) {
  */
 export function unmetExpectations(expect, states) {
   // `expect` names a served state that doesn't move with the clock: an "@" time marker never matches (the fake serves
-  // it resolved), and says so, as the corpus test does.
+  // it resolved), and says so, as the corpus test does. A literal state that merely starts with "@" ("@standby") is
+  // served as written, so it matches as any other.
   return Object.entries(expect || {})
-    .filter(([id, want]) => String(want).startsWith('@') || states[id]?.s !== want)
-    .map(([id, want]) => String(want).startsWith('@')
+    .filter(([id, want]) => isTimeMarker(want) || states[id]?.s !== want)
+    .map(([id, want]) => isTimeMarker(want)
       ? `${id}: expects the time marker ${want}, not a state HA serves`
       : `${id}: expected ${want}, got ${states[id]?.s ?? 'no state'}`);
+}
+
+/**
+ * True for a fixture time the fake HA resolves (fakehome.py's `resolve`): "@D+1", "@D-2 14:30", "@-2h", "@+1d12h",
+ * "@90". Anything else after an "@" is a literal state.
+ */
+export function isTimeMarker(v) {
+  if (typeof v !== 'string' || !v.startsWith('@')) return false;
+  const spec = v.slice(1).trim();
+  return /^D[+-]\d+(?: \d\d:\d\d(?::\d\d)?)?$/.test(v.slice(1)) ||
+    /^[+-]?\d+(\.\d+)?$/.test(spec) ||
+    /^[+-]?(?:\d+(?:\.\d+)?[smhdw])+$/.test(spec);
 }

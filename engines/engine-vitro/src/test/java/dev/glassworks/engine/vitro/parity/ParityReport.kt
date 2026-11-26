@@ -292,6 +292,15 @@ class ParityOpen(private val file: File) {
         }
     }
 
+    /**
+     * An open entry on a case whose view HA's frontend draws (route `frontend`): Vitro draws nothing there, so the bug it
+     * names can't be checked, and the run says so as an ERROR instead of an ordinary match. Null when [key] isn't listed.
+     */
+    fun judgeFrontend(key: String): Pair<ParityStatus, List<String>>? {
+        val bug = describe(key) ?: return null
+        return ParityStatus.ERROR to listOf("HA's frontend draws its view, so Vitro draws nothing to check: drop it from open.json ($bug)")
+    }
+
     val keys: Set<String> get() = json.keys().asSequence().filter { !it.startsWith("_") }.toSet()
 }
 

@@ -139,6 +139,37 @@ class TileNativeOptionsTest {
     }
 
     @Test
+    fun aFanThatGoesUnavailableMidDragDropsTheDragAndFollowsHaAgain() {
+        val store = EntityStore().also { it.putLocal(fan(10.0, 20)) }
+        val raw = JSONObject("""{"type": "tile", "entity": "fan.ceiling", "features": [{"type": "fan-speed"}]}""")
+        val view = TileCardView(context(store), CardConfig("tile", raw))
+        activity.setContentView(FrameLayout(activity).apply { addView(view, FrameLayout.LayoutParams(800, ViewGroup.LayoutParams.WRAP_CONTENT)) })
+        view.measure(View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        view.layout(0, 0, 800, view.measuredHeight)
+        ShadowLooper.idleMainLooper()
+        val slider = view.all().first { it.isShown && it.javaClass.simpleName == "HaHorizontalSliderView" }
+        fun shown(): Float {
+            val info = android.view.accessibility.AccessibilityNodeInfo.obtain()
+            slider.onInitializeAccessibilityNodeInfo(info)
+            return info.rangeInfo.current
+        }
+        val t = android.os.SystemClock.uptimeMillis()
+        val y = slider.height / 2f
+        slider.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_DOWN, slider.width * 0.9f, y, 0))
+        // The fan goes unavailable mid-drag: the slider is disabled and the drag's up never arrives.
+        store.putLocal(fan(10.0, 20, state = "unavailable"))
+        ShadowLooper.idleMainLooper()
+        assertTrue(!slider.isEnabled)
+        // Back, at 70 %: the slider shows Home Assistant's value, not a drag stuck at 90 %.
+        store.putLocal(fan(10.0, 70))
+        ShadowLooper.idleMainLooper()
+        android.os.SystemClock.sleep(0)
+        ShadowLooper.idleMainLooper(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals(70f, shown(), 1f)
+        assertTrue(calls.none { it.service == "set_percentage" })
+    }
+
+    @Test
     fun aFanWithFourSpeedsIsSetByItsSpeedButtons() {
         val view = tile("""{"type": "tile", "entity": "fan.ceiling", "features": [{"type": "fan-speed"}]}""",
             fan(33.333333333333336, 67))

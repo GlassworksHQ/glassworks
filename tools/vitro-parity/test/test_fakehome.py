@@ -398,8 +398,9 @@ class Corpus(unittest.TestCase):
                 missing.append(f"{cid}: expects {e}, which has no state")
             for e, want in (doc.get("expect") or {}).items():
                 # `expect` names a served state that doesn't move with the clock ("on"); an "@" time is served
-                # resolved, so neither this check nor capture's (unmetExpectations) could ever match it.
-                if str(want).startswith("@"):
+                # resolved, so neither this check nor capture's (unmetExpectations) could ever match it. A literal
+                # state that merely starts with "@" ("@standby") is served as written and compared as any other.
+                if H.resolve_state(want) != want:
                     missing.append(f"{cid}: expects {e} {want}: a time marker, not a state HA serves")
                     continue
                 got = (fx.get("states") or {}).get(e, {}).get("state")
