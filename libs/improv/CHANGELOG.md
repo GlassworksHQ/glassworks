@@ -5,7 +5,7 @@ What changed in each release of `dev.glassworks:improv` on Maven Central. Versio
 cut from `libs/improv/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.2.1] - 2026-11-25
 
 ### Fixed
 - **The client stays connected through a state change on Android 6 and 7.** Below Android 8, `ImprovBleServer`

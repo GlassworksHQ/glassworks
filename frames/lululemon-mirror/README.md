@@ -172,6 +172,7 @@ Deep engineering notes from bringing up the Mirror (see [all research notes](../
 - [option-c.md](research/option-c.md) — Notes on building a clean AOSP 6 image from on-device vendor files
 - [community-root-and-network-adb.md](research/community-root-and-network-adb.md) — Review of community root and network-adb methods
 - [display-sleep-lines.md](research/display-sleep-lines.md) — Why Android's screen off leaves lines across the display, and the backlight-only sleep that avoids it
+- [improv-ble-disconnect.md](research/improv-ble-disconnect.md) — Why Wi-Fi setup over Bluetooth never finished in Home Assistant, and the advertising fix
 - [stock-firmware-probe.md](research/stock-firmware-probe.md) — Live probe of untouched stock 1.24.0 firmware via userdata-only HTTP app, `FS_IOC_FIEMAP`, and reversible surgical USB ADB
 - [stock-softap.md](research/stock-softap.md) — Why stock software keeps opening its `mirror-<serial>` hotspot, and the `services.jar` edit that turns it off
 
