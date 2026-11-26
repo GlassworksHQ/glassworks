@@ -400,6 +400,40 @@ class WebFallbackTest {
         assertEquals(emptyList<Int>(), c.built)
     }
 
+    @Test fun aRebuildDuringTheWaitKeepsTheRequestedView() {
+        // Greptile on #952: the user's light or dark choice (or any rebuild) landing while the requested view waits for
+        // the resources rendered the index before it, which took the wait over: the page then opened the first view.
+        val c = coldView(views(living, bubblePlain), "plain")
+        assertEquals(1, c.vv.currentViewIndex)
+        c.vv.setUserTheme(null, dark = !c.vv.darkMode)
+        idle()
+        assertEquals("nothing built while it waits", emptyList<Int>(), c.built)
+        assertEquals(1, c.vv.currentViewIndex)
+        c.vv.resourcesList = LovelaceResourceList(listOf(bubbleScript), bubbleModules = false)
+        idle()
+        assertEquals("the requested view, once", listOf(1), c.built)
+        assertEquals(emptyList<String>(), c.web)
+    }
+
+    @Test fun theViewTabsTakeHomeAssistantsHeaderColorNotTheCards() {
+        // HA's hui-root toolbar: --app-header-background-color, which HA's theme sets to --sidebar-background-color and
+        // that to --card-background-color. A theme with transparent cards (--ha-card-background) keeps its toolbar
+        // (Greptile on #952: the tabs took the card-only color, and went transparent).
+        val vv = VitroView(activity, EntityStore(), Color.BLACK)
+        fun theme(vararg vars: Pair<String, String>, dark: Boolean = true) = dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(
+            dev.glassworks.engine.vitro.theme.ThemeCatalog(themes = mapOf("t" to dev.glassworks.engine.vitro.theme.ThemeCatalog.ThemeDefinition(base = mapOf(*vars)))),
+            dark, "t",
+        )
+        val glass = theme("ha-card-background" to "transparent")
+        assertEquals("the card itself is transparent", Color.TRANSPARENT, glass.cardBackgroundColor and 0xFF000000.toInt())
+        assertEquals("HA's dark --card-background-color", 0xFF1C1C1C.toInt(), vv.headerBackground(glass))
+        assertEquals(0xFFFFFFFF.toInt(), vv.headerBackground(theme("ha-card-background" to "rgba(0, 0, 0, 0)", dark = false)))
+        // A theme's own header, or its sidebar, wins, as in HA.
+        assertEquals(0xFF123456.toInt(), vv.headerBackground(theme("ha-card-background" to "transparent", "app-header-background-color" to "#123456")))
+        assertEquals(0xFF654321.toInt(), vv.headerBackground(theme("sidebar-background-color" to "#654321")))
+        assertEquals(0xFF222233.toInt(), vv.headerBackground(theme("card-background-color" to "#222233")))
+    }
+
     @Test fun aColdStartWithoutAnAnswerBuildsAfterTheWait() {
         val c = coldView(views(living, bubblePlain), "plain", holdMs = 2_000)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_900))

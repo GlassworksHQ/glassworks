@@ -851,6 +851,8 @@ class VitroEngine(
                 val viewIndex = vitroView.currentViewIndex
                 val walkGen = walkGeneration
                 val resources = vitroView.resourcesList
+                // The Home Assistant this view's islands are of: a size one reports after another took its place is dropped.
+                val serverGen = vitroView.serverGeneration
                 VitroCardContext(
                     context = activity,
                     haBase = haBase,
@@ -914,7 +916,7 @@ class VitroEngine(
                     },
                     touch = touchScreen,
                     needsFrontend = { card, tags, owners -> vitroView.cardNeedsFrontend(card, tags, owners, resources) },
-                    islandCardSize = { card, size -> vitroView.islandCardSize(card, size) },
+                    islandCardSize = { card, size -> vitroView.islandCardSize(card, size, serverGen) },
                     islandFailed = { card, reason -> vitroView.cardFailedInIsland(card, reason, resources) },
                     matchedNeedFrontend = { card, reason -> vitroView.matchedNeedFrontend(card, reason) },
                     haConnected = { haConnected },

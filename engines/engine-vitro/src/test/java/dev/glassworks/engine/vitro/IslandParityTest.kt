@@ -116,6 +116,23 @@ class IslandParityTest {
         return find(this)?.childCount ?: -1
     }
 
+    @Test fun aSizeFromAnotherHomeAssistantsIslandIsDropped() {
+        // Sourcery on #952: a cardSize queued by an island of the Home Assistant before a reset could land on the next
+        // one's dashboard, where the same config is another card on another hass.
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val vv = VitroView(activity, EntityStore(), 0xFF000000.toInt())
+        val before = vv.serverGeneration
+        vv.islandCardSize(islandsView[1], 2.0, before)
+        assertEquals(2.0, HaCardSize.of(islandsView[1]), 0.0)
+        vv.resetForServer()
+        assertEquals("a reset forgets every size", 1.0, HaCardSize.of(islandsView[1]), 0.0)
+        assertTrue(vv.serverGeneration != before)
+        vv.islandCardSize(islandsView[1], 3.0, before)
+        assertEquals("the old island's late report is dropped", 1.0, HaCardSize.of(islandsView[1]), 0.0)
+        vv.islandCardSize(islandsView[1], 3.0, vv.serverGeneration)
+        assertEquals(3.0, HaCardSize.of(islandsView[1]), 0.0)
+    }
+
     private fun VitroView.currentRoot(): View? = (0 until childCount).map { getChildAt(it) }
         .firstOrNull { it is ViewGroup && it.visibility == View.VISIBLE }
 

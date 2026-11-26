@@ -470,7 +470,9 @@ class VitroView(
      * to another column or changes how many columns stay, and other built masonry views with the card are when next
      * shown. A view that places its cards the same stays as it is.
      */
-    fun islandCardSize(card: CardConfig, size: Double) {
+    fun islandCardSize(card: CardConfig, size: Double, generation: Int = serverGeneration) {
+        // A size an island of another Home Assistant reported, queued before [resetForServer]: not this one's card.
+        if (generation != serverGeneration) return
         val cfg = dashboard
         val width = (resources.displayMetrics.widthPixels / dp).toInt()
         fun holds(v: ViewConfig) = v.cards.any { root -> holdsCard(root, card.raw.toString()) }
@@ -484,6 +486,13 @@ class VitroView(
             if (i == currentViewIndex && webViewIndex == null) renderView(i, forceRebuild = true, pushHistory = false) else staleViews += i
         }
     }
+
+    /**
+     * Which Home Assistant the islands' reports are about: [resetForServer] moves it on, and a report made under an
+     * older one ([islandCardSize]) is dropped (Sourcery on #952). The engine reads it as it builds each card's context.
+     */
+    @Volatile var serverGeneration: Int = 0
+        private set
 
     /** A view [buildViewTree] lays out as masonry (its last case): not a panel, sections, sidebar or layout-card view. */
     private fun isMasonry(v: ViewConfig): Boolean =
@@ -658,6 +667,7 @@ class VitroView(
         islandLosses.clear()
         gaveUpIslands.clear()
         gaveUpViews.clear()
+        serverGeneration++
         IslandCardSizes.clear()
         resourceHold?.let { mainHandler.removeCallbacks(it.timeout) }
         resourceHold = null
@@ -994,12 +1004,15 @@ class VitroView(
     }
 
     /**
-     * HA's toolbar behind the view tabs: `--app-header-background-color`, which HA's theme sets to
-     * `--sidebar-background-color`, which is `--card-background-color` (frontend 20261028.5).
+     * HA's toolbar behind the view tabs (`hui-root`'s `.header`, frontend 20261028.5): `--app-header-background-color`,
+     * with no fallback of its own. HA's theme sets it to `--sidebar-background-color`, which it sets to
+     * `--card-background-color`: the theme variable, never the card-only `--ha-card-background` or a card-mod style, so
+     * a theme with transparent cards keeps its toolbar (Greptile on #952). Past those, HA's own card background.
      */
-    private fun headerBackground(theme: dev.glassworks.engine.vitro.theme.ResolvedTheme): Int =
-        listOf("app-header-background-color", "sidebar-background-color").firstNotNullOfOrNull { ThemeResolver.parseColor(theme.vars[it]) }
-            ?: theme.cardBackgroundColor
+    internal fun headerBackground(theme: dev.glassworks.engine.vitro.theme.ResolvedTheme): Int =
+        listOf("app-header-background-color", "sidebar-background-color", "card-background-color")
+            .firstNotNullOfOrNull { ThemeResolver.parseColor(theme.vars[it]) }
+            ?: if (theme.dark) 0xFF1C1C1C.toInt() else 0xFFFFFFFF.toInt()
 
     private fun rebuildTabs(config: DashboardConfig) {
         tabBar.removeAllViews()
@@ -1217,6 +1230,10 @@ class VitroView(
         // Whether the view goes to HA's frontend, and which of its cards go to islands, is decided once the resources
         // are known: the decision made then is the one that stands. The connecting screen stays meanwhile.
         if (holdForResources(index, cfg)) {
+            // The view the page waits on is the current one: a rebuild meanwhile (the user's light or dark choice, a
+            // theme, the header) renders it, not the index before, which would take the wait over (Greptile on #952).
+            // Whether it goes to HA's frontend is still decided once the resources are known.
+            currentViewIndex = index
             for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
             for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE
             updateIslandsShown()
