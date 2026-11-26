@@ -1231,7 +1231,7 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 if (unavailable) {
                     unavailableText.text = HaText.ui(
                         "ui.panel.lovelace.warning.entity_unavailable",
-                        "entity" to "${config.name ?: s?.friendlyName ?: eid} ($eid)",
+                        "entity" to "${config.name(s) ?: s?.friendlyName ?: eid} ($eid)",
                     )
                 }
                 icon.setCondition(state)
