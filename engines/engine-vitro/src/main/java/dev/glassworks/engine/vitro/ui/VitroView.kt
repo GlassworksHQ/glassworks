@@ -69,6 +69,7 @@ import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.cards.MediaControlCardView
 import dev.glassworks.engine.vitro.cards.MushroomTitleCardView
 import dev.glassworks.engine.vitro.cards.ModernCircularGaugeCardView
+import dev.glassworks.engine.vitro.cards.MoreInfoRoute
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
 import dev.glassworks.engine.vitro.cards.MushroomClimateCardView
@@ -665,21 +666,32 @@ class VitroView(
 
     /**
      * Opens More Info for an entity in Home Assistant's own frontend, over the view on screen (its URL's
-     * `more-info-entity-id`), with the reason Vitro's sheet can't show it: a script with fields, whose form only HA's
-     * dialog has. Null (a view with no page): Vitro's sheet, whose Run then never starts such a script.
+     * `more-info-entity-id`), with the reason Vitro's sheet can't show it as HA does ([MoreInfoRoute]), or a script
+     * with fields, whose form only HA's dialog has. Null (a view with no page): Vitro's sheet, for every entity, whose
+     * Run then never starts such a script.
      */
     var onMoreInfoInFrontend: ((ViewConfig, String, String) -> Unit)? = null
 
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         val inFrontend = onMoreInfoInFrontend
+        val view = dashboard?.views?.getOrNull(currentViewIndex)
+        // Clarity times the sheet itself; everyone else gets HA's dialog where the sheet would draw a different one.
+        if (inFrontend != null && trace == null && view != null) {
+            MoreInfoRoute.handOff(entityId, store[entityId])?.let { reason ->
+                closeMoreInfo()
+                inFrontend(view, entityId, "More Info: $reason")
+                return
+            }
+        }
+        // A script with fields (its `get_services` entry): its form is in HA's dialog alone (#926's Run finds the same).
         if (inFrontend != null && entityId.substringBefore('.') == "script") {
             val ctx = contextFactory?.invoke(ThemeResolver.resolve(themeCatalog, darkMode, userThemeName)) ?: return
             dev.glassworks.engine.vitro.cards.EntityRowControls.scriptHasFields(ctx, entityId) { fields ->
-                val view = dashboard?.views?.getOrNull(currentViewIndex)
-                if (fields == true && view != null) {
+                val shown = dashboard?.views?.getOrNull(currentViewIndex)
+                if (fields == true && shown != null) {
                     closeMoreInfo()
-                    inFrontend(view, entityId, "More Info of a script with fields")
+                    inFrontend(shown, entityId, "More Info of a script with fields")
                 } else {
                     showMoreInfo(entityId, trace)
                 }

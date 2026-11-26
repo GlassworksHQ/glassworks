@@ -103,6 +103,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
     /** The header's Close: where keyboard focus starts when the sheet opens. */
     private var closeButton: View? = null
+    private val footerSlot = FrameLayout(ctx.context).apply { visibility = GONE }
     private val body = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(ctx.px(24f), ctx.px(if (compact) 4f else 8f), ctx.px(24f), ctx.px(if (compact) 12f else 24f))
@@ -216,6 +217,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             addView(body, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
         panel.addView(scroll, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, 1f))
+        // A dialog's sticky footer (an update's actions): under the content, at the panel's bottom while it scrolls.
+        panel.addView(footerSlot, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
         if (wide) {
             // `min(var(--ha-dialog-width-md, 580px), 95vw)`, its top 40 px down (half the 80 px its height leaves).
@@ -401,7 +404,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         // The sensor's content (`.content`, 24 px all round) and the history tab's (8 px over, 24 under) have their
         // own sides; every other domain keeps its control layout's.
         val custom = showingHistory || domain !in CONTROL_DOMAINS
-        if (custom) body.setPadding(0, ctx.px(if (showingHistory) 8f else 24f), 0, ctx.px(24f))
+        footerSlot.removeAllViews()
+        footerSlot.visibility = GONE
+        // HA's `.content` (24 px all round) around the controls drawn as HA's newer dialogs are; an update's sides are
+        // its own (its state row and summary), and its sticky footer takes the bottom's place.
+        if (!showingHistory && domain == "update") body.setPadding(0, ctx.px(24f), 0, 0)
+        else if (!showingHistory && domain in CONTENT_DOMAINS) body.setPadding(ctx.px(24f), ctx.px(24f), ctx.px(24f), ctx.px(24f))
+        else if (custom) body.setPadding(0, ctx.px(if (showingHistory) 8f else 24f), 0, ctx.px(24f))
         else body.setPadding(ctx.px(24f), ctx.px(if (compact) 4f else 8f), ctx.px(24f), ctx.px(if (compact) 12f else 24f))
         val update: (EntityState?) -> Unit = if (showingHistory) {
             buildSensor(id, stateRow = false)
@@ -417,6 +426,16 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             "media_player" -> buildMedia(id)
             "alarm_control_panel" -> buildAlarm(id, s)
             "button", "input_button", "script", "scene" -> buildAction(id, domain)
+            "vacuum" -> MoreInfoVacuumView(ctx, id).also { body.addView(it, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }::update
+            "update" -> MoreInfoUpdateView(ctx, id) { url ->
+                // The release announcement: HA opens it in a new tab; the page goes there, as a `url` action does.
+                dismiss()
+                ctx.navigate(url)
+            }.also {
+                body.addView(it, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                footerSlot.addView(it.footer, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+                footerSlot.visibility = VISIBLE
+            }::update
             else -> buildSensor(id, stateRow = true)
         }
         updater = { st ->
@@ -1506,7 +1525,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 name.text = parts.entity ?: parts.device ?: s?.friendlyName ?: id
                 // No age without a last change (0: HA never sent one), as ha-relative-time shows nothing then.
                 time.text = s?.takeIf { it.lastChanged > 0.0 }?.let { HaFormat.relativeTime((it.lastChanged * 1000).toLong(), ctx.now()) }.orEmpty()
-                value.text = s?.formattedState() ?: HaText.ui("state.default.unknown")
+                value.text = s?.let { MoreInfoStateHeader.stateCardDisplay(it, ctx.now()) } ?: HaText.ui("state.default.unknown")
             }
         }
         // computeShowHistoryComponent: no history section when HA runs without its `history` integration.
@@ -1751,6 +1770,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             "select", "input_select", "lock", "media_player", "alarm_control_panel", "button", "input_button", "script", "scene",
         )
 
+        /** The domains drawn from HA's own parts ([MoreInfoVacuumView]), inside its 24 px `.content`. */
+        val CONTENT_DOMAINS = setOf("vacuum")
+
         /** Below this viewport height (dp) the sheet uses its compact landscape sizes. */
         const val COMPACT_HEIGHT_DP = 580
         const val SCRIM = 0x40000000
@@ -1766,9 +1788,13 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         const val EXIT_MIN_DP = 180f
         const val TIME_REFRESH_MS = 30_000L
 
-        /** Domains whose More-Info has a control view and a History tab. */
+        /**
+         * Domains whose More-Info has a control view and a History tab: HA's `_shouldShowHistory`, the sheet's domains in
+         * `DOMAINS_WITH_MORE_INFO` (a camera has no history).
+         */
         val HISTORY_TOGGLE_DOMAINS = setOf(
-            "light", "switch", "fan", "input_boolean", "climate", "cover", "lock", "automation", "humidifier", "siren",
+            "light", "switch", "fan", "input_boolean", "climate", "cover", "lock", "siren", "alarm_control_panel",
+            "media_player", "script", "scene", "vacuum", "update",
         )
 
         const val DOCK_LIGHT = 0xFFF2F2F2.toInt()

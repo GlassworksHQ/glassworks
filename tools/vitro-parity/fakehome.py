@@ -920,6 +920,8 @@ HANDLERS = {
     "recorder/statistics_during_period": lambda c, m: c.result(m["id"], statistics(
         m.get("statistic_ids"), m.get("start_time"), m.get("end_time"), m.get("period"), m.get("types"))),
     "logbook/event_stream": _logbook,
+    # An update entity's release notes (`update/release_notes`): the fixture's Markdown, or none (HA answers null).
+    "update/release_notes": lambda c, m: c.result(m["id"], (fixture().get("release_notes") or {}).get(m.get("entity_id"))),
     "todo/item/subscribe": _todo,
     "weather/subscribe_forecast": _forecast,
     "calendar/event/subscribe": _calendar,

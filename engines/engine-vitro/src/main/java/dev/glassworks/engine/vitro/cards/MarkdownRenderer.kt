@@ -687,8 +687,8 @@ class MarkdownRenderer(private val ctx: VitroCardContext) {
      * the same box (the same elements, attributes, computed styles and sheet: a clock's minute, a sensor's value), the
      * text views of the changed runs get their new text in place ([updateInPlace]); anything else is built again.
      */
-    fun render(markdown: String, into: LinearLayout, parentStyle: MdStyle = defaultRootStyle(), sheet: MdSheet = MdSheet.EMPTY) {
-        val root = MdHtml.fromMarkdown(markdown)
+    fun render(markdown: String, into: LinearLayout, parentStyle: MdStyle = defaultRootStyle(), sheet: MdSheet = MdSheet.EMPTY, breaks: Boolean = true) {
+        val root = MdHtml.fromMarkdown(markdown, breaks)
         MdCascade.apply(root, parentStyle, sheet, ctx.theme.vars)
         val prev = last
         if (prev != null && prev.into === into && prev.sheet === sheet && into.childCount > 0 &&
