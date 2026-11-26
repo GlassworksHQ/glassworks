@@ -200,6 +200,60 @@ class VitroFallbackReturnTest {
         assertNative(page, fp)
     }
 
+    // ---- Home Assistant's own More Info dialog ----
+
+    @Test fun aDialogTheSheetDoesntDrawOpensInHomeAssistantsFrontendAndClosingItComesBack() {
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        val vv = vitroView(page)
+        // A timer's dialog (its controls and presets) is HA's own: its frontend shows the view with it open.
+        vv.openMoreInfo("timer.tea")
+        idle()
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        assertEquals(listOf("$living?more-info-entity-id=timer.tea"), fp.loads.toList())
+        assertEquals("no sheet of Vitro's", null, vv.openSheet)
+
+        // HA's page reports the dialog's URL: no hand-back while it's open.
+        val fpHost = fb.fallbackOpen().host
+        fpHost.onLocationChange("$living?more-info-entity-id=timer.tea")
+        idle()
+        assertFallback(page, fp)
+
+        // The dialog closes (HA drops the parameter): the native view again, with no step back to the dialog.
+        fpHost.onLocationChange(living)
+        idle()
+        assertNative(page, fp)
+        assertEquals(living, host.locations.last())
+        assertFalse("Back doesn't open the dialog again", page.canGoBack)
+    }
+
+    @Test fun backFromHomeAssistantsDialogReturnsToTheViewItOpenedOver() {
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        page.load(wall)
+        idle()
+        vitroView(page).openMoreInfo("weather.home")
+        idle()
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        page.goBack()
+        idle()
+        assertNative(page, fp)
+        assertEquals(1, vitroView(page).currentViewIndex)
+        assertEquals(wall, host.locations.last())
+    }
+
+    @Test fun aDialogTheSheetDrawsStaysNative() {
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        val vv = vitroView(page)
+        vv.openMoreInfo("sensor.outdoor_temperature")
+        idle()
+        assertNotNull(vv.openSheet)
+        assertTrue("no fallback page", fb.opens.none { it.background == Color.BLACK })
+    }
+
     // ---- Reload dashboard ----
 
     @Test fun reloadDashboardOnAFallbackPageReturnsToTheNativeView() {

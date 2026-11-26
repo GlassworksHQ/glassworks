@@ -69,6 +69,7 @@ import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.cards.MediaControlCardView
 import dev.glassworks.engine.vitro.cards.MushroomTitleCardView
 import dev.glassworks.engine.vitro.cards.ModernCircularGaugeCardView
+import dev.glassworks.engine.vitro.cards.MoreInfoRoute
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
 import dev.glassworks.engine.vitro.cards.MushroomChipsCardView
 import dev.glassworks.engine.vitro.cards.MushroomClimateCardView
@@ -663,9 +664,24 @@ class VitroView(
 
     fun openMoreInfo(entityId: String) = openMoreInfo(entityId, null)
 
+    /**
+     * Opens Home Assistant's own More Info dialog for an entity whose dialog the sheet doesn't draw as HA does
+     * ([MoreInfoRoute]), with the reason: its frontend shows the view with the dialog over it. Null (no page): the
+     * sheet opens for every entity.
+     */
+    var onWebMoreInfo: ((entityId: String, reason: String) -> Unit)? = null
+
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         closeMoreInfo()
+        // Clarity times the sheet itself; everyone else gets HA's dialog where the sheet would draw a different one.
+        val web = onWebMoreInfo
+        if (web != null && trace == null) {
+            MoreInfoRoute.handOff(entityId, store[entityId])?.let { reason ->
+                web(entityId, reason)
+                return
+            }
+        }
         moreInfoEntityId = entityId
         // HA's dialogs live outside the view: a view's `theme` never reaches them, the user's theme does (#885).
         val theme = ThemeResolver.resolve(themeCatalog, darkMode, userThemeName)

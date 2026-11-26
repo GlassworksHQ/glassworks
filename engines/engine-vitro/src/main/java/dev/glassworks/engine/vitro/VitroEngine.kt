@@ -251,14 +251,25 @@ class VitroEngine(
                 if (url != null && handsBack(url)) {
                     Log.i(logTag, "Home Assistant's frontend went to a dashboard Vitro draws: ${forLog(url)}")
                     pendingHandBack = url
+                    // HA's More Info dialog closed (its URL lost `more-info-entity-id`): back to the view it opened
+                    // over, as if it had never left, so Back doesn't open the dialog again.
+                    val closedDialog = moreInfoReturn?.let { samePage(it, url) } == true
                     main.post {
                         // Only if the page is still there: a newer location (edit mode, a sign-in) supersedes it.
                         if (pendingHandBack != url) return@post
                         pendingHandBack = null
-                        if (!disposed && fallbackInFront()) load(url)
+                        if (disposed || !fallbackInFront()) return@post
+                        if (closedDialog) {
+                            currentUrl = null
+                            if (history.lastOrNull() == moreInfoReturn) history.removeLast()
+                        }
+                        moreInfoReturn = null
+                        load(url)
                     }
                     return
                 }
+                // HA's page moved on from the view the dialog opened over: closing the dialog is no way back now.
+                if (url != null && moreInfoReturn?.let { samePage(it, url) } != true) moreInfoReturn = null
                 pendingHandBack = null
                 host.onLocationChange(url)
             }
@@ -283,6 +294,12 @@ class VitroEngine(
         /** A dashboard HA's frontend went to, queued to load natively; null once a newer location supersedes it. */
         private var pendingHandBack: String? = null
 
+        /**
+         * The native view HA's More Info dialog was opened over ([VitroView.onWebMoreInfo]), while HA's page shows it:
+         * the dialog closing goes back there in place, without a step in the history.
+         */
+        private var moreInfoReturn: String? = null
+
         /** Dashboards (origin and path) whose config Home Assistant didn't have: its frontend draws them, not Vitro. */
         private val webDashboards = HashSet<Pair<String?, String?>>()
 
@@ -300,7 +317,8 @@ class VitroEngine(
             if (!VitroCardContext.sameOrigin(origin, proxyOrigin)) return false
             if (!LovelaceParser.isDashboardUrl(url)) return false
             val query = runCatching { java.net.URI(url).rawQuery }.getOrNull().orEmpty()
-            if ("auth_callback" in query || "edit=" in query) return false
+            // HA's More Info dialog open over the view ([VitroView.onWebMoreInfo]) stays HA's until it closes.
+            if ("auth_callback" in query || "edit=" in query || "$MORE_INFO_PARAM=" in query) return false
             return !isWebDashboard(url)
         }
 
@@ -627,6 +645,22 @@ class VitroEngine(
                         currentUrl = url
                         openInFallback(url)
                     }
+                }
+            }
+            vitroView.onWebMoreInfo = { entityId, reason ->
+                // As onWebView: only the dashboard that owns the route, on a page still in use.
+                val view = lastNativeUrl
+                if (!disposed && nativeActive && view != null && displayedDashboard != null &&
+                    displayedDashboard == (currentOrigin to currentDashboardPath)
+                ) {
+                    val url = moreInfoUrl(view, entityId)
+                    Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows its More Info")
+                    leaveNativeDashboard()
+                    // Back from HA's dialog comes back to this view; closing it does too ([moreInfoReturn]).
+                    currentUrl?.let(::remember)
+                    currentUrl = url
+                    moreInfoReturn = view
+                    openInFallback(url)
                 }
             }
             // One chronological history for back: a tab tap goes in it like a load does.
@@ -1262,6 +1296,22 @@ class VitroEngine(
 
         /** Back steps a page keeps. */
         private const val MAX_HISTORY = 50
+
+        /** HA's query parameter that opens its More Info dialog over a page (`more-info-query-params.ts`). */
+        private const val MORE_INFO_PARAM = "more-info-entity-id"
+
+        /** [viewUrl] with HA's More Info dialog for [entityId] open over it, as HA's frontend writes it. */
+        internal fun moreInfoUrl(viewUrl: String, entityId: String): String {
+            val base = viewUrl.substringBefore('#')
+            val sep = if ('?' in base) '&' else '?'
+            return "$base$sep$MORE_INFO_PARAM=${java.net.URLEncoder.encode(entityId, "UTF-8")}"
+        }
+
+        /** [a] and [b] are the same page (scheme, host, port and path), whatever their queries. */
+        internal fun samePage(a: String, b: String): Boolean {
+            fun key(u: String) = u.substringBefore('#').substringBefore('?').trimEnd('/')
+            return key(a) == key(b)
+        }
 
         internal fun buildViewUrl(origin: String?, dashPath: String?, viewPath: String): String? {
             if (origin.isNullOrBlank()) return null
