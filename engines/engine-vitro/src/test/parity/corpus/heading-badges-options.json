@@ -1,0 +1,174 @@
+{
+ "title": "Heading with an action, and badges with their own color, content and parts shown",
+ "expect": {
+  "light.hallway_ceiling_ring": "on",
+  "climate.living_room": "heat",
+  "timer.laundry": "active",
+  "update.kitchen_speaker_firmware": "on"
+ },
+ "card": {
+  "type": "heading",
+  "heading": "Utilities",
+  "heading_style": "subtitle",
+  "icon": "mdi:tools",
+  "tap_action": {
+   "action": "navigate",
+   "navigation_path": "/lovelace/utilities"
+  },
+  "badges": [
+   {
+    "type": "entity",
+    "entity": "light.hallway_ceiling_ring",
+    "color": "state",
+    "state_content": [
+     "state",
+     "brightness"
+    ]
+   },
+   {
+    "type": "entity",
+    "entity": "climate.living_room",
+    "color": "state"
+   },
+   {
+    "type": "entity",
+    "entity": "timer.laundry",
+    "show_icon": false
+   },
+   {
+    "type": "entity",
+    "entity": "update.kitchen_speaker_firmware",
+    "show_state": false,
+    "color": "pink"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.hallway_ceiling_ring": {
+    "state": "on",
+    "last_changed": "-260m",
+    "attributes": {
+     "min_color_temp_kelvin": 2702,
+     "max_color_temp_kelvin": 6535,
+     "supported_color_modes": [
+      "color_temp",
+      "xy"
+     ],
+     "color_mode": "xy",
+     "brightness": 13,
+     "color_temp_kelvin": null,
+     "hs_color": [
+      34.878,
+      96.471
+     ],
+     "rgb_color": [
+      255,
+      152,
+      9
+     ],
+     "xy_color": [
+      0.579995,
+      0.4
+     ],
+     "off_with_transition": false,
+     "off_brightness": null,
+     "friendly_name": "Hallway Ceiling Light Hallway Ceiling Ring",
+     "supported_features": 40
+    }
+   },
+   "climate.living_room": {
+    "state": "heat",
+    "last_changed": "-74m",
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat"
+     ],
+     "min_temp": 7,
+     "max_temp": 35,
+     "target_temp_step": 0.5,
+     "current_temperature": 20.5,
+     "temperature": 21.5,
+     "hvac_action": "heating",
+     "friendly_name": "Living Room Thermostat",
+     "supported_features": 385
+    }
+   },
+   "timer.laundry": {
+    "state": "active",
+    "last_changed": "-17m26s",
+    "attributes": {
+     "duration": "0:30:00",
+     "remaining": "0:30:00",
+     "finishes_at": "@+12m34s",
+     "editable": true,
+     "friendly_name": "Laundry",
+     "icon": "mdi:washing-machine"
+    }
+   },
+   "update.kitchen_speaker_firmware": {
+    "state": "on",
+    "last_changed": "-26h",
+    "attributes": {
+     "auto_update": false,
+     "display_precision": 0,
+     "installed_version": "1.4.2",
+     "in_progress": false,
+     "latest_version": "1.5.0",
+     "release_summary": null,
+     "release_url": null,
+     "skipped_version": null,
+     "title": "Speaker firmware",
+     "update_percentage": null,
+     "device_class": "firmware",
+     "entity_picture": "/static/images/logo_dark.png",
+     "friendly_name": "Kitchen Speaker Firmware",
+     "supported_features": 23
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.hallway_ceiling_ring",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-hallway-ceiling-light",
+    "en": "Hallway Ceiling Ring",
+    "np": "device"
+   },
+   {
+    "ei": "climate.living_room",
+    "pl": "zha",
+    "di": "dev-living-room-thermostat",
+    "np": "device"
+   },
+   {
+    "ei": "timer.laundry",
+    "pl": "timer",
+    "en": "Laundry"
+   },
+   {
+    "ei": "update.kitchen_speaker_firmware",
+    "pl": "zha",
+    "di": "dev-kitchen-speaker",
+    "np": "device",
+    "en": "Firmware"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway-ceiling-light",
+    "name": "Hallway Ceiling Light"
+   },
+   {
+    "id": "dev-living-room-thermostat",
+    "name": "Living Room Thermostat"
+   },
+   {
+    "id": "dev-kitchen-speaker",
+    "name": "Kitchen Speaker"
+   }
+  ]
+ }
+}

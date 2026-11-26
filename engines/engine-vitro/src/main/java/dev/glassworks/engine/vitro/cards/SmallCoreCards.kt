@@ -152,8 +152,11 @@ internal object HaStateColor {
         return MarkdownInline.parseCssColor(v) ?: ThemeResolver.parseColor(v)
     }
 
-    /** `stateColorCss(stateObj, state)`, or null where HA gives none. */
-    fun of(ctx: VitroCardContext, s: EntityState, state: String = s.state): Int? {
+    /**
+     * `stateColorCss(stateObj, state)`, or null where HA gives none. Without [inactiveDefault] the chain stops short of
+     * `--state-inactive-color`, as under a heading badge's `--state-inactive-color: initial`.
+     */
+    fun of(ctx: VitroCardContext, s: EntityState, state: String = s.state, inactiveDefault: Boolean = true): Int? {
         if (state == "unavailable") return ctx.theme.disabledTextColor
         val domain = s.domain
         val dc = s.deviceClass
@@ -175,7 +178,7 @@ internal object HaStateColor {
             if (dc != null) add("state-$domain-$dc-$key-color")
             add("state-$domain-$key-color")
             add("state-$domain-$activeKey-color")
-            add("state-$activeKey-color")
+            if (active || inactiveDefault) add("state-$activeKey-color")
         }
         for (p in props) property(ctx, p)?.let { return it }
         return null

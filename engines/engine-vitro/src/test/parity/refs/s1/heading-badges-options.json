@@ -1,0 +1,517 @@
+{
+ "case": "heading-badges-options",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 40
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 24,
+   "type": "hui-heading-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Utilities",
+   "x": 30,
+   "y": 5.59,
+   "w": 48.39,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 268.2,
+   "y": 6,
+   "w": 17.56,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "·",
+   "x": 289.33,
+   "y": 6,
+   "w": 3.77,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "5%",
+   "x": 296.66,
+   "y": 6,
+   "w": 18.33,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Heat",
+   "x": 341.98,
+   "y": 6,
+   "w": 30,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "·",
+   "x": 375.55,
+   "y": 6,
+   "w": 3.77,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "20.5 °C",
+   "x": 382.88,
+   "y": 6,
+   "w": 45.78,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12:34",
+   "x": 436.66,
+   "y": 6,
+   "w": 35.34,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "climate.living_room": {
+   "s": "heat",
+   "a": {
+    "hvac_modes": [
+     "off",
+     "heat"
+    ],
+    "min_temp": 7,
+    "max_temp": 35,
+    "target_temp_step": 0.5,
+    "current_temperature": 20.5,
+    "temperature": 21.5,
+    "hvac_action": "heating",
+    "friendly_name": "Living Room Thermostat",
+    "supported_features": 385
+   },
+   "lc": 1794495240,
+   "lu": 1794495240
+  },
+  "light.hallway_ceiling_ring": {
+   "s": "on",
+   "a": {
+    "min_color_temp_kelvin": 2702,
+    "max_color_temp_kelvin": 6535,
+    "supported_color_modes": [
+     "color_temp",
+     "xy"
+    ],
+    "color_mode": "xy",
+    "brightness": 13,
+    "color_temp_kelvin": null,
+    "hs_color": [
+     34.878,
+     96.471
+    ],
+    "rgb_color": [
+     255,
+     152,
+     9
+    ],
+    "xy_color": [
+     0.579995,
+     0.4
+    ],
+    "off_with_transition": false,
+    "off_brightness": null,
+    "friendly_name": "Hallway Ceiling Light Hallway Ceiling Ring",
+    "supported_features": 40
+   },
+   "lc": 1794484080,
+   "lu": 1794484080
+  },
+  "timer.laundry": {
+   "s": "active",
+   "a": {
+    "duration": "0:30:00",
+    "remaining": "0:30:00",
+    "finishes_at": "2026-11-12T16:20:34+00:00",
+    "editable": true,
+    "friendly_name": "Laundry",
+    "icon": "mdi:washing-machine"
+   },
+   "lc": 1794498634,
+   "lu": 1794498634
+  },
+  "update.kitchen_speaker_firmware": {
+   "s": "on",
+   "a": {
+    "auto_update": false,
+    "display_precision": 0,
+    "installed_version": "1.4.2",
+    "in_progress": false,
+    "latest_version": "1.5.0",
+    "release_summary": null,
+    "release_url": null,
+    "skipped_version": null,
+    "title": "Speaker firmware",
+    "update_percentage": null,
+    "device_class": "firmware",
+    "entity_picture": "/static/images/logo_dark.png",
+    "friendly_name": "Kitchen Speaker Firmware",
+    "supported_features": 23
+   },
+   "lc": 1794406080,
+   "lu": 1794406080
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "climate.living_room",
+    "pl": "zha",
+    "di": "device-1",
+    "np": "device"
+   },
+   {
+    "ei": "light.hallway_ceiling_ring",
+    "pl": "zha",
+    "tk": "light",
+    "di": "device-2",
+    "en": "Hallway Ceiling Ring",
+    "np": "device"
+   },
+   {
+    "ei": "timer.laundry",
+    "pl": "timer",
+    "en": "Laundry"
+   },
+   {
+    "ei": "update.kitchen_speaker_firmware",
+    "pl": "zha",
+    "di": "device-3",
+    "en": "Firmware",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Living Room Thermostat"
+   },
+   {
+    "id": "device-2",
+    "name": "Hallway Ceiling Light"
+   },
+   {
+    "id": "device-3",
+    "name": "Kitchen Speaker"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "climate",
+    "light",
+    "timer",
+    "update"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "climate": {
+     "_": {
+      "default": "mdi:thermostat",
+      "state_attributes": {
+       "fan_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "auto": "mdi:fan-auto",
+         "diffuse": "mdi:weather-windy",
+         "focus": "mdi:target",
+         "high": "mdi:speedometer",
+         "low": "mdi:speedometer-slow",
+         "medium": "mdi:speedometer-medium",
+         "middle": "mdi:speedometer-medium",
+         "off": "mdi:fan-off",
+         "on": "mdi:fan"
+        }
+       },
+       "hvac_action": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "cooling": "mdi:snowflake",
+         "defrosting": "mdi:snowflake-melt",
+         "drying": "mdi:water-percent",
+         "fan": "mdi:fan",
+         "heating": "mdi:fire",
+         "idle": "mdi:clock-outline",
+         "off": "mdi:power",
+         "preheating": "mdi:heat-wave"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "activity": "mdi:motion-sensor",
+         "away": "mdi:account-arrow-right",
+         "boost": "mdi:rocket-launch",
+         "comfort": "mdi:sofa",
+         "eco": "mdi:leaf",
+         "home": "mdi:home",
+         "sleep": "mdi:bed"
+        }
+       },
+       "swing_horizontal_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:arrow-oscillating-off",
+         "on": "mdi:arrow-expand-horizontal"
+        }
+       },
+       "swing_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "both": "mdi:arrow-all",
+         "horizontal": "mdi:arrow-left-right",
+         "off": "mdi:arrow-oscillating-off",
+         "on": "mdi:arrow-oscillating",
+         "vertical": "mdi:arrow-up-down"
+        }
+       }
+      }
+     }
+    },
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "update": {
+     "_": {
+      "default": "mdi:package-up",
+      "state": {
+       "off": "mdi:package"
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.climate.entity_component._.state.auto": "Auto",
+    "component.climate.entity_component._.state.cool": "Cool",
+    "component.climate.entity_component._.state.dry": "Dry",
+    "component.climate.entity_component._.state.fan_only": "Fan only",
+    "component.climate.entity_component._.state.heat": "Heat",
+    "component.climate.entity_component._.state.heat_cool": "Heat/Cool",
+    "component.climate.entity_component._.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.current_humidity.name": "Current humidity",
+    "component.climate.entity_component._.state_attributes.current_temperature.name": "Current temperature",
+    "component.climate.entity_component._.state_attributes.fan_mode.name": "Fan mode",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.auto": "Auto",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.diffuse": "Diffuse",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.focus": "Focus",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.high": "High",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.low": "Low",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.medium": "Medium",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.middle": "Middle",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.on": "On",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.top": "Top",
+    "component.climate.entity_component._.state_attributes.fan_modes.name": "Fan modes",
+    "component.climate.entity_component._.state_attributes.humidity.name": "Target humidity",
+    "component.climate.entity_component._.state_attributes.hvac_action.name": "Current action",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.cooling": "Cooling",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.defrosting": "Defrosting",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.drying": "Drying",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.fan": "Fan",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.heating": "Heating",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.idle": "Idle",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.preheating": "Preheating",
+    "component.climate.entity_component._.state_attributes.hvac_modes.name": "HVAC modes",
+    "component.climate.entity_component._.state_attributes.max_humidity.name": "Max target humidity",
+    "component.climate.entity_component._.state_attributes.max_temp.name": "Max target temperature",
+    "component.climate.entity_component._.state_attributes.min_humidity.name": "Min target humidity",
+    "component.climate.entity_component._.state_attributes.min_temp.name": "Min target temperature",
+    "component.climate.entity_component._.state_attributes.preset_mode.name": "Preset",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.activity": "Activity",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.away": "Away",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.boost": "Boost",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.comfort": "Comfort",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.eco": "Eco",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.home": "Home",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.none": "None",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.sleep": "Sleep",
+    "component.climate.entity_component._.state_attributes.preset_modes.name": "Presets",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_mode.name": "Horizontal swing mode",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_mode.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_mode.state.on": "On",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_modes.name": "Horizontal swing modes",
+    "component.climate.entity_component._.state_attributes.swing_mode.name": "Swing mode",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.both": "Both",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.horizontal": "Horizontal",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.on": "On",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.vertical": "Vertical",
+    "component.climate.entity_component._.state_attributes.swing_modes.name": "Swing modes",
+    "component.climate.entity_component._.state_attributes.target_temp_high.name": "Upper target temperature",
+    "component.climate.entity_component._.state_attributes.target_temp_low.name": "Lower target temperature",
+    "component.climate.entity_component._.state_attributes.target_temp_step.name": "Target temperature step",
+    "component.climate.entity_component._.state_attributes.temperature.name": "Target temperature",
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.light.entity_component._.state_attributes.brightness.name": "Brightness",
+    "component.light.entity_component._.state_attributes.color_mode.name": "Color mode",
+    "component.light.entity_component._.state_attributes.color_mode.state.brightness": "Brightness only",
+    "component.light.entity_component._.state_attributes.color_mode.state.color_temp": "Color temperature",
+    "component.light.entity_component._.state_attributes.color_mode.state.hs": "HS",
+    "component.light.entity_component._.state_attributes.color_mode.state.onoff": "On/Off",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgb": "RGB",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgbw": "RGBW",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgbww": "RGBWW",
+    "component.light.entity_component._.state_attributes.color_mode.state.unknown": "Unknown",
+    "component.light.entity_component._.state_attributes.color_mode.state.white": "White",
+    "component.light.entity_component._.state_attributes.color_mode.state.xy": "XY",
+    "component.light.entity_component._.state_attributes.color_temp_kelvin.name": "Color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.effect.name": "Effect",
+    "component.light.entity_component._.state_attributes.effect.state.off": "Off",
+    "component.light.entity_component._.state_attributes.effect_list.name": "Available effects",
+    "component.light.entity_component._.state_attributes.max_color_temp_kelvin.name": "Maximum color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.min_color_temp_kelvin.name": "Minimum color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.supported_color_modes.name": "Available color modes",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.brightness": "Brightness only",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.color_temp": "Color temperature",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.hs": "HS",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.onoff": "On/Off",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgb": "RGB",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgbw": "RGBW",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgbww": "RGBWW",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.unknown": "Unknown",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.white": "White",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.xy": "XY",
+    "component.timer.entity_component._.state.active": "Active",
+    "component.timer.entity_component._.state.idle": "Idle",
+    "component.timer.entity_component._.state.paused": "Paused",
+    "component.timer.entity_component._.state_attributes.duration.name": "Duration",
+    "component.timer.entity_component._.state_attributes.editable.name": "Managed via UI",
+    "component.timer.entity_component._.state_attributes.editable.state.false": "No",
+    "component.timer.entity_component._.state_attributes.editable.state.true": "Yes",
+    "component.timer.entity_component._.state_attributes.finishes_at.name": "Finishes at",
+    "component.timer.entity_component._.state_attributes.last_transition.name": "Last transition",
+    "component.timer.entity_component._.state_attributes.last_transition.state.cancelled": "Cancelled",
+    "component.timer.entity_component._.state_attributes.last_transition.state.finished": "Finished",
+    "component.timer.entity_component._.state_attributes.last_transition.state.paused": "Paused",
+    "component.timer.entity_component._.state_attributes.last_transition.state.restarted": "Restarted",
+    "component.timer.entity_component._.state_attributes.last_transition.state.started": "Started",
+    "component.timer.entity_component._.state_attributes.remaining.name": "Remaining",
+    "component.timer.entity_component._.state_attributes.restore.name": "Restore",
+    "component.update.entity_component._.state.off": "Up-to-date",
+    "component.update.entity_component._.state.on": "Update available",
+    "component.update.entity_component._.state_attributes.auto_update.name": "Auto update",
+    "component.update.entity_component._.state_attributes.auto_update.state.false": "No",
+    "component.update.entity_component._.state_attributes.auto_update.state.true": "Yes",
+    "component.update.entity_component._.state_attributes.in_progress.name": "In progress",
+    "component.update.entity_component._.state_attributes.in_progress.state.false": "No",
+    "component.update.entity_component._.state_attributes.in_progress.state.true": "Yes",
+    "component.update.entity_component._.state_attributes.installed_version.name": "Installed version",
+    "component.update.entity_component._.state_attributes.latest_version.name": "Latest version",
+    "component.update.entity_component._.state_attributes.release_summary.name": "Release summary",
+    "component.update.entity_component._.state_attributes.release_url.name": "Release URL",
+    "component.update.entity_component._.state_attributes.skipped_version.name": "Skipped version",
+    "component.update.entity_component._.state_attributes.title.name": "Title"
+   },
+   "entity": {
+    "component.zha.entity.light.light.state_attributes.effect.state.colorloop": "Color loop"
+   }
+  }
+ }
+}

@@ -106,12 +106,21 @@ internal object HaStateDisplay {
         else -> s
     }
 
-    /** What `<state-display .content=[content]>` shows for [s] at [nowMs]. */
-    fun of(s: EntityState, content: List<String>?, nowMs: Long, config: JSONObject): Display {
+    /**
+     * What `<state-display .content=[content]>` shows for [s] at [nowMs]; with [dashUnavailable] (a heading badge's
+     * `dash-unavailable`) an unavailable or unknown state is "—", and [name] is what the `name` content shows.
+     */
+    fun of(s: EntityState, content: List<String>?, nowMs: Long, config: JSONObject, dashUnavailable: Boolean = false, name: String? = null): Display {
         val contents = content ?: DEFAULT_CONTENT[s.domain] ?: listOf("state")
         var tick: Long? = null
         fun ticks(ms: Long) { tick = tick?.let { minOf(it, ms) } ?: ms }
-        val values = contents.mapNotNull { part(s, it, nowMs, config, ::ticks)?.takeIf { v -> v.isNotEmpty() } }
+        val values = contents.mapNotNull { c ->
+            when {
+                c == "state" && dashUnavailable && (s.state == "unavailable" || s.state == "unknown") -> "—"
+                c == "name" && !name.isNullOrEmpty() -> name
+                else -> part(s, c, nowMs, config, ::ticks)
+            }?.takeIf { v -> v.isNotEmpty() }
+        }
         if (values.isEmpty()) return Display(formatEntityState(s), null)
         return Display(values.joinToString(SEPARATOR), tick)
     }

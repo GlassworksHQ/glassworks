@@ -2880,15 +2880,18 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
         val subtitle = config.raw.optString("subtitle", "")
         val isSubtitle = config.raw.optString("heading_style", "title") == "subtitle"
         // hui-heading-card: `0 4px` around a row with 8 px gaps and an 18 px icon; the title is 16 px / 400 on a
-        // 25.6 px line, the subtitle 14 px / 500 on an 18 px row, 6 px under the card's top (measured in HA).
-        setPadding(ctx.px(4f), if (isSubtitle) ctx.px(6f) else 0, ctx.px(4f), 0)
+        // 25.6 px line, the subtitle 14 px / 500 on a 16.8 px one, 20 px badges beside them. The card is at least 24 px
+        // tall with the row at its bottom (`min-height: 24px; justify-content: flex-end`), so a short row sits lower.
+        val hasBadges = (config.raw.optJSONArray("badges")?.length() ?: 0) > 0
+        val rowHeight = maxOf(if (isSubtitle) 16.8f else 25.6f, if (config.icon.isNullOrBlank()) 0f else 18f, if (hasBadges) 20f else 0f)
+        setPadding(ctx.px(4f), ((24f - rowHeight).coerceAtLeast(0f) * ctx.dp).roundToInt(), ctx.px(4f), 0)
         val textColor = if (isSubtitle) ctx.theme.secondaryTextColor else ctx.theme.primaryTextColor
 
         // HA's `hui-heading-card`: [icon] heading ........ [entity badges]
         val row = LinearLayout(ctx.context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = if (isSubtitle) ctx.px(18f) else (25.6f * ctx.dp).roundToInt()
+            minimumHeight = (rowHeight * ctx.dp).roundToInt()
         }
         config.icon?.takeIf { it.isNotBlank() }?.let { iconName ->
             row.addView(MdiIconView(ctx.context).apply { setIcon(iconName, textColor) },
@@ -2905,7 +2908,24 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
             hView.text = heading
         }
         row.addView(hView, LayoutParams(0, WRAP_CONTENT, 1f))
-        parseBadges(config.raw.optJSONArray("badges")).forEach { (eid, icon) -> row.addView(buildBadge(eid, icon)) }
+        // HA's heading tap_action: the title row (icon, heading, and an ha-icon-next chevron after it) acts.
+        val headingAction = ActionConfig.parse(config.raw.optJSONObject("tap_action"), "none")
+        if (headingAction.action != "none") {
+            (hView.layoutParams as LayoutParams).apply { width = WRAP_CONTENT; weight = 0f }
+            row.addView(MdiIconView(ctx.context).apply { setIcon("mdi:chevron-right", textColor) },
+                LayoutParams(ctx.px(18f), ctx.px(18f)).apply { marginStart = ctx.px(8f) })
+            row.addView(Space(ctx.context), LayoutParams(0, 0, 1f))
+            val content = (0 until row.childCount).map { row.getChildAt(it) }.filter { it !is Space }
+            for (v in content) {
+                v.isClickable = true
+                v.setOnClickListener { ctx.performAction(headingAction, null) }
+            }
+            row.contentDescription = heading
+        }
+        val badgeConfigs = config.raw.optJSONArray("badges")
+        for (i in 0 until (badgeConfigs?.length() ?: 0)) {
+            badgeConfigs?.optJSONObject(i)?.takeIf { it.optString("entity", "").contains('.') }?.let { row.addView(buildBadge(it)) }
+        }
         if (heading.isNotEmpty() || row.childCount > 1) addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
         if (subtitle.isNotEmpty()) {
@@ -2920,10 +2940,22 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
     }
 
     /**
-     * One right-side heading badge, as hui-entity-heading-badge measures in HA: a 16 px icon, 3 px, then the state
-     * (HA's state display, 14 px / 400 with 0.1 px letter spacing) on a 20 px row, badges 8 px apart.
+     * One right-side heading badge, HA's `hui-entity-heading-badge` (frontend 20261028.5): the entity's 16 px icon
+     * (`show_icon`), 3 px, then its `<state-display dash-unavailable>` (`show_state`, `state_content`), 14 px / 400 in
+     * the secondary text color with 0.1 px letter spacing on a 20 px row, badges 8 px apart. The icon takes `color`
+     * (`state`: the state color, a light's own; a theme or CSS color while active; none by default). It acts only on
+     * its own `tap_action` and `hold_action` (none by default). An entity HA doesn't have is a red alert icon and "-".
      */
-    private fun buildBadge(eid: String, explicitIcon: String?): View {
+    private fun buildBadge(cfg: JSONObject): View {
+        val eid = cfg.optString("entity")
+        val explicitIcon = cfg.optString("icon", "").ifEmpty { null }
+        val showIcon = cfg.optBoolean("show_icon", true)
+        val showState = cfg.optBoolean("show_state", true)
+        val colorSpec = cfg.optString("color", "").ifEmpty { null }
+        val content = HaStateDisplay.contentOf(cfg.opt("state_content"))
+        val configuredName = cfg.optString("name", "").ifEmpty { null }
+        val tap = ActionConfig.parse(cfg.optJSONObject("tap_action"), "none")
+        val hold = ActionConfig.parse(cfg.optJSONObject("hold_action"), "none")
         val icon = MdiIconView(ctx.context)
         val state = textView(ctx, 14f, ctx.theme.secondaryTextColor).apply { maxLines = 1; letterSpacing = 0.1f / 14f }
         val item = LinearLayout(ctx.context).apply {
@@ -2931,18 +2963,54 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = ctx.px(20f)
             layoutParams = LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = ctx.px(8f) }
-            isClickable = true
-            setOnClickListener { ctx.performAction(ActionConfig("more-info"), eid) }
-            addView(icon, LayoutParams(ctx.px(16f), ctx.px(16f)).apply { marginEnd = ctx.px(3f) })
-            addView(state)
+            addView(icon, LayoutParams(ctx.px(16f), ctx.px(16f)))
+            addView(state, LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
         }
-        val render = { s: EntityState? ->
-            icon.setIcon(MdiIcons.resolveIconName(explicitIcon, s), ctx.theme.secondaryTextColor)
-            state.text = s?.plainState() ?: "…"
+        // ha-heading-badge's type: a button only with an action.
+        if (tap.action != "none" || hold.action != "none") {
+            item.isClickable = true
+            if (tap.action != "none") item.setOnClickListener { ctx.performAction(tap, eid) }
+            if (hold.action != "none") item.bindHoldAction(ctx, hold, eid)
+        }
+        fun iconColor(s: EntityState): Int? = when {
+            colorSpec == null || colorSpec == "none" -> null
+            colorSpec == "state" -> {
+                val rgb = (s.attributes["rgb_color"] as? List<*>)?.mapNotNull { (it as? Number)?.toDouble() }
+                if (s.domain == "light" && rgb != null && rgb.size >= 3) TileCardView.contrastLightColor(rgb[0], rgb[1], rgb[2])
+                else HaStateColor.of(ctx, s, inactiveDefault = false)
+            }
+            HaStateActive.of(s) -> HaStateColor.cssColor(ctx, colorSpec)
+            else -> null
+        }
+        val tick = object : Runnable {
+            override fun run() { render(ctx.store[eid]) }
+            fun render(s: EntityState?) {
+                ctx.main.removeCallbacks(this)
+                if (s == null && ctx.store.isMissing(eid)) {
+                    icon.visibility = VISIBLE
+                    state.visibility = VISIBLE
+                    (state.layoutParams as LayoutParams).marginStart = ctx.px(3f)
+                    icon.setIcon("mdi:alert-circle", HaStateColor.property(ctx, "red-color") ?: 0xFFF44336.toInt())
+                    state.text = "-"
+                    return
+                }
+                icon.visibility = if (showIcon) VISIBLE else GONE
+                state.visibility = if (showState) VISIBLE else GONE
+                // flex `gap: 3px` between the two, only when both show.
+                (state.layoutParams as LayoutParams).marginStart = if (showIcon && showState) ctx.px(3f) else 0
+                icon.setIcon(MdiIcons.resolveIconName(explicitIcon, s), s?.let(::iconColor) ?: ctx.theme.secondaryTextColor)
+                if (s == null) { state.text = "…"; return }
+                val name = configuredName ?: s.displayName
+                item.contentDescription = name
+                val d = HaStateDisplay.of(s, content, ctx.now(), ctx.haConfig(), dashUnavailable = true, name = name)
+                state.text = d.text
+                if (showState && d.tickMs != null && isAttachedToWindow) ctx.main.postDelayed(this, d.tickMs)
+            }
         }
         bind {
-            render(ctx.store[eid])
-            ctx.store.subscribe(eid) { s -> ctx.main.post { render(s) } }
+            tick.render(ctx.store[eid])
+            val unsub = ctx.store.subscribe(eid) { ctx.main.post { tick.render(ctx.store[eid]) } }
+            ({ unsub(); ctx.main.removeCallbacks(tick) })
         }
         return item
     }

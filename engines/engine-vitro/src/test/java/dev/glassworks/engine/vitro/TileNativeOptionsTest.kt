@@ -13,6 +13,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.HaStateDisplay
+import dev.glassworks.engine.vitro.cards.HeadingCardView
 import dev.glassworks.engine.vitro.cards.TileCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -49,6 +50,7 @@ class TileNativeOptionsTest {
     }
 
     private val calls = ArrayList<Call>()
+    private val opened = ArrayList<String>()
     private var now = 1_794_499_680_000L
 
     private fun context(store: EntityStore) = VitroCardContext(
@@ -56,7 +58,7 @@ class TileNativeOptionsTest {
         theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
         accessToken = { FakeHaServer.TOKEN },
         callService = { domain, service, data, _ -> calls += Call(domain, service, data ?: JSONObject()) },
-        navigate = {}, openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+        navigate = { opened += "navigate $it" }, openMoreInfo = { opened += "more-info $it" }, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
         now = { now },
         haConfig = { JSONObject("""{"unit_system": {"temperature": "°C", "length": "km"}}""") },
     )
@@ -221,5 +223,66 @@ class TileNativeOptionsTest {
         val c = tile("""{"type": "tile", "entity": "climate.hall"}""", climate)
         assertTrue(c.texts().toString(), "Heat · 20.5 °C" in c.texts())
         assertTrue(c.all().any { it.isShown && it.contentDescription != null && "heating" in it.contentDescription.toString().lowercase() })
+    }
+
+    private fun heading(json: String, vararg states: EntityState, missingKnown: Boolean = false): HeadingCardView {
+        val store = EntityStore().also { s -> states.forEach { s.putLocal(it) } }
+        if (missingKnown) store.markSnapshot(emptySet())
+        val raw = JSONObject(json)
+        val view = HeadingCardView(context(store), CardConfig(raw.getString("type"), raw))
+        val host = FrameLayout(activity)
+        activity.setContentView(host)
+        host.addView(view, FrameLayout.LayoutParams(800, ViewGroup.LayoutParams.WRAP_CONTENT))
+        ShadowLooper.idleMainLooper()
+        return view
+    }
+
+    private val lamp = EntityState("light.desk", "on", mapOf("friendly_name" to "Desk", "brightness" to 166, "rgb_color" to listOf(255, 152, 9)))
+
+    @Test
+    fun aHeadingBadgeActsOnlyOnItsOwnActions() {
+        // HA's entity heading badge: tap and hold are `none` unless the badge sets them.
+        val plain = heading("""{"type": "heading", "heading": "Office", "badges": [{"type": "entity", "entity": "light.desk"}]}""", lamp)
+        val badge = plain.all().first { it.contentDescription == "Desk" }
+        assertFalse(badge.isClickable)
+        badge.performClick()
+        assertTrue(opened.toString(), opened.isEmpty())
+        val acting = heading("""{"type": "heading", "heading": "Office", "badges": [{"type": "entity", "entity": "light.desk",
+            "tap_action": {"action": "more-info"}}]}""", lamp)
+        acting.all().first { it.contentDescription == "Desk" }.performClick()
+        assertEquals(listOf("more-info light.desk"), opened)
+    }
+
+    @Test
+    fun aHeadingWithAnActionShowsTheChevronAndNavigates() {
+        val view = heading("""{"type": "heading", "heading": "Office", "tap_action": {"action": "navigate", "navigation_path": "/lovelace/office"}}""")
+        assertTrue(view.icons().any { "chevron-right" in it.icon })
+        view.all().filterIsInstance<TextView>().first { it.text.toString() == "Office" }.performClick()
+        assertEquals(listOf("navigate /lovelace/office"), opened)
+        assertTrue(heading("""{"type": "heading", "heading": "Office"}""").icons().none { "chevron-right" in it.icon })
+    }
+
+    @Test
+    fun aHeadingBadgeShowsWhatItsOptionsSay() {
+        val view = heading("""{"type": "heading", "heading": "Office", "badges": [
+            {"type": "entity", "entity": "light.desk", "color": "state", "state_content": ["state", "brightness"]},
+            {"type": "entity", "entity": "light.desk", "show_icon": false},
+            {"type": "entity", "entity": "sensor.gone"}]}""", lamp, missingKnown = true)
+        val texts = view.texts()
+        assertTrue(texts.toString(), "On · 65%" in texts && "65%" in texts && "-" in texts)
+        // `color: state`: the light's own color for its icon; an entity HA doesn't have is a red alert.
+        val icons = view.icons().filter { it.isShown }
+        assertEquals(2, icons.count { "lightbulb" in it.icon || "alert-circle" in it.icon })
+        assertEquals(TileCardView.contrastLightColor(255.0, 152.0, 9.0), icons.first { "lightbulb" in it.icon }.tintColor)
+        assertTrue(icons.any { "alert-circle" in it.icon && it.tintColor == 0xFFF44336.toInt() })
+    }
+
+    @Test
+    fun aPersonTileFollowsEveryEntityForItsZone() {
+        fun view(entity: String) = dev.glassworks.engine.vitro.model.LovelaceParser.parseDashboard(JSONObject(
+            """{"views": [{"cards": [{"type": "tile", "entity": "$entity"}]}]}""")).views.single()
+        assertTrue(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("person.sam")))
+        assertTrue(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("device_tracker.phone")))
+        assertFalse(dev.glassworks.engine.vitro.model.CardRouter.followsAllEntities(view("light.desk")))
     }
 }

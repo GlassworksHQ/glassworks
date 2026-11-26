@@ -1,6 +1,5 @@
 {
  "title": "Heading with an icon and entity badges",
- "route": "frontend",
  "card": {
   "type": "heading",
   "heading": "Living room",

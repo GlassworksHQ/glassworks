@@ -829,6 +829,58 @@
         }
       },
       "name": "text",
+      "entitylessAction": {
+        "by": "action",
+        "default": "none",
+        "why": "a card without an entity has nothing to toggle or show More-Info for",
+        "cases": {
+          "none": {
+            "keys": {
+              "action": "any"
+            }
+          },
+          "navigate": {
+            "keys": {
+              "action": "any",
+              "navigation_path": {
+                "pattern": "^/",
+                "why": "a path that isn't absolute resolves against the current page in HA"
+              },
+              "navigation_replace": "any",
+              "confirmation": "@confirmation"
+            }
+          },
+          "url": {
+            "keys": {
+              "action": "any",
+              "url_path": "any",
+              "confirmation": "@confirmation"
+            }
+          },
+          "perform-action": {
+            "keys": {
+              "action": "any",
+              "perform_action": "any",
+              "service": "any",
+              "data": "any",
+              "service_data": "any",
+              "target": "any",
+              "confirmation": "@confirmation"
+            }
+          },
+          "call-service": {
+            "keys": {
+              "action": "any",
+              "perform_action": "any",
+              "service": "any",
+              "data": "any",
+              "service_data": "any",
+              "target": "any",
+              "confirmation": "@confirmation"
+            }
+          }
+        }
+      },
       "noAction": {
         "by": "action",
         "default": "none",
@@ -1464,14 +1516,18 @@
           "automation",
           "binary_sensor",
           "calendar",
+          "climate",
           "counter",
+          "cover",
           "device_tracker",
+          "fan",
           "group",
           "input_boolean",
           "input_number",
           "input_select",
           "input_text",
           "lawn_mower",
+          "light",
           "lock",
           "media_player",
           "number",
@@ -1486,13 +1542,16 @@
           "sun",
           "switch",
           "text",
+          "timer",
           "todo",
+          "update",
           "vacuum",
           "water_heater",
           "weather",
           "zone"
         ],
-        "why": "HA's badge shows more than the state for this domain (a light's brightness, a fan's speed, a cover's position, a timer's countdown)"
+        "why": "HA's badge shows its state differently for this domain (a relative time)",
+        "note": "HA's state-display defaults (a light's brightness, a fan's speed, a cover's state and position, a climate's state and temperature, a timer's countdown, an update's status) compared in heading-badges and heading-badges-options. Left out: humidifier and valve (not compared yet) and the timestamp domains"
       },
       "headingBadge": {
         "by": "type",
@@ -1505,36 +1564,24 @@
               "entity": "@badgeEntity",
               "name": "@name",
               "icon": "@icon",
-              "show_state": {
-                "values": [
-                  true
-                ],
-                "why": "Vitro always shows the state"
-              },
-              "show_icon": {
-                "values": [
-                  true
-                ],
-                "why": "Vitro always shows the icon"
-              },
+              "show_state": "@bool",
+              "show_icon": "@bool",
               "color": {
-                "values": [
-                  "none"
-                ],
-                "why": "Vitro doesn't color a badge's icon"
+                "anyOf": [
+                  {
+                    "values": [
+                      "none",
+                      "state"
+                    ]
+                  },
+                  "@cssColor"
+                ]
               },
-              "tap_action": {
-                "by": "action",
-                "why": "a heading badge's tap always opens More-Info in Vitro",
-                "cases": {
-                  "more-info": {
-                    "keys": {
-                      "action": "any"
-                    }
-                  }
-                }
+              "state_content": {
+                "list": "@stateContent"
               },
-              "hold_action": "@noAction",
+              "tap_action": "@action",
+              "hold_action": "@action",
               "double_tap_action": "@doubleTap"
             }
           }
@@ -3387,7 +3434,7 @@
             ]
           },
           "icon": "@icon",
-          "tap_action": "@noAction",
+          "tap_action": "@entitylessAction",
           "badges": {
             "list": "@headingBadge"
           }
