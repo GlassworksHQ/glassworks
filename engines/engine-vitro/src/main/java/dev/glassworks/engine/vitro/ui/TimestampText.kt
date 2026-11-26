@@ -14,7 +14,9 @@ import java.util.WeakHashMap
  * A state shown where HA's card draws a timestamp with `hui-timestamp-display` (frontend 20261028.5): HA's
  * `state-display` (the tile, view badges, heading entities), the sensor and simple entity rows and the glance card.
  * The display writes a timestamp state relative to now ("In 3 hours", "5 minutes ago") and redraws it each second, so
- * a text shown here does too, while its view is on screen.
+ * a text shown here does too, while its view is on screen. It is Vitro's one ticker for text that changes on its own:
+ * the tile's and heading badges' `state-display` (a running timer too) and an entities row's relative secondary line
+ * go through [show] with their own relative form.
  */
 internal object TimestampText {
     /** The ticker of each text that shows a timestamp now. */
@@ -103,7 +105,9 @@ internal object TimestampText {
 
         override fun run() {
             if (!view.isAttachedToWindow) return
-            current(entityId)?.let { relative(it, now()) }?.let { if (view.text?.toString() != it) view.text = it }
+            // A text in a hidden cached view (or a hidden row) isn't set: a set would lay the shown view out again.
+            // It counts on from the next second it's shown.
+            if (view.isShown) current(entityId)?.let { relative(it, now()) }?.let { if (view.text?.toString() != it) view.text = it }
             main.postDelayed(this, 1_000L)
         }
 

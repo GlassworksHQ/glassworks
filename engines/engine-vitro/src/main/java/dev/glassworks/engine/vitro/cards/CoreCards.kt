@@ -245,8 +245,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     }
     private var pictureUrl: String? = null
 
-    /** Draws the state line again when it changes on its own (a relative time, a timer counting down). */
-    private val stateTick = Runnable { guarded("tick") { config.entity?.let { renderState(ctx.store[it]) } } }
+    /**
+     * The tile's state line when it changes on its own (a relative time, a timer counting down), for [TimestampText] to
+     * draw again each second while on screen; null when it doesn't (or the state is hidden).
+     */
+    private val tileStateTicking: (EntityState, Long) -> String? = { s, now ->
+        if (config.raw.optBoolean("hide_state", false)) null
+        else HaStateDisplay.of(s, HaStateDisplay.contentOf(config.raw.opt("state_content")), now, ctx.haConfig()).takeIf { it.tickMs != null }?.text
+    }
 
     /** HA draws the tile icon's tinted shape only when the icon has an action. */
     private var iconInteractive = true
@@ -1450,15 +1456,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         titleView.text = config.name(s) ?: config.entity?.let(HaDisplay::deviceEntityName) ?: s?.friendlyName ?: config.entity.orEmpty()
         val hideState = config.raw.optBoolean("hide_state", false)
         stateView.visibility = if (hideState) GONE else VISIBLE
-        ctx.main.removeCallbacks(stateTick)
         when {
-            // HA's <state-display>: the `state_content` parts (or the domain's own), joined by " · ". It draws a
-            // timestamp relative ("In 3 hours").
-            isTile && s != null -> stateView.text = HaStateDisplay.of(s, HaStateDisplay.contentOf(config.raw.opt("state_content")), ctx.now(), ctx.haConfig()).let { d ->
-                // A relative time or a running timer changes on its own: drawn again when it does, while on screen.
-                if (!hideState && d.tickMs != null && isAttachedToWindow) ctx.main.postDelayed(stateTick, d.tickMs)
-                d.text
-            }
+            // HA's <state-display>: the `state_content` parts (or the domain's own), joined by " · ". A relative time
+            // ("In 3 hours") or a running timer is drawn again each second, while on screen.
+            isTile && s != null -> ctx.showRelativeOr(
+                stateView, s,
+                HaStateDisplay.of(s, HaStateDisplay.contentOf(config.raw.opt("state_content")), ctx.now(), ctx.haConfig()).text,
+                tileStateTicking,
+            )
             // Mushroom's cards write HA's formatEntityState ("On") with their own percentages, and a timestamp
             // sensor's, a scene's or a button's state relative.
             config.type.startsWith("custom:mushroom-") ->
@@ -1693,7 +1698,6 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     }
 
     override fun onDetachedFromWindow() {
-        ctx.main.removeCallbacks(stateTick)
         badgeAnimator?.cancel()
         badgeAnimator = null
         badgeColor?.let { c ->
@@ -2468,9 +2472,6 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }.toSet()
         }
         val rowViews = ArrayList<LinearLayout>()
-        // Rows whose secondary line is a relative time: redrawn every second while the card is shown, as HA's
-        // `hui-timestamp-display` does, so an idle entity's "1 minute ago" keeps counting.
-        val relativeLines = ArrayList<() -> Unit>()
         // The rows (entity or special) that take the 8 px gap after another row.
         val gapRows = HashSet<View>()
         val rowVisible = ArrayList<Boolean>()
@@ -2531,6 +2532,13 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             } else {
                 null
             }
+            // A secondary line that is a relative time: the same instance each render, so its ticker carries on.
+            val secondaryRelative: ((EntityState, Long) -> String?)? =
+                if (rowCfg.secondaryInfo in EntityRowControls.RELATIVE_SECONDARY_INFO) {
+                    { st, now -> EntityRowControls.secondaryText(st, rowCfg.secondaryInfo, now) }
+                } else {
+                    null
+                }
             control?.rowHeightDp?.let { row.minimumHeight = ctx.px(it) }
 
             // state-badge: a 24 px icon in a 40 px box, then the name 16 px after it (a dropdown takes the name's
@@ -2608,7 +2616,12 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 // A dropdown row shows its name in the field (HA's `hide-name`): the row, which opens More Info,
                 // is named by it for TalkBack.
                 if (control?.hideName == true) row.contentDescription = nameView.text
-                secondaryView?.setTextIfChanged(EntityRowControls.secondaryText(s, rowCfg.secondaryInfo, ctx.now()).orEmpty())
+                // A relative time (last-changed, …) keeps counting each second while shown, as HA's
+                // `hui-timestamp-display` does; TimestampText sets only a text that changed.
+                if (secondaryView != null) {
+                    if (secondaryRelative != null) ctx.showRelativeOr(secondaryView, s, "", secondaryRelative)
+                    else secondaryView.setTextIfChanged(EntityRowControls.secondaryText(s, rowCfg.secondaryInfo, ctx.now()).orEmpty())
+                }
                 when {
                     control != null -> control.update(s)
                     isSwitchable -> {
@@ -2618,12 +2631,6 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                     isCover -> Unit
                     // hui-sensor-entity-row and hui-simple-entity-row draw a timestamp with hui-timestamp-display.
                     else -> ctx.showTimestampOr(valueView, s, s?.formattedState() ?: "…")
-                }
-            }
-            if (secondaryView != null && rowCfg.secondaryInfo in EntityRowControls.RELATIVE_SECONDARY_INFO) {
-                relativeLines += {
-                    val text = EntityRowControls.secondaryText(ctx.store[rowCfg.entity], rowCfg.secondaryInfo, ctx.now()).orEmpty()
-                    if (secondaryView.text.toString() != text) secondaryView.text = text
                 }
             }
             gapRows += row
@@ -2742,18 +2749,6 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         // Every toggle entity keeps the header switch current, a button row's included (its own row doesn't).
         if (masterSwitch != null) toggleRows.map { it.first }.distinct().forEach { id -> observe(id) { refreshMaster() } }
         refreshFilter()
-        if (relativeLines.isNotEmpty()) {
-            renewing {
-                val tick = object : Runnable {
-                    override fun run() {
-                        relativeLines.forEach { it() }
-                        ctx.main.postDelayed(this, 1_000L)
-                    }
-                }
-                ctx.main.postDelayed(tick, 1_000L)
-                ({ ctx.main.removeCallbacks(tick) })
-            }
-        }
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
     }
 
@@ -2781,11 +2776,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             for (p in props) HaStateColor.property(ctx, p)?.let { return it }
             return ctx.theme.stateIconColor
         }
-        /** HA's DOMAINS_TOGGLE (frontend 20261028.5), the domains the header toggle counts and switches. */
-        val HEADER_TOGGLE_DOMAINS = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
-
+        /** The header toggle counts and switches HA's DOMAINS_TOGGLE ([ActionConfig.DOMAINS_TOGGLE]). */
         fun EntityRowConfig.countsForHeaderToggle(): Boolean =
-            (isEntity || rowType == "button") && entity.substringBefore('.') in HEADER_TOGGLE_DOMAINS
+            (isEntity || rowType == "button") && entity.substringBefore('.') in ActionConfig.DOMAINS_TOGGLE
         val COVER_BUTTONS = listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
 
         fun dividerLine(ctx: VitroCardContext): View = View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) }
@@ -3160,43 +3153,43 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
             HaStateActive.of(s) -> HaStateColor.cssColor(ctx, colorSpec)
             else -> null
         }
-        val tick = object : Runnable {
-            override fun run() { render(ctx.store[eid]) }
-            fun render(s: EntityState?) {
-                ctx.main.removeCallbacks(this)
-                if (s == null && ctx.store.isMissing(eid)) {
-                    icon.visibility = VISIBLE
-                    state.visibility = VISIBLE
-                    (state.layoutParams as LayoutParams).marginStart = ctx.px(3f)
-                    icon.setIcon("mdi:alert-circle", HaStateColor.property(ctx, "red-color") ?: 0xFFF44336.toInt())
-                    state.text = "-"
-                    return
-                }
-                icon.visibility = if (showIcon) VISIBLE else GONE
-                state.visibility = if (showState) VISIBLE else GONE
-                // flex `gap: 3px` between the two, only when both show.
-                (state.layoutParams as LayoutParams).marginStart = if (showIcon && showState) ctx.px(3f) else 0
-                icon.setIcon(MdiIcons.resolveIconName(explicitIcon, s), s?.let(::iconColor) ?: ctx.theme.secondaryTextColor)
-                if (s == null) { state.text = "…"; return }
-                val name = configuredName ?: s.displayName
-                item.contentDescription = name
-                val d = HaStateDisplay.of(s, content, ctx.now(), ctx.haConfig(), dashUnavailable = true, name = name)
-                state.text = d.text
-                if (showState && d.tickMs != null && isAttachedToWindow) ctx.main.postDelayed(this, d.tickMs)
+        // The state-display text when it changes on its own (a relative time, a running timer), for TimestampText to
+        // draw again each second while on screen; null when it doesn't, or the state is hidden.
+        val ticking: (EntityState, Long) -> String? = { s, now ->
+            if (!showState) null
+            else HaStateDisplay.of(s, content, now, ctx.haConfig(), dashUnavailable = true, name = configuredName ?: s.displayName)
+                .takeIf { it.tickMs != null }?.text
+        }
+        fun render(s: EntityState?) {
+            if (s == null && ctx.store.isMissing(eid)) {
+                icon.visibility = VISIBLE
+                state.visibility = VISIBLE
+                (state.layoutParams as LayoutParams).marginStart = ctx.px(3f)
+                icon.setIcon("mdi:alert-circle", HaStateColor.property(ctx, "red-color") ?: 0xFFF44336.toInt())
+                ctx.showRelativeOr(state, null, "-", ticking)
+                return
             }
+            icon.visibility = if (showIcon) VISIBLE else GONE
+            state.visibility = if (showState) VISIBLE else GONE
+            // flex `gap: 3px` between the two, only when both show.
+            (state.layoutParams as LayoutParams).marginStart = if (showIcon && showState) ctx.px(3f) else 0
+            icon.setIcon(MdiIcons.resolveIconName(explicitIcon, s), s?.let(::iconColor) ?: ctx.theme.secondaryTextColor)
+            if (s == null) { ctx.showRelativeOr(state, null, "…", ticking); return }
+            val name = configuredName ?: s.displayName
+            item.contentDescription = name
+            ctx.showRelativeOr(state, s, HaStateDisplay.of(s, content, ctx.now(), ctx.haConfig(), dashUnavailable = true, name = name).text, ticking)
         }
         bind {
-            tick.render(ctx.store[eid])
-            val unsub = ctx.store.subscribe(eid) { ctx.main.post { tick.render(ctx.store[eid]) } }
-            ({ unsub(); ctx.main.removeCallbacks(tick) })
+            render(ctx.store[eid])
+            ctx.store.subscribe(eid) { ctx.main.post { render(ctx.store[eid]) } }
         }
-        refreshers += { tick.render(ctx.store[eid]) }
+        refreshers += { render(ctx.store[eid]) }
         return item
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        // Bound in the constructor, before attachment: the badges are drawn again so their tickers start.
+        // Bound in the constructor, before attachment: the badges are drawn again, with the current state.
         if (unsubs.isEmpty()) binders.forEach { unsubs += it() } else refreshers.forEach { it() }
     }
 
