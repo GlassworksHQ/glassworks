@@ -279,7 +279,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 if (enterListener === this) enterListener = null
                 if (dismissed) return true
                 if (!wide && panel.height > 0) panel.translationY = panel.height.toFloat()
-                val anim = panel.animate().setDuration(duration).setInterpolator(HaMotion.decelerate())
+                // On a hardware layer while it runs: the panel's content is recorded once and each frame only moves
+                // (or fades) the layer, rather than drawing the whole sheet again over the dashboard's live cameras.
+                // The layer goes when the entrance ends.
+                val anim = panel.animate().setDuration(duration).setInterpolator(HaMotion.decelerate()).withLayer()
                 if (wide) anim.alpha(1f).scaleX(1f).scaleY(1f) else anim.translationY(0f)
                 trace?.let { t ->
                     // As the sheet runs it: Android's "Animator duration scale" (0 with "Remove animations").

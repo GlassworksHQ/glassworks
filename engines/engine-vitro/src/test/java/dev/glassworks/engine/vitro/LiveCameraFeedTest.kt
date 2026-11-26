@@ -1198,6 +1198,65 @@ class LiveCameraFeedTest {
     }
 
     @Test
+    fun webRtcIsPrewarmedWhereTheAnswerLandsNotAfterTheBuild() {
+        // The answer comes on the socket's thread while the main thread is still busy building the view.
+        pendingCaps = ArrayList()
+        feed(context(store()))
+        val answer = pendingCaps!!.single()
+        answer(true, capabilities, null)
+        assertEquals("prewarmed before the main thread runs", listOf(WEB_RTC), prewarmed)
+        idle()
+        assertEquals(listOf(WEB_RTC), prewarmed)
+    }
+
+    @Test
+    fun aCameraWhoseCapabilitiesAreKnownStartsAsItsViewBuilds() {
+        val ctx = context(store())
+        // Unknown yet: building the card starts nothing (it asks, as before).
+        val unknown = card(ctx)
+        unknown.startEarly()
+        assertTrue(made.isEmpty())
+        idle()
+        // Known now (the first card's answer): the next card's players open as it's built, before it's attached.
+        val known = card(ctx)
+        known.startEarly()
+        assertEquals(listOf(WEB_RTC), running())
+        // Attached and shown in the same turn, as a view's build does: it plays on.
+        val parent = FrameLayout(activity)
+        parent.addView(known, FrameLayout.LayoutParams(720, 405))
+        activity.setContentView(parent)
+        showWindow(activity.window.decorView)
+        idle()
+        assertEquals(listOf(WEB_RTC), running())
+        assertEquals(1, made.size)
+        // One the build never attached closes what it opened on the next turn.
+        val dropped = card(ctx)
+        dropped.startEarly()
+        assertEquals(2, made.count { !it.closed })
+        idle()
+        assertEquals(listOf(WEB_RTC), running())
+    }
+
+    @Test
+    fun aViewBuildStartsOnlyTheCamerasItShows() {
+        val s = store().apply { putLocal(EntityState("binary_sensor.door", "off", emptyMap())) }
+        // The connection knows the camera (another picture of it asked).
+        feed(context(s))
+        idle()
+        val vv = dev.glassworks.engine.vitro.ui.VitroView(activity, s, 0xFF000000.toInt())
+        vv.contextFactory = { _ -> context(s) }
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject("""{"views": [{"title": "Cams", "cards": [
+            {"type": "picture-entity", "entity": "camera.porch", "camera_view": "live"},
+            {"type": "picture-entity", "entity": "camera.porch", "camera_view": "live",
+             "visibility": [{"condition": "state", "entity": "binary_sensor.door", "state": "on"}]}]}]}""")), null)
+        // Built (not attached yet): the shown card's player is open, the hidden card's isn't.
+        assertEquals(listOf(WEB_RTC), running())
+        // Never attached here: it closes.
+        idle()
+        assertTrue(running().isEmpty())
+    }
+
+    @Test
     fun theConnectionBackAfterADropAsksForCapabilitiesAgain() {
         val s = store()
         feed(context(s))
