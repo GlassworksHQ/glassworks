@@ -1,0 +1,12 @@
+# CodeRabbit is this repo's only reviewer, on the free OSS plan (100 files per review).
+# Generated or captured test data is left out, so reviews cover the code and tests that make and
+# check it: the Vitro parity references and cases (tools/vitro-parity writes them, its own tests
+# check them), test resources, and images.
+reviews:
+  path_filters:
+    - "!engines/engine-vitro/src/test/parity/refs/**"
+    - "!engines/engine-vitro/src/test/parity/corpus/**"
+    - "!**/src/test/resources/**"
+    - "!**/*.png"
+    - "!**/*.webp"
+    - "!**/*.jpg"
