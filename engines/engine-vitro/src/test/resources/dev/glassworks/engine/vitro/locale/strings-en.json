@@ -139,6 +139,7 @@
  "ui.panel.lovelace.editor.action-editor.actions.perform-action": "Perform action",
  "ui.panel.lovelace.editor.action-editor.actions.toggle": "Toggle",
  "ui.panel.lovelace.editor.action-editor.actions.url": "URL",
+ "ui.panel.lovelace.views.unnamed_view": "Unnamed view",
  "ui.panel.lovelace.warning.attribute_not_numeric": "Attribute {attribute} is non-numeric",
  "ui.panel.lovelace.warning.entity_non_numeric": "Entity is non-numeric: {entity}",
  "ui.panel.lovelace.warning.entity_unavailable": "Entity is currently unavailable: {entity}"

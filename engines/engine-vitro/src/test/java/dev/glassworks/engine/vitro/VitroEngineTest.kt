@@ -931,6 +931,41 @@ class VitroEngineTest {
     }
 
     @Test
+    fun viewTabsShowTheIconAloneUnlessTheViewAsksForItsTitleToo() {
+        // HA's hui-root: a view with an icon has an icon-only tab (the title is its label), `show_icon_and_title` adds
+        // the title, and a view with neither shows "Unnamed view".
+        server.dashboardConfig = JSONObject(
+            """{"views": [
+              {"title": "Home", "path": "home", "icon": "mdi:home", "cards": [{"type": "markdown", "content": "h"}]},
+              {"title": "Lights", "path": "lights", "icon": "mdi:lightbulb", "show_icon_and_title": true, "cards": [{"type": "markdown", "content": "l"}]},
+              {"title": "Garden", "path": "garden", "cards": [{"type": "markdown", "content": "g"}]},
+              {"path": "nameless", "cards": [{"type": "markdown", "content": "n"}]}
+            ]}""",
+        )
+        val page = openPage(vitro())
+        page.load("$base/wall-test")
+        awaitMain("first ready") { host.messages("ready").isNotEmpty() }
+        val vv = vitroView(page)
+        vv.hideHeader = false
+        idle()
+        fun tab(index: Int): android.view.ViewGroup = (0 until vv.childCount).asSequence()
+            .flatMap { vv.getChildAt(it).let { c -> if (c is android.view.ViewGroup) c.allViews() else sequenceOf(c) } }
+            .first { it.tag == index && it.isClickable } as android.view.ViewGroup
+        fun shown(index: Int): List<String> = tab(index).allViews().filter { it.visibility == View.VISIBLE }.mapNotNull {
+            when (it) {
+                is dev.glassworks.engine.vitro.ui.MdiIconView -> "icon"
+                is android.widget.TextView -> it.text.toString()
+                else -> null
+            }
+        }.toList()
+        assertEquals(listOf("icon"), shown(0))
+        assertEquals("the icon-only tab is named for TalkBack", "Home", tab(0).contentDescription)
+        assertEquals(listOf("icon", "Lights"), shown(1))
+        assertEquals(listOf("Garden"), shown(2))
+        assertEquals(listOf("Unnamed view"), shown(3))
+    }
+
+    @Test
     fun logLinesLeaveOutQueriesAndProxiedPaths() {
         assertEquals("http://…/auth/…?…", VitroEngine.forLog("http://192.0.2.10:8123/auth/authorize?client_id=a&state=secret"))
         // No Home Assistant address either: an origin, a host or an IP a connection error names.

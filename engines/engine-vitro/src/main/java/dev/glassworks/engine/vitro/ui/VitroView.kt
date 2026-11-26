@@ -909,13 +909,18 @@ class VitroView(
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(px(16f), px(12f), px(16f), px(9.5f))
             }
-            val icon = v.icon?.let { name ->
+            // HA's hui-root: an icon alone for a view with one, its title too only with `show_icon_and_title`.
+            val content = v.tab { HaText.ui("ui.panel.lovelace.views.unnamed_view") }
+            tab.contentDescription = content.label
+            val icon = content.icon?.let { name ->
                 MdiIconView(context).apply { setIcon(name, theme.secondaryTextColor) }.also {
-                    row.addView(it, LinearLayout.LayoutParams(px(18f), px(18f)).apply { marginEnd = px(6f) })
+                    val gap = if (content.text != null) px(6f) else 0
+                    row.addView(it, LinearLayout.LayoutParams(px(18f), px(18f)).apply { marginEnd = gap })
                 }
             }
             val label = TextView(context).apply {
-                text = v.title
+                text = content.text
+                visibility = if (content.text == null) GONE else VISIBLE
                 textSize = 13f
                 typeface = VitroFonts.typeface(context, Inter.MEDIUM, 13f)
                 includeFontPadding = false

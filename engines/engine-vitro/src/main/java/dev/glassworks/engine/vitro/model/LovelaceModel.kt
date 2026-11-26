@@ -128,6 +128,21 @@ data class ViewConfig(
     }
 
     /**
+     * What HA's `hui-root` puts in this view's tab (frontend 20261028.5): a view with an icon shows the icon alone, or
+     * the icon and its title when the view sets `show_icon_and_title` and has a title; a view with no icon shows its
+     * title, or [unnamed] (HA's "Unnamed view") when it has none.
+     */
+    fun tab(unnamed: () -> String): ViewTab {
+        val title = raw.optString("title", "").ifEmpty { null }
+        val both = icon != null && title != null && truthy(raw.opt("show_icon_and_title"))
+        return when {
+            both -> ViewTab(icon, title, title)
+            icon != null -> ViewTab(icon, null, title)
+            else -> ViewTab(null, title ?: unnamed(), title)
+        }
+    }
+
+    /**
      * HA's `hui-root` `_isVisible` (outside edit mode): a view with no `visible`, `visible: true`, or a list of
      * `{user: id}` that holds [userId]. Which view a dashboard opens on reads it ([DashboardConfig.viewIndex]).
      */
@@ -162,6 +177,20 @@ data class ViewConfig(
         val user: Any? = if (entry is JSONObject && entry.has("user")) entry.opt("user") else null
         if (userId == null) user == null else user == userId
     }
+}
+
+/**
+ * A view's tab ([ViewConfig.tab]): its [icon], its [text] (null: the icon alone, HA's `icon-only` tab), and its
+ * [label], HA's `aria-label` and the icon's tooltip (the view's own title, null when it has none).
+ */
+data class ViewTab(val icon: String?, val text: String?, val label: String?)
+
+/** JavaScript's truthiness, for a config value HA tests with `&&` (`show_icon_and_title`). */
+internal fun truthy(v: Any?): Boolean = when (v) {
+    null, JSONObject.NULL, false -> false
+    is Number -> v.toDouble().let { it != 0.0 && !it.isNaN() }
+    is String -> v.isNotEmpty()
+    else -> true
 }
 
 /** The view types layout-card registers (`masonry-layout`, ...), as a view's `type`. */

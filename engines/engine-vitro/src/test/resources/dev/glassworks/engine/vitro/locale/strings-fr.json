@@ -139,6 +139,7 @@
  "ui.panel.lovelace.editor.action-editor.actions.perform-action": "Effectuer une action",
  "ui.panel.lovelace.editor.action-editor.actions.toggle": "Basculer",
  "ui.panel.lovelace.editor.action-editor.actions.url": "URL",
+ "ui.panel.lovelace.views.unnamed_view": "Vue sans nom",
  "ui.panel.lovelace.warning.attribute_not_numeric": "L'attribut {attribute} n'est pas numérique",
  "ui.panel.lovelace.warning.entity_non_numeric": "L'entité n'est pas numérique : {entity}",
  "ui.panel.lovelace.warning.entity_unavailable": "L'entité est actuellement indisponible : {entity}"
