@@ -197,6 +197,15 @@ series of connects from another crashed `mediaserver`.
    rule. Every stream takes that path, a turn of 0 included (maintainer's call: one encoder input on every camera).
    The encoder and the ONVIF profile run at the turned size, 720×1280 on the Mirror.
 
+   The first build with the turn stood the stream upright but at 432×768. The Mirror's encoder,
+   `OMX.qcom.video.encoder.avc`, lists its sizes as at most 1920×1088 in `/system/etc/media_codecs.xml`, and Android 6's
+   `isSizeSupported(720, 1280)` reads that as landscape only, so 1280 rows looked too tall and the pane fell back to the
+   next size that fit. Either way round, 720×1280 at 30 fps is 108,000 macroblocks a second, well inside the encoder's
+   244,800, so the size check now accepts a size when the encoder lists it in either orientation. With that build (2026-11-26, verified) a
+   frame grabbed from the RTSP stream is 720×1280, upright, with real color edge to edge. While Protect and the grab
+   both streamed, `top` gave the app 15–18% of the CPU (11–16% at 432×768), its page 0–5% and `mediaserver` 2–3%.
+   `dumpsys meminfo` gave the app 286 MB PSS, 80 MB of it `EGL mtrack`.
+
 ## Result
 
 | Problem | Cause | What the camera pane does now |
@@ -227,7 +236,8 @@ To see the pane's handling on a Mirror running Glassworks with the camera pane:
 ## Open questions
 
 - What the GPU step costs on the Mirror over time (memory for the GL context, GPU time at 30 fps). Measured once
-  below; a long run with the page open is still owed.
+  under attempt 7; a long run with the page open is still owed, and a baseline without the GL step to compare
+  `EGL mtrack` against.
 
 - Why the HAL starts a third of its sessions this way. The `mm-camera` logs show nothing different before a bad
   session. Without the vendor's source this is a workaround, not a fix.
