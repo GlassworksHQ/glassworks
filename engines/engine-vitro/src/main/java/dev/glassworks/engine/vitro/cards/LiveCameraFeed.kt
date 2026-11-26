@@ -250,7 +250,11 @@ internal class LiveCameraFeed(
             startPolling()
             return
         }
-        if (capabilities == null) capabilities = knowledge.capabilities(entityId)
+        // The connection's answer, the one it has now: a copy from before a reconnect isn't used.
+        if (offersStream()) {
+            capabilities = knowledge.capabilities(entityId)
+            if (capabilities == null) capabilitiesAsked = false
+        }
         if (capabilities == null) askCapabilities() else recompute()
         if (!onScreen) schedulePark()
     }
@@ -330,7 +334,14 @@ internal class LiveCameraFeed(
             // keeps nothing worth keeping paused (WebRTC's) is closed too, and opened again on show.
             for (kind in slots.keys.toList()) {
                 val slot = slots[kind] ?: continue
-                if (slot.stream.closeWhenHidden || guard(kind) { slot.stream.setActive(false) } == null) closeSlot(kind)
+                if (slot.stream.closeWhenHidden) {
+                    closeSlot(kind)
+                    // Its replacement on show has shown nothing yet: loading, as a new player is (a failure stays).
+                    if (kind == CameraStreamKind.WEB_RTC && webRtcVideo == true) webRtcVideo = null
+                    if (kind == CameraStreamKind.HLS && hlsVideo == true) hlsVideo = null
+                } else if (guard(kind) { slot.stream.setActive(false) } == null) {
+                    closeSlot(kind)
+                }
             }
             releaseSlots()
             capped = false
@@ -419,6 +430,12 @@ internal class LiveCameraFeed(
             }
         }
         if (!stream) return
+        // HA may have restarted with other settings: its answer is asked again (the players run on meanwhile), now,
+        // or when the camera shows.
+        if (offersStream()) {
+            capabilities = null
+            capabilitiesAsked = false
+        }
         if (capabilities == null && !capabilitiesAsked && active) {
             ctx.main.removeCallbacks(askAgain)
             capabilitiesRetryMs = CAPABILITIES_RETRY_MS

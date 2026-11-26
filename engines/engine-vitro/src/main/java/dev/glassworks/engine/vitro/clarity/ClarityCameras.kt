@@ -84,6 +84,11 @@ internal class ClarityCameras(private val now: () -> Double) {
         return null
     }
 
+    /** [s] was made (before its card places and starts it): its [Rec.openedAt]. */
+    internal fun opened(s: MeasuredCameraStream) {
+        rec(s)
+    }
+
     internal fun started(s: MeasuredCameraStream) {
         val r = rec(s)
         if (r.startedAt == null) r.startedAt = now()
@@ -250,6 +255,7 @@ internal class ClarityCameras(private val now: () -> Double) {
         private class Measured(private val inner: CameraStreamFactory) : CameraStreamFactory {
             override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
                 inner.create(entityId, kind)?.let { MeasuredCameraStream(it, entityId, kind) }
+                    ?.also { ClarityCameras.current?.opened(it) }
 
             override fun prewarm() = inner.prewarm()
         }

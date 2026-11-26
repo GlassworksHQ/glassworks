@@ -59,12 +59,23 @@ internal object WebRtcRuntime {
     @Synchronized
     fun release() = parts.release()
 
-    /** Makes the parts on a short-lived thread of its own, and gives them back at once: they linger for a player. */
+    /** A [prewarm] runs: another one meanwhile does nothing. */
+    private val warming = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Makes the parts on a short-lived thread of its own, and gives them back at once: they linger for a player. One
+     * at a time, and none while the parts are kept already (several cameras ask at once).
+     */
     fun prewarm(context: Context) {
+        if (parts.alive || !warming.compareAndSet(false, true)) return
         Thread({
-            runCatching {
-                acquire(context)
-                release()
+            try {
+                runCatching {
+                    acquire(context)
+                    release()
+                }
+            } finally {
+                warming.set(false)
             }
         }, "ha-webrtc-warm").apply { isDaemon = true }.start()
     }

@@ -375,6 +375,19 @@ class ClarityCamerasTest {
     }
 
     @Test
+    fun aStreamMadeBeforeItStartsHasItsOwnOpenTime() {
+        t = 1050.0
+        val s = factory.create("camera.clarity_cam_0", WEB_RTC)!!
+        card("camera.clarity_cam_0").addView(s.view)
+        t = 1300.0
+        s.start()
+        play(s, 1500.0, 35_000.0)
+        val x = stream(window(listOf("camera.clarity_cam_0"), 1, WEB_RTC, 1000.0, 4000.0, 34_000.0))
+        assertEquals(50.0, x.getDouble("opened_ms"), 0.01)
+        assertEquals(300.0, x.getDouble("started_ms"), 0.01)
+    }
+
+    @Test
     fun aCameraThatNeverPlayedHasNoStartTimes() {
         open("camera.clarity_cam_0", WEB_RTC, 1100.0)
         val x = stream(window(listOf("camera.clarity_cam_0"), 1, WEB_RTC, 1000.0, 4000.0, 34_000.0))

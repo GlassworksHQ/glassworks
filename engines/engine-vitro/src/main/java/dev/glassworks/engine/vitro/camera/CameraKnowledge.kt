@@ -32,7 +32,8 @@ class CameraKnowledge internal constructor(private val now: () -> Long = SystemC
     /**
      * Asks HA for [entityId]'s capabilities through [send] (`camera/capabilities`; it answers on the main thread with
      * success and HA's result), unless a request for it is out already: [done] then hears that one's answer. A
-     * success is kept; a failure isn't, so the next [ask] sends again.
+     * success is kept; a failure isn't, so the next [ask] sends again. A reply to a request sent before [forget]
+     * reaches no one: it may be the old Home Assistant's, and the askers ask again once the connection is back.
      */
     fun ask(entityId: String, send: (answer: (ok: Boolean, result: Any?) -> Unit) -> Unit, done: (ok: Boolean, kinds: List<CameraStreamKind>?) -> Unit) {
         capabilities[entityId]?.let { return done(true, it) }
@@ -43,11 +44,10 @@ class CameraKnowledge internal constructor(private val now: () -> Long = SystemC
         val waiting = mutableListOf(done)
         asking[entityId] = waiting
         send { ok, result ->
-            // A reply to a request sent before [forget] still answers its askers, but isn't kept.
-            val current = asking[entityId] === waiting
-            if (current) asking.remove(entityId)
+            if (asking[entityId] !== waiting) return@send
+            asking.remove(entityId)
             val kinds = if (ok) CameraStreamChoice.kindsOf(result) else null
-            if (current && kinds != null) capabilities[entityId] = kinds
+            if (kinds != null) capabilities[entityId] = kinds
             for (d in waiting.toList()) d(ok, kinds)
         }
     }

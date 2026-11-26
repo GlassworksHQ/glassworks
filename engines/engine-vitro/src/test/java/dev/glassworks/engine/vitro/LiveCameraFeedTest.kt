@@ -1283,6 +1283,44 @@ class LiveCameraFeedTest {
     }
 
     @Test
+    fun aReplacementOpenedOnShowThatShowsNoVideoStillGivesWayToHls() {
+        closesWhenHiddenFor += WEB_RTC
+        CameraVideoBudget.max = 1
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        live(WEB_RTC).frame()
+        idle()
+        f.setActive(false)
+        f.setActive(true)
+        idle()
+        // The new player has shown nothing: it gets WebRTC's short wait alone, then HLS takes over.
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
+        assertEquals(listOf(HLS), f.runningKinds)
+    }
+
+    @Test
+    fun aCameraHeardBackAfterADropAsksHaAgainAndTakesUpWhatItOffersNow() {
+        // HA offered no stream type; it restarts with HLS on.
+        capabilities = JSONObject().put("frontend_stream_types", JSONArray())
+        val s = store()
+        val f = feed(context(s))
+        f.start()
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        capabilities = JSONObject().put("frontend_stream_types", JSONArray().put("hls"))
+        LiveCameraFeed.connectionRestored(s)
+        idle()
+        assertEquals(2, wsCalls.count { it.optString("type") == "camera/capabilities" })
+        assertTrue(HLS in f.runningKinds)
+        // Stopped and started again, it takes the connection's answer, not a copy of its own from before.
+        f.stop()
+        f.start()
+        idle()
+        assertEquals(listOf(HLS), f.runningKinds)
+    }
+
+    @Test
     fun anOffScreenCameraStopsDrawingAtOnceAndDrawsAgainBackOnScreen() {
         val f = feed(context(store()))
         f.start()
