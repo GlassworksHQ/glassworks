@@ -123,6 +123,17 @@ class VitroParityHarnessTest {
         wanted: MutableMap<String, LinkedHashSet<String>>,
     ): ParityResult {
         return try {
+            // The strict compat rule decides first: a case whose view opens in HA's frontend has nothing of Vitro's to
+            // compare, and a case that routes elsewhere than it says is a change in what Vitro claims to draw.
+            ParityRoute.of(case, root)?.let { (route, why) ->
+                if (route != case.route) {
+                    return ParityResult(label, frame, case, ParityStatus.ERROR, null,
+                        listOf("Vitro routes it `$route`" + (why?.let { " ($it)" } ?: "") + ", the case says `${case.route}`"), emptyList(), null)
+                }
+                if (route == ParityRoute.FRONTEND) {
+                    return ParityResult(label, frame, case, ParityStatus.MATCH, null, emptyList(), listOf("HA's frontend draws its view: $why"), null)
+                }
+            }
             // Inside the try: unreadable reference metadata is this case's error, not the end of the run.
             val ref = ParityReference.find(root, frame, case)
             val render = renderer.render(case, ref)

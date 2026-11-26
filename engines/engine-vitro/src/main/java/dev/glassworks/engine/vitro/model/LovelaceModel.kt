@@ -8,6 +8,7 @@ import dev.glassworks.engine.vitro.compat.CardCompat
 import dev.glassworks.engine.vitro.compat.CardRoute
 import dev.glassworks.engine.vitro.compat.CardVerdict
 import dev.glassworks.engine.vitro.compat.IslandScripts
+import dev.glassworks.engine.vitro.compat.NativeOptions
 import dev.glassworks.engine.vitro.compat.VitroSupport
 import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.EntityState
@@ -182,7 +183,7 @@ data class EntityRowConfig(
         /** HA's `DOMAINS_TOGGLE` (`common/const.ts`): the domains a button row or button toggles by default. */
         val HA_DOMAINS_TOGGLE: Set<String> = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
 
-        /** The special row types Vitro draws ([parse]); `attribute` and `cast` go to HA's frontend ([WebFallback]). */
+        /** The special row types Vitro parses ([parse]); a row Vitro doesn't draw as HA does sends its view to HA's frontend ([WebFallback]). */
         val SPECIAL_TYPES: Set<String> get() = VitroSupport.ENTITIES_ROW_TYPES
 
         /**
@@ -259,8 +260,8 @@ data class EntityRowConfig(
                 }
                 else -> {
                     val id = item.str("entity") ?: return null
-                    // `attribute` and `cast` rows send their view to HA's frontend; any other row with an entity (an
-                    // explicit `*-entity` type, a custom row) is drawn as an entity row.
+                    // Any other row with an entity is parsed as an entity row. One Vitro doesn't draw as HA does (an
+                    // `attribute` row, a custom row, a domain whose control it lacks) sends its view to HA's frontend.
                     EntityRowConfig(
                         entity = id,
                         name = name,
@@ -725,6 +726,12 @@ data class CardConfig(
 
     /** [CardCompat.staysNative] for this card, decided once like [compat] (it walks the cards it produces). */
     internal val nativeOnly: Boolean by lazy { CardCompat.staysNative(this) }
+
+    /**
+     * The options and values in this card's config its native renderer doesn't draw as HA does ([NativeOptions]),
+     * decided once: empty when it draws all of them.
+     */
+    val unsupportedOptions: List<String> by lazy { NativeOptions.cardReasons(type, raw) }
 
     fun entities(): List<EntityRowConfig> {
         val arr = raw.optJSONArray("entities") ?: return emptyList()

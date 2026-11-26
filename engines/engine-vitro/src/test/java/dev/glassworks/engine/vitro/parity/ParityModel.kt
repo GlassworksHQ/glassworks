@@ -139,6 +139,12 @@ data class ParityCase(
      * dialog's surface (HA's `<dialog>`, Vitro's sheet), and its texts are the dialog's own.
      */
     val moreInfo: String? = null,
+    /**
+     * `route`: where the strict compat rule sends the case's card ([ParityRoute]): `native` (the default), `island`
+     * (a custom card the island draws when its script is a Lovelace resource; without one, the native card is what's
+     * compared) or `frontend` (its view opens in HA's frontend, so there is nothing of Vitro's to compare).
+     */
+    val route: String = ParityRoute.NATIVE,
 ) {
     fun runsOn(frame: ParityFrame) = frames == null || frame.id in frames
 
@@ -180,6 +186,9 @@ data class ParityCase(
                 viewConfig = o.optJSONObject("view_config"),
                 moreInfo = o.optString("more_info").ifBlank { null }?.also { require(o.has("card")) { "$id: `more_info` opens over a card's view: the case needs a `card`" } },
                 view = o.optString("view").ifBlank { null },
+                route = o.optString("route", ParityRoute.NATIVE).also {
+                    require(it in ParityRoute.ALL) { "$id: `route` is one of ${ParityRoute.ALL}, not $it" }
+                },
                 frames = frames,
                 dark = o.optBoolean("dark", true),
                 theme = o.optString("theme").ifBlank { null },
@@ -202,6 +211,31 @@ data class ParityCase(
 
         /** Where a case's fixture resources live on HA's origin: a path HA doesn't serve, answered by the capture. */
         const val FIXTURE_PREFIX = "/local/vitro-harness-fixtures/"
+    }
+}
+
+/**
+ * Where Vitro routes a committed case's card, as a panel would with every community card's script a Lovelace resource
+ * (the strict compat rule: [dev.glassworks.engine.vitro.compat.NativeOptions]).
+ */
+object ParityRoute {
+    const val NATIVE = "native"
+    const val ISLAND = "island"
+    const val FRONTEND = "frontend"
+    val ALL = setOf(NATIVE, ISLAND, FRONTEND)
+
+    /** The route of [case]'s view (its first card for `island`), and why; null for a local case of a real dashboard. */
+    fun of(case: ParityCase, root: java.io.File): Pair<String, String?>? {
+        if (case.dashboard != null) return null
+        val dashboard = dev.glassworks.engine.vitro.model.LovelaceParser.parseDashboard(case.dashboardJson(root))
+        val view = dashboard.views.single()
+        view.webFallbackReason?.let { return FRONTEND to it }
+        // The first card the view builds in an island, at any depth, as the view builds its containers' children.
+        fun island(card: dev.glassworks.engine.vitro.model.CardConfig): dev.glassworks.engine.vitro.model.CardConfig? =
+            if (card.inIsland(dev.glassworks.engine.vitro.compat.IslandScripts.ANY)) card
+            else dev.glassworks.engine.vitro.model.CardRouter.builtChildren(card).firstNotNullOfOrNull { island(it.value) }
+        val found = dev.glassworks.engine.vitro.model.CardRouter.viewRoots(view).firstNotNullOfOrNull { island(it.card) }
+        return if (found != null) ISLAND to found.compat.reasons.firstOrNull() else NATIVE to null
     }
 }
 

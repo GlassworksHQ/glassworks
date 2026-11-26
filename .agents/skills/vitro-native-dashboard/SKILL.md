@@ -13,7 +13,7 @@ description: >-
 
 Glassworks' **Vitro** engine renders **32 built-in Lovelace cards (Tier 1)** and **30 popular HACS cards (Tier 2)** directly in native Android Views, without a browser. Any unrecognized `custom:*` card triggers a **Tier 3 GeckoView micro-island**, which starts the full browser engine for that card. So does a HACS card Vitro draws when its config has something Vitro can't draw (a Bubble Card pop-up, an unsupported chip, card-mod that reaches inside the card). Vitro's memory use hasn't been measured against GeckoView yet, so don't promise the user a number.
 
-A built-in card Vitro draws natively never goes to an island, because the island can't run Home Assistant's own cards. (A built-in card Vitro has no renderer for, such as `map`, does, and shows only a summary there.) When a built-in card Vitro draws has something Vitro doesn't draw (an unsupported tile feature, an entities header, a `buttons` row), Vitro draws the rest and **leaves that part out**. The auditor reports these as `WARN` lines. Treat them as part of the rewrite too: a WARN is a visible difference from Home Assistant, not a pass. Its card-mod check is coarse, so it doesn't list every left-out property (a `filter` on a built-in card, say): read the site checker's notes for those too.
+A built-in card Vitro draws natively never goes to an island, because the island can't run Home Assistant's own cards. (A built-in card Vitro has no renderer for, such as `map`, sends its view to Home Assistant's frontend.) Vitro follows a strict rule: a card it draws claims a config only when it draws every option and value in it exactly as Home Assistant does. When a built-in card has something Vitro doesn't draw (an unsupported tile feature, an entities header, an `input_number` row, a double-tap action), the whole view opens in Home Assistant's frontend instead. The auditor reports these as `TIER 3 [HA FRONTEND]` lines. Its card-mod check is different and coarse: a built-in card stays native for its card-mod and gets a `WARN` line, so read the site checker's notes for those too.
 
 Use this workflow to rewrite an existing dashboard into a **100% Vitro-native** dashboard and theme that keeps the same visual layout, aesthetic, entities, and actions with **zero Tier 3 GeckoView triggers**.
 
@@ -31,7 +31,7 @@ Run the bundled auditor on the dashboard YAML or storage JSON:
 python3 .agents/skills/vitro-native-dashboard/scripts/audit_vitro_dashboard.py path/to/dashboard.yaml
 ```
 
-The auditor routes cards the way the engine does and prints every view with its counts, each `TIER 3 [GECKOVIEW]` card with the reason, and a `WARN` line for each part Vitro leaves out. It exits `0` only when **zero Tier 3 triggers** remain.
+The auditor routes cards the way the engine does and prints every view with its counts, each `TIER 3 [GECKOVIEW]` card and `TIER 3 [HA FRONTEND]` view with the reason, and a `WARN` line for each card-mod part Vitro leaves out. It exits `0` only when **zero Tier 3 triggers** remain.
 
 Its card-mod check is coarse: it flags selectors that reach inside a card, pseudo-elements, keyframes and unknown sheet paths, but not each CSS property. For the property-level verdict, paste the dashboard into the site's checker at <https://www.glassworks.dev/blueprints#vitro-check> (it runs in the browser and uses the engine's full rules), or read the panel's own report: with Vitro on, logcat's `Glassworks.Vitro` tag logs one `Island <where>: <why>` line per island.
 

@@ -19,6 +19,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -59,18 +60,32 @@ class CompatCheckerTest {
         return v
     }
 
+    /**
+     * The strict compat rule ([dev.glassworks.engine.vitro.compat.NativeOptions]): a built-in card, or a custom one
+     * holding built-in cards, with an option or value Vitro doesn't draw as HA does sends its view to HA's frontend.
+     */
+    private fun assertFrontend(json: String, reasonPart: String): String {
+        val reason = dev.glassworks.engine.vitro.compat.WebFallback.cardReason(card(json))
+        assertNotNull("expected HA's frontend for $json", reason)
+        assertTrue("the reason doesn't mention '$reasonPart': $reason", reasonPart in reason!!)
+        return reason
+    }
+
     private fun style(css: String) = JSONObject.quote(css)
 
     @Test
-    fun autoEntitiesFilterKeysVitroDoesNotEvaluateAreNoted() {
-        val v = assertNative(
+    fun autoEntitiesFilterKeysVitroDoesNotEvaluateSendTheViewToHa() {
+        // auto-entities builds an entities card, which the island can't draw: a rule Vitro doesn't evaluate would leave
+        // its entities out, so HA's frontend draws the view.
+        val all = card(
             """{"type": "custom:auto-entities", "filter": {"include": [{"area": "kitchen", "domain": "light"},
                 {"or": [{"device": "Lamp"}, {"domain": "switch"}]}], "exclude": [{"integration": "hue"}]}}""",
-        )
-        val note = v.notes.single { "auto-entities filter" in it }
-        assertTrue(note, "`area`" in note && "`device`" in note && "`integration`" in note)
-        assertFalse(note, "`domain`" in note)
-        assertTrue(assertNative("""{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]}}""").notes.none { "auto-entities filter" in it })
+        ).unsupportedOptions
+        assertTrue(all.toString(), listOf("include[0].area", "include[1].or[0].device", "exclude[0].integration").all { k -> all.any { k in it } })
+        assertFalse(all.toString(), all.any { ".domain" in it })
+        assertFrontend("""{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}], "template": "{{ [] }}"}}""", "`filter.template`")
+        assertNative("""{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]}}""")
+        assertNull(dev.glassworks.engine.vitro.compat.WebFallback.cardReason(card("""{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]}}""")))
     }
 
     @Test
@@ -128,7 +143,7 @@ class CompatCheckerTest {
 
     @Test
     fun theReportsNotesHeadingFitsIslandWarningsToo() {
-        val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "tile", "entity": "light.a", "features_position": "inline", "features": [{"type": "toggle"}]}]}"""))
+        val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "tile", "entity": "light.a", "card_mod": {"style": "ha-card { backdrop-filter: blur(4px) }"}}]}"""))
         val text = CompatChecker.check(view).format()
         assertTrue(text, "Compatibility notes:" in text)
         assertFalse(text, "Known gaps (native" in text)
@@ -279,14 +294,12 @@ class CompatCheckerTest {
     }
 
     @Test
-    fun tileWithFeaturesInlineIsNativeWithAKnownGap() {
-        val v = assertNative(
-            """{"type": "tile", "entity": "light.desk", "features_position": "inline",
-                "features": [{"type": "light-brightness"}]}""",
-        )
-        assertTrue(v.notes.any { "features_position" in it })
-        assertNative("""{"type": "tile", "entity": "fan.a", "features": [{"type": "fan-speed"}, {"type": "toggle"}]}""")
-        assertNative("""{"type": "tile", "entity": "input_select.a", "features": [{"type": "select-options"}]}""")
+    fun tileFeaturesAreNativeOnlyWhereVitroDrawsThemAsHaDoes() {
+        assertNull(dev.glassworks.engine.vitro.compat.WebFallback.cardReason(card("""{"type": "tile", "entity": "light.desk", "features": [{"type": "light-brightness"}]}""")))
+        assertNull(dev.glassworks.engine.vitro.compat.WebFallback.cardReason(card("""{"type": "tile", "entity": "input_select.a", "features": [{"type": "select-options"}]}""")))
+        // Inline features aren't compared with HA yet, and fan-speed draws a slider where HA draws buttons for a few speeds.
+        assertFrontend("""{"type": "tile", "entity": "light.desk", "features_position": "inline", "features": [{"type": "light-brightness"}]}""", "`features_position: inline`")
+        assertFrontend("""{"type": "tile", "entity": "fan.a", "features": [{"type": "fan-speed"}, {"type": "toggle"}]}""", "`features[0].type: fan-speed`")
     }
 
     @Test
@@ -393,18 +406,18 @@ class CompatCheckerTest {
 
     @Test
     fun cardOptionsVitroCannotDrawFallBack() {
-        assertIsland("""{"type": "tile", "entity": "climate.a", "features": [{"type": "climate-preset-modes"}]}""", "tile feature `climate-preset-modes`")
-        assertIsland("""{"type": "entities", "entities": [{"type": "custom:slider-entity-row", "entity": "light.a"}]}""", "custom:slider-entity-row")
-        assertIsland("""{"type": "entities", "entities": [{"type": "cast", "dashboard": "lovelace"}]}""", "row type `cast`")
-        assertIsland("""{"type": "entities", "entities": ["light.a"], "footer": {"type": "graph", "entity": "sensor.a"}}""", "`footer:`")
-        assertIsland("""{"type": "picture-elements", "image": "/local/p.png", "elements": [{"type": "conditional", "conditions": [], "elements": []}]}""", "element `conditional`")
-        assertIsland("""{"type": "custom:mushroom-chips-card", "chips": [{"type": "alarm-control-panel", "entity": "alarm_control_panel.a"}]}""", "chip `alarm-control-panel`")
-        assertIsland("""{"type": "custom:bubble-card", "card_type": "pop-up", "hash": "#k"}""", "card_type: pop-up")
-        assertIsland("""{"type": "custom:layout-card", "layout_type": "custom:foo-layout", "cards": []}""", "layout_type: foo-layout")
-        assertIsland("""{"type": "markdown", "content": "<ha-alert alert-type=\"warning\">Door open</ha-alert>"}""", "`<ha-alert>`")
-        assertIsland("""{"type": "markdown", "content": "<details><summary>More</summary>x</details>"}""", "`<details>`")
+        assertFrontend("""{"type": "tile", "entity": "light.a", "features": [{"type": "climate-preset-modes"}]}""", "`features[0].type: climate-preset-modes`")
+        assertFrontend("""{"type": "entities", "entities": [{"type": "custom:slider-entity-row", "entity": "light.a"}]}""", "`entities[0].type: custom:slider-entity-row`")
+        assertFrontend("""{"type": "entities", "entities": [{"type": "cast", "dashboard": "lovelace"}]}""", "`entities[0].type: cast`")
+        assertFrontend("""{"type": "entities", "entities": ["light.a"], "footer": {"type": "graph", "entity": "sensor.a"}}""", "`footer`")
+        assertFrontend("""{"type": "picture-elements", "image": "/local/p.png", "elements": [{"type": "conditional", "conditions": [], "elements": []}]}""", "conditional elements aren't drawn")
+        assertIsland("""{"type": "custom:mushroom-chips-card", "chips": [{"type": "alarm-control-panel", "entity": "alarm_control_panel.a"}]}""", "`chips[0].type: alarm-control-panel`")
+        assertIsland("""{"type": "custom:bubble-card", "card_type": "pop-up", "hash": "#k"}""", "`card_type: pop-up`")
+        assertIsland("""{"type": "custom:layout-card", "layout_type": "custom:foo-layout", "cards": []}""", "`layout_type: custom:foo-layout`")
+        assertFrontend("""{"type": "markdown", "content": "<ha-alert alert-type=\"warning\">Door open</ha-alert>"}""", "`<ha-alert>`")
+        assertFrontend("""{"type": "markdown", "content": "<details><summary>More</summary>x</details>"}""", "`<details>`")
         // Tags HA's sanitizer escapes show as text there too, so they don't count.
-        assertNative("""{"type": "markdown", "content": "<script>x</script> <iframe src=\"x\"></iframe>"}""")
+        assertNull(dev.glassworks.engine.vitro.compat.WebFallback.cardReason(card("""{"type": "markdown", "content": "<script>x</script> <iframe src=\"x\"></iframe>"}""")))
     }
 
     // ---- Routing ----
@@ -476,7 +489,7 @@ class CompatCheckerTest {
         assertEquals(listOf("View 1 › card 1 (vertical-stack) › card 2 (custom:acme-card)", "View 1 › card 2 (custom:vertical-stack-in-card)"), report.islands.map { it.path })
         val text = report.format()
         assertTrue(text, text.startsWith("4 cards: 2 native, 2 island"))
-        assertTrue(text, "ISLAND View 1 › card 2 (custom:vertical-stack-in-card)\n  - card_mod `@media` rules aren't evaluated natively" in text)
+        assertTrue(text, "ISLAND View 1 › card 2 (custom:vertical-stack-in-card)\n" in text && "  - card_mod `@media` rules aren't evaluated natively" in text)
         // stack-in-card builds a built-in stack around its cards, which the island would draw as a summary: native.
         val sic = verdict(
             """{"type": "custom:stack-in-card", "card_mod": {"style": "@media (min-width: 1px) { :host { margin: 0 } }"},
@@ -508,7 +521,7 @@ class CompatCheckerTest {
         assertIsland(
             """{"type": "custom:layout-card", "layout_type": "custom:foo-layout",
                 "cards": [{"type": "custom:mushroom-entity-card", "entity": "light.a"}, {"type": "custom:acme-card"}]}""",
-            "layout_type: foo-layout",
+            "`layout_type: custom:foo-layout`",
         )
     }
 
@@ -774,7 +787,7 @@ class CompatCheckerTest {
             0,
             JSONObject(
                 """{"cards": [{"type": "custom:auto-entities", "card_param": "cards", "entities": [{"entity": "light.a", "type": "tile"}],
-                    "card": {"type": "custom:layout-card", "layout_type": "custom:foo-layout"}}]}""",
+                    "card": {"type": "custom:layout-card", "layout_type": "custom:masonry-layout"}}]}""",
             ),
         )
         val genReport = CompatChecker.check(generated)
@@ -815,7 +828,7 @@ class CompatCheckerTest {
         )
         val replaced = card(
             """{"type": "custom:auto-entities", "card_param": "cards", "entities": [{"entity": "light.a", "type": "custom:mushroom-entity-card"}],
-                "card": {"type": "custom:layout-card", "cards": [{"type": "custom:acme-card"}]}}""",
+                "card": {"type": "custom:layout-card", "layout_type": "masonry", "cards": [{"type": "custom:acme-card"}]}}""",
         )
         val types = CardRouter.producedCards(replaced).flatMap { (_, c) -> listOf(c.type) + c.childCards.map { it.type } }
         assertFalse(types.toString(), "custom:acme-card" in types)

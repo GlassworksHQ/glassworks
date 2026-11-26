@@ -101,13 +101,14 @@ object CardCompat {
             val beforeCardMod = reasons.size
             checkCardMod(card, reasons, notes)
             cardModOnly = beforeCardMod == 0 && reasons.isNotEmpty()
-            if (type == "markdown") checkMarkdownContent(card.raw.optString("content", ""), reasons)
         }
         // The island runs a custom card's own JavaScript, so it draws that card as HA does. It has no HA frontend for
         // built-in cards, so a built-in card there would be a plain summary: further from HA than Vitro's native
-        // card. Until the island can run HA's card code, a built-in card Vitro draws stays native and the checker
-        // says what it would have fallen back for. So does a custom container Vitro draws (stack-in-card,
+        // card. Until the island can run HA's card code, a built-in card Vitro draws stays native for its card_mod and
+        // the checker says what it would have fallen back for. So does a custom container Vitro draws (stack-in-card,
         // layout-card) with a built-in card anywhere inside it: in the island, that child would be a summary too.
+        // Their options and content are different: what they don't draw as HA does sends their view to HA's frontend
+        // ([WebFallback]), which is why [checkOptions] leaves those out here.
         if (reasons.isNotEmpty()) {
             val why = when {
                 type in VitroSupport.CORE_CARD_TYPES -> "the island can't draw built-in cards yet"
@@ -206,74 +207,13 @@ object CardCompat {
 
     private fun checkOptions(card: CardConfig, reasons: MutableSet<String>, notes: MutableSet<String>) {
         val raw = card.raw
-        VitroSupport.UNSUPPORTED_OPTIONS[card.type]?.forEach { (key, what) ->
-            if (raw.has(key) && !raw.isNull(key)) reasons += "`$key:` ($what) isn't drawn natively"
-        }
+        // The strict rule ([NativeOptions]): an option or value the native card doesn't draw as HA does. A card the
+        // island can't draw (a built-in card, or a custom one holding built-in cards) goes to HA's frontend for it
+        // instead ([WebFallback]), so its reasons aren't the island's.
+        if (!card.nativeOnly) reasons += card.unsupportedOptions
         when (card.type) {
-            "tile" -> {
-                objects(raw.optJSONArray("features")).forEach { f ->
-                    val t = f.optString("type", "")
-                    if (t.isNotEmpty() && t !in VitroSupport.TILE_FEATURES) reasons += "tile feature `$t` isn't drawn natively"
-                }
-                if (raw.optString("features_position") == "inline" && raw.optJSONArray("features")?.length() ?: 0 > 0) {
-                    notes += gap("tile features_position: inline", "`features_position: inline`")
-                }
-            }
             // Native, but its page is a web page: it takes a browser session, as HA's iframe does.
             "iframe" -> notes += "the `iframe` card shows its page in a browser island of its own"
-            "entities", "entity-filter" -> {
-                val rows = raw.optJSONArray("entities") ?: JSONArray()
-                for (i in 0 until rows.length()) {
-                    val row = rows.optJSONObject(i) ?: continue
-                    val t = row.optString("type", "")
-                    if (t.isNotEmpty() && t !in VitroSupport.ENTITIES_ROW_TYPES) reasons += "entities row type `$t` isn't drawn natively"
-                }
-            }
-            "picture-elements" -> objects(raw.optJSONArray("elements")).forEach { el ->
-                val t = el.optString("type", "")
-                if (t !in VitroSupport.PICTURE_ELEMENT_TYPES) reasons += "picture-elements element `${t.ifEmpty { "(no type)" }}` isn't drawn natively"
-            }
-            "custom:mushroom-chips-card" -> objects(raw.optJSONArray("chips")).forEach { chip ->
-                val t = chip.optString("type", "entity")
-                if (t !in VitroSupport.CHIP_TYPES) reasons += "mushroom chip `$t` isn't drawn natively"
-                if (t == "conditional") {
-                    val inner = chip.optJSONObject("chip")?.optString("type", "entity")
-                    if (inner != null && (inner !in VitroSupport.CHIP_TYPES || inner == "conditional")) {
-                        reasons += "mushroom chip `$inner` (in a conditional chip) isn't drawn natively"
-                    }
-                }
-            }
-            "custom:bubble-card" -> {
-                val t = raw.optString("card_type", "button").ifEmpty { "button" }
-                if (t !in VitroSupport.BUBBLE_CARD_TYPES) reasons += "Bubble Card `card_type: $t` isn't drawn natively"
-            }
-            "custom:auto-entities" -> {
-                // Filter keys Vitro doesn't evaluate (`area`, `device`, `integration`, …), nested rules included: the
-                // child stays native, but the entities those keys would match are left out of it.
-                val unknown = LinkedHashSet<String>()
-                fun scan(rule: JSONObject) {
-                    for (k in rule.keys()) {
-                        if (k !in dev.glassworks.engine.vitro.cards.AutoEntitiesFilter.RULE_KEYS) unknown += k
-                        when (k) {
-                            "not" -> rule.optJSONObject(k)?.let(::scan)
-                            "or", "and" -> objects(rule.optJSONArray(k)).forEach(::scan)
-                        }
-                    }
-                }
-                raw.optJSONObject("filter")?.let { f ->
-                    objects(f.optJSONArray("include")).forEach(::scan)
-                    objects(f.optJSONArray("exclude")).forEach(::scan)
-                    if (f.has("template")) unknown += "template"
-                }
-                if (unknown.isNotEmpty()) {
-                    notes += "auto-entities filter ${unknown.joinToString { "`$it`" }} isn't evaluated natively: entities an include rule " +
-                        "matches are left out, and an exclude rule can't remove its matches"
-                }
-            }
-            "custom:layout-card" -> {
-                val t = raw.optString("layout_type", "masonry-layout").removePrefix("custom:").ifEmpty { "masonry-layout" }
-                if (t !in VitroSupport.LAYOUT_CARD_TYPES) reasons += "layout-card `layout_type: $t` isn't drawn natively"
-            }
             "custom:button-card" -> ButtonCardCompat.check(raw, reasons, notes)
             "custom:swipe-card" -> {
                 val params = raw.optJSONObject("parameters") ?: JSONObject()
@@ -837,11 +777,17 @@ object CardCompat {
 
     private val OPEN_TAG = Regex("""<([a-zA-Z][a-zA-Z0-9-]*)""")
 
-    private fun checkMarkdownContent(content: String, reasons: MutableSet<String>) {
+    /**
+     * Why a Markdown card's [content] isn't drawn as HA draws it: the tags HA's sanitizer keeps that Vitro doesn't
+     * draw. The card is built in, so these send its view to HA's frontend ([WebFallback]).
+     */
+    internal fun markdownReasons(content: String): List<String> {
+        val reasons = LinkedHashSet<String>()
         for (m in OPEN_TAG.findAll(content)) {
             val tag = m.groupValues[1].lowercase(Locale.ROOT)
             VitroSupport.UNDRAWN_MARKDOWN_TAGS[tag]?.let { reasons += "Markdown `<$tag>` ($it) isn't drawn natively" }
         }
+        return reasons.toList()
     }
 
     // -------------------------------------------------------------------------------------------------------------
