@@ -195,6 +195,11 @@ class VitroCardContext(
      * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
      */
     val pageStorage: () -> JSONObject? = { null },
+    /**
+     * HA's `showToast`: a toast over the page ([HaToast]), which outlives the card or sheet that showed it (an update
+     * that failed after its dialog closed). Main thread. The default (tests, no engine) shows nothing.
+     */
+    val showToast: (HaToast) -> Unit = {},
 ) {
     val dp: Float = context.resources.displayMetrics.density
     /** The main thread, for the card's own updates: one that throws is logged and dropped ([GuardedHandler]). */
@@ -263,6 +268,7 @@ class VitroCardContext(
         watchConnection = watchConnection,
         watchConfig = watchConfig,
         pageStorage = pageStorage,
+        showToast = showToast,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout
@@ -312,21 +318,23 @@ class VitroCardContext(
     }
 
     private fun runAction(action: ActionConfig, defaultEntityId: String?) {
+        // HA's handleAction tells in a toast when an action has nothing to act on.
+        fun missing(key: String) = showToast(HaToast(HaText.ui("ui.panel.lovelace.cards.actions.$key")))
         when (action.action) {
             "none" -> Unit
-            "toggle" -> defaultEntityId?.let(::toggleEntity)
+            "toggle" -> defaultEntityId?.let(::toggleEntity) ?: missing("no_entity_toggle")
             // HA's handleAction: the action's own `entity`, else the card's.
-            "more-info" -> (action.entity ?: defaultEntityId)?.let(openMoreInfo)
-            "navigate" -> action.navigationPath?.let(navigate)
+            "more-info" -> (action.entity ?: defaultEntityId)?.let(openMoreInfo) ?: missing("no_entity_more_info")
+            "navigate" -> action.navigationPath?.takeIf { it.isNotEmpty() }?.let(navigate) ?: missing("no_navigation_path")
             "call-service", "perform-action" -> {
-                val svc = action.service ?: return
+                val svc = action.service?.takeIf { it.isNotEmpty() } ?: return missing("no_action")
                 val domain = svc.substringBefore('.', "")
                 val name = svc.substringAfter('.', "")
                 if (domain.isNotEmpty() && name.isNotEmpty()) {
                     callService(domain, name, action.serviceData, action.target)
                 }
             }
-            "url" -> action.urlPath?.let(navigate)
+            "url" -> action.urlPath?.takeIf { it.isNotEmpty() }?.let(navigate) ?: missing("no_url")
         }
     }
 

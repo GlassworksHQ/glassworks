@@ -1138,7 +1138,13 @@ object HaTimelineChart {
         val st = ctx.store[entityId] ?: return Color.TRANSPARENT
         if (state == "unavailable") return Color.TRANSPARENT
         if (state == "unknown") return 0xFF606060.toInt()
-        if (st.domain in STATE_COLORED) {
+        // A person's or tracker's zone (any state but home and not_home): its own `--state-<domain>-<zone>-color` when
+        // the theme sets one, else a graph color of its own, as for any other value.
+        val zoned = (st.domain == "person" || st.domain == "device_tracker") && state != "home" && state != "not_home"
+        if (zoned) {
+            val slug = state.lowercase(java.util.Locale.ROOT).replace(Regex("[^a-z0-9]+"), "_").trim('_')
+            ThemeResolver.parseColor(ctx.theme.vars["state-${st.domain}-$slug-color"])?.let { return it }
+        } else if (st.domain in STATE_COLORED) {
             return if (st.copy(state = state).isActive) ctx.theme.activeColor(st.domain) else ctx.theme.stateInactiveColor
         }
         val enumLike = st.domain == "select" || st.domain == "input_select" || (st.domain == "sensor" && st.deviceClass == "enum")

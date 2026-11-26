@@ -315,7 +315,7 @@ class EntityRowControlsTest {
     private fun dashboardView(inFrontend: ((String) -> Unit)?): VitroView {
         val vv = VitroView(activity, store, 0xFF000000.toInt())
         vv.contextFactory = { ctx() }
-        if (inFrontend != null) vv.onMoreInfoInFrontend = { _, id, _ -> inFrontend(id) }
+        if (inFrontend != null) vv.onMoreInfoInFrontend = { _, id, _, _ -> inFrontend(id) }
         val card = JSONObject("""{"type": "entities", "entities": ["script.greet", "script.goodnight"]}""")
         vv.setDashboard(LovelaceParser.parseDashboard(JSONObject().put("views", org.json.JSONArray().put(JSONObject().put("title", "Home").put("cards", org.json.JSONArray().put(card))))), null)
         activity.setContentView(vv)

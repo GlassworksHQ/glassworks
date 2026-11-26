@@ -237,7 +237,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         showingHistory = false
         dismissed = false
         val domain = entityId.substringBefore('.')
-        historyButton.visibility = if (domain in HISTORY_TOGGLE_DOMAINS && historyLoaded()) VISIBLE else GONE
+        // `_shouldShowHistory`: a dialog of its own, and HA's history or its logbook (the tab shows either).
+        val tab = historyLoaded() || HaLogbook.shows(entityId, ctx.store[entityId], ctx.haConfig())
+        historyButton.visibility = if (domain in HISTORY_TOGGLE_DOMAINS && tab) VISIBLE else GONE
         buildBody()
         unsub = ctx.store.subscribe(entityId) { s -> ctx.main.post { if (!dismissed) updater?.invoke(s) } }
         ctx.main.removeCallbacks(clockTick)
@@ -1522,6 +1524,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
     private fun buildSensor(id: String, stateRow: Boolean): (EntityState?) -> Unit {
         val side = ctx.px(24f)
         var update: (EntityState?) -> Unit = {}
+        // computeShowLogBookComponent: the Activity section after the history (`ha-more-info-logbook`).
+        val logbook = HaLogbook.shows(id, ctx.store[id], ctx.haConfig())
         if (stateRow) {
             // state-info: a 40 px badge with its 24 px icon, the name (16.8 px line) over the time (22.4 px line).
             val row = LinearLayout(ctx.context).apply {
@@ -1553,7 +1557,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f)).apply {
                 marginStart = side
                 marginEnd = side
-                if (historyLoaded()) bottomMargin = ctx.px(16f)
+                if (historyLoaded() || logbook) bottomMargin = ctx.px(16f)
             })
             update = { s ->
                 icon.setIcon(MdiIcons.resolveIconName(null, s), theme.stateIconColor)
@@ -1566,20 +1570,61 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
         }
         // computeShowHistoryComponent: no history section when HA runs without its `history` integration.
-        if (!historyLoaded()) return update
-        val history = MoreInfoHistoryView(ctx, id, onShowMore = { href ->
-            // HA's link: the dialog closes as the page moves to /history (HA's frontend, with the way back of #863).
-            dismiss()
-            ctx.navigate(href)
-        }, onGraph = { trace?.graph(it) })
-        historyView = history
-        releasers += {
-            history.stop()
-            if (historyView === history) historyView = null
+        val withHistory = historyLoaded()
+        if (withHistory) {
+            val history = MoreInfoHistoryView(ctx, id, onShowMore = { href ->
+                // HA's link: the dialog closes as the page moves to /history (HA's frontend, with the way back of #863).
+                dismiss()
+                ctx.navigate(href)
+            }, onGraph = { trace?.graph(it) })
+            historyView = history
+            releasers += {
+                history.stop()
+                if (historyView === history) historyView = null
+            }
+            body.addView(history, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (stateRow) bottomMargin = ctx.px(16f) })
         }
-        body.addView(history, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (stateRow) bottomMargin = ctx.px(16f) })
-        return update
+        if (!logbook) return update
+        val view = if (stateRow) "info" else "history"
+        val cfg = ctx.context.resources.configuration
+        val activity = MoreInfoLogbookView(ctx, id, MoreInfoLogbookView.capped(cfg.screenWidthDp, cfg.screenHeightDp),
+            onEntry = {
+                // HA's row opens its logbook detail dialog (the entry, its cause, the run's trace), which only HA's
+                // frontend has: its More Info dialog takes over, on the view the entry is in.
+                inFrontend?.invoke(id, view, "More Info: an Activity entry's detail")
+            },
+            onShowMore = { href ->
+                // HA's link, as the history's: the dialog closes as the page moves to /logbook.
+                dismiss()
+                ctx.navigate(href)
+            },
+            onUnsupported = { reason -> inFrontend?.invoke(id, view, "More Info: $reason") },
+        )
+        logbookView = activity
+        releasers += {
+            activity.stop()
+            if (logbookView === activity) logbookView = null
+        }
+        body.addView(activity, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+            // `ha-more-info-history + ha-more-info-logbook` on the History tab; under the default view's history it's
+            // not the last child (more-info-content follows), so 16 px under it.
+            if (!stateRow && withHistory) topMargin = ctx.px(16f)
+            if (stateRow) bottomMargin = ctx.px(16f)
+        })
+        return { st ->
+            update(st)
+            activity.tick()
+        }
     }
+
+    /** The Activity section showing, if any. */
+    private var logbookView: MoreInfoLogbookView? = null
+
+    /**
+     * Opens HA's own More Info dialog for an entity on one of its views (`more-info-view`: `info`, `history`), in
+     * HA's frontend, for what only it has: an Activity entry's detail. Null (no page, a test): nothing opens.
+     */
+    var inFrontend: ((entityId: String, view: String, reason: String) -> Unit)? = null
 
     // ---- Shared pieces ----
 

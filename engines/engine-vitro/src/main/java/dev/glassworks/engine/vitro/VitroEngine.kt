@@ -815,13 +815,14 @@ class VitroEngine(
                     }
                 }
             }
-            vitroView.onMoreInfoInFrontend = { v, entityId, reason ->
+            vitroView.onMoreInfoInFrontend = { v, entityId, reason, moreInfoView ->
                 // As onWebView, with HA's own More Info dialog open over the view (its `more-info-entity-id`). When the
                 // dialog closes, HA drops the parameter, and the plain view hands the page back (handsBack).
                 if (!disposed && nativeActive && displayedDashboard != null && displayedDashboard == (currentOrigin to currentDashboardPath)) {
                     val url = buildViewUrl(currentOrigin, currentDashboardPath, v.path ?: v.index.toString())
                     if (url != null) {
-                        val withDialog = "$url?more-info-entity-id=${java.net.URLEncoder.encode(entityId, "UTF-8")}"
+                        val withDialog = "$url?more-info-entity-id=${java.net.URLEncoder.encode(entityId, "UTF-8")}" +
+                            (moreInfoView?.let { "&more-info-view=${java.net.URLEncoder.encode(it, "UTF-8")}" } ?: "")
                         Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows ${forLog(url)} with its dialog")
                         leaveNativeDashboard()
                         // Back from HA's dialog comes back to this view; closing it does too, in place ([moreInfoReturn]).
@@ -916,6 +917,7 @@ class VitroEngine(
                         ({ configWatchers -= onChange })
                     },
                     pageStorage = { HaPageStorage.of(activity).items(haBase.ifEmpty { null }) },
+                    showToast = { toast -> vitroView.showToast(toast) },
                 )
             }
             main.post { host.onConnect(port) }
