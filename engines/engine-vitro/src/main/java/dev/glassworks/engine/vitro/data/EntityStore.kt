@@ -89,6 +89,7 @@ data class EntityState(
             return if (u == null) n else "$n${HaFormat.blankBeforeUnit(u)}$u"
         }
         if (u != null) return "$state${HaFormat.blankBeforeUnit(u)}$u"
+        dateTimeState()?.let { return it }
         if (domain != "light" && domain != "cover" && domain != "climate" && domain != "fan") HaDisplay.stateLabel(this)?.let { return it }
         // Options and text are the user's own strings: HA shows them as they are, never capitalized.
         if (domain in VERBATIM_DOMAINS) return state
@@ -126,6 +127,63 @@ data class EntityState(
             }
             else -> state.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
         }
+    }
+
+    /**
+     * HA's `computeStateDisplay` for a date or a time (frontend 20261028.5): a `date`, `input_datetime` or `time`
+     * state in the panel's own zone, and a timestamp state ([isTimestampState]) with `formatDateTime`. Text that
+     * isn't a date stays as it is, as HA's `try` around the formatter leaves it. Null for any other state.
+     */
+    private fun dateTimeState(): String? {
+        if (domain in DATE_DOMAINS) {
+            val local = HaLocale.current.copy(timeZone = "local")
+            val parts = state.split(' ')
+            return when {
+                parts.size == 2 -> jsDateMs("${parts[0]}T${parts[1]}")?.let { HaFormat.formatDateTime(it, local) }
+                parts.size == 1 && '-' in state -> jsDateMs("${state}T00:00")?.let { HaFormat.formatDate(it, local) }
+                parts.size == 1 && ':' in state -> {
+                    // `new Date(<today in UTC>T<time>)`: the time on today's date, read in the panel's zone.
+                    val today = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
+                        .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date())
+                    jsDateMs("${today}T$state")?.let { HaFormat.formatTime(it, local) }
+                }
+                else -> null
+            } ?: state
+        }
+        if (!isTimestampState) return null
+        return jsDateMs(state)?.let { HaFormat.formatDateTime(it) } ?: state
+    }
+
+    /**
+     * Whether HA formats this state as a point in time (`computeStateDisplay`): the domains whose state is the time of
+     * their last event (a button's press, a scene's activation, an event's fire, …) and a `sensor` whose
+     * `device_class` is `timestamp` or `uptime`.
+     */
+    val isTimestampState: Boolean
+        get() = domain in TIMESTAMP_DOMAINS || (domain == "sensor" && deviceClass in TIMESTAMP_CLASSES)
+
+    /**
+     * The state as `hui-timestamp-display` draws it where HA's cards use one (`state-display`, the sensor row, the
+     * glance card), or null when they'd show [formattedState] instead: unavailable, unknown, or not a timestamp.
+     * [format] is the display's: `relative` ("In 3 hours", "5 minutes ago"), `total` (an uptime's "3 days"),
+     * `datetime`, `date` or `time`; null picks HA's default, `total` for an uptime and `relative` otherwise.
+     * [anyDomain] is `state-display`'s test, which reads the `device_class` of any entity, not only a sensor's.
+     */
+    fun timestampDisplay(nowMs: Long, format: String? = null, anyDomain: Boolean = false): String? {
+        if (isUnavailable) return null
+        val timestamp = isTimestampState || (anyDomain && deviceClass in TIMESTAMP_CLASSES)
+        if (!timestamp) return null
+        val ts = jsDateMs(state) ?: return HaText.ui("ui.panel.lovelace.components.timestamp-display.invalid").ifEmpty { "Invalid timestamp" }
+        val text = when (format ?: if (deviceClass == "uptime") "total" else "relative") {
+            "relative" -> HaFormat.relativeTime(ts, nowMs)
+            "total" -> HaFormat.relativeTime(nowMs, ts, includeTense = false)
+            "datetime" -> HaFormat.formatDateTime(ts)
+            "date" -> HaFormat.formatDate(ts)
+            "time" -> HaFormat.formatTime(ts)
+            else -> return HaText.ui("ui.panel.lovelace.components.timestamp-display.invalid_format").ifEmpty { "Invalid format" }
+        }
+        // `capitalize` applies to the relative and total forms only (the formatters' own text is left alone).
+        return if (format == null || format == "relative" || format == "total") HaFormat.capitalize(text) else text
     }
 
     /**
@@ -173,6 +231,54 @@ data class EntityState(
  * cards bound to that `entity_id`.
  */
 private val NUMBER_DOMAINS = setOf("number", "input_number", "counter")
+
+/** HA's TIMESTAMP_STATE_DOMAINS (frontend 20261028.5): domains whose state is the time of their last event. */
+private val TIMESTAMP_DOMAINS = setOf(
+    "ai_task", "button", "conversation", "event", "image", "infrared", "input_button", "notify", "radio_frequency",
+    "scene", "stt", "tag", "tts", "wake_word", "datetime",
+)
+
+/** HA's sensor device classes drawn as a point in time (`SENSOR_DEVICE_CLASS_TIMESTAMP` and `uptime`). */
+private val TIMESTAMP_CLASSES = setOf("timestamp", "uptime")
+
+/** Domains whose state is a local date, time or both (`computeStateDisplay`'s first date branch). */
+private val DATE_DOMAINS = setOf("date", "input_datetime", "time")
+
+private val JS_DATE = Regex("""^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?\s*(Z|[+-]\d{2}(?::?\d{2})?)?)?$""")
+
+/**
+ * What JavaScript's `new Date(text)` makes of an ISO date, in epoch ms: a date and time with an offset at that
+ * instant, one without an offset in the panel's zone, and a date alone at UTC midnight. Null where JavaScript's would
+ * be an Invalid Date (HA's formatters then throw and show the text as it is).
+ */
+internal fun jsDateMs(text: String): Long? {
+    val m = JS_DATE.matchEntire(text.trim()) ?: return null
+    val g = m.groupValues
+    val year = g[1].toInt(); val month = g[2].toInt(); val day = g[3].toInt()
+    val hasTime = g[4].isNotEmpty()
+    val hour = if (hasTime) g[4].toInt() else 0
+    val minute = if (hasTime) g[5].toInt() else 0
+    val second = g[6].toIntOrNull() ?: 0
+    val millis = g[7].takeIf { it.isNotEmpty() }?.padEnd(3, '0')?.substring(0, 3)?.toInt() ?: 0
+    if (month !in 1..12 || day !in 1..31 || hour > 24 || minute > 59 || second > 59) return null
+    val zone = g[8]
+    val tz = when {
+        !hasTime || zone == "Z" -> java.util.TimeZone.getTimeZone("UTC")
+        zone.isEmpty() -> HaLocale.deviceTimeZone()
+        else -> {
+            val digits = zone.substring(1).replace(":", "")
+            val minutes = digits.substring(0, 2).toInt() * 60 + (if (digits.length >= 4) digits.substring(2, 4).toInt() else 0)
+            java.util.SimpleTimeZone((if (zone[0] == '-') -minutes else minutes) * 60_000, "")
+        }
+    }
+    val cal = java.util.Calendar.getInstance(tz).apply {
+        isLenient = false
+        clear()
+        set(year, month - 1, day, hour, minute, second)
+        set(java.util.Calendar.MILLISECOND, millis)
+    }
+    return runCatching { cal.timeInMillis }.getOrNull()
+}
 private val TILE_EXTRA_DOMAINS = setOf("light", "cover", "fan", "climate")
 private val VERBATIM_DOMAINS = setOf("select", "input_select", "text", "input_text")
 

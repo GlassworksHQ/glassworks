@@ -596,7 +596,7 @@
     },
     "badge": {
       "anyOf": [
-        {"gap": "HA shows a string badge's name above its state; Vitro shows the state only"},
+        {"entity": ["*"], "note": "a bare entity id: HA's ensureBadgeConfig makes it an entity badge with show_name: true, as Vitro's badge parser does"},
         {"by": "type", "default": "entity", "cases": {"entity": "@entityBadge"}}
       ]
     },

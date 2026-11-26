@@ -43,6 +43,7 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.HaErrorSeverity
 import dev.glassworks.engine.vitro.ui.errorCardContent
+import dev.glassworks.engine.vitro.ui.showTimestampOr
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.HaWeatherSvg
@@ -1353,7 +1354,13 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         titleView.text = config.name ?: config.entity?.let(HaDisplay::deviceEntityName) ?: s?.friendlyName ?: config.entity.orEmpty()
         val hideState = config.raw.optBoolean("hide_state", false)
         stateView.visibility = if (hideState) GONE else VISIBLE
-        stateView.text = s?.formattedState() ?: "…"
+        // HA's tile shows its state with state-display, which draws a timestamp relative ("In 3 hours"). Mushroom's
+        // cards write HA's formatEntityState ("On", "November 25, 2026 at 7:14 AM"), with their own percentages.
+        when {
+            config.type == "tile" -> ctx.showTimestampOr(stateView, s, s?.formattedState() ?: "…", anyDomain = true)
+            config.type.startsWith("custom:mushroom-") -> stateView.text = s?.let { mushroomStateLine(config.type, it) } ?: "…"
+            else -> stateView.text = s?.formattedState() ?: "…"
+        }
         updateBadge(s, active = s?.isActive == true)
         // The icon's own action, named for TalkBack: "Toggle Desk lamp" for HA's default toggle, else the entity.
         if (iconInteractive) iconWrap.contentDescription = if (iconToggles) "Toggle ${titleView.text}" else titleView.text
@@ -2102,12 +2109,21 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         }
         val title = config.title
         val rows = config.entities()
-        // HA's header toggle: shown when the card has a title and holds toggleable entities, on while any is on.
-        // Every row whose config names an entity (`"entity" in conf`), a button row's included.
-        val toggleIds = rows.filter { it.isEntity || it.rowType == "button" }.map { it.entity }
-            .filter { it.substringBefore('.') in SWITCH_DOMAINS }.distinct()
+        // HA's header toggle (hui-entities-card's `_showHeaderToggle`, frontend 20261028.5): with a title and no
+        // `show_header_toggle`, shown once two of the rows that name an entity (`"entity" in conf`, a button row's
+        // included) are of a toggle domain (DOMAINS_TOGGLE). An entity filter builds its card from the rows that pass,
+        // so only those count, and the switch comes and goes as they change. `hui-entities-toggle` then switches the
+        // rows' toggle-domain entities that exist, and is on while any of them is "on".
+        val toggleRows = ArrayList<Pair<String, () -> Boolean>>()
+        val explicitToggle = if (config.raw.has("show_header_toggle") && !config.raw.isNull("show_header_toggle")) {
+            config.raw.optBoolean("show_header_toggle", false)
+        } else {
+            null
+        }
         val masterSwitch: HaSwitchView? =
-            if (title != null && config.raw.optBoolean("show_header_toggle", true) && toggleIds.isNotEmpty()) HaSwitchView(ctx) else null
+            if (title != null && explicitToggle != false && rows.any { it.countsForHeaderToggle() }) HaSwitchView(ctx) else null
+        fun shownToggleIds(): List<String> = toggleRows.filter { it.second() }.map { it.first }
+        fun headerToggleIds(): List<String> = shownToggleIds().filter { ctx.store[it] != null }.distinct()
         if (title != null) {
             val header = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -2124,12 +2140,14 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 masterSwitch.isClickable = true
                 masterSwitch.contentDescription = "Toggle entities"
                 masterSwitch.setOnClickListener {
+                    val ids = headerToggleIds()
+                    if (ids.isEmpty()) return@setOnClickListener
                     val turnOn = !masterSwitch.isOn
                     masterSwitch.setOn(turnOn)
                     ctx.callService(
                         "homeassistant",
                         if (turnOn) "turn_on" else "turn_off",
-                        JSONObject().put("entity_id", JSONArray(toggleIds)),
+                        JSONObject().put("entity_id", JSONArray(ids)),
                         null,
                     )
                 }
@@ -2140,10 +2158,12 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             col.setPadding(0, ctx.px(16f), 0, ctx.px(16f))
         }
         fun refreshMaster() {
-            masterSwitch?.setOn(toggleIds.any { ctx.store[it]?.isActive == true })
+            val sw = masterSwitch ?: return
+            val ids = headerToggleIds()
+            val shown = (explicitToggle ?: (shownToggleIds().size >= 2)) && ids.isNotEmpty()
+            sw.visibility = if (shown) VISIBLE else GONE
+            sw.setOn(ids.any { ctx.store[it]?.state == "on" })
         }
-        // Every toggle entity keeps the header switch current, a button row's included (its own row doesn't).
-        if (masterSwitch != null) toggleIds.forEach { id -> observe(id) { refreshMaster() } }
 
         // `entity-filter` support: when `state_filter` is present, rows whose state isn't listed are hidden.
         val filterArr = config.raw.optJSONArray("state_filter")
@@ -2179,6 +2199,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         fun refreshFilter() {
             rowViews.forEachIndexed { i, row -> row.visibility = if (rowVisible[i]) VISIBLE else GONE }
             fixGaps()
+            refreshMaster()
         }
 
         fun entityRow(rowCfg: EntityRowConfig): View {
@@ -2290,7 +2311,8 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                         refreshMaster()
                     }
                     isCover -> Unit
-                    else -> valueView.text = s?.formattedState() ?: "…"
+                    // hui-sensor-entity-row and hui-simple-entity-row draw a timestamp with hui-timestamp-display.
+                    else -> ctx.showTimestampOr(valueView, s, s?.formattedState() ?: "…")
                 }
             }
             gapRows += row
@@ -2399,13 +2421,27 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             val gapAbove = prevWasRow
             prevWasRow = true
             col.addView(entityRow(rowCfg), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (gapAbove) topMargin = ctx.px(8f) })
+            if (rowCfg.countsForHeaderToggle()) {
+                val idx = rowViews.lastIndex
+                toggleRows += rowCfg.entity to { rowVisible[idx] }
+            }
         }
+        // A button row names its entity too, and is never filtered out.
+        rows.filter { it.rowType == "button" && it.countsForHeaderToggle() }.forEach { toggleRows += it.entity to { true } }
+        // Every toggle entity keeps the header switch current, a button row's included (its own row doesn't).
+        if (masterSwitch != null) toggleRows.map { it.first }.distinct().forEach { id -> observe(id) { refreshMaster() } }
         refreshFilter()
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
     }
 
     private companion object {
         val SWITCH_DOMAINS = setOf("light", "switch", "input_boolean", "fan", "automation", "humidifier", "siren")
+
+        /** HA's DOMAINS_TOGGLE (frontend 20261028.5), the domains the header toggle counts and switches. */
+        val HEADER_TOGGLE_DOMAINS = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
+
+        fun EntityRowConfig.countsForHeaderToggle(): Boolean =
+            (isEntity || rowType == "button") && entity.substringBefore('.') in HEADER_TOGGLE_DOMAINS
         val COVER_BUTTONS = listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
 
         fun dividerLine(ctx: VitroCardContext): View = View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) }
@@ -2500,7 +2536,8 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                     val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                     icon.setIcon(MdiIcons.resolveIconName(e.icon, s), tint)
                     name.text = e.name ?: s?.displayName ?: e.entity
-                    state.text = s?.plainState() ?: "…"
+                    // hui-glance-card: a timestamp state through hui-timestamp-display ("In 3 hours").
+                    ctx.showTimestampOr(state, s, s?.plainState() ?: "…")
                 }
                 row.addView(cell, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { bottomMargin = ctx.px(12f) })
             }
@@ -2679,7 +2716,8 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
         }
         val render = { s: EntityState? ->
             icon.setIcon(MdiIcons.resolveIconName(explicitIcon, s), ctx.theme.secondaryTextColor)
-            state.text = s?.plainState() ?: "…"
+            // hui-heading-entity: state-display, which draws a timestamp relative ("In 3 hours").
+            ctx.showTimestampOr(state, s, s?.plainState() ?: "…", anyDomain = true)
         }
         bind {
             render(ctx.store[eid])

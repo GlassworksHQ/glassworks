@@ -1062,7 +1062,8 @@ object LovelaceParser {
         val out = ArrayList<CardConfig>(arr.length())
         for (i in 0 until arr.length()) {
             when (val item = arr.opt(i)) {
-                is String -> out += CardConfig("entity", JSONObject().put("type", "entity").put("entity", item))
+                // HA's ensureBadgeConfig: a bare id is an entity badge that shows its name.
+                is String -> out += CardConfig("entity", JSONObject().put("type", "entity").put("entity", item).put("show_name", true))
                 is JSONObject -> out += parseCard(item)
             }
         }
