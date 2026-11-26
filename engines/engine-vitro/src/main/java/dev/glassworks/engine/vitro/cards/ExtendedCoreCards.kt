@@ -4,7 +4,6 @@
 
 package dev.glassworks.engine.vitro.cards
 
-import dev.glassworks.engine.vitro.ui.NumberText
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
@@ -32,7 +31,6 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.HaIntl
 import dev.glassworks.engine.vitro.data.HaText
