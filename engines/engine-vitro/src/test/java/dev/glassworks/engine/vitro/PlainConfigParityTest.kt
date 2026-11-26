@@ -243,6 +243,28 @@ class PlainConfigParityTest {
         assertEquals(0xFF4CAF50.toInt(), color("custom:mushroom-fan-card", EntityState("fan.f", "on", emptyMap())))
     }
 
+    @Test fun mushroomEntityChipIconsTakeTheChipsTextColor() {
+        // Mushroom's entity chip colors its icon only with its own icon_color (HA's reference: mushroom-chips-person).
+        put("person.alex", "home"); put("light.lamp", "on", "rgb_color" to listOf(255, 160, 0))
+        val chips = dev.glassworks.engine.vitro.cards.MushroomChipsCardView(ctx(), card("""{"type": "custom:mushroom-chips-card", "chips": [{"type": "entity", "entity": "person.alex"}, {"type": "entity", "entity": "light.lamp"}]}"""))
+        idle()
+        val theme = ThemeResolver.resolve(ThemeCatalog(), true)
+        val tints = all(chips).filterIsInstance<dev.glassworks.engine.vitro.ui.MdiIconView>().map { it.tintColor }
+        assertEquals(listOf(theme.primaryTextColor, theme.primaryTextColor), tints)
+    }
+
+    @Test fun aHorizontalMushroomSliderFillsTheHalfBesideTheInfo() {
+        // mushroom-slider's flex: 1 (HA's reference: mushroom-light-horizontal), not a 36 px square.
+        put("light.lamp", "on", "brightness" to 166, "supported_color_modes" to listOf("brightness"))
+        val c = MushroomLightCardView(ctx(), card("""{"type": "custom:mushroom-light-card", "entity": "light.lamp", "layout": "horizontal", "show_brightness_control": true}"""))
+        idle()
+        val dp = activity.resources.displayMetrics.density
+        c.measure(View.MeasureSpec.makeMeasureSpec((480 * dp).toInt(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        c.layout(0, 0, c.measuredWidth, c.measuredHeight)
+        val slider = all(c).filterIsInstance<dev.glassworks.engine.vitro.cards.HaHorizontalSliderView>().single()
+        assertTrue("slider ${slider.width / dp} dp wide", slider.width / dp > 150)
+    }
+
     // ---- 4. Mushroom's alarm card ----
 
     @Test fun mushroomsAlarmCardHasNoButtonsWithoutStates() {

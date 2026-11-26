@@ -3501,7 +3501,6 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
             }
             else -> if (eid != null) {
                 val render: (EntityState?) -> Unit = { s ->
-                    val active = s?.isActive == true
                     if (type == "weather") {
                         // Mushroom's weather chip: its copy of HA's weather picture (night variant), then the
                         // conditions and the temperature, each only when asked for, joined by " ⸱ ".
@@ -3509,11 +3508,10 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
                         icon.picture = s?.let { HaWeatherSvg.forCondition(it.state, night = true, vars = ctx.theme.vars, mushroom = true) }
                         setLabel(weatherChipLabel(c, s))
                     } else {
-                        // An idle entity chip's icon takes the chip's text colour (HA: --primary-text-color).
-                        val tint = staticColor ?: when {
-                            !active -> ctx.theme.primaryTextColor
-                            else -> s.lightTintColor() ?: ctx.theme.activeColor(s.domain)
-                        }
+                        // Mushroom's entity chip: `ha-state-icon.active { color: var(--color) }`, where `--color` is
+                        // only its `icon_color`; otherwise the icon takes the chip's text color (--primary-text-color),
+                        // whatever the state (a person at home, a light that is on: parity case mushroom-chips-person).
+                        val tint = staticColor?.takeIf { s != null && mushroomActive(s) } ?: ctx.theme.primaryTextColor
                         icon.setIcon(MdiIcons.resolveIconName(c.optString("icon", "").ifEmpty { null }, s), tint)
                         setLabel(
                             when (c.optString("content_info", "state")) {

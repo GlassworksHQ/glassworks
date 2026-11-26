@@ -173,7 +173,8 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(stateItem, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            if (horizontal) addView(controls, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = ctx.px(10f) })
+            // The state item's own 10 px end padding is the gap: a slider starts right after it (mushroom-light-horizontal).
+            if (horizontal) addView(controls, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         }
         if (hideName) primary.visibility = GONE
         if (hideState) secondary.visibility = GONE
@@ -349,9 +350,13 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
         (button.getChildAt(0) as? MdiIconView)?.let { v -> v.setIcon(v.icon, if (enabled) ctx.theme.primaryTextColor else mushroomDisabled) }
     }
 
-    /** Adds [button] to [row]: an equal-width cell, or a fixed square ([weight] squares wide) beside the info. */
-    protected fun addCell(row: LinearLayout, button: View, weight: Float = 1f) {
-        val lp = if (horizontal) LinearLayout.LayoutParams(ctx.px(controlHeight * weight), ctx.px(controlHeight))
+    /**
+     * Adds [button] to [row]: an equal-width cell, or a fixed square ([weight] squares wide) beside the info. A slider
+     * ([fill]) takes the row's free width beside the info too, as `mushroom-slider`'s `flex: 1` does (parity case
+     * mushroom-light-horizontal).
+     */
+    protected fun addCell(row: LinearLayout, button: View, weight: Float = 1f, fill: Boolean = false) {
+        val lp = if (horizontal && !fill) LinearLayout.LayoutParams(ctx.px(controlHeight * weight), ctx.px(controlHeight))
         else LinearLayout.LayoutParams(0, ctx.px(controlHeight), weight)
         row.addView(button, lp.apply { if (row.childCount > 0) marginStart = ctx.px(10f) })
     }
@@ -427,7 +432,7 @@ class MushroomMediaPlayerCardView(ctx: VitroCardContext, config: CardConfig) : M
                         call("media_player", "volume_set") { it.put("volume_level", (frac * 100f).roundToInt() / 100.0) }
                     }
                     slider = s
-                    addCell(row, s, 3f)
+                    addCell(row, s, 3f, fill = true)
                 }
                 "volume_buttons" -> {
                     addCell(row, mushroomButton("mdi:volume-minus", "Volume down") { call("media_player", "volume_down") })
@@ -675,7 +680,7 @@ class MushroomHumidifierCardView(ctx: VitroCardContext, config: CardConfig) : Mu
                 call("humidifier", "set_humidity") { it.put("humidity", (min + frac * (max - min)).roundToInt()) }
             }
             slider = s
-            addCell(row, s)
+            addCell(row, s, fill = true)
         }
         start()
     }
@@ -737,7 +742,7 @@ class MushroomNumberCardView(ctx: VitroCardContext, config: CardConfig) : Mushro
             s.mushroom = true
             s.inactiveColor = mushroomDisabled
             slider = s
-            addCell(row, s)
+            addCell(row, s, fill = true)
         }
         start()
     }
@@ -877,7 +882,7 @@ class MushroomLightCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
     private val switchButtons = LinkedHashMap<String, View>()
 
     init {
-        addCell(row, slider)
+        addCell(row, slider, fill = true)
         start()
     }
 
@@ -982,7 +987,7 @@ class MushroomFanCardView(ctx: VitroCardContext, config: CardConfig) : MushroomS
     } else null
 
     init {
-        slider?.let { addCell(row, it) }
+        slider?.let { addCell(row, it, fill = true) }
         listOfNotNull(oscillate, direction).forEach { b ->
             row.addView(b, LinearLayout.LayoutParams(if (slider == null) 0 else ctx.px(42f), ctx.px(42f), if (slider == null) 1f else 0f).apply {
                 if (row.childCount > 0) marginStart = ctx.px(12f)
@@ -1030,7 +1035,7 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
 
     init {
         buttons.forEach { addCell(row, it) }
-        slider?.let { addCell(row, it) }
+        slider?.let { addCell(row, it, fill = true) }
         // The other control as a button beside the active one (Mushroom's _renderOtherControls).
         if (coverControls.size > 1) coverControls.forEach { c ->
             val b = mushroomButton(COVER_CONTROL_ICONS.getValue(c), c) { activeControl = c; showActive() }
