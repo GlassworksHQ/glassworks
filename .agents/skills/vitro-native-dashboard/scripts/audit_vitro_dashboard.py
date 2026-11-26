@@ -103,6 +103,9 @@ NATIVE_OPTIONS = json.loads(NATIVE_OPTIONS_FILE.read_text(encoding="utf-8"))
 # Values a reason may name: a key, a type, an enum value. Never a path, a URL or an entity id.
 SAFE = re.compile(r"^[A-Za-z0-9_:+\-]{1,48}$")
 
+# A number written as text, as all three checkers read one (no hex, `NaN`, `Infinity` or `_`).
+NUMBER = re.compile(r"^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$")
+
 
 class _Walk:
     """One check against the declaration (NativeOptions.Walk): the reasons it found, worded for `subject`."""
@@ -149,15 +152,16 @@ class _Walk:
         elif "range" in spec:
             lo, hi = spec["range"]
             n = None
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                n = float(value)
-            elif isinstance(value, str):
-                try:
+            try:
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    n = float(value)
+                elif isinstance(value, str) and NUMBER.match(value):
                     n = float(value.strip())
-                except ValueError:
-                    n = None
+            except OverflowError:
+                n = None  # a number too large for a double, as Kotlin and JavaScript read it: not finite
             if n is None or not math.isfinite(n) or (lo is not None and n < lo) or (hi is not None and n > hi):
-                self.fail(_join(path, _shown(value)), why=why)
+                # Never the value itself: a number that isn't one may be any text of the dashboard's.
+                self.fail(path, "not a number in range", why)
         elif "entity" in spec:
             domain = value.split(".", 1)[0].strip() if isinstance(value, str) and "." in value else ""
             if not domain or not any(d in ("*", domain) for d in spec["entity"]):
@@ -240,8 +244,10 @@ class _Walk:
 def _shown(value):
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, int) and abs(value) >= 10**24:
+        return None  # str() of a very long int raises on Python 3.11+, and the reason wouldn't show it anyway
     if isinstance(value, (int, float)):
-        return str(value)
+        return str(value) if len(str(value)) <= 24 else None
     if isinstance(value, str) and SAFE.match(value):
         return value
     return None
@@ -254,8 +260,7 @@ def _join(path: str, value) -> str:
 def _same(a, b) -> bool:
     if isinstance(a, bool) or isinstance(b, bool):
         return a is b
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-        return float(a) == float(b)
+    # Python compares an int and a float by value without converting either (no overflow): 1 == 1.0.
     return a == b
 
 
@@ -810,12 +815,16 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
         # them, so one Vitro can't draw sends the view to HA's frontend or itself to an island.
         # The explicit entries come first, and the inner card's walk below lists them.
         entries = sum(isinstance(e, (str, dict)) for e in as_list(card.get("entities"))) if card.get("card_param") == "cards" else 0
+        # Every generated card at any depth: one that needs HA's frontend decides, whatever comes before it.
+        found: list[str] = []
         for label, _, gen in produced_cards(card, ctype, True)[len(children) + entries:]:
-            sub_counts = {"tier1": 0, "tier2": 0, "tier3": 0}
-            walk_card(gen, f"{loc}.generated", sub_counts, triggers, warnings)
-            if sub_counts["tier3"]:
-                counts["tier3"] += sub_counts["tier3"]
-                return
+            sub_triggers: list[str] = []
+            walk_card(gen, f"{loc}.generated", {"tier1": 0, "tier2": 0, "tier3": 0}, sub_triggers, [])
+            found += sub_triggers
+        if found:
+            counts["tier3"] += 1
+            triggers.append(next((t for t in found if "[HA FRONTEND]" in t), found[0]))
+            return
     if explicit >= 0 and ctype in CONTAINER_TYPES and ctype != "conditional":
         # auto-entities' inner card: only its explicit `entities:` entries are known before it runs.
         for _, i, child in children:

@@ -1330,9 +1330,17 @@ function walkCard(card: Obj, loc: string, view: ViewAudit, holdsGenerated = -1) 
     // so one Vitro can't draw sends the view to HA's frontend or itself to an island, as listed cards do.
     // The explicit entries come first, and the inner card's walk below lists them.
     const entries = Array.isArray(card.entities) ? card.entities.filter((e) => typeof e === "string" || isObj(e)).length : 0;
-    for (const [, g] of producedCards(card, true).slice(children.length + (explicit >= 0 ? entries : 0))) {
-      const gv = verdict(g);
-      if (gv.native) continue;
+    // Every generated card at any depth: one that needs HA's frontend decides, whatever comes before it.
+    const off: [Obj, Verdict][] = [];
+    const scan = (c: Obj) => {
+      const v = verdict(c);
+      if (!v.native) off.push([c, v]);
+      else for (const [, inner] of producedCards(c, true)) scan(inner);
+    };
+    for (const [, g] of producedCards(card, true).slice(children.length + (explicit >= 0 ? entries : 0))) scan(g);
+    const first = off.find(([, v]) => v.frontend) ?? off[0];
+    if (first) {
+      const [g, gv] = first;
       view.tier3++;
       view.triggers.push({ view: view.name, path: `${loc}.generated`, type: cardType(g), reasons: gv.frontend ? gv.reasons.map((r) => `${FRONTEND} ${r}`) : gv.reasons });
       return;

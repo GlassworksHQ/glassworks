@@ -23,7 +23,8 @@ import org.json.JSONObject
  * - `"@name"`: the spec `defs.name`.
  * - `{"values": [...]}`: one of these JSON scalars.
  * - `{"pattern": "regex"}`: a string the expression finds a match in.
- * - `{"range": [min, max]}`: a finite number in the range (a null bound is open).
+ * - `{"range": [min, max]}`: a finite number in the range (a null bound is open), or text that is one in plain decimal
+ *   notation.
  * - `{"entity": ["light", ...]}`: an entity id of one of these domains (`"*"`: any).
  * - `{"keys": {"key": spec}, "required": ["key"]}`: an object; a key the spec doesn't list isn't drawn, and neither is
  *   an object without a `required` key. A null value counts as absent.
@@ -111,9 +112,10 @@ object NativeOptions {
                 }
                 spec.has("range") -> {
                     val r = spec.getJSONArray("range")
-                    val n = (value as? Number)?.toDouble() ?: (value as? String)?.trim()?.toDoubleOrNull()
+                    val n = (value as? Number)?.toDouble() ?: (value as? String)?.takeIf { NUMBER.matches(it) }?.trim()?.toDoubleOrNull()
                     val ok = n != null && n.isFinite() && (r.isNull(0) || n >= r.getDouble(0)) && (r.isNull(1) || n <= r.getDouble(1))
-                    if (!ok) fail(join(path, shown(value)), why = why)
+                    // Never the value itself: a number that isn't one may be any text of the dashboard's.
+                    if (!ok) fail(path, "not a number in range", why)
                 }
                 spec.has("entity") -> {
                     val domains = spec.getJSONArray("entity")
@@ -181,11 +183,15 @@ object NativeOptions {
         }
     }
 
+    /** A number written as text, as all three checkers read one (no hex, `NaN`, `Infinity` or `_`). */
+    private val NUMBER = Regex("""^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$""")
+
     /** Values that can be named in a reason: a key, a type, an enum value. Never a path, a URL or an entity id. */
     private val SAFE = Regex("""^[A-Za-z0-9_:+\-]{1,48}$""")
 
     private fun shown(value: Any?): String? = when (value) {
-        is Boolean, is Number -> value.toString()
+        is Boolean -> value.toString()
+        is Number -> value.toString().takeIf { it.length <= 24 }
         is String -> value.takeIf { SAFE.matches(it) }
         else -> null
     }

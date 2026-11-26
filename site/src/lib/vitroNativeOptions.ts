@@ -21,8 +21,12 @@ const has = (o: Obj, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 /** Values that can be named in a reason: a key, a type, an enum value. Never a path, a URL or an entity id. */
 const SAFE = /^[A-Za-z0-9_:+-]{1,48}$/;
 
+/** A number written as text, as all three checkers read one (no hex, `NaN`, `Infinity` or `_`). */
+const NUMBER = /^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/;
+
 function shown(value: unknown): string | null {
-  if (typeof value === "boolean" || typeof value === "number") return String(value);
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number") return String(value).length <= 24 ? String(value) : null;
   if (typeof value === "string" && SAFE.test(value)) return value;
   return null;
 }
@@ -77,9 +81,10 @@ class Walk {
       if (typeof value !== "string" || !new RegExp(String(spec.pattern)).test(value)) this.fail(path, null, why);
     } else if (has(spec, "range")) {
       const [min, max] = spec.range as (number | null)[];
-      const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value.trim()) : NaN;
+      const n = typeof value === "number" ? value : typeof value === "string" && NUMBER.test(value) ? Number(value.trim()) : NaN;
       const ok = Number.isFinite(n) && (min === null || n >= min) && (max === null || n <= max);
-      if (!ok) this.fail(join(path, shown(value)), null, why);
+      // Never the value itself: a number that isn't one may be any text of the dashboard's.
+      if (!ok) this.fail(path, "not a number in range", why);
     } else if (has(spec, "entity")) {
       const domains = spec.entity as string[];
       const domain = typeof value === "string" && value.includes(".") ? value.slice(0, value.indexOf(".")).trim() : "";
