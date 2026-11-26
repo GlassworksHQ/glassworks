@@ -200,6 +200,12 @@ class VitroCardContext(
      * that failed after its dialog closed). Main thread. The default (tests, no engine) shows nothing.
      */
     val showToast: (HaToast) -> Unit = {},
+    /**
+     * Opens HA's own More Info dialog for an entity in HA's frontend, over the view on screen, on its `more-info-view`
+     * ([view], null for its default), for what only HA's frontend has ([reason]): a logbook entry's detail dialog.
+     * False when there's no page to open it in (tests, no engine): the caller does what it would without HA's frontend.
+     */
+    val moreInfoInFrontend: (entityId: String, view: String?, reason: String) -> Boolean = { _, _, _ -> false },
 ) {
     val dp: Float = context.resources.displayMetrics.density
     /** The main thread, for the card's own updates: one that throws is logged and dropped ([GuardedHandler]). */
@@ -269,6 +275,7 @@ class VitroCardContext(
         watchConfig = watchConfig,
         pageStorage = pageStorage,
         showToast = showToast,
+        moreInfoInFrontend = moreInfoInFrontend,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout

@@ -1,0 +1,87 @@
+{
+ "title": "More Info of a select (a dryer's program): its state row, the program's menu with its arrow beside the state badge, then the timeline and the Activity section",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "select.dryer_program"
+ },
+ "more_info": "select.dryer_program",
+ "expect": {
+  "select.dryer_program": "Cotton"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "select.dryer_program": {
+    "state": "Cotton",
+    "last_changed": -5400,
+    "attributes": {
+     "options": [
+      "Cotton",
+      "Synthetics",
+      "Wool",
+      "Quick"
+     ],
+     "friendly_name": "Dryer Program"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "select.dryer_program",
+    "pl": "mqtt",
+    "di": "dev-dryer",
+    "en": "Program",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-dryer",
+    "name": "Dryer"
+   }
+  ],
+  "history": {
+   "select.dryer_program": {
+    "steps": [
+     [
+      "-30h",
+      "Quick"
+     ],
+     [
+      "-20h",
+      "Wool"
+     ],
+     [
+      "-90m",
+      "Cotton"
+     ]
+    ]
+   }
+  },
+  "logbook": [
+   {
+    "entity_id": "select.dryer_program",
+    "state": "Wool",
+    "when": "-20h"
+   },
+   {
+    "entity_id": "select.dryer_program",
+    "state": "Cotton",
+    "when": "-90m"
+   }
+  ]
+ }
+}

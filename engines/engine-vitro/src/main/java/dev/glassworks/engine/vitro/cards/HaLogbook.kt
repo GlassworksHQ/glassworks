@@ -22,6 +22,36 @@ internal object HaLogbook {
     /** `DOMAINS_MORE_INFO_NO_HISTORY`. */
     private val NO_HISTORY_DOMAINS = setOf("camera", "configurator")
 
+    /** `DOMAINS_WITH_MORE_INFO`: a dialog of their own, whose Activity section is on its History view, not its default. */
+    private val DOMAINS_WITH_MORE_INFO = setOf(
+        "alarm_control_panel", "automation", "calendar", "camera", "climate", "configurator", "conversation", "counter",
+        "cover", "date", "datetime", "fan", "group", "humidifier", "image", "input_boolean", "input_datetime",
+        "lawn_mower", "light", "lock", "media_player", "person", "remote", "script", "scene", "siren", "sun", "switch",
+        "time", "timer", "update", "vacuum", "valve", "water_heater", "weather",
+    )
+
+    /**
+     * The `more-info-view` of [entityId]'s dialog that lists its Activity section: `history` for a domain with a dialog
+     * of its own (`DOMAINS_WITH_MORE_INFO`), else null, the default view (`ha-more-info-info`).
+     */
+    fun activityView(entityId: String): String? =
+        if (entityId.substringBefore('.') in DOMAINS_WITH_MORE_INFO) "history" else null
+
+    /**
+     * A tap on a logbook card's entry ([entityId], the entry's entity). HA opens its logbook detail dialog
+     * (`ha-logbook-renderer`'s `showLogbookDetailDialog`: the entry, its cause, the run's trace), which only HA's
+     * frontend has and no URL opens. Its More Info dialog for the entity does open from one, on the view whose Activity
+     * section lists the same entry, the detail one tap away: Vitro hands the tap off there, as the sheet's Activity rows
+     * do. An entity whose dialog has no Activity section ([shows]: a numeric sensor, a camera), or a tap without HA's
+     * frontend ([VitroCardContext.moreInfoInFrontend] false), opens Vitro's More Info instead; an entry without an
+     * entity (an event) opens nothing.
+     */
+    fun openEntryDetail(ctx: dev.glassworks.engine.vitro.ui.VitroCardContext, entityId: String?) {
+        val id = entityId ?: return
+        if (shows(id, ctx.store[id], ctx.haConfig()) && ctx.moreInfoInFrontend(id, activityView(id), "a logbook entry's detail")) return
+        ctx.openMoreInfo(id)
+    }
+
     /** `TRIGGER_DOMAINS`. */
     private val TRIGGER_DOMAINS = setOf("automation", "script")
 

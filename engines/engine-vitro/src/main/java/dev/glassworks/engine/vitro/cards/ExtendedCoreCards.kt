@@ -2280,7 +2280,8 @@ class LogbookCardView(ctx: VitroCardContext, private val config: CardConfig) : C
             orientation = LinearLayout.HORIZONTAL
             setPadding(ctx.px(16f), 0, ctx.px(16f), 0)
             isClickable = true
-            e.entityId?.let { eid -> setOnClickListener { ctx.openMoreInfo(eid) } }
+            // HA opens its logbook detail dialog, which only its frontend has (HaLogbook.openEntryDetail).
+            e.entityId?.let { eid -> setOnClickListener { HaLogbook.openEntryDetail(ctx, eid) } }
         }
         row.addView(LogbookNode(ctx.context, color, ctx.theme.dividerColor, ThemeResolver.parseColor(ctx.theme.vars["disabled-color"]) ?: if (ctx.theme.dark) 0xFF464646.toInt() else 0xFFBDBDBD.toInt(), unavailable, firstOfDay, lastOfDay),
             LinearLayout.LayoutParams(ctx.px(28f), MATCH_PARENT).apply { marginEnd = ctx.px(8f) })

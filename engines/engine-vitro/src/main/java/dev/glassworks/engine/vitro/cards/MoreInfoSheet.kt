@@ -424,11 +424,10 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             "camera" -> buildCamera(id)
             "climate" -> buildClimate(id)
             "cover" -> buildCover(id, s)
-            "select", "input_select" -> buildSelect(id, domain)
             "lock" -> buildLock(id)
             "media_player" -> buildMedia(id)
             "alarm_control_panel" -> buildAlarm(id, s)
-            "button", "input_button", "script", "scene" -> buildAction(id, domain)
+            "script", "scene" -> buildAction(id, domain)
             "vacuum" -> MoreInfoVacuumView(ctx, id).also { body.addView(it, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }::update
             "update" -> MoreInfoUpdateView(ctx, id) { url ->
                 // The release announcement: HA opens it in a new tab; the page goes there, as a `url` action does.
@@ -1229,47 +1228,6 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         }
     }
 
-    private fun buildSelect(id: String, domain: String): (EntityState?) -> Unit {
-        val list = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
-        body.addView(list, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(8f) })
-        var shown: Pair<List<String>, String?>? = null
-        return { s ->
-            val opts = listAttr(s, "options")
-            val key = opts to s?.state
-            if (key != shown) {
-                shown = key
-                list.removeAllViews()
-                for (opt in opts) {
-                    val selected = s?.state == opt
-                    val row = LinearLayout(ctx.context).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
-                        setPadding(ctx.px(16f), 0, ctx.px(12f), 0)
-                        background = GradientDrawable().apply {
-                            cornerRadius = 12f * ctx.dp
-                            setColor(if (selected) CardSurface.withAlpha(theme.primaryColor, 0.12f) else Color.TRANSPARENT)
-                        }
-                        isClickable = true
-                        ripple(this, 12f * ctx.dp)
-                        setOnClickListener {
-                            ctx.callOptimistic(ctx.store[id]?.copy(state = opt), domain, "select_option", JSONObject().put("entity_id", id).put("option", opt))
-                        }
-                    }
-                    row.addView(text(15f, if (selected) theme.primaryColor else theme.primaryTextColor, if (selected) Inter.MEDIUM else Inter.REGULAR).apply {
-                        this.text = opt
-                        maxLines = 1
-                        ellipsize = TextUtils.TruncateAt.END
-                    }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-                    if (selected) {
-                        row.addView(MdiIconView(ctx.context).apply { setIcon("mdi:check", theme.primaryColor) },
-                            LinearLayout.LayoutParams(ctx.px(22f), ctx.px(22f)))
-                    }
-                    list.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)).apply { bottomMargin = ctx.px(2f) })
-                }
-            }
-        }
-    }
-
     private fun buildMedia(id: String): (EntityState?) -> Unit {
         val title = text(20f, theme.primaryTextColor, Inter.MEDIUM).apply {
             gravity = Gravity.CENTER; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
@@ -1375,11 +1333,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
 
     private fun buildAction(id: String, domain: String): (EntityState?) -> Unit {
         val timeLabel = timeLabel()
-        val (caption, service) = when (domain) {
-            "script" -> HaText.ui("ui.card.script.run") to "turn_on"
-            "scene" -> HaText.ui("ui.card.scene.activate") to "turn_on"
-            else -> HaText.ui("ui.card.button.press") to "press"
-        }
+        val (caption, service) = if (domain == "script") HaText.ui("ui.card.script.run") to "turn_on"
+        else HaText.ui("ui.card.scene.activate") to "turn_on"
         val button = text(16f, Color.WHITE, Inter.MEDIUM).apply {
             this.text = caption
             gravity = Gravity.CENTER
@@ -1554,6 +1509,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 gravity = Gravity.CENTER_VERTICAL or Gravity.END
             }
             var control: EntityRowControls.Control? = null
+            var stateCard: MoreInfoStateCard? = null
             if (number) {
                 // state-card-number / state-card-input_number: state-info, then the slider and its state (or the box)
                 // in the `.flex` that takes the rest of the row.
@@ -1569,15 +1525,18 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                     if (historyLoaded() || logbook) bottomMargin = ctx.px(16f)
                 })
             } else {
-                row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = ctx.px(8f) })
-                row.addView(value, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(40f)).apply { marginStart = ctx.px(8f) })
-                body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f)).apply {
+                // Every other domain's row ([MoreInfoStateCard]): the state on the right, or a select's menu, a button's
+                // Press, an alert's toggle, an event's time and type.
+                val card = MoreInfoStateCard(ctx, id)
+                stateCard = card
+                body.addView(card, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
                     marginStart = side
                     marginEnd = side
                     if (historyLoaded() || logbook) bottomMargin = ctx.px(16f)
                 })
             }
-            update = { s ->
+            update = update@{ s ->
+                stateCard?.let { it.bind(s); return@update }
                 control?.update?.invoke(s)
                 // state-info's state-badge (`stateColor`): an active entity in its state's color (a tracker at home
                 // green), anything else in the icon color.
@@ -1871,7 +1830,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         /** The domains with a control view of their own (buildBody); the rest show HA's state row and history. */
         val CONTROL_DOMAINS = setOf(
             "light", "switch", "input_boolean", "automation", "siren", "humidifier", "fan", "camera", "climate", "cover",
-            "select", "input_select", "lock", "media_player", "alarm_control_panel", "button", "input_button", "script", "scene",
+            "lock", "media_player", "alarm_control_panel", "script", "scene",
         )
 
         /** The domains whose state row is a slider or a box (`state-card-number`, `state-card-input_number`). */

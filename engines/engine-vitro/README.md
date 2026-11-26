@@ -195,6 +195,12 @@ Its title names the entity on two lines, as Home Assistant does: the area and de
 | Camera | A live stream, chosen as on the picture cards (WebRTC, then HLS and MJPEG) |
 | Switch | A toggle pill |
 | Alarm panel | A PIN pad |
+| Select, input select | The options menu next to the entity's icon, then the history and the Activity section |
+| Button, input button | Its icon, name and last press, a Press button, then the history and the Activity section |
+| Alert | Its icon, name and last change, a toggle while the alert is active (turning it off acknowledges it), then the history and the Activity section |
+| Event | Its icon and name, the time of the last event over its type, then the history and the Activity section |
+
+Some details only Home Assistant's frontend has. Tapping an Activity entry, or an entry of a logbook card, opens Home Assistant's own More-Info dialog for that entity, where the entry's detail is one tap away. Closing it brings back the dashboard.
 
 Tiles can also carry the inline features Home Assistant adds under the card: `climate-hvac-modes`, `target-temperature`, `fan-speed`, `cover-position`, `light-color-temp`, `media-player-volume-slider`, `toggle`, `media-player-playback`, `light-color-favorites`, `numeric-input` and `vacuum-commands`, next to the brightness, select and open/close controls.
 

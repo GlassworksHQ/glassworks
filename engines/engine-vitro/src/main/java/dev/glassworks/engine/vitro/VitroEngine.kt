@@ -918,6 +918,7 @@ class VitroEngine(
                     },
                     pageStorage = { HaPageStorage.of(activity).items(haBase.ifEmpty { null }) },
                     showToast = { toast -> vitroView.showToast(toast) },
+                    moreInfoInFrontend = { entityId, view, reason -> vitroView.moreInfoInFrontend(entityId, view, reason) },
                 )
             }
             main.post { host.onConnect(port) }

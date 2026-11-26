@@ -1148,7 +1148,10 @@ object HaTimelineChart {
             val slug = state.lowercase(java.util.Locale.ROOT).replace(Regex("[^a-z0-9]+"), "_").trim('_')
             ThemeResolver.parseColor(ctx.theme.vars["state-${st.domain}-$slug-color"])?.let { return it }
         } else if (st.domain in STATE_COLORED) {
-            return if (st.copy(state = state).isActive) ctx.theme.activeColor(st.domain) else ctx.theme.stateInactiveColor
+            // `stateColorProperties`: the state's own color first (an alert on red, acknowledged orange; a lock locked
+            // green), then the domain's active or inactive one.
+            return HaStateColor.of(ctx, st, state)
+                ?: if (st.copy(state = state).isActive) ctx.theme.activeColor(st.domain) else ctx.theme.stateInactiveColor
         }
         val enumLike = st.domain == "select" || st.domain == "input_select" || (st.domain == "sensor" && st.deviceClass == "enum")
         val options = (st.attributes["options"] as? List<*>)?.map { it.toString() }

@@ -1,0 +1,87 @@
+{
+ "title": "More Info of an event (a doorbell): its state row's last event time over its type, then the timeline and the Activity section",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "button",
+  "entity": "event.front_doorbell"
+ },
+ "more_info": "event.front_doorbell",
+ "expect": {
+  "event.front_doorbell": "2026-11-12T15:43:00+00:00"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "event.front_doorbell": {
+    "state": "2026-11-12T15:43:00+00:00",
+    "last_changed": -1500,
+    "attributes": {
+     "event_types": [
+      "pressed",
+      "double_pressed"
+     ],
+     "event_type": "pressed",
+     "device_class": "doorbell",
+     "friendly_name": "Front Doorbell Press"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "event.front_doorbell",
+    "pl": "mqtt",
+    "di": "dev-doorbell",
+    "en": "Press",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-doorbell",
+    "name": "Front Doorbell"
+   }
+  ],
+  "history": {
+   "event.front_doorbell": {
+    "steps": [
+     [
+      "-30h",
+      "@-40h"
+     ],
+     [
+      "-6h",
+      "@-6h"
+     ],
+     [
+      "-25m",
+      "@-25m"
+     ]
+    ]
+   }
+  },
+  "logbook": [
+   {
+    "entity_id": "event.front_doorbell",
+    "state": "@-6h",
+    "when": "-6h"
+   },
+   {
+    "entity_id": "event.front_doorbell",
+    "state": "@-25m",
+    "when": "-25m"
+   }
+  ]
+ }
+}
