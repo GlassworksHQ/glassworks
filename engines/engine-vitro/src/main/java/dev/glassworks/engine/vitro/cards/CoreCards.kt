@@ -2949,22 +2949,20 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
         val showName = config.raw.optBoolean("show_name", true)
         val showState = config.raw.optBoolean("show_state", false)
         val showIcon = config.raw.optBoolean("show_icon", true)
-        val label = textView(ctx, 16f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
-            gravity = Gravity.CENTER
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-        }
-        val state = textView(ctx, 12.6f, ctx.theme.secondaryTextColor, Inter.REGULAR).apply {
-            gravity = Gravity.CENTER
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-        }
+        // The name and the state are spans in HA's column: a long one wraps onto more lines ("Kitchen / Pendant"),
+        // each a 1.2 line box, and the card grows with them where its height isn't fixed (masonry).
+        val label = textView(ctx, 16f, ctx.theme.primaryTextColor, Inter.REGULAR).apply { gravity = Gravity.CENTER }
+        val state = textView(ctx, 12.6f, ctx.theme.secondaryTextColor, Inter.REGULAR).apply { gravity = Gravity.CENTER }
         if (showIcon) col.addView(icon, iconLp)
-        if (showName) col.addView(label, LinearLayout.LayoutParams(MATCH_PARENT, (19.2f * ctx.dp).roundToInt()).apply {
+        if (showName) col.addView(label, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
             if (showIcon) topMargin = ctx.px(8f)
         })
-        if (showState) col.addView(state, LinearLayout.LayoutParams(MATCH_PARENT, (15.12f * ctx.dp).roundToInt()))
+        if (showState) col.addView(state, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER))
+        fun TextView.line(text: String, size: Float) {
+            this.text = text
+            lineBox(ctx, this, size, 1.2f)
+        }
 
         val eid = config.entity
         // hui-button-card: `tap_action` defaults to toggle for HA's DOMAINS_TOGGLE, else more-info (a lock, a cover,
@@ -2979,12 +2977,12 @@ class ButtonCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                 val active = s?.isActive == true
                 val color = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                 icon.setIcon(MdiIcons.resolveIconName(config.icon, s), stateColorBrightness(s, color))
-                label.text = config.name(s) ?: s?.displayName ?: eid
-                state.text = s?.plainState().orEmpty()
+                label.line(config.name(s) ?: s?.displayName ?: eid, 16f)
+                state.line(s?.plainState().orEmpty(), 12.6f)
             }
         } else {
             icon.setIcon(config.icon ?: "mdi:home", ctx.theme.stateIconColor)
-            label.text = config.name(null).orEmpty()
+            label.line(config.name(null).orEmpty(), 16f)
         }
     }
 
