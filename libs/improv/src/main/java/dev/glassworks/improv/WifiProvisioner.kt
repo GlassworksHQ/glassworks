@@ -413,6 +413,8 @@ public class WifiProvisioner(
             method = if (isDeviceOwner) "device-owner" else "addNetwork"
             Log.i(TAG, "addNetwork -> $netId (new=$addedNew), enableNetwork -> $enabled")
             if (!enabled) {
+                // don't leave our new entry behind: a later save (below API 26) would keep it for good
+                if (addedNew) Log.i(TAG, "removeNetwork($netId) -> ${wm.removeNetwork(netId)}")
                 finish(Outcome.Failed("enableNetwork refused", null))
                 return true
             }
