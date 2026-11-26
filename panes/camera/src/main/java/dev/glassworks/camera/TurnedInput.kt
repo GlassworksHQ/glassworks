@@ -25,7 +25,10 @@ import java.util.concurrent.TimeUnit
 /**
  * The stream's picture turned upright on the GPU: the camera draws [width] x [height] into [surface], and each frame
  * is drawn into [output] (the encoder's input) turned [turn] degrees clockwise, as [stillRotation] turns a still.
- * Every stream goes through it, a turn of 0 included, so the encoder has one input path on every camera.
+ * Every stream goes through it, a turn of 0 included, so the encoder has one input path on every camera. [turn] is
+ * worked out for the camera's raw buffer, the one a still turns, so only the crop of the texture's own transform is
+ * kept ([rawTexture]): a full Camera2 HAL also puts its sensor's turn (and a front camera's flip) in there, which would
+ * turn the picture twice.
  *
  * Runs on its own thread. Throws from the constructor when EGL or the shader can't be set up; [release] stops drawing
  * and frees everything but [output], which belongs to the encoder. A frame that fails to draw (the texture update
@@ -49,6 +52,7 @@ class TurnedInput(
     private var program = 0
     private var textureId = 0
     private val st = FloatArray(16)
+    private val raw = FloatArray(16)
     private val tex = FloatArray(16)
     private val turnMatrix = textureTurn(turn)
     private val out = turnedSize(width, height, turn)
@@ -132,7 +136,8 @@ class TurnedInput(
     private fun drawFrame() {
         texture.updateTexImage()
         texture.getTransformMatrix(st)
-        Matrix.multiplyMM(tex, 0, st, 0, turnMatrix, 0)
+        rawTexture(st, raw)
+        Matrix.multiplyMM(tex, 0, raw, 0, turnMatrix, 0)
         GLES20.glViewport(0, 0, out.first, out.second)
         GLES20.glUseProgram(program)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -227,6 +232,32 @@ class TurnedInput(
 /** The picture's size once turned [turn] degrees: a quarter turn swaps [width] and [height]. */
 fun turnedSize(width: Int, height: Int, turn: Int): Pair<Int, Int> =
     if (turn % 180 == 0) width to height else height to width
+
+/**
+ * [st], a SurfaceTexture's transform matrix, as the raw buffer's: the same crop window, read top row first as GL's
+ * usual matrix does, with any turn or flip the camera put in it left out. Written to [out], which it returns.
+ *
+ * The Pixel Tablet's front camera (sensor at 90°) puts a quarter turn in it; the Mirror's LEGACY shim puts none. The
+ * crop window is where [st] sends the output's corners (0, 0) and (1, 1), whichever way it turns them.
+ */
+fun rawTexture(st: FloatArray, out: FloatArray = FloatArray(16)): FloatArray {
+    val x0 = st[12]
+    val y0 = st[13]
+    val x1 = st[0] + st[4] + st[12]
+    val y1 = st[1] + st[5] + st[13]
+    val left = minOf(x0, x1)
+    val right = maxOf(x0, x1)
+    val bottom = minOf(y0, y1)
+    val top = maxOf(y0, y1)
+    out.fill(0f)
+    out[0] = right - left
+    out[5] = bottom - top
+    out[10] = 1f
+    out[12] = left
+    out[13] = top
+    out[15] = 1f
+    return out
+}
 
 /**
  * The texture matrix that turns a picture [turn] degrees clockwise: an output point (x, y), both 0 to 1 from the bottom

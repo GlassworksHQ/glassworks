@@ -39,6 +39,36 @@ class TurnedInputTest {
         assertEquals(1f to 1f, source(270, 0f, 1f))
     }
 
+    /** GL's usual SurfaceTexture matrix: the buffer's top row first, inside a crop window [inset] in from each edge. */
+    private fun usual(inset: Float = 0f): FloatArray {
+        val m = FloatArray(16)
+        Matrix.setIdentityM(m, 0)
+        Matrix.translateM(m, 0, inset, 1f - inset, 0f)
+        Matrix.scaleM(m, 0, 1f - 2 * inset, -(1f - 2 * inset), 1f)
+        return m
+    }
+
+    private fun times(a: FloatArray, b: FloatArray) = FloatArray(16).also { Matrix.multiplyMM(it, 0, a, 0, b, 0) }
+
+    private fun assertSame(expected: FloatArray, actual: FloatArray, why: String = "") =
+        assertEquals(why, expected.map { Math.round(it * 1000) / 1000f }, actual.map { Math.round(it * 1000) / 1000f })
+
+    @Test fun theUsualTextureMatrixStaysAsItIs() {
+        assertSame(usual(), rawTexture(usual()))
+        assertSame(usual(0.01f), rawTexture(usual(0.01f)), "a crop window stays")
+    }
+
+    @Test fun aTurnTheCameraPutsInTheTextureIsLeftOut() {
+        // The Pixel Tablet's front camera: Camera2 hands the texture a quarter turn for its sensor at 90°.
+        for (turn in listOf(90, 180, 270)) assertSame(usual(0.01f), rawTexture(times(usual(0.01f), textureTurn(turn))))
+    }
+
+    @Test fun aFrontCamerasFlipIsLeftOutToo() {
+        val flip = FloatArray(16).also { Matrix.setIdentityM(it, 0); Matrix.translateM(it, 0, 1f, 0f, 0f); Matrix.scaleM(it, 0, -1f, 1f, 1f) }
+        assertSame(usual(), rawTexture(times(usual(), flip)))
+        assertSame(usual(), rawTexture(times(times(usual(), textureTurn(90)), flip)))
+    }
+
     @Test fun aQuarterTurnSwapsTheSize() {
         assertEquals(720 to 1280, turnedSize(1280, 720, 270))
         assertEquals(720 to 1280, turnedSize(1280, 720, 90))
