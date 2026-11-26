@@ -97,6 +97,29 @@ app is the fix and Kiln only sets the switch.
    says the failure as its own state 5, and its switch-off right after sends no broadcast, so 5 stays the sticky
    state. The recovery only knew 4. It now treats 5 as the failure too (`VENDOR_STATE_FAILED`).
 
+7. **The fixed recovery on the Mirror** (2026-11-25, verified, test build `test-build/mirror-wifi-902-923` at
+   `2ff391706`, with `37041de8c`). Three reboots over Wi-Fi adb, Ethernet unplugged. Every boot lost the race
+   (`Wi-Fi state is failed` at about 19–27 s), and every boot was back on Wi-Fi adb about 40 s after the reboot
+   (6.5 minutes to 35 minutes before). Restart 1, Mirror clock:
+
+   ```
+   03:33:39.015 I/Glassworks: KioskService started
+   03:33:40.752 E/WifiService: Wi-Fi state is failed
+   03:33:40.753 D/WifiService: setWifiEnabled: false pid=714, uid=1000
+   03:33:40.914 I/Glassworks.Wifi: Wi-Fi driver failed to load: switching Wi-Fi back on in 5 s
+   03:33:45.919 D/WifiService: setWifiEnabled: true pid=928, uid=10009
+   03:33:45.921 I/Glassworks.Wifi: switching Wi-Fi on (try 1 of 6): asked
+   03:33:58.920 I/Glassworks.Wifi: Wi-Fi is on again
+   ```
+
+   Restart 2 was the same. On restart 3 the service started after the failure, so it saw the sticky broadcast (state
+   5) and switched Wi-Fi on 5 s later, as the unit test for that case says. Each time one try was enough, the sticky
+   state afterwards was `wifi_state=3` (enabled), `wifi_on` read `1`, and the screen stayed on at brightness 200.
+
+   One more thing this run showed: with Ethernet plugged in, stock's Android 6 doesn't join a saved Wi-Fi network at
+   all. Wi-Fi was on and scanning every 15 s, saw the saved network, and never connected (`wpa_state=SCANNING`,
+   `STA_AUTOCONNECT 0`, so joining is the framework's call). Unplugging Ethernet, it joined within seconds.
+
 ## Result
 
 | Who | What it does now |
@@ -105,9 +128,8 @@ app is the fix and Kiln only sets the switch.
 | Glassworks (core, the setup hotspot) | When its rule is about to open the hotspot by itself and Wi-Fi is switched off, it switches Wi-Fi on and gives the saved network the rule's minutes again before it opens the hotspot. One failed boot no longer costs 15 minutes offline. A hotspot asked for on the setup screen doesn't wait |
 | Kiln (`keepWifiOn` in `installer/src/inplace.ts`) | Reads `wifi_on`; when it reads `0`, writes `1` for the next start and says so. No `svc wifi enable`. This covers a switch that is already off when a boot starts: Android then never tries the driver, so there is no failure for the app to react to |
 
-The first build of the recovery didn't fire on the Mirror (attempts 5 and 6). The fixed one, and Kiln's step, are
-**untested on a Mirror** so far: the next run reboots it a few times, with Ethernet plugged in so the log streams
-from early boot, and checks `settings get global wifi_on` and the `Glassworks.Wifi` lines.
+The first build of the recovery didn't fire on the Mirror (attempts 5 and 6). The fixed one is **verified** on the
+Mirror (attempt 7). Kiln's `keepWifiOn` step is still untested on a Mirror.
 
 ## How to reproduce
 
@@ -135,3 +157,7 @@ From a Mirror on stock with Glassworks installed in place, on adb. It reboots th
 - Whether a slower start of WifiService (or an earlier firmware trigger) could avoid the race altogether. Both live
   in stock's `/system`, which the in-place install leaves as it is apart from `services.jar`.
 - What exactly the stock lululemon apps did to bring Wi-Fi back (read, not yet looked for).
+- Why stock doesn't join a saved Wi-Fi network while Ethernet is up (attempt 7): AOSP's autojoin or a lululemon
+  change. A Mirror on Ethernet has no Wi-Fi to fall back on if the cable comes out until Android scans and joins again.
+- The setup hotspot's wait after it switches Wi-Fi on (`SetupHotspot`'s `switchRadioOn`) is unit-tested only: with the
+  recovery working, a Mirror's Wi-Fi is on long before the hotspot's rule runs.
