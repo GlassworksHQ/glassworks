@@ -56,12 +56,12 @@ object IslandStrings {
         }
     }
 
-    /** The set whose content hash is [hash]: the current one, or one of the last few; null for any other. */
-    fun byHash(hash: String): Snapshot? {
-        val now = current()
-        if (now.hash == hash) return now
-        return synchronized(this) { recent[hash] }
-    }
+    /**
+     * The set whose content hash is [hash], among the last few made (the current one included); null for any other.
+     * A lookup makes nothing: a page asks for the set it was made with, and making a new one here could push that one
+     * out. New sets are made for new pages ([path], [current]).
+     */
+    fun byHash(hash: String): Snapshot? = synchronized(this) { recent[hash] }
 
     /** The address of the strings now, on the island server: `/__vitro/strings/<hash>.json`. */
     fun path(): String = "$PREFIX${current().hash}.json"

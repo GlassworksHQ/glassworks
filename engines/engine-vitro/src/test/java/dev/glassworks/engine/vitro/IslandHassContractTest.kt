@@ -111,8 +111,9 @@ class IslandHassContractTest {
             assertEquals(german.hash, IslandStrings.byHash(german.hash)?.hash)
             assertNull("never another set's strings", IslandStrings.byHash("0123456789abcdef01234567"))
             assertEquals("${IslandStrings.PREFIX}${german.hash}.json", IslandStrings.path())
-            // Back to English after three more sets, then one more: English, made again, is among the last ones kept.
-            for (lang in listOf("fr", "es", "it")) {
+            // Four sets (en, de, fr, es), English made again, then one more: English, made again, counts as the newest
+            // and stays; without that, the fifth would push it out as the oldest.
+            for (lang in listOf("fr", "es")) {
                 dev.glassworks.engine.vitro.data.HaText.install(lang, mapOf("ui.common.save" to lang))
                 IslandStrings.current()
             }
@@ -121,6 +122,10 @@ class IslandHassContractTest {
             dev.glassworks.engine.vitro.data.HaText.install("nl", mapOf("ui.common.save" to "Opslaan"))
             IslandStrings.current()
             assertEquals("made again counts as new", english.hash, IslandStrings.byHash(english.hash)?.hash)
+            assertNull("German, the oldest, went", IslandStrings.byHash(german.hash))
+            // A lookup makes no set, so it can't push out the one it looks for.
+            dev.glassworks.engine.vitro.data.HaText.install("pt", mapOf("ui.common.save" to "Guardar"))
+            assertEquals(english.hash, IslandStrings.byHash(english.hash)?.hash)
         } finally {
             dev.glassworks.engine.vitro.data.HaText.reset()
         }

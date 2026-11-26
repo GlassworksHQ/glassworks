@@ -884,7 +884,8 @@ class VitroEngineTest {
         assertTrue("up before the restart", ctx.haConnected())
         page.restart()
         // The old client's own disconnect is dropped as stale: the restart itself says the connection went.
-        assertEquals(listOf(false), heard.toList())
+        // The new client may already be up by now (the fake answers at once): the first edge is the down one.
+        assertEquals(false, heard.first())
         awaitMain("second connection") { server.commands("auth").size == 2 && heard.size == 2 }
         assertEquals("then up on the new client, where the islands start their subscriptions again", listOf(false, true), heard.toList())
         assertTrue(ctx.haConnected())

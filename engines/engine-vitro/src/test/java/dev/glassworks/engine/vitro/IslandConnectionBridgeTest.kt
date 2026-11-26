@@ -314,7 +314,8 @@ class IslandConnectionBridgeTest {
     @Test fun aTokenRefreshGetsTheTokenThePanelHoldsNow() {
         val (island, send, sent) = island()
         token = "second-token"
-        island.handleIslandMessage(JSONObject().put("type", "refreshToken"), send)
+        island.handleIslandMessage(JSONObject().put("type", "refreshToken").put("rid", 7), send)
         assertEquals("second-token", sent.ofType("auth").last().getString("token"))
+        assertEquals("the reply names its request", 7, sent.ofType("auth").last().getInt("rid"))
     }
 }

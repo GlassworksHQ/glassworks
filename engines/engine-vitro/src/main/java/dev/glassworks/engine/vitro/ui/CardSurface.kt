@@ -172,6 +172,12 @@ class VitroCardContext(
      */
     val haConnected: () -> Boolean = { true },
     /**
+     * Counts the connections to Home Assistant that came up: a web island page whose bridge was down learns from it
+     * whether HA's connection changed meanwhile (its `resubscribe: false` subscriptions then ended). The default
+     * (tests, no engine) never changes.
+     */
+    val haConnectionEpoch: () -> Long = { 0L },
+    /**
      * [onChange] runs (on any thread) each time the connection to Home Assistant goes down (false) or is up again
      * (true), until the returned handle is called: a web island's `hass.connection` fires `disconnected` and `ready`,
      * and its subscriptions start again. HA drops a connection's subscriptions with it. The default (tests, no engine)
@@ -247,6 +253,7 @@ class VitroCardContext(
         needsFrontend = needsFrontend,
         islandFailed = islandFailed,
         haConnected = haConnected,
+        haConnectionEpoch = haConnectionEpoch,
         watchConnection = watchConnection,
         watchConfig = watchConfig,
         pageStorage = pageStorage,

@@ -38,7 +38,7 @@ async function settle() { for (let i = 0; i < 5; i++) await tick(); }
  * One island page: the module run in its own context, with [card] as the custom element (a class-like factory:
  * (el) => void sets up el). Returns the bridge and the page's globals.
  */
-async function openPage({ card, strings = STRINGS, height = 40, mountHeight, snapshot = LAMP, source = SOURCE } = {}) {
+async function openPage({ card, strings = STRINGS, height = 40, mountHeight, snapshot = LAMP, source = SOURCE, epoch = () => 1 } = {}) {
   const listeners = {};
   const sockets = [];
   let cardEl = null;
@@ -59,6 +59,8 @@ async function openPage({ card, strings = STRINGS, height = 40, mountHeight, sna
         this.readyState = 1;
         if (this.onopen) this.onopen();
         // What the panel sends a page whose bridge opens: the states it has (null: none yet).
+        // The panel's seed: where HA's connection is (and which one: its epoch), then the states.
+        this.push({ type: 'conn', connected: true, epoch: epoch() });
         if (snapshot) this.push({ type: 'snapshot', states: snapshot });
       }, 0);
     }
@@ -117,7 +119,8 @@ async function openPage({ card, strings = STRINGS, height = 40, mountHeight, sna
 const plainCard = (el) => {
   el.got = [];
   el.setConfig = () => {};
-  Object.defineProperty(el, 'hass', { set(h) { el.got.push(h); el.drawn = true; }, get() { return el.got[el.got.length - 1]; } });
+  // It draws what it shows as text (the blank check reads content, not the host's box).
+  Object.defineProperty(el, 'hass', { set(h) { el.got.push(h); el.drawn = true; el.textContent = 'Lounge'; }, get() { return el.got[el.got.length - 1]; } });
 };
 
 // ---- The contract: HA's HomeAssistant and Connection, member by member ----
@@ -305,6 +308,25 @@ test('subscribeEvents is subscribe_events, and a refused subscription rejects', 
   await assert.rejects(pending, (e) => e.code === 'unauthorized');
 });
 
+test('a subscription that doesn\'t resubscribe stays ended when HA\'s connection changed while the bridge was down', async () => {
+  let epoch = 1;
+  const page = await openPage({ card: plainCard, epoch: () => epoch });
+  const once = page.hass().connection.subscribeMessage(() => {}, { type: 'render_template', template: '{{ 1 }}' }, { resubscribe: false });
+  const kept = page.hass().connection.subscribeMessage(() => {}, { type: 'scheduler' });
+  await settle();
+  const [a, b] = page.sent('subscribe').slice(-2);
+  page.ws().push({ type: 'subAck', sid: a.sid });
+  page.ws().push({ type: 'subAck', sid: b.sid });
+  await once;
+  await kept;
+  page.ws().drop();
+  epoch = 2; // HA went down and came back meanwhile
+  await tick(80);
+  await settle();
+  assert.equal(page.sockets.length, 2);
+  assert.deepEqual(page.sockets[1].sent.filter((m) => m.type === 'subscribe').map((m) => m.sid), [b.sid], 'only the resubscribing one');
+});
+
 test('a new bridge (the page handed to the next build) asks for every subscription again', async () => {
   const page = await openPage({ card: plainCard });
   const pending = page.hass().connection.subscribeMessage(() => {}, { type: 'render_template', template: '{{ 1 }}' }, { resubscribe: false });
@@ -437,7 +459,16 @@ test('refreshAccessToken resolves with the token the panel holds now', async () 
   const pending = auth.refreshAccessToken();
   await settle();
   assert.equal(page.sent('refreshToken').length, 1);
-  page.ws().push({ type: 'auth', token: 'renewed', user: null });
+  // A seed's auth (no request id) settles nothing; the reply to this request does.
+  page.ws().push({ type: 'auth', token: 'older', user: null });
+  await settle();
+  let settled = false;
+  pending.then(() => { settled = true; });
+  await settle();
+  assert.equal(settled, false, 'not settled by another auth');
+  const rid = page.sent('refreshToken').at(-1).rid;
+  assert.equal(typeof rid, 'number');
+  page.ws().push({ type: 'auth', token: 'renewed', user: null, rid });
   await pending;
   assert.equal(page.card().hass.auth.accessToken, 'renewed');
   assert.equal(auth.accessToken, 'renewed', 'the Auth the card held reads it too');
@@ -609,6 +640,30 @@ test('a card the config never reaches is still made (HA without one draws it too
   const page = await openPage({ card: plainCard, source: SOURCE_NO_CONFIG });
   await tick(3200);
   assert.ok(page.card());
+});
+
+test('a host with a height of its own that throws before drawing is blank, and one that drew text is not', async () => {
+  const blank = (el) => {
+    el.setConfig = () => {};
+    // `:host { height: 120px }`: the host takes room, nothing is in it.
+    el.getBoundingClientRect = () => ({ height: 120 });
+    el.shadowRoot = { children: [{ localName: 'style', getBoundingClientRect: () => ({ height: 0 }) }], textContent: '' };
+    el.textContent = '';
+  };
+  const empty = await openPage({ card: blank });
+  empty.throwInPage(new TypeError('e.hass.someNewMember is not a function'));
+  await tick(1700);
+  assert.deepEqual(empty.sent('cardBroken').map((m) => m.member), ['someNewMember']);
+
+  const text = (el) => {
+    el.setConfig = () => {};
+    el.getBoundingClientRect = () => ({ height: 24 });
+    el.shadowRoot = { children: [], textContent: '21.5 °C' };
+  };
+  const drew = await openPage({ card: text });
+  drew.throwInPage(new TypeError('e.hass.someNewMember is not a function'));
+  await tick(1700);
+  assert.deepEqual(drew.sent('cardBroken'), [], 'it shows text');
 });
 
 test('a card whose host is inline but whose content drew is not blank', async () => {

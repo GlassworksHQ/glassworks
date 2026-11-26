@@ -195,7 +195,7 @@ class WebIslandCardView(
                         // Where the connection is now: a page kept across a hand-over may still think it's down.
                         val up = ctx.haConnected()
                         sentConnected[send] = up
-                        send(connMessage(up))
+                        send(connMessage(up, ctx.haConnectionEpoch()))
                         // HA's config as the panel has it now: a page made before it arrived has none.
                         ctx.haConfig().takeIf { it.length() > 0 }?.let { send(configMessage(it)) }
                         seedInitialStates(send)
@@ -467,7 +467,11 @@ class WebIslandCardView(
             // renews the token (a reconnect, [VitroCardContext.watchToken]); a card can't make it renew one sooner.
             "refreshToken" -> synchronized(seedLock) {
                 sendTokenIfChanged()
-                send(JSONObject().put("type", "auth").put("token", currentToken()).put("user", currentUser() ?: JSONObject.NULL))
+                // The reply names the request: an `auth` the page gets otherwise (a seed, a new token) settles nothing.
+                send(
+                    JSONObject().put("type", "auth").put("token", currentToken()).put("user", currentUser() ?: JSONObject.NULL)
+                        .put("rid", msg.optInt("rid", 0)),
+                )
             }
             "moreInfo" -> {
                 val id = msg.optString("entity_id", "")
@@ -694,7 +698,7 @@ class WebIslandCardView(
             }
         }
         ended.forEach { s -> s.handle?.let { runCatching { it() } }; s.handle = null }
-        val msg = connMessage(up)
+        val msg = connMessage(up, ctx.haConnectionEpoch())
         for (send in senders) {
             if (sentConnected[send] == up) continue
             sentConnected[send] = up
@@ -785,7 +789,8 @@ class WebIslandCardView(
         internal fun configMessage(config: JSONObject): JSONObject = JSONObject().put("type", "config").put("config", config)
 
         /** The bridge message that says whether the connection to Home Assistant is up (`hass.connected`). */
-        internal fun connMessage(up: Boolean): JSONObject = JSONObject().put("type", "conn").put("connected", up)
+        internal fun connMessage(up: Boolean, epoch: Long = 0L): JSONObject =
+            JSONObject().put("type", "conn").put("connected", up).put("epoch", epoch)
 
         /** The bridge message that tells the page HA refused subscription [sid] (with HA's [error]). */
         internal fun subError(sid: Int, error: JSONObject): JSONObject =
@@ -1969,6 +1974,10 @@ async function vitroCallApi(method, path, parameters, headers) {
 // subscriptions go over the bridge to the panel's one connection. A subscription the panel starts on HA's connection
 // is followed by its id (sid); the bridge sends its events, and the page asks for each again on a new bridge.
 let haConnected = true;
+// The panel's HA connection the page last heard of (`conn`'s epoch), and whether a new bridge still has to ask for the
+// page's subscriptions (it does at its first `conn`).
+let connEpoch = null;
+let replayOnConn = false;
 // Counts the connection's changes: a reconnect's preCheck answers for that reconnect only.
 let connGeneration = 0;
 const connListeners = new Map();
@@ -2095,14 +2104,17 @@ function askServices() {
 }
 
 // hass.auth's refreshAccessToken: the page asks for the token the panel holds now (the panel renews its own).
-const tokenWaiters = [];
+// Each request has its id, and only the reply that names it settles it: an `auth` the page gets for another reason (a
+// seed queued before the request, a new token) doesn't.
+const tokenWaiters = new Map();
+let refreshIds = 0;
 function vitroRefreshToken() {
   return new Promise((resolve) => {
-    tokenWaiters.push(resolve);
-    sendBridge({ type: 'refreshToken' });
+    const rid = ++refreshIds;
+    tokenWaiters.set(rid, resolve);
+    sendBridge({ type: 'refreshToken', rid });
     setTimeout(() => {
-      const at = tokenWaiters.indexOf(resolve);
-      if (at >= 0) { tokenWaiters.splice(at, 1); resolve(); }
+      if (tokenWaiters.delete(rid)) resolve();
     }, QUEUED_CALL_MS);
   });
 }
@@ -2201,8 +2213,9 @@ function connectBridge() {
     bridgeOpened = true;
     while (outQueue.length) sock.send(outQueue.shift().line);
     for (const entry of wsPending.values()) entry.sent = true;
-    // Every subscription the page holds, on this bridge: a new one, or the one after a hand-over.
-    for (const [sid, entry] of pageSubs) sendIfOpen(subscribeLine(sid, entry));
+    // Every subscription the page holds, on this bridge (a new one, or the one after a hand-over), once the bridge
+    // says where HA's connection is (its first `conn`).
+    replayOnConn = true;
   };
   sock.onmessage = (ev) => {
     const lines = String(ev.data || '').split('\n').filter(Boolean);
@@ -2224,10 +2237,23 @@ function connectBridge() {
           changed = true;
         }
         if (changed && cardEl) cardEl.hass = makeHass();
-        tokenWaiters.splice(0).forEach((done) => done());
+        const waiter = typeof m.rid === 'number' ? tokenWaiters.get(m.rid) : undefined;
+        if (waiter) { tokenWaiters.delete(m.rid); waiter(); }
       } else if (m.type === 'conn') {
         // The panel's connection to HA went down or is back (its subscriptions start again on the panel's side).
         const up = !!m.connected;
+        const epoch = typeof m.epoch === 'number' ? m.epoch : connEpoch;
+        if (replayOnConn) {
+          replayOnConn = false;
+          // HA's connection changed while this page had no bridge: as HA's client, a subscription that started and
+          // doesn't resubscribe ended with it (the panel ended its side then). The others are asked for again.
+          const changedMeanwhile = connEpoch !== null && epoch !== connEpoch;
+          for (const [sid, entry] of Array.from(pageSubs)) {
+            if (changedMeanwhile && entry.acked && !entry.resubscribe) { pageSubs.delete(sid); continue; }
+            sendIfOpen(subscribeLine(sid, entry));
+          }
+        }
+        connEpoch = epoch;
         if (up !== haConnected) {
           haConnected = up;
           // HA's client asks a subscription's preCheck again before it resubscribes: one that says no now ends.
@@ -2344,10 +2370,15 @@ function vitroMissingMember(err) {
 // island holds at the screen's height even when it's empty.
 // What the card drew: its own box, or its content's (a custom element is inline unless it says otherwise, and an
 // inline host around a block card measures nothing).
+// What the card drew, never its host's own box: a host can have a height of its own (`:host { height }`) before its
+// content exists. Drawn means an element inside it takes room, or it shows text (the host then holds it).
 function vitroCardBlank() {
   if (!cardEl || !cardEl.isConnected) return true;
-  const boxes = [cardEl].concat(cardEl.shadowRoot ? Array.from(cardEl.shadowRoot.children || []) : [], Array.from(cardEl.children || []));
-  return !boxes.some((el) => el && el.localName !== 'style' && el.getBoundingClientRect && Math.ceil(el.getBoundingClientRect().height || 0) > 0);
+  const content = (cardEl.shadowRoot ? Array.from(cardEl.shadowRoot.children || []) : []).concat(Array.from(cardEl.children || []));
+  const room = (el) => el && el.localName !== 'style' && el.getBoundingClientRect && Math.ceil(el.getBoundingClientRect().height || 0) > 0;
+  if (content.some(room)) return false;
+  const text = ((cardEl.shadowRoot && cardEl.shadowRoot.textContent) || '') + (cardEl.textContent || '');
+  return !(text.trim() && room(cardEl));
 }
 // Every update failing on the same missing member: the card shows what it drew before (HA's "Entity not found" from
 // a first render, say), never what it should. Handed over too, drawn or not.

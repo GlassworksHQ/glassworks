@@ -244,6 +244,9 @@ class VitroEngine(
         /** The islands to tell when Home Assistant's config arrives ([VitroCardContext.watchConfig]). Any thread. */
         private val configWatchers = java.util.concurrent.CopyOnWriteArraySet<(JSONObject) -> Unit>()
 
+        /** Counts the connections that came up ([VitroCardContext.haConnectionEpoch]). */
+        @Volatile private var connectionEpoch = 0L
+
         /** The client ([clientGeneration]) whose connection is up, -1 when none is: a new client starts down. */
         @Volatile private var connectedGeneration = -1
 
@@ -258,6 +261,7 @@ class VitroEngine(
             val now = if (up) generation else -1
             if (connectedGeneration == now) return
             connectedGeneration = now
+            if (up) connectionEpoch++
             connectionWatchers.forEach { runCatching { it(up) } }
         }
 
@@ -747,6 +751,7 @@ class VitroEngine(
                     needsFrontend = { card, tags, owners -> vitroView.cardNeedsFrontend(card, tags, owners, resources) },
                     islandFailed = { card, reason -> vitroView.cardFailedInIsland(card, reason, resources) },
                     haConnected = { haConnected },
+                    haConnectionEpoch = { connectionEpoch },
                     watchConnection = { onChange ->
                         connectionWatchers += onChange
                         ({ connectionWatchers -= onChange })
