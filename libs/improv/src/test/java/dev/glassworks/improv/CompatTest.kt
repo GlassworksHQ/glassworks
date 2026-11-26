@@ -36,4 +36,9 @@ class CompatTest {
             assertEquals(false, CompatApi(level).listsSavedNetworks(deviceOwner = false, locationAccess = true))
         }
     }
+
+    @Test fun theBootCountExistsFromAndroid7() {
+        assertEquals(false, CompatApi(23).hasBootCount)
+        assertEquals(true, CompatApi(24).hasBootCount)
+    }
 }

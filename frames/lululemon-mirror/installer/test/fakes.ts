@@ -133,6 +133,8 @@ export interface FakeMirrorOptions {
   serialno?: string;
   /** our app is the image's privileged copy (Kiln's fastboot install), so an adb install updates it */
   privileged?: boolean;
+  /** `Settings.Global.WIFI_ON` as `settings get` prints it: 1 (on) by default */
+  wifiOn?: string;
 }
 
 /**
@@ -179,6 +181,8 @@ export class FakeMirror implements PanelShell {
   admins = new Set<string>();
   /** the Device Owner, once `dpm set-device-owner` made one (the in-place install): stock has none */
   owner?: string;
+  /** `Settings.Global.WIFI_ON` */
+  wifiOn: string;
 
   /** our app: its package, the HOME component Android records (an alias), its admin */
   readonly app: MirrorApp;
@@ -196,6 +200,7 @@ export class FakeMirror implements PanelShell {
   constructor(readonly o: FakeMirrorOptions = {}) {
     this.app = o.app ?? GLASSWORKS;
     this.installed = o.installed;
+    this.wifiOn = o.wifiOn ?? '1';
     if ((o.kiosk ?? 'admin') === 'admin') this.admins.add('com.nimrod.mirrorkiosk/.AdminReceiver');
     this.preferred = { comp: o.installed ? this.app.home : o.kiosk === 'none' ? LAUNCHER3 : MIRROR_KIOSK, from: this.homes() };
     if (o.installed && this.app.admin) this.admins.add(this.app.admin);
@@ -253,6 +258,8 @@ export class FakeMirror implements PanelShell {
     const set = /^settings put system (user_rotation|accelerometer_rotation) (\d)$/.exec(cmd);
     if (set) { if (set[1] === 'user_rotation') this.userRotation = Number(set[2]); else this.accelerometer = Number(set[2]); return ok(); }
     if (cmd === 'dumpsys window windows') return ok(`  mRotation=${o.rotationStuck || this.accelerometer !== 0 ? 0 : this.userRotation}\n`);
+    if (cmd === 'settings get global wifi_on') return ok(`${this.wifiOn}\n`);
+    if ((m = /^settings put global wifi_on (\d)$/.exec(cmd))) { this.wifiOn = m[1]!; return ok(); }
     if ((m = /^pm (hide|unhide) (\S+)$/.exec(cmd))) {
       // Android 6 won't hide a package with an active device admin
       if (m[1] === 'hide' && (o.hideFails || [...this.admins].some((a) => a.startsWith(`${m![2]}/`)))) return ok(`Package ${m[2]} new hidden state: false\n`);

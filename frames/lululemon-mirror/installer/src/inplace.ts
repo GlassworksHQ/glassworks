@@ -264,18 +264,20 @@ export async function installInPlace(p: PanelShell, o: { apk: Uint8Array; onStep
 
   // What the Glass Panes image's settings overlay makes the defaults of a fresh userdata (overlay/res/values/defaults.xml),
   // set over adb here, since stock's own SettingsProvider keeps its own: the display never sleeps by itself (the app
-  // turns the backlight off to sleep, and Android's display off would stop it), and Wi-Fi is on. Auto-rotate goes with
+  // turns the backlight off to sleep, and Android's display off would stop it). Wi-Fi is the next step. Auto-rotate goes with
   // the portrait step below. The lock screen stays as stock has it: Android 6 moves that setting into LockSettings on
   // the first boot, out of adb's reach, and the Mirror's stock shows none.
-  r.step('Keep the display on and Wi-Fi up, as on the Glassworks image');
+  r.step('Keep the display on, as on the Glassworks image');
   for (const [cmd, what] of [
     ['settings put system screen_off_timeout 2147483647', 'screen timeout: never'],
     ['settings put global stay_on_while_plugged_in 7', 'stay awake while plugged in: on'],
-    ['svc wifi enable', 'Wi-Fi: on'],
   ] as const) {
     const out = await p.run(cmd);
     r.detail(out.code === 0 ? what : `${what.split(':')[0]}: not set (${out.out.trim().split('\n')[0] || `exit ${out.code}`})`);
   }
+
+  r.step('Keep Wi-Fi on');
+  r.detail(await keepWifiOn(p));
 
   r.step('Hide the stock apps');
   const bloat = await hideStockBloat(p);
@@ -297,6 +299,29 @@ export async function installInPlace(p: PanelShell, o: { apk: Uint8Array; onStep
 export const INSTALLER_MAC_SETTING = 'glassworks_device_mac';
 /** The global setting that tells the app which permission `allowUsbDebugging` checks now (UsbDebugging). */
 export const USB_ALLOW_PERMISSION_SETTING = 'glassworks_usb_allow_permission';
+
+/**
+ * Wi-Fi's switch (`Settings.Global.WIFI_ON`), set back on when it reads off, and the detail line that says what
+ * happened. Not `svc wifi enable`: on stock the shell lacks CHANGE_WIFI_STATE, and the shell is killed for asking
+ * (verified on a Mirror 2026-11-25). It may write global settings, and Android reads this one when it starts, so a
+ * switch put back on takes effect at the next start. Wi-Fi reads off on stock when a fast start loses the race with the
+ * Wi-Fi firmware: Android then switches Wi-Fi off for good. From then on the app switches it back on after each such
+ * failure (research/stock-wifi-boot.md); a switch that is off from the start of a boot has no failure to react to,
+ * which is what this write is for. Airplane mode (3) is left as it is.
+ */
+export async function keepWifiOn(p: PanelShell): Promise<string> {
+  const read = await p.run('settings get global wifi_on');
+  const v = read.out.trim();
+  if (read.code !== 0 || !/^\d+$/.test(v)) return `Wi-Fi: switch not read (${v.split('\n')[0] || `exit ${read.code}`}), left as it is`;
+  if (v === '1' || v === '2') return 'Wi-Fi: on';
+  if (v === '3') return 'Wi-Fi: off for airplane mode, left as it is';
+  const put = await p.run('settings put global wifi_on 1');
+  if (put.code !== 0) return `Wi-Fi: off, and not set (${put.out.trim().split('\n')[0] || `exit ${put.code}`})`;
+  // Android 6's `settings` can exit 0 after a refused write: only a read-back says it took
+  const back = await p.run('settings get global wifi_on');
+  if (back.code !== 0 || back.out.trim() !== '1') return `Wi-Fi: off, and not set (it reads ${back.out.trim().split('\n')[0] || `exit ${back.code}`} after the write)`;
+  return 'Wi-Fi: was off, on from the next start';
+}
 
 /** The Mirror's in-place code. `words`: installer.json `device.words` (the `inPlace.*` keys, checked here). */
 export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {

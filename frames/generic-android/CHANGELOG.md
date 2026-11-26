@@ -23,16 +23,26 @@ line of each version is what Home Assistant shows on the update card. A change o
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
 ### Fixed
-- **A Wi-Fi network you give Glassworks stays saved after a restart on Android 6 and 7.** The legacy build joined
-  the network from Kiln or your phone, but Android forgot it at the next restart, so a lululemon Mirror on its stock
-  system asked you to send Wi-Fi from a phone every time it started. It now keeps the network, as Android 8 and newer
-  always did.
+- **The Mirror keeps its Wi-Fi on after a restart.** On the Mirror's stock software, a quick restart could find
+  the Wi-Fi chip not ready yet, and Android then switched Wi-Fi off and kept it off, so the panel stayed offline
+  until someone turned Wi-Fi back on. Glassworks now turns Wi-Fi back on by itself when that happens, trying for a
+  couple of minutes. A Wi-Fi you switch off on purpose stays off. Kiln's in-place install also sets Wi-Fi's switch
+  back on when it finds it off. And when the setup hotspot finds Wi-Fi switched off, it turns Wi-Fi on and gives
+  your saved network a few minutes to join before it opens, so it no longer takes the panel offline for 15 minutes.
+- **The Mirror's screen never stays dark while it's awake.** On the Mirror, brightness 0 turns the backlight off, so
+  a panel whose system brightness was at 0 came up awake but black, and waking it from Home Assistant didn't help.
+  Glassworks now keeps the Mirror's screen at a visible level whenever it's awake, whatever the system or manual
+  brightness says. Sleep still turns the backlight off. In the legacy build.
 - **App updates fail fast when "Install unknown apps" is turned off.** On Android 8 and newer (unless Glassworks is a system app or device owner), starting a Home Assistant update without "Install unknown apps" allowed used to download the APK, open Android's refusal dialog, and wait 10 minutes before reporting a timeout. Glassworks now stops right away and tells you to enable "Install unknown apps" in Android's settings.
 - **Wi-Fi setup over Bluetooth finishes on the Mirror.** When Home Assistant or its phone app sent the Wi-Fi
   details over Bluetooth, the Mirror joined the network, but the phone or Home Assistant kept saying it was
   connecting because the Mirror dropped the Bluetooth connection before it could report back. It now stays
   connected and reports the join, so the setup finishes. In the legacy build.
 - **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
+- **A Wi-Fi network you give Glassworks stays saved after a restart on Android 6 and 7.** The legacy build joined
+  the network from Kiln or your phone, but Android forgot it at the next restart, so a lululemon Mirror on its stock
+  system asked you to send Wi-Fi from a phone every time it started. It now keeps the network, as Android 8 and newer
+  always did.
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
   you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in

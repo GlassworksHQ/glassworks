@@ -128,6 +128,17 @@ class SetupHotspotPolicy(
         state = if (s.armed) State.Waiting(now) else State.Idle
     }
 
+    /**
+     * Rule 1 was about to start the hotspot, but the Wi-Fi radio was off, so no saved network could have joined in
+     * the [graceMs] it waited. The radio is on now: the saved network gets its [graceMs] from [now] first, as after
+     * new Wi-Fi details, and the hotspot stays off. Only from rule 1's own start ([State.On] not [State.On.asked]).
+     */
+    fun radioSwitchedOn(now: Long) {
+        val s = state as? State.On ?: return
+        if (s.asked) return
+        state = State.Waiting(now)
+    }
+
     /** The hotspot didn't start: off, until someone asks again. */
     fun failed() {
         if (state is State.On) lastStop = Stop.FAILED
