@@ -81,7 +81,7 @@ class BubbleModulesTest {
 
     @Test
     fun aHomeAssistantWithoutBubbleIsNeverAsked() {
-        val list = start(file = BubbleModules.FileProbe(200, "text/yaml", "default:"))
+        val list = start(file = MODULES_FILE)
         assertFalse(list.bubbleModules)
         assertTrue(server.commands(BubbleModules.TOOLS_COMMAND).isEmpty())
         assertTrue(fetched.isEmpty())
@@ -113,7 +113,7 @@ class BubbleModulesTest {
         // tablet Vitro run 3): every Bubble card went to an island on it.
         withBubble()
         for (file in listOf(null, BubbleModules.FileProbe(500), BubbleModules.FileProbe(403), BubbleModules.FileProbe(302),
-            BubbleModules.FileProbe(200, "text/html; charset=utf-8", "<!DOCTYPE html>"))) {
+            BubbleModules.FileProbe(200, "<!DOCTYPE html>"))) {
             resources.clear()
             assertFalse("$file", start(file = file).bubbleModules)
         }
@@ -156,12 +156,13 @@ class BubbleModulesTest {
         c.start(null)
         awaitCondition("the first connection's file probe") { calls.get() == 1 }
         server.dropConnection()
+        // The replaced connection's answer is stale once the next connection asks (its generation moved on).
         awaitCondition("the second connection's probe") { server.commands(BubbleModules.TOOLS_COMMAND).size == 2 &&
             server.commands("subscribe_entities").count { it.optJSONArray("entity_ids")?.toString() == """["${BubbleModules.SENSOR}"]""" } == 2 }
-        Thread.sleep(200)
         release.countDown()
+        // The probes run one at a time on one executor, each with its answer: once the second has answered, the first's
+        // answer (dropped or not) has run before it. No sleep (Sourcery on #952).
         awaitCondition("the current connection's answer") { calls.get() == 2 && resources.isNotEmpty() }
-        Thread.sleep(200)
         // Only the current connection's verdict: the late 404 of the replaced one is dropped.
         assertEquals(1, resources.size)
         assertTrue((resources.single() as LovelaceResourceList).bubbleModules)
@@ -186,39 +187,84 @@ class BubbleModulesTest {
         assertTrue(BubbleModules.sensorAnswer(JSONObject("""{"a": {"sensor.bubble_card_modules": {"s": "1"}}}""")))
         assertFalse(BubbleModules.fileAnswer(MISSING))
         assertTrue(BubbleModules.fileAnswer(MODULES_FILE))
-        assertTrue(BubbleModules.fileAnswer(BubbleModules.FileProbe(200, null, "my_module:")))
-        assertTrue(BubbleModules.fileAnswer(BubbleModules.FileProbe(206, "application/octet-stream", "default:")))
+        assertTrue(BubbleModules.fileAnswer(BubbleModules.FileProbe(206, "my_module:")))
         // As Bubble's `if (!response.ok) continue` and its caught fetch: none.
         assertFalse(BubbleModules.fileAnswer(null))
-        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(500)))
-        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(301, "text/html")))
-        // A 200 with nothing YAML reads as modules: empty, or an HTML page (by its type or its first character).
-        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(200, "text/yaml", "")))
-        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(200, "TEXT/HTML", "default:")))
-        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(200, "application/octet-stream", "<html><head>")))
+        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(500, "default:")))
+        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(304, "default:")))
+        assertFalse(BubbleModules.fileAnswer(BubbleModules.FileProbe(200, "")))
         assertTrue(BubbleModules.loaded(listOf(LovelaceResource("/hacsfiles/Bubble-Card/bubble-card.js", "module"))))
         assertFalse(BubbleModules.loaded(listOf(LovelaceResource("/local/bubble-card.css", "css"))))
     }
 
     @Test
-    fun theProbeReadsTheStatusTheTypeAndTheBodysStart() {
+    fun onlyAYamlMappingHoldsModules() {
+        // Bubble parses the body as YAML and takes modules from a mapping alone (Sourcery on #952: the content type and
+        // a 4 KiB window decided it before).
+        for (yes in listOf("default:", "my_module:", "default: {name: x}", "\"my module\": 1", "'a''s': 1", "? complex", "{a: 1}",
+            "{ default: { name: x } }", "-dash-key: 1", "key:   # a comment after")) {
+            assertTrue(yes, BubbleModules.isMapping(yes))
+        }
+        for (no in listOf("", "{}", "{ }  # empty", "- default", "[default]", "just text", "<!DOCTYPE html>", "<html><head>",
+            "404 Not Found", "\"quoted scalar\"", "http://x", "a:b", "|", "& anchor")) {
+            assertFalse(no, BubbleModules.isMapping(no))
+        }
+    }
+
+    @Test
+    fun theFirstContentLineSkipsWhatYamlSkipsWithoutAFixedWindow() {
+        fun first(body: String) = BubbleModules.firstContentLine(body.byteInputStream())
+        assertEquals("default:", first("default:\n  name: x\n"))
+        // 8 KiB of blank lines and comments, a directive and a document start before the content: still found.
+        assertEquals("default:", first(" \n".repeat(4096) + "# modules\n%YAML 1.2\n---\ndefault:\n"))
+        assertEquals("{a: 1}", first("--- {a: 1}\n"))
+        assertEquals("  default:", first("\uFEFF\r\n  default:\r\n"))
+        assertEquals("", first("\n\n# only comments\n"))
+        // Past the cap with nothing read: none (YAML would read nothing there either).
+        assertEquals("", first(" ".repeat(BubbleModules.MAX_BODY_CHARS + 10) + "\ndefault:"))
+    }
+
+    @Test
+    fun theProbeReadsTheFileAsBubblesFetchDoes() {
         val http = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
-        fun route(path: String, status: Int, type: String, body: String) = http.createContext(path) { ex ->
+        fun route(path: String, status: Int, type: String, body: String, location: String? = null) = http.createContext(path) { ex ->
             val bytes = body.toByteArray()
             ex.responseHeaders.add("Content-Type", type)
+            location?.let { ex.responseHeaders.add("Location", it) }
             ex.sendResponseHeaders(status, if (bytes.isEmpty()) -1 else bytes.size.toLong())
             ex.responseBody.use { it.write(bytes) }
         }
         route("/yaml", 200, "text/yaml", "\n\n  default:\n    name: Default\n" + "x".repeat(10_000))
         route("/page", 200, "text/html; charset=utf-8", "<!DOCTYPE html><html></html>")
+        // Valid YAML labelled as HTML is still YAML to Bubble; a list or a scalar holds no modules whatever its type.
+        route("/yaml-as-html", 200, "text/html", "default:\n  name: x\n")
+        route("/list", 200, "text/yaml", "- default\n- other\n")
+        route("/scalar", 200, "text/yaml", "modules go here\n")
+        // A mapping after more than 4 KiB of blank lines.
+        route("/late", 200, "text/yaml", "\n".repeat(6000) + "default:\n")
         route("/missing", 404, "text/plain", "404: Not Found")
         http.start()
+        val base = "http://127.0.0.1:${http.address.port}"
+        // Redirects within the origin are followed, as fetch follows them, up to a few hops; another origin's fails.
+        route("/moved", 301, "text/plain", "", "/yaml")
+        route("/hop1", 302, "text/plain", "", "$base/hop2")
+        route("/hop2", 307, "text/plain", "", "/yaml")
+        route("/loop", 302, "text/plain", "", "/loop")
+        val other = java.net.ServerSocket(0).use { it.localPort }
+        route("/away", 302, "text/plain", "", "http://127.0.0.1:$other/yaml")
         try {
-            val base = "http://127.0.0.1:${http.address.port}"
-            assertEquals(BubbleModules.FileProbe(200, "text/yaml", "default:\n    nam"), BubbleModules.probe("$base/yaml"))
+            assertEquals(BubbleModules.FileProbe(200, "  default:"), BubbleModules.probe("$base/yaml"))
             assertTrue(BubbleModules.fileAnswer(BubbleModules.probe("$base/yaml")))
             assertFalse(BubbleModules.fileAnswer(BubbleModules.probe("$base/page")))
-            assertEquals(BubbleModules.FileProbe(404, "text/plain", ""), BubbleModules.probe("$base/missing"))
+            assertTrue(BubbleModules.fileAnswer(BubbleModules.probe("$base/yaml-as-html")))
+            assertFalse(BubbleModules.fileAnswer(BubbleModules.probe("$base/list")))
+            assertFalse(BubbleModules.fileAnswer(BubbleModules.probe("$base/scalar")))
+            assertTrue(BubbleModules.fileAnswer(BubbleModules.probe("$base/late")))
+            assertEquals(BubbleModules.FileProbe(404, ""), BubbleModules.probe("$base/missing"))
+            assertTrue(BubbleModules.fileAnswer(BubbleModules.probe("$base/moved")))
+            assertTrue("two hops", BubbleModules.fileAnswer(BubbleModules.probe("$base/hop1")))
+            assertEquals("a redirect loop gives up", null, BubbleModules.probe("$base/loop"))
+            assertEquals("another origin: no file", null, BubbleModules.probe("$base/away"))
         } finally {
             http.stop(0)
         }
@@ -228,7 +274,7 @@ class BubbleModulesTest {
     }
 
     private companion object {
-        val MISSING = BubbleModules.FileProbe(404, "text/plain")
-        val MODULES_FILE = BubbleModules.FileProbe(200, "text/yaml", "default:")
+        val MISSING = BubbleModules.FileProbe(404)
+        val MODULES_FILE = BubbleModules.FileProbe(200, "default:")
     }
 }

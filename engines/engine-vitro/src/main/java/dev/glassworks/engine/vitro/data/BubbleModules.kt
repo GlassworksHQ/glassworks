@@ -45,48 +45,104 @@ object BubbleModules {
     fun sensorAnswer(event: JSONObject): Boolean = event.optJSONObject("a")?.has(SENSOR) == true
 
     /**
-     * What a GET of [LEGACY_FILE] answered: its HTTP status, its `Content-Type`, and the first characters of its body
-     * that aren't white space (empty for an empty body).
+     * What a GET of [LEGACY_FILE] answered, after its same-origin redirects: the HTTP status, and the first line of the
+     * body's YAML content (after blank lines, comments, directives and a `---`), empty when it has none.
      */
-    data class FileProbe(val status: Int, val contentType: String? = null, val start: String = "")
+    data class FileProbe(val status: Int, val firstLine: String = "")
 
     /**
      * Whether [LEGACY_FILE]'s answer ([probe], null when the request failed) may hold modules, as Bubble Card 3.4.3
-     * reads it: `fetch`, then `if (!response.ok) continue`, then the body parsed as YAML into a mapping of modules. A
-     * failed request is caught and gives none. So only a 2xx can, and not an empty body or an HTML page (a proxy's or
-     * a frontend's page for a file that isn't there: YAML reads it as text, never a mapping of modules).
+     * reads it: `fetch` (redirects followed), `if (!response.ok) continue`, then the body parsed as YAML, and modules
+     * only from a mapping; a failed request is caught and gives none. The content type plays no part. So only a 2xx
+     * whose YAML document is a non-empty mapping ([isMapping]) counts: not an empty body, a list, a scalar, or an HTML
+     * page (a proxy's or a frontend's page for a file that isn't there, which YAML reads as text).
      */
-    fun fileAnswer(probe: FileProbe?): Boolean {
-        if (probe == null || probe.status !in 200..299) return false
-        if (probe.contentType?.substringBefore(';')?.trim()?.equals("text/html", ignoreCase = true) == true) return false
-        return probe.start.isNotEmpty() && !probe.start.startsWith("<")
+    fun fileAnswer(probe: FileProbe?): Boolean =
+        probe != null && probe.status in 200..299 && isMapping(probe.firstLine)
+
+    /**
+     * True when a YAML document whose first content line is [line] is a non-empty mapping: a block mapping's first key
+     * (`default:`, `"my module": …`, `? key`), or a flow mapping that isn't `{}`. The document's top-level form is decided
+     * by that line. Vitro doesn't parse the rest: a file shaped as a mapping that YAML would refuse counts as modules
+     * (Bubble would apply none), which errs toward the island.
+     */
+    fun isMapping(line: String): Boolean {
+        val l = line.trim()
+        if (l.isEmpty()) return false
+        if (l.startsWith("{")) return !FLOW_EMPTY.matches(l)
+        return BLOCK_KEY.containsMatchIn(l)
     }
 
-    /** A GET of [url] ([FileProbe]: reads at most the body's first 4 KiB), or null when it can't be read. Blocking. */
+    /** A block mapping's first key: a quoted or plain key, then `:` and a space or the line's end; or `? `. */
+    private val BLOCK_KEY = Regex("""^(?:\?\s|(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s#\-?:,\[\]{}&*!|>'"%@`][^#]*?|-[^\s#][^#]*?)\s*:(?:\s|$))""")
+    private val FLOW_EMPTY = Regex("""^\{\s*}\s*(?:#.*)?$""")
+
+    /** The most of a body [probe] reads: blank lines and comments before its content count toward it. */
+    internal const val MAX_BODY_CHARS = 1 shl 20
+
+    /** The most same-origin redirects [probe] follows, as `fetch` follows them (another origin: the fetch fails). */
+    internal const val MAX_REDIRECTS = 3
+
+    /** A GET of [url] ([FileProbe]), its same-origin redirects followed, or null when it can't be read. Blocking. */
     fun probe(url: String): FileProbe? = runCatching {
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 5_000
-            readTimeout = 5_000
-            instanceFollowRedirects = false
-            requestMethod = "GET"
-        }
-        try {
-            val status = conn.responseCode
-            val start = if (status in 200..299) {
-                conn.inputStream.use { input ->
-                    val buf = ByteArray(4096)
-                    var n = 0
-                    while (n < buf.size) {
-                        val r = input.read(buf, n, buf.size - n)
-                        if (r < 0) break
-                        n += r
-                    }
-                    String(buf, 0, n, Charsets.UTF_8).trimStart().take(16)
+        var target = URL(url)
+        repeat(MAX_REDIRECTS + 1) {
+            val conn = (target.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 5_000
+                readTimeout = 5_000
+                instanceFollowRedirects = false
+                requestMethod = "GET"
+            }
+            try {
+                val status = conn.responseCode
+                if (status in REDIRECTS) {
+                    val next = conn.getHeaderField("Location")?.let { URL(target, it) } ?: return@runCatching null
+                    // Bubble's fetch would follow another origin too, where HA's CORS refuses it: no file.
+                    if (!sameOrigin(target, next)) return@runCatching null
+                    target = next
+                    return@repeat
                 }
-            } else ""
-            FileProbe(status, conn.contentType, start)
-        } finally {
-            conn.disconnect()
+                val first = if (status in 200..299) conn.inputStream.use(::firstContentLine) else ""
+                return@runCatching FileProbe(status, first)
+            } finally {
+                conn.disconnect()
+            }
         }
+        null // more redirects than fetch would reasonably need: no file
     }.getOrNull()
+
+    private val REDIRECTS = setOf(301, 302, 303, 307, 308)
+
+    private fun sameOrigin(a: URL, b: URL): Boolean =
+        a.protocol.equals(b.protocol, ignoreCase = true) && a.host.equals(b.host, ignoreCase = true) &&
+            (if (a.port < 0) a.defaultPort else a.port) == (if (b.port < 0) b.defaultPort else b.port)
+
+    /**
+     * The first line of [input]'s YAML content: blank lines, comments, `%` directives and a `---` document start are
+     * skipped however long they run, up to [MAX_BODY_CHARS] read in all (then empty: nothing YAML reads as modules).
+     */
+    internal fun firstContentLine(input: java.io.InputStream): String {
+        val reader = java.io.BufferedReader(java.io.InputStreamReader(input, Charsets.UTF_8))
+        var read = 0
+        val line = StringBuilder()
+        while (read < MAX_BODY_CHARS) {
+            val c = reader.read()
+            if (c < 0 || c == '\n'.code) {
+                val l = line.toString().trimEnd('\r').removePrefix("\uFEFF")
+                val t = l.trim()
+                val content = when {
+                    t.isEmpty() || t.startsWith("#") || t.startsWith("%") -> null
+                    t == "---" || t.startsWith("--- ") -> t.removePrefix("---").trim().takeIf { it.isNotEmpty() && !it.startsWith("#") }
+                    else -> l
+                }
+                if (content != null) return content
+                if (c < 0) return ""
+                line.setLength(0)
+            } else {
+                line.append(c.toChar())
+            }
+            read++
+        }
+        return ""
+    }
 }
