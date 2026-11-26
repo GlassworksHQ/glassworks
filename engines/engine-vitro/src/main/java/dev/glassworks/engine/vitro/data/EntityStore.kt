@@ -284,8 +284,11 @@ class EntityStore {
                     // HA leaves `lu` out when it equals `lc`.
                     lastUpdated = obj.optDouble("lu", lc),
                 )
-                states[id] = entity
-                changed += id
+                // A snapshot (every resubscribe starts with one) repeats entities that haven't changed: only a
+                // different one counts, so the cards already showing it don't render again. The new instance is kept
+                // either way: it is what HA reported, so an optimistic write it matches is confirmed, not rolled back.
+                val prev = states.put(id, entity)
+                if (prev != entity) changed += id
             }
             if (snapshotScope != null) {
                 val scope = if (snapshotScope.isEmpty()) states.keys.toList() else snapshotScope

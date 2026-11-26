@@ -71,6 +71,12 @@ class HaDashboardClient(
     private val listener: Listener,
     /** How long the greeting and the auth exchange may take before the connection is dropped and retried. */
     private val authTimeoutMs: Long = AUTH_TIMEOUT_MS,
+    /**
+     * How often a live connection is checked ([keepAlive]): a `ping` that must be answered within [pongTimeoutMs], and
+     * the token asked for again so its consumers get a fresh one before it expires.
+     */
+    private val keepAliveMs: Long = KEEP_ALIVE_MS,
+    private val pongTimeoutMs: Long = PONG_TIMEOUT_MS,
 ) {
     interface Listener {
         fun onConnected(haVersion: String) {}
@@ -344,7 +350,8 @@ class HaDashboardClient(
         runCatching { socket?.close() }
         socket = null
         sendExecutor.shutdownNow()
-        synchronized(registryLock) { registryTimer?.shutdownNow() }
+        synchronized(registryLock) { timer?.shutdownNow() }
+        held.clear()
     }
 
     /** Switches the entity subscription to [entityIds] for the active view. */
@@ -504,19 +511,18 @@ class HaDashboardClient(
     }
 
     /**
-     * Reads the forecast of weather [entityId] once via `weather/subscribe_forecast` and drops the subscription
-     * after the first list, like [fetchHistory].
+     * The forecast of weather [entityId] (`weather/subscribe_forecast`), held open as HA's weather card holds it: every
+     * list the integration pushes reaches [onForecast], on the socket's thread, until the returned handle is called. It
+     * is sent again on every new connection ([hold]).
      */
-    fun fetchForecast(entityId: String, forecastType: String = "daily", onForecast: (List<ForecastDay>) -> Unit) {
+    fun subscribeForecast(entityId: String, forecastType: String = "daily", onForecast: (List<ForecastDay>) -> Unit): () -> Unit {
         val msg = JSONObject()
             .put("type", "weather/subscribe_forecast")
             .put("entity_id", entityId)
             .put("forecast_type", forecastType)
-        subscribeWithId(msg) { subId, ev ->
-            val arr = ev.optJSONArray("forecast") ?: return@subscribeWithId
-            onForecast(ForecastDay.parseList(arr))
-            unsubscribe(subId)
-        }
+        return hold({ JSONObject(msg.toString()) }, { ev, _ ->
+            ev.optJSONArray("forecast")?.let { onForecast(ForecastDay.parseList(it)) }
+        }, {})
     }
 
     private fun parseBinaryState(state: String): Double? = when (state.lowercase(java.util.Locale.ROOT)) {
@@ -535,21 +541,124 @@ class HaDashboardClient(
     }
 
     /**
-     * Subscribes [msg] (any subscription command, e.g. `history/stream`) and hands each of its events to [onEvent], on
-     * the socket's thread. [onError] runs once if Home Assistant rejects the command (with its `error`), or with null
-     * when it can't be sent; cancelling with the returned handle never calls it. [onStarted] runs once Home Assistant
-     * accepted it (its `result`), unless it was cancelled first.
+     * Subscribes [msg] (any subscription command, e.g. `todo/item/subscribe`) and hands each of its events to
+     * [onEvent], on the socket's thread, until the returned handle is called. With [resubscribe] it is held as HA's
+     * frontend holds its subscriptions ([hold]): asked for while the connection is down, it goes out once it is back,
+     * and every new connection sends it again. [onError] then runs once, only if Home Assistant rejects it.
+     *
+     * Without [resubscribe] (a one-off exchange, such as a camera's WebRTC offer) it lives on this connection only:
+     * [onError] runs once if Home Assistant rejects it, the connection drops before it starts (its `error`), or with
+     * null when it can't be sent. Cancelling with the returned handle never calls it. [onStarted] runs once Home
+     * Assistant accepted it (its `result`), unless it was cancelled first: what a web island's `subscribeMessage`
+     * resolves on (an island holds its own subscriptions across reconnects, so it asks without [resubscribe]).
      */
     fun subscribeWs(
         msg: JSONObject,
         onEvent: (JSONObject) -> Unit,
         onError: (JSONObject?) -> Unit,
+        resubscribe: Boolean = true,
         onStarted: () -> Unit = {},
     ): () -> Unit {
+        if (resubscribe) return hold({ JSONObject(msg.toString()) }, { ev, _ -> onEvent(ev) }, onError)
         val subId = subscribeWithId(JSONObject(msg.toString()), onError, onStarted) { _, ev -> onEvent(ev) }
         if (subId <= 0) onError(null)
         return { if (subId > 0) unsubscribe(subId) }
     }
+
+    /**
+     * [subscribeWs] held across connections whose [message] is built again for each one (a history window that follows
+     * the clock). [onEvent] hears with `first` the first event of each send: a stream that starts again from a fresh
+     * window (`history/stream`) drops what it had before taking it in.
+     */
+    fun subscribeWsFresh(
+        message: () -> JSONObject,
+        onEvent: (event: JSONObject, first: Boolean) -> Unit,
+        onError: (JSONObject?) -> Unit,
+    ): () -> Unit = hold(message, onEvent, onError)
+
+    // ---- Held subscriptions (cards') ----
+
+    /**
+     * A subscription a card holds for as long as it shows, whatever happens to the connection: HA's frontend
+     * (home-assistant-js-websocket, `resubscribe`) sends every live subscription again on a new connection, and so does
+     * this client ([onAuthenticated]). [wireId] and [gen] are its id on the connection ([connectionGen]) it was last
+     * sent on; -1 while it waits for one. Guarded by the object's own lock.
+     */
+    private class Held(
+        val message: () -> JSONObject,
+        val onEvent: (JSONObject, Boolean) -> Unit,
+        val onError: (JSONObject?) -> Unit,
+    ) {
+        var wireId = -1
+        var gen = -1
+        var ended = false
+    }
+
+    /** Every held subscription not ended yet, sent or waiting for a connection. */
+    private val held: MutableSet<Held> = Collections.newSetFromMap(ConcurrentHashMap<Held, Boolean>())
+
+    private fun hold(
+        message: () -> JSONObject,
+        onEvent: (JSONObject, Boolean) -> Unit,
+        onError: (JSONObject?) -> Unit,
+    ): () -> Unit {
+        val h = Held(message, onEvent, onError)
+        if (closed.get()) return {}
+        held += h
+        sendHeld(h)
+        return { endHeld(h) }
+    }
+
+    /** Sends [h] on the connection there is now, unless it is already on it; without one it waits for the next. */
+    private fun sendHeld(h: Held) {
+        synchronized(h) {
+            if (h.ended || closed.get() || !authenticated) return
+            // The connection and the send as one, under the lock a dropped connection takes to end: [h] is on the
+            // connection it names, or on none.
+            synchronized(queueLock) {
+                val gen = connectionGen.get()
+                if (h.wireId > 0 && h.gen == gen) return
+                val msg = runCatching { h.message() }.getOrElse { return }
+                val first = AtomicBoolean(true)
+                val id = subscribeWithId(msg, { err -> heldFailed(h, err) }) { _, ev -> h.onEvent(ev, first.getAndSet(false)) }
+                if (id > 0) {
+                    h.wireId = id
+                    h.gen = gen
+                }
+            }
+        }
+    }
+
+    /** Home Assistant turned [h] down: it ends, and its owner hears it once. A lost connection only sends it again. */
+    private fun heldFailed(h: Held, error: JSONObject?) {
+        if (error?.optString("code") in setOf(DISCONNECTED, SEND_FAILED)) return
+        synchronized(h) {
+            if (h.ended) return
+            h.ended = true
+        }
+        held -= h
+        h.onError(error)
+    }
+
+    private fun endHeld(h: Held) {
+        val wire = synchronized(h) {
+            h.ended = true
+            h.wireId.takeIf { it > 0 && h.gen == connectionGen.get() }
+        }
+        held -= h
+        wire?.let(::unsubscribe)
+    }
+
+    /** A new connection: every held subscription goes out on it. */
+    private fun resendHeld() {
+        for (h in held.toList()) sendHeld(h)
+    }
+
+    /** How many held subscriptions are live (tests). */
+    internal fun heldCount(): Int = held.size
+
+    /** How many requests wait for their result (tests). */
+    internal fun pendingCount(): Int = pending.size
 
     // ---- Registries for web islands ----
 
@@ -567,7 +676,9 @@ class HaDashboardClient(
 
     /** Registries whose refetch is waiting out [REGISTRY_DEBOUNCE_MS]. */
     private val registryDue = Collections.newSetFromMap(ConcurrentHashMap<HassRegistries.Kind, Boolean>())
-    @Volatile private var registryTimer: java.util.concurrent.ScheduledExecutorService? = null
+
+    /** The client's timer ([schedule]): registry refetches and [keepAlive]. Made on first use, stopped by close(). */
+    @Volatile private var timer: java.util.concurrent.ScheduledExecutorService? = null
 
     /**
      * HA's registries as its frontend hands them to cards ([HassRegistries]: `{entities, devices, areas, floors}`), for
@@ -631,25 +742,15 @@ class HaDashboardClient(
     /** A registry changed: read it again once its burst of events is over (an integration reload sends dozens). */
     private fun refetchRegistry(kind: HassRegistries.Kind, gen: Int) {
         if (!registryDue.add(kind)) return
-        val timer = synchronized(registryLock) {
-            // Checked under the lock close() takes to stop the timer: a closed client starts no new one.
-            if (closed.get()) return
-            registryTimer ?: Executors.newSingleThreadScheduledExecutor { r ->
-                Thread(r, "vitro-ha-registries").apply { isDaemon = true }
-            }.also { registryTimer = it }
-        }
-        try {
-            timer.schedule({
-                registryDue.remove(kind)
-                // Only for the feed still running: the last watcher may have gone, or the connection, meanwhile. Checked
-                // and sent under one lock, which stopRegistries() takes too: a stop can't slip in between.
-                synchronized(registryLock) {
-                    if (registryGen == gen && gen == connectionGen.get()) fetchRegistry(kind, gen)
-                }
-            }, REGISTRY_DEBOUNCE_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
-        } catch (_: RejectedExecutionException) {
+        val scheduled = schedule(REGISTRY_DEBOUNCE_MS) {
             registryDue.remove(kind)
+            // Only for the feed still running: the last watcher may have gone, or the connection, meanwhile. Checked
+            // and sent under one lock, which stopRegistries() takes too: a stop can't slip in between.
+            synchronized(registryLock) {
+                if (registryGen == gen && gen == connectionGen.get()) fetchRegistry(kind, gen)
+            }
         }
+        if (!scheduled) registryDue.remove(kind)
     }
 
     /** Subscribes to HA's server-side Jinja2 `render_template` (for markdown & mushroom-template-card). */
@@ -657,11 +758,11 @@ class HaDashboardClient(
         val msg = JSONObject()
             .put("type", "render_template")
             .put("template", template)
-        val subId = subscribe(msg) { ev ->
+        // Held across connections: a template a card shows keeps following HA after a reconnect.
+        return hold({ JSONObject(msg.toString()) }, { ev, _ ->
             val rendered = ev.opt("result")?.takeIf { it != JSONObject.NULL }?.toString().orEmpty()
             onRendered(rendered)
-        }
-        return { if (subId > 0) unsubscribe(subId) }
+        }, {})
     }
 
     private fun loop() {
@@ -697,8 +798,10 @@ class HaDashboardClient(
                         watchdog.interrupt()
                         backoffMs = 1_000L
                         authenticated = true
+                        lastHeard = System.nanoTime()
                         listener.onConnected(auth.optString("ha_version", ""))
                         onAuthenticated()
+                        keepAlive(ws, connectionGen.get())
                     }
                     "auth_invalid" -> {
                         // Try once with a forced refresh token before reporting auth required. The refreshed token
@@ -719,7 +822,8 @@ class HaDashboardClient(
 
                 while (!closed.get()) {
                     // A clean close by HA (or its proxy) is still a lost connection: the panel shows it and retries.
-                    val raw = ws.receive() ?: throw IOException("Closed by Home Assistant")
+                    val raw = ws.receive() ?: throw IOException(if (silent === ws) NO_ANSWER else "Closed by Home Assistant")
+                    lastHeard = System.nanoTime()
                     handleIncoming(JSONObject(raw))
                 }
             } catch (e: Exception) {
@@ -770,6 +874,68 @@ class HaDashboardClient(
         displayRequested.clear()
         displayPending.set(0)
         displayChanged.set(false)
+    }
+
+    /** When the reader last got a message from Home Assistant ([System.nanoTime]). */
+    @Volatile private var lastHeard = 0L
+
+    /** The socket [keepAlive] gave up on: its reader reports the drop as [NO_ANSWER]. */
+    @Volatile private var silent: HaSocket? = null
+
+    /**
+     * Every [keepAliveMs] while connection [gen] lasts on [ws]: the token is asked for again, so its consumers (images,
+     * the island proxy, an island's `hass.auth`) get a fresh one before HA's 30-minute token expires (the provider
+     * hands out its cached one until then); and a `ping` goes out. When neither its `pong` nor anything else comes back
+     * within [pongTimeoutMs], the connection is dead without having said so (HA's host lost power, a router dropped
+     * it): the socket is closed and the reader reconnects. HA's frontend pings in the same way.
+     */
+    private fun keepAlive(ws: HaSocket, gen: Int) {
+        fun live() = !closed.get() && gen == connectionGen.get() && socket === ws
+        schedule(keepAliveMs) {
+            if (!live()) return@schedule
+            // The next check is due whatever this one finds; a dead connection ends the chain (live() fails).
+            keepAlive(ws, gen)
+            refreshToken(force = false) {}
+            val sentAt = System.nanoTime()
+            val answered = AtomicBoolean(false)
+            val pingId = request(JSONObject().put("type", "ping")) { res -> if (!isTransportError(res)) answered.set(true) }
+            if (pingId <= 0) return@schedule
+            schedule(pongTimeoutMs) {
+                // The check is the ping's end: a pong that never came (the connection lived on other traffic) leaves no
+                // callback behind in [pending], one per check for as long as the connection lasts.
+                pending.remove(pingId)
+                // A pong held up behind a big message still counts: anything heard since the ping means it lives.
+                if (!live() || answered.get() || lastHeard - sentAt > 0) return@schedule
+                silent = ws
+                runCatching { ws.close() }
+            }
+        }
+    }
+
+    /**
+     * Asks the token provider for the token now ([force]: a refreshed one), for the consumers its provider tells
+     * (the engine's images, island proxy and islands). [done] gets it, or null. Any thread; doesn't block.
+     */
+    fun refreshToken(force: Boolean, done: (String?) -> Unit) {
+        if (closed.get()) { done(null); return }
+        tokenProvider(force, done)
+    }
+
+    /** Runs [block] after [delayMs] on the client's timer; false (and nothing runs) once the client is closed. */
+    private fun schedule(delayMs: Long, block: () -> Unit): Boolean {
+        val t = synchronized(registryLock) {
+            // Checked under the lock close() takes to stop the timer: a closed client starts no new one.
+            if (closed.get()) return false
+            timer ?: Executors.newSingleThreadScheduledExecutor { r ->
+                Thread(r, "vitro-ha-timer").apply { isDaemon = true }
+            }.also { timer = it }
+        }
+        return try {
+            t.schedule({ runCatching(block) }, delayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+            true
+        } catch (_: RejectedExecutionException) {
+            false
+        }
     }
 
     /** Closes [ws] if Home Assistant hasn't greeted and accepted the token within [authTimeoutMs]. */
@@ -1014,6 +1180,9 @@ class HaDashboardClient(
         }
         // 8. The registries web islands read, when one does (they ask on first read): again on every connection.
         synchronized(registryLock) { startRegistries() }
+        // 9. The cards' own subscriptions (templates, forecasts, to-do lists, history streams): the ones the last
+        // connection carried, and the ones asked for while it was down.
+        resendHeld()
     }
 
     /** Reads `selectedTheme` (a theme name, or `{theme, dark}`) out of the `core` user data and tells the listener. */
@@ -1198,8 +1367,17 @@ class HaDashboardClient(
         /** How long a registry's refetch waits for its burst of update events to end, as HA's frontend debounces its own. */
         internal const val REGISTRY_DEBOUNCE_MS = 500L
 
-        /** Default bound on the greeting and auth exchange; after `auth_ok` reads may idle for as long as they like. */
+        /** Default bound on the greeting and auth exchange; after `auth_ok`, [keepAlive] checks the connection. */
         const val AUTH_TIMEOUT_MS = 20_000L
+
+        /** How often a live connection is pinged and the token asked for again (well inside the provider's last minute). */
+        const val KEEP_ALIVE_MS = 30_000L
+
+        /** How long a ping may go unanswered, with nothing else heard either, before the connection counts as dead. */
+        const val PONG_TIMEOUT_MS = 10_000L
+
+        /** Why a connection [keepAlive] gave up on was dropped. */
+        const val NO_ANSWER = "No answer from Home Assistant"
 
         /** Bound on the HTTP upgrade (the `101 Switching Protocols` answer), before the auth watchdog runs. */
         const val UPGRADE_TIMEOUT_MS = 20_000

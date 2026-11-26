@@ -16,6 +16,8 @@ import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
+import dev.glassworks.engine.vitro.data.HaFrontend
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.island.VitroIslandServer
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
@@ -60,12 +62,17 @@ class IslandSessionsTest {
     private val opened = ArrayList<Page>()
     private val islandServers = ArrayList<VitroIslandServer>()
 
+    /** HA's frontend files: none reachable unless a test serves them (a test never reaches the network). */
+    private val realFetch = HaFrontend.fetch
+
     @Before fun setUp() {
+        HaFrontend.fetch = { null }
         controller = Robolectric.buildActivity(Activity::class.java).setup()
         activity = controller.get()
     }
 
     @After fun tearDown() {
+        HaFrontend.fetch = realFetch
         engines.forEach { runCatching { it.islandServer.stop() } }
         islandServers.forEach { runCatching { it.stop() } }
         opened.forEach { page ->
@@ -506,6 +513,104 @@ class IslandSessionsTest {
         assertTrue(first.closed)
         assertEquals(2, islandPages().size)
         assertOnePagePerIsland(p)
+    }
+
+    @Test fun aTokenRefreshedOnALiveConnectionReachesTheIslandsProxyAndPage() {
+        // HA's access tokens last 30 minutes and the WebSocket never asks again: the page asks while it lives (A §1).
+        var token = FakeHaServer.TOKEN
+        val e = VitroEngine(
+            fallback = fallback, settings = { settings }, enabled = { true },
+            tokenProvider = { _, done -> done(token) }, socketFactory = server::connect,
+        ).also { engines += it }
+        e.keepAliveMs = 100
+        val p = page(e)
+        p.load("$base/wall-test/wall")
+        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
+        val sent = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
+        slots(e.islandServer).values.single().onConnected { sent += it }
+        sent.clear()
+        fun session() = p.javaClass.getMethod("islandSession").invoke(p) as Pair<*, *>
+        assertEquals(FakeHaServer.TOKEN, session().second)
+
+        // The provider's cached token runs out and it hands out a refreshed one: the connection stays up.
+        token = "refreshed-token"
+        awaitMain("the island's page gets it") { sent.any { it.optString("type") == "auth" } }
+        assertEquals("refreshed-token", sent.first { it.optString("type") == "auth" }.getString("token"))
+        assertEquals("the island proxy sends it", "refreshed-token", session().second)
+        val tokenFor = p.javaClass.getDeclaredMethod("tokenFor", String::class.java)
+        assertEquals("images and streams use it", "refreshed-token", tokenFor.invoke(p, base))
+        assertEquals("no reconnect needed", 1, server.connectUrls.size)
+        // The same token on the next checks tells nobody again.
+        val pings = server.commands("ping").size
+        awaitMain("more checks") { server.commands("ping").size >= pings + 2 }
+        assertEquals(1, sent.count { it.optString("type") == "auth" })
+
+        // The proxy's way back from a 401: a forced refresh, handed to everyone the same way.
+        token = "forced-token"
+        val renewed = java.util.concurrent.CompletableFuture<Pair<String?, String?>>()
+        e.renewIslandSession { renewed.complete(it) }
+        assertEquals("forced-token", renewed.get(5, java.util.concurrent.TimeUnit.SECONDS).second)
+    }
+
+    @Test fun aReconnectWithNothingChangedBuildsNothingAgainAndKeepsTheIslandsPage() {
+        // HA's frontend strings, served for this HA: each connection reads them again (A §3, G L1).
+        val origin = base
+        val files = mapOf(
+            "$origin/" to """<script type="module" src="/frontend_latest/app.abc123.js"></script>""",
+            "$origin/frontend_latest/app.abc123.js" to
+                """JSON.parse('{"fragments":["lovelace"],"translations":{"en":{"nativeName":"English","hash":"e1"}}}')""",
+            "$origin/static/translations/en-e1.json" to """{"state":{"default":{"unavailable":"Unavailable"}}}""",
+            "$origin/static/translations/lovelace/en-e1.json" to "{}",
+        )
+        val indexReads = java.util.concurrent.atomic.AtomicInteger(0)
+        HaFrontend.fetch = { url -> if (url == "$origin/") indexReads.incrementAndGet(); files[url]?.toByteArray() }
+        try {
+            val p = page()
+            p.load("$base/wall-test/wall")
+            awaitCondition("ready, strings in", timeoutMs = 30_000, tick = { idle() }) {
+                readyCount() == 1 && islandPages().size == 1 && HaText.language != null && indexReads.get() >= 1
+            }
+            Thread.sleep(100)
+            idle()
+            val view = vitroView(p)
+            val card = islandCards(p).single()
+            val rebuilds = view.localeRebuilds
+
+            // Counted before the drop: the reconnect's read can't land before the baseline.
+            val reads = indexReads.get()
+            server.dropConnection()
+            awaitMain("reconnected, strings read again") { readyCount() >= 2 && indexReads.get() > reads }
+            Thread.sleep(200)
+            idle()
+            assertEquals("unchanged strings build nothing", rebuilds, view.localeRebuilds)
+            assertSame("the view on screen is the same one", card, islandCards(p).single())
+            assertEquals("the island's page wasn't reloaded", 1, islandPages().size)
+            assertFalse(islandPages().single().closed)
+        } finally {
+            HaFrontend.reset()
+            HaText.reset()
+        }
+    }
+
+    @Test fun aRealLanguageChangeLoadsTheIslandsPageAgainInTheNewLocale() {
+        // An island's hass.locale and <html lang> are written into its page when it loads: a kept page would keep the
+        // old language while the native cards switch, so a real locale change loads the page again.
+        val p = page()
+        p.load("$base/wall-test/wall")
+        awaitMain("ready") { readyCount() == 1 && islandPages().size == 1 }
+        val first = islandPages().single()
+        val view = vitroView(p)
+        view.setLocale(dev.glassworks.engine.vitro.data.FrontendLocale(language = "de"), "UTC", HaText.version)
+        idle()
+        assertEquals(1, view.localeRebuilds)
+        assertTrue("the old page goes", first.closed)
+        assertEquals("one new page for the island", 2, islandPages().size)
+        assertOnePagePerIsland(p)
+        // The same locale again (a reconnect, a repeated report) changes nothing.
+        view.setLocale(dev.glassworks.engine.vitro.data.FrontendLocale(language = "de"), "UTC", HaText.version)
+        idle()
+        assertEquals(1, view.localeRebuilds)
+        assertEquals(2, islandPages().size)
     }
 
     @Test fun aReconnectWithANewTokenAndTheSameConfigSendsTheTokenToTheKeptIsland() {

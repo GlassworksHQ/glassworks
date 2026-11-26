@@ -21,6 +21,8 @@ Per transport (each a view of home.py's dashboard, one live picture-entity card)
              has the test pattern's colours (a blank or black surface has none)
   4. pause   HOME: the stream goes inactive (setActive false) and draws nothing; the fake stops sending MJPEG
              frames and serving HLS fetches. Back: active again, a first frame again, and motion again
+  4b. drop   WebRTC only: HA restarts (the fake cuts every websocket and WebRTC session and refuses websockets for
+             DROP_S): the camera stops drawing; once HA is back it plays WebRTC again within RECOVER_S, not MJPEG
   5. close   the card is removed from the dashboard (HA's lovelace_updated): the stream closes, no stream is left
              open, the fake has no session, connection or fetches left for it, and the app has no thread the
              stream started still running
@@ -54,6 +56,11 @@ TRANSPORTS = {
 # later), started the first time anything (libwebrtc's network monitor) registers a network callback. A stream
 # starting one isn't a leak. Every other thread that appeared with the stream must be gone once
 # it closed. Names are /proc's comm: 15 characters, after the last '.' (vitro-mjpeg-camera.x_mjpeg -> x_mjpeg).
+# HA's restart in step 4b: how long the fake refuses websockets (longer than the WebRTC stream's three reconnects,
+# about 12 s, so a camera that gives up on WebRTC is seen), and how long after it the camera must play WebRTC again
+# (Vitro's websocket waits up to 10 s between tries, then the stream connects).
+DROP_S = 20
+RECOVER_S = 30
 SHARED_THREADS = re.compile(r"^(vitro-img|ExoPlayer:Backg|HwBinder[:_]|Binder[:_]|ConnectivityMan|ConnectivityThr)")
 
 
@@ -398,6 +405,10 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
     r["render_after_resume"] = check_motion(dev)
     assert_rendered(r["render_after_resume"], f"{name} after resume")
 
+    # 4b. HA restarts: WebRTC comes back (the other transports' players don't wait for HA's websocket).
+    if name == "webrtc" and sid:
+        sid = drop_and_recover(dev, fake, probe, cam, kind, out, r)
+
     # 5. The card removed: the stream closes, and nothing of it is left.
     fake.get(f"/vitro-camera-e2e/remove?view={name}")
     fake.lovelace_updated()
@@ -426,6 +437,57 @@ def run_transport(dev, fake, probe, name, base_url, budget_ms, out, seam_require
     fake.get("/vitro-camera-e2e/restore")
     fake.lovelace_updated()
     return r
+
+
+def drop_and_recover(dev, fake, probe, cam, kind, out, r):
+    """The fake drops HA for DROP_S: the camera must stop drawing, then draw from a WebRTC stream again within
+    RECOVER_S of HA coming back. Returns that stream's id. Fills r["drop"]."""
+    d = r["drop"] = {"seconds": DROP_S}
+    probe.poll()
+    start = len(probe.events)
+    d["cut"] = fake.get(f"/vitro-camera-e2e/drop?seconds={DROP_S}")["cut"]
+    if not d["cut"]:
+        raise Fail("drop: the fake had no websocket to cut (the app isn't connected)")
+    t0 = time.monotonic()
+    time.sleep(3.0)                 # frames already in flight, and the probe's last tick of them
+    probe.poll()
+    quiet = len(probe.events)
+    time.sleep(max(0.0, t0 + DROP_S - time.monotonic()))
+    probe.poll()
+
+    def camera_ids(of_kind=None):
+        return {e["id"] for e in probe.events if e["event"] == "open" and e.get("entity") == cam
+                and (of_kind is None or e.get("kind") == of_kind)}
+    drawn = [e for e in probe.events[quiet:] if e["event"] in ("frames", "first_frame") and e.get("id") in camera_ids()]
+    d["during"] = [{k: e.get(k) for k in ("event", "id", "kind", "reason")} for e in probe.events[start:]
+                   if e["event"] in ("open", "close", "error", "first_frame")]
+    if any(e.get("id") in camera_ids(kind) for e in drawn):
+        raise Fail(f"drop: WebRTC still drew while HA was down, so the fake didn't drop it: {drawn}")
+    back = time.monotonic()
+    mark = len(probe.events)
+
+    def webrtc_drew(e):
+        return (e["event"] in ("frames", "first_frame") and e.get("id") in camera_ids(kind)
+                and probe.events.index(e) >= mark)
+    hit = probe.wait(webrtc_drew, RECOVER_S)
+    d["during"] += [{k: e.get(k) for k in ("event", "id", "kind", "reason")} for e in probe.events[mark:]
+                    if e["event"] in ("open", "close", "error", "first_frame")]
+    if not hit:
+        dev.png(os.path.join(out, "webrtc-not-recovered.png"))
+        shown = sorted({e.get("kind") for e in probe.events[mark:] if e["event"] in ("frames", "first_frame")
+                        and e.get("id") in camera_ids()})
+        raise Fail(f"drop: no WebRTC picture within {RECOVER_S} s of HA coming back (drawing: {shown or 'nothing'}; "
+                   f"streams: {d['during']})")
+    d["recovered_s"] = round(time.monotonic() - back, 1)
+    d["recovered_id"] = hit["id"]
+    served = [s for s in fake.cameras()["webrtc"] if s.get("camera") == cam]
+    if not served:
+        raise Fail("drop: the camera draws, but the fake serves it no WebRTC session")
+    time.sleep(1.0)
+    d["render"] = check_motion(dev)
+    dev.png(os.path.join(out, "webrtc-recovered.png"))
+    assert_rendered(d["render"], "webrtc after HA came back")
+    return hit["id"]
 
 
 def live_streams(cams):

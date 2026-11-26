@@ -321,6 +321,8 @@ internal class MeasuredCameraStream(
 
     override fun setActive(active: Boolean) = inner.setActive(active)
 
+    override fun connectionRestored() = inner.connectionRestored()
+
     override fun close() {
         ClarityCameras.current?.closed(this)
         inner.close()

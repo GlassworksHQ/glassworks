@@ -96,6 +96,14 @@ object HaGraph {
         var combined: LinkedHashMap<String, MutableList<HistoryState>> = LinkedHashMap()
             private set
 
+        /**
+         * The stream starts over: its subscription was sent again on a new connection, with a fresh window, and the
+         * next message is that window whole (`first` of a held subscription). What came before goes.
+         */
+        fun restart() {
+            combined = LinkedHashMap()
+        }
+
         /** [message] is one event (`{states, start_time, end_time}`); [nowMs] the frontend's clock when it arrives. */
         fun process(message: JSONObject, nowMs: Long): Map<String, List<HistoryState>> {
             val statesObj = message.optJSONObject("states") ?: JSONObject()

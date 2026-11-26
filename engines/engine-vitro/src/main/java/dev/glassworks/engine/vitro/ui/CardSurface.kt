@@ -75,8 +75,12 @@ class VitroCardContext(
     /** Loopback micro-host server + GeckoView [Page] factory for Tier 3 Custom Card Islands (zero WebView). */
     val islandServer: VitroIslandServer? = null,
     val openIslandPage: ((url: String) -> Page?)? = null,
-    /** One-shot `weather/subscribe_forecast` read (`daily`, `hourly` or `twice_daily`). */
-    val fetchForecast: (entityId: String, forecastType: String, done: (List<ForecastDay>) -> Unit) -> Unit = { _, _, _ -> },
+    /**
+     * `weather/subscribe_forecast` (`daily`, `hourly` or `twice_daily`), held open as HA's weather card holds it: every
+     * list the integration pushes reaches `onForecast` (any thread), across reconnects, until the returned handle is
+     * called. The default (tests, no engine) never delivers.
+     */
+    val subscribeForecast: (entityId: String, forecastType: String, onForecast: (List<ForecastDay>) -> Unit) -> () -> Unit = { _, _, _ -> {} },
     /** HA's `auth/current_user` result (`id`, `name`, `is_admin`, `is_owner`), empty until it arrives. */
     val haUser: () -> JSONObject = { JSONObject() },
     /**
@@ -85,16 +89,30 @@ class VitroCardContext(
      */
     val cameraPlayers: CameraPlayers? = null,
     /**
-     * A WebSocket subscription (`history/stream`, say): every event of [msg]'s subscription reaches `onEvent`, on any
-     * thread, until the returned handle is called; `onError` runs once, on any thread, if Home Assistant rejects it, the
-     * connection drops before it starts (its `error`) or it can't be sent (null). A delivery already under way when the
-     * handle is called may still finish, so a consumer checks on its own thread that the subscription is still its
-     * current one before using an event. The default (tests, no engine) never delivers anything.
+     * A WebSocket subscription (`todo/item/subscribe`, say): every event of [msg]'s subscription reaches `onEvent`, on
+     * any thread, until the returned handle is called. It is held across connections, as HA's frontend holds its own:
+     * asked for while the connection is down it goes out once it is back, and a new connection sends it again.
+     * `onError` runs once, on any thread, if Home Assistant rejects it, or with null when there is no connection to
+     * Home Assistant at all. A delivery already under way when the handle is called may still finish, so a consumer
+     * checks on its own thread that the subscription is still its current one before using an event. The default
+     * (tests, no engine) never delivers anything.
      */
     val subscribeWs: (msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit) -> () -> Unit = { _, _, _ -> {} },
     /**
-     * [subscribeWs] that also says when Home Assistant accepted the subscription (`onStarted`, on any thread): what a
-     * web island's `subscribeMessage` resolves on. The default (tests, no engine) says so as soon as it's asked.
+     * [subscribeWs] whose message is built again by `message` for every connection (a `history/stream` window that
+     * follows the clock): `onEvent` hears with `first` the first event of each, after which a stream starts over. The
+     * default hands the message built now to [subscribeWs].
+     */
+    val subscribeWsFresh: (
+        message: () -> JSONObject,
+        onEvent: (event: JSONObject, first: Boolean) -> Unit,
+        onError: (JSONObject?) -> Unit,
+    ) -> () -> Unit = { message, onEvent, onError -> subscribeWs(message(), { onEvent(it, false) }, onError) },
+    /**
+     * A subscription on the connection of now only, which also says when Home Assistant accepted it (`onStarted`, on
+     * any thread): what a web island's `subscribeMessage` resolves on. The island starts it again itself after a
+     * reconnect. `onError` also runs (its `error`) if the connection drops before HA answered. The default (tests, no
+     * engine) is [subscribeWs], and says it started as soon as it's asked.
      */
     val subscribeWsStarted: (
         msg: JSONObject,
@@ -207,10 +225,11 @@ class VitroCardContext(
         subscribeTemplate = subscribeTemplate,
         islandServer = islandServer,
         openIslandPage = openIslandPage,
-        fetchForecast = fetchForecast,
+        subscribeForecast = subscribeForecast,
         haUser = haUser,
         cameraPlayers = cameraPlayers,
         subscribeWs = subscribeWs,
+        subscribeWsFresh = subscribeWsFresh,
         subscribeWsStarted = subscribeWsStarted,
         now = now,
         pageUrl = pageUrl,

@@ -344,16 +344,11 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
                     fetchHistory = { ids, hours, done -> ws.restHistory(ids, hours, ref?.now ?: System.currentTimeMillis()) { main.post { done(it) } } },
                     callWs = { msg, done -> ws.call(msg) { ok, result, error -> main.post { done(ok, result, error) } } },
                     subscribeWs = { msg, onEvent, onError -> ws.subscribe(msg, { main.post(it) }, onEvent, onError) },
-                    // HaDashboardClient's one-shot forecast read, answered from HA's own `weather/subscribe_forecast`.
-                    fetchForecast = { entityId, type, done ->
+                    // HaDashboardClient's held forecast, answered from HA's own `weather/subscribe_forecast`.
+                    subscribeForecast = { entityId, type, onForecast ->
                         val msg = JSONObject().put("type", "weather/subscribe_forecast").put("entity_id", entityId).put("forecast_type", type)
-                        var got = false
                         ws.subscribe(msg, { main.post(it) }, { ev ->
-                            val arr = ev.optJSONArray("forecast")
-                            if (!got && arr != null) {
-                                got = true
-                                done(dev.glassworks.engine.vitro.data.ForecastDay.parseList(arr))
-                            }
+                            ev.optJSONArray("forecast")?.let { onForecast(dev.glassworks.engine.vitro.data.ForecastDay.parseList(it)) }
                         })
                     },
                     // HA's page drew at the pinned instant (refs/*.json "now"): the graphs' time windows end there too.

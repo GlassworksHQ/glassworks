@@ -235,7 +235,7 @@ class MoreInfoSensorTest {
 
     @Test
     fun aFailedRenewalKeepsItsErrorOverTheMinuteTick() {
-        // History arrives, the connection comes back, and the new subscription is refused: the old chart doesn't return.
+        // History arrives, the connection comes back, and the client's renewal is refused: the old chart doesn't return.
         val events = ArrayList<(JSONObject) -> Unit>()
         val errors = ArrayList<(JSONObject?) -> Unit>()
         val store = sensor(emptyMap())
@@ -255,19 +255,23 @@ class MoreInfoSensorTest {
         idle()
         sheet.reconnected()
         idle()
-        errors[1](JSONObject().put("code", "unknown_error").put("message", "refused"))
+        // The client renews a held subscription itself (HaDashboardClient), and reports a refused renewal on it.
+        assertEquals("the sheet leaves a live subscription to the client", 1, subscriptions.size)
+        errors[0](JSONObject().put("code", "unknown_error").put("message", "refused"))
         idle()
         ShadowLooper.idleMainLooper(MoreInfoHistoryView.MINUTE_MS + 1, java.util.concurrent.TimeUnit.MILLISECONDS)
         assertTrue(texts(sheet).toString(), texts(sheet).any { it.endsWith(": refused") })
     }
 
     @Test
-    fun aReconnectRenewsTheStateHistoryStream() {
+    fun aReconnectLeavesALiveStateHistoryStreamToTheClient() {
+        // The client sends a held subscription again on the new connection (HaDashboardClientTest): the sheet asking
+        // for another one would only double it.
         val sheet = open(sensor(emptyMap()))
         assertEquals(1, subscriptions.size)
         sheet.reconnected()
         idle()
-        assertEquals(2, subscriptions.size)
+        assertEquals(1, subscriptions.size)
     }
 
     @Test

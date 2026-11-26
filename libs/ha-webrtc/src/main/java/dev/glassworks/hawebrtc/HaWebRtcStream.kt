@@ -17,10 +17,14 @@ package dev.glassworks.hawebrtc
  * - **Timeout.** No frame within [Options.connectTimeoutMs] fails the connection ([TIMEOUT]).
  * - **Reconnecting.** A stream that has played reconnects when its connection fails (ICE or DTLS `failed`, or
  *   `disconnected` for [Options.disconnectedGraceMs]): a new peer and a new HA session, up to [Options.maxReconnects]
- *   times in a row, waiting [Options.reconnectDelayMs] and doubling. The frontend calls `restartIce()` instead, but
- *   every offer to HA is a new session with a new peer on the camera's side (go2rtc's, for one), so a fresh
- *   connection costs the same and doesn't depend on a DTLS restart. A stream that never played fails at once, so a
- *   caller can fall back to HLS or MJPEG quickly, as the frontend does.
+ *   times in a row, waiting [Options.reconnectDelayMs] and doubling. The frontend calls `restartIce()` instead, and
+ *   its renegotiation sends a new offer, which HA answers with a new session and a new peer on the camera's side
+ *   (go2rtc's, for one); so a fresh connection costs the same and doesn't depend on a DTLS restart. A stream that
+ *   never played fails at once, so a caller can fall back to HLS or MJPEG quickly, as the frontend does.
+ * - **Waiting for Home Assistant.** A reconnection that fails because the channel has no connection to HA
+ *   ([HaError.NOT_CONNECTED]: HA restarting, the panel's Wi-Fi gone) doesn't use one of those tries: the stream
+ *   keeps trying at the backed-off wait, as the frontend's offer waits for its socket to come back. [connectionRestored]
+ *   (the channel is back) makes it try at once.
  * - **Pausing.** [setActive] false stops drawing at once, and after [Options.idleTeardownMs] (60 s, the frontend's
  *   wait when the page is hidden) closes the connection; true resumes, reconnecting if it was closed.
  *
@@ -43,9 +47,12 @@ public class HaWebRtcStream(
         public val connectTimeoutMs: Long = 20_000,
         /** How long a paused stream keeps its connection before it closes it. 0 closes it at once. */
         public val idleTeardownMs: Long = 60_000,
-        /** Reconnections in a row (without a frame between them) before the stream gives up. */
+        /**
+         * Reconnections in a row (without a frame between them) before the stream gives up. Tries that failed for want
+         * of a connection to HA ([HaError.NOT_CONNECTED]) don't count.
+         */
         public val maxReconnects: Int = 3,
-        /** The wait before the first reconnection; it doubles for each one after. */
+        /** The wait before the first reconnection; it doubles for each one after, up to 32 times it. */
         public val reconnectDelayMs: Long = 1_000,
         /** How long `disconnected` may last before the connection counts as failed. */
         public val disconnectedGraceMs: Long = 5_000,
@@ -93,7 +100,12 @@ public class HaWebRtcStream(
     private var active = true
     private var attempt: Attempt? = null
     private var played = false
+
+    /** Reconnections since the last frame that count against [Options.maxReconnects]. */
     private var reconnects = 0
+
+    /** Every reconnection since the last frame, those waiting for HA's connection too: the backoff. */
+    private var retries = 0
     private var runStartMs = 0L
     private var runReported = false
 
@@ -140,6 +152,7 @@ public class HaWebRtcStream(
             val a = attempt
             if (a == null) {
                 reconnects = 0
+                retries = 0
                 connect()
             } else {
                 // Kept through the pause: it must show a new frame in time too, or it counts as failed (a peer that
@@ -162,6 +175,27 @@ public class HaWebRtcStream(
         dropConnection()
     }
 
+    /**
+     * The channel's connection to Home Assistant is back after it dropped. A stream waiting to reconnect connects now,
+     * with its tries counted afresh; a connection still being set up starts over, since what it sent went through the
+     * connection that dropped and its answer won't come. A connection that has played is left alone: it ends on its
+     * own if HA closed its session ([Options.disconnectedGraceMs]). Nothing happens to a paused, failed or closed one.
+     */
+    public fun connectionRestored() {
+        if (!started || closed || failed || !active) return
+        val a = attempt
+        if (a?.playing == true) return
+        reconnect?.cancel()
+        reconnect = null
+        reconnects = 0
+        retries = 0
+        if (a != null) {
+            teardown(a)
+            attempt = null
+        }
+        connect()
+    }
+
     private fun dropConnection() {
         attempt?.let(::teardown)
         attempt = null
@@ -175,7 +209,7 @@ public class HaWebRtcStream(
         a.signaling = signaling
         signaling.fetchClientConfig(
             { config -> scheduler.post { onConfig(a, config) } },
-            { error -> scheduler.post { failAttempt(a, startFailed(error)) } },
+            { error -> scheduler.post { failAttempt(a, startFailed(error), offline = error.code == HaError.NOT_CONNECTED) } },
         )
     }
 
@@ -213,6 +247,7 @@ public class HaWebRtcStream(
             a.playing = true
             played = true
             reconnects = 0
+            retries = 0
         }
         if (!runReported) {
             runReported = true
@@ -239,19 +274,21 @@ public class HaWebRtcStream(
         }
     }
 
-    private fun failAttempt(a: Attempt, error: HaError) {
+    /** [offline]: it failed because the channel has no connection to HA, which isn't the camera failing. */
+    private fun failAttempt(a: Attempt, error: HaError, offline: Boolean = false) {
         if (attempt !== a || closed || failed) return
         teardown(a)
         attempt = null
-        if (played && reconnects < options.maxReconnects) {
-            reconnects++
-            val delay = options.reconnectDelayMs shl (reconnects - 1).coerceAtMost(MAX_BACKOFF_SHIFT)
+        if (played && (offline || reconnects < options.maxReconnects)) {
+            if (!offline) reconnects++
+            retries++
+            val delay = options.reconnectDelayMs shl (retries - 1).coerceAtMost(MAX_BACKOFF_SHIFT)
             // The timer first, so a listener that closes the stream from onReconnecting cancels it.
             reconnect = scheduler.postDelayed(delay) {
                 reconnect = null
                 if (!closed && !failed && active && attempt == null) connect()
             }
-            listener?.onReconnecting(reconnects, error)
+            listener?.onReconnecting(retries, error)
         } else {
             failed = true
             idle?.cancel()
@@ -301,7 +338,7 @@ public class HaWebRtcStream(
         }
 
         override fun onError(error: HaError) {
-            scheduler.post { failAttempt(a, startFailed(error)) }
+            scheduler.post { failAttempt(a, startFailed(error), offline = error.code == HaError.NOT_CONNECTED) }
         }
     }
 

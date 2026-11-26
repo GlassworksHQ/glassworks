@@ -72,6 +72,10 @@ class LiveCameraFeedTest {
             closed = true
         }
 
+        override fun connectionRestored() {
+            calls += "restored"
+        }
+
         fun frame(w: Int = 1280, h: Int = 720) {
             videoWidth = w
             videoHeight = h
@@ -801,6 +805,183 @@ class LiveCameraFeedTest {
         assertEquals(711 to 400, frame.fitted(400, 400))
         frame.fit = CameraFitFrame.FILL
         assertEquals(400 to 400, frame.fitted(400, 400))
+    }
+
+
+    // ---- Recovery after a drop (#799 C1): HA restarts, every kind fails, HA comes back.
+
+    private fun ms(n: Long) = ShadowLooper.idleMainLooper(n, java.util.concurrent.TimeUnit.MILLISECONDS)
+
+    /** A camera that played WebRTC, then lost every kind while HA was down; MJPEG [mjpegPlays] once HA's HTTP is back. */
+    private fun droppedToMjpeg(f: LiveCameraFeed, mjpegPlays: Boolean) {
+        f.start()
+        idle()
+        live(HLS).frame()
+        live(WEB_RTC).frame()
+        idle()
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        live(WEB_RTC).fail()
+        idle()
+        assertEquals(listOf(HLS), f.runningKinds)
+        live(HLS).fail()
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        if (mjpegPlays) live(MJPEG).frame() else live(MJPEG).fail()
+        idle()
+    }
+
+    @Test
+    fun afterADropHaIsBackAndTheCameraGoesBackToWebRtc() {
+        val s = store()
+        val f = feed(context(s))
+        droppedToMjpeg(f, mjpegPlays = true)
+        assertEquals(MJPEG, f.shownKind)
+        val mjpeg = live(MJPEG)
+
+        LiveCameraFeed.connectionRestored(s)
+        idle()
+        // The choice starts over as HA's does (HLS and WebRTC side by side); MJPEG stays on screen until video draws.
+        assertEquals(listOf(MJPEG, HLS, WEB_RTC), f.runningKinds)
+        assertEquals(MJPEG, f.shownKind)
+        assertTrue("MJPEG heard it too", "restored" in mjpeg.calls)
+        live(WEB_RTC).frame()
+        idle()
+        // WebRTC shows; HLS goes on hidden until it reports, as HA's ha-camera-stream runs it.
+        assertEquals(listOf(HLS, WEB_RTC), f.runningKinds)
+        assertEquals(WEB_RTC, f.shownKind)
+        assertTrue(mjpeg.closed)
+    }
+
+    @Test
+    fun afterADropThatTookStillsTooTheCameraGoesBackToVideo() {
+        val s = store()
+        val f = feed(context(s))
+        droppedToMjpeg(f, mjpegPlays = false)
+        assertEquals(emptyList<CameraStreamKind>(), f.runningKinds)
+        assertTrue(f.isPolling)
+        LiveCameraFeed.connectionRestored(s)
+        idle()
+        assertEquals(listOf(HLS, WEB_RTC), f.runningKinds)
+        // The stills go on until the video draws.
+        assertTrue(f.isPolling)
+        live(WEB_RTC).frame()
+        idle()
+        assertEquals(WEB_RTC, f.shownKind)
+        assertFalse(f.isPolling)
+        // MJPEG's retry was dropped with its failure: it doesn't open over the video later.
+        ms(LiveCameraFeed.RETRY_MS)
+        assertEquals(listOf(HLS, WEB_RTC), f.runningKinds)
+    }
+
+    @Test
+    fun aPlayerStillPlayingAtTheReconnectIsLeftAlone() {
+        val s = store()
+        val f = feed(context(s))
+        f.start()
+        idle()
+        live(HLS).frame()
+        live(WEB_RTC).frame()
+        idle()
+        val rtc = live(WEB_RTC)
+        LiveCameraFeed.connectionRestored(s)
+        idle()
+        assertEquals(listOf("start", "restored"), rtc.calls)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        assertEquals(1, made.count { it.kind == WEB_RTC })
+    }
+
+    @Test
+    fun aReconnectReachesOnlyTheFeedsOfThatConnectionAndNoStoppedOne() {
+        val s = store()
+        val other = store()
+        val f = feed(context(s))
+        val g = feed(context(other))
+        droppedToMjpeg(f, mjpegPlays = true)
+        LiveCameraFeed.connectionRestored(other)
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        g.start()
+        g.stop()
+        f.stop()
+        LiveCameraFeed.connectionRestored(s)
+        idle()
+        assertEquals(emptyList<CameraStreamKind>(), f.runningKinds)
+        assertTrue(made.all { it.closed })
+    }
+
+    @Test
+    fun aHiddenCameraTriesAgainWhenItShows() {
+        val s = store()
+        val f = feed(context(s))
+        droppedToMjpeg(f, mjpegPlays = true)
+        f.setActive(false)
+        LiveCameraFeed.connectionRestored(s)
+        idle()
+        assertTrue("nothing opens while hidden", made.none { !it.closed && it.kind != MJPEG })
+        f.setActive(true)
+        idle()
+        assertEquals(listOf(MJPEG, HLS, WEB_RTC), f.runningKinds)
+    }
+
+    @Test
+    fun aLongHideTriesWhatFailedAgainAndAShortOneDoesnt() {
+        val f = feed(context(store()))
+        droppedToMjpeg(f, mjpegPlays = true)
+        f.setActive(false)
+        ms(LiveCameraFeed.LONG_HIDE_MS - 1_000)
+        f.setActive(true)
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        f.setActive(false)
+        ms(LiveCameraFeed.LONG_HIDE_MS)
+        f.setActive(true)
+        idle()
+        assertEquals(listOf(MJPEG, HLS, WEB_RTC), f.runningKinds)
+    }
+
+    @Test
+    fun aCameraWhoseVideoFailedTriesItAgainNowAndThen() {
+        val f = feed(context(store()))
+        droppedToMjpeg(f, mjpegPlays = true)
+        ms(LiveCameraFeed.VIDEO_RETRY_MS - 1_000)
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        ms(1_000)
+        assertEquals(listOf(MJPEG, HLS, WEB_RTC), f.runningKinds)
+        // It fails again: back on MJPEG, and the next try is a whole wait away.
+        live(WEB_RTC).fail()
+        live(HLS).fail()
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        ms(LiveCameraFeed.VIDEO_RETRY_MS - 1_000)
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        ms(1_000)
+        assertEquals(listOf(MJPEG, HLS, WEB_RTC), f.runningKinds)
+    }
+
+    @Test
+    fun aCameraOnMjpegForWantOfASlotDoesntRetryOnATimer() {
+        CameraVideoBudget.max = 1
+        val first = feed(context(store()))
+        first.start()
+        idle()
+        live(WEB_RTC).frame()
+        idle()
+        val s = store()
+        val second = LiveCameraFeed(context(s), "camera.porch", { null }, host = FrameLayout(activity)) {}
+        second.start()
+        idle()
+        assertEquals(listOf(MJPEG), second.runningKinds)
+        val opened = made.size
+        ms(LiveCameraFeed.VIDEO_RETRY_MS)
+        assertEquals(listOf(MJPEG), second.runningKinds)
+        assertEquals(opened, made.size)
+        // A reconnect doesn't take it off the waiting list either: still MJPEG until a slot frees.
+        LiveCameraFeed.connectionRestored(s)
+        idle()
+        assertEquals(listOf(MJPEG), second.runningKinds)
+        first.stop()
+        idle()
+        assertTrue(WEB_RTC in second.runningKinds)
     }
 
     @Test

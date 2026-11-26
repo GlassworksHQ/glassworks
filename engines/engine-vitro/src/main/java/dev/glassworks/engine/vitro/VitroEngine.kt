@@ -91,6 +91,9 @@ class VitroEngine(
     /** How Clarity's harness reaches its fake Home Assistant ([VitroClarity]); tests give one that touches no network. */
     internal var clarityHttp: ClarityHttp = ClarityHttp.Loopback
 
+    /** How often a page's connection is checked and its token asked for again ([HaDashboardClient]); tests shorten it. */
+    internal var keepAliveMs: Long = HaDashboardClient.KEEP_ALIVE_MS
+
     /** The app, once Vitro has seen it: where the island server keeps its port ([islandPort]). */
     @Volatile private var appContext: Context? = null
 
@@ -104,11 +107,22 @@ class VitroEngine(
         override fun save(port: Int) { prefs()?.edit()?.putInt(ISLAND_PORT, port)?.apply() }
     }
 
+    /**
+     * The island proxy's session again after Home Assistant refused its token (a 401 on a proxied `/api/` request): a
+     * forced refresh, handed to every consumer. For the island server to retry once with; [done] runs on any thread.
+     */
+    fun renewIslandSession(done: (Pair<String?, String?>) -> Unit) {
+        val page = activePage ?: return done(null to null)
+        page.renewIslandSession(done)
+    }
+
     val islandServer: VitroIslandServer = VitroIslandServer(
         session = { activePage?.islandSession() ?: (null to null) },
         log = { msg -> Log.d(logTag, "island: ${forLog(msg)}") },
         resources = { activePage?.resourceUrls().orEmpty() },
         portMemory = islandPort,
+        // A request Home Assistant refused (401) is tried once more with the token this renews.
+        renewSession = { done -> renewIslandSession(done) },
     )
 
     /**
@@ -529,6 +543,16 @@ class VitroEngine(
         }
 
         /**
+         * A fresh token for the island proxy, for a request Home Assistant refused with the one [islandSession] gave
+         * (a 401): the provider is asked with force, every consumer gets the new token as with any other ([tokenWatchers]),
+         * and [done] gets the session after it, on any thread. With no connection it gets the session as it is.
+         */
+        fun renewIslandSession(done: (Pair<String?, String?>) -> Unit) {
+            val c = client ?: return done(islandSession())
+            c.refreshToken(force = true) { done(islandSession()) }
+        }
+
+        /**
          * The token for [origin], read when a request goes out: only one issued for that origin. An image or stream
          * queued for the old Home Assistant never gets the next one's token.
          */
@@ -550,9 +574,11 @@ class VitroEngine(
                     val c = client
                     if (c != null) c.callWs(msg, done) else done(false, null, null)
                 },
+                // A camera's exchange (a WebRTC offer and its candidates) belongs to one connection: it isn't sent again
+                // on the next one, as a card's subscription is.
                 subscribeWs = { msg, onEvent, onError ->
                     val c = client
-                    if (c != null) c.subscribeWs(msg, onEvent, onError) else { onError(null); {} }
+                    if (c != null) c.subscribeWs(msg, onEvent, onError, resubscribe = false) else { onError(null); {} }
                 },
             )
             return CameraPlayers.forHost(host) { id -> store[id]?.entityPicture }
@@ -665,17 +691,23 @@ class VitroEngine(
                     navigate = { path -> navigateInPlace(path) },
                     openMoreInfo = { entityId -> vitroView.openMoreInfo(entityId) },
                     fetchHistory = { ids, hours, done -> client?.fetchHistory(ids, hours, done) },
-                    fetchForecast = { id, kind, done -> client?.fetchForecast(id, kind, done) },
+                    subscribeForecast = { id, kind, onForecast -> client?.subscribeForecast(id, kind, onForecast) ?: {} },
                     subscribeWs = { msg, onEvent, onError ->
                         val c = client
                         if (c != null) c.subscribeWs(msg, onEvent, onError) else { onError(null); {} }
+                    },
+                    subscribeWsFresh = { message, onEvent, onError ->
+                        val c = client
+                        if (c != null) c.subscribeWsFresh(message, onEvent, onError) else { onError(null); {} }
                     },
                     subscribeTemplate = { tpl, onRendered ->
                         client?.subscribeTemplate(tpl, onRendered) ?: {}
                     },
                     subscribeWsStarted = { msg, onStarted, onEvent, onError ->
                         val c = client
-                        if (c != null) c.subscribeWs(msg, onEvent, onError, onStarted) else { onError(null); {} }
+                        // On this connection only: the island starts its subscriptions again itself after a reconnect
+                        // (each page's own `resubscribe` and `preCheck`), so the client doesn't hold them.
+                        if (c != null) c.subscribeWs(msg, onEvent, onError, resubscribe = false, onStarted = onStarted) else { onError(null); {} }
                     },
                     cameraPlayers = cameraPlayersFor(haBase),
                     islandServer = islandServer,
@@ -794,10 +826,13 @@ class VitroEngine(
                             if (tok != null && generation == clientGeneration) {
                                 // Another sign-in than the cached images were fetched with: they go before it is used.
                                 VitroCardContext.noteToken(tok)
+                                val changed = cachedSession != (origin to tok)
                                 cachedToken = tok
                                 cachedSession = origin to tok
-                                // Islands whose page stays (a kept dashboard after a reconnect) get it now.
-                                tokenWatchers.forEach { runCatching { it() } }
+                                // Islands whose page stays (a kept dashboard after a reconnect, or a token refreshed
+                                // on a live connection: the client asks for it every 30 s) get it now. The same token
+                                // again (the provider's cached one) tells nobody.
+                                if (changed) tokenWatchers.forEach { runCatching { it() } }
                             }
                             done(tok)
                         }
@@ -806,6 +841,7 @@ class VitroEngine(
                 store = store,
                 connect = socketFactory,
                 listener = WsListener(generation),
+                keepAliveMs = keepAliveMs,
             )
             client = wsClient
             // Islands holding the registries keep them, now from this Home Assistant.
