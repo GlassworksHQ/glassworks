@@ -2118,17 +2118,26 @@ class VitroView(
      * size and again when it changes. Never for a card that casts a shadow ([cardLayerWanted]), which the layer's
      * bounds would clip, nor for one that plays a live camera ([playsLiveVideo]): each video frame would draw its whole
      * layer again. Sections, masonry and sidebar views alike.
+     *
+     * Never for a card that holds an island ([IslandCard]: a custom card's page, an iframe) either: the island is a
+     * browser's SurfaceView, whose picture shows through the hole its window leaves for it, and a layer draws that
+     * hole as its own pixels. The island then stays blank while its page draws and sizes the card. The 160 px an island
+     * holds before its page reports a size is already big on the S1, so every masonry island was blank there.
      */
     private fun cacheCardAsLayer(cardView: View, card: CardConfig, ctx: VitroCardContext) {
         if (!cardLayerWanted(ctx.theme.cardElevationDp, cardView.elevation) || playsLiveVideo(card)) return
-        if (cardLayers == CardLayers.ALL) {
-            cardView.setLayerType(LAYER_TYPE_HARDWARE, null)
-            return
+        fun want(v: View, w: Int, h: Int): Int = when {
+            islandsIn(v).isNotEmpty() -> LAYER_TYPE_NONE
+            cardLayers == CardLayers.ALL || isBigCard(w, h, width, height) -> LAYER_TYPE_HARDWARE
+            else -> LAYER_TYPE_NONE
         }
+        if (cardLayers == CardLayers.ALL) cardView.setLayerType(want(cardView, 0, 0), null)
+        // Again when the card's size changes: a big card by its new size, and an island a card made later (an
+        // auto-entities child, a conditional's) takes the card off its layer. A card whose size can't change (a fixed
+        // grid_options.rows) never hears of that island here: the island lifts the layer itself ([liftLayersAbove]).
         cardView.addOnLayoutChangeListener { v, l, t, r, b, ol, ot, or, ob ->
             if (r - l == or - ol && b - t == ob - ot) return@addOnLayoutChangeListener
-            val big = isBigCard(r - l, b - t, width, height)
-            val want = if (big) LAYER_TYPE_HARDWARE else LAYER_TYPE_NONE
+            val want = want(v, r - l, b - t)
             if (v.layerType != want) v.setLayerType(want, null)
         }
     }
@@ -2647,6 +2656,23 @@ class VitroView(
     }
 
     companion object {
+        /**
+         * Takes every hardware layer off the views between [island] and the VitroView holding it ([cacheCardAsLayer]):
+         * an island attached into a card that already has a layer (an auto-entities or conditional child made later,
+         * in a card whose size doesn't change) would otherwise stay blank under it. Main thread; nothing outside a
+         * VitroView (a More Info sheet's island) is touched.
+         */
+        internal fun liftLayersAbove(island: View) {
+            val above = ArrayList<View>()
+            var p = island.parent
+            while (p is View && p !is VitroView) {
+                above += p
+                p = p.parent
+            }
+            if (p !is VitroView) return
+            for (v in above) if (v.layerType == View.LAYER_TYPE_HARDWARE) v.setLayerType(View.LAYER_TYPE_NONE, null)
+        }
+
         /** HA's `CONNECTION_LOST_TOAST_ID`, and how long a drop lasts before its toast shows. */
         private const val CONNECTION_LOST_TOAST = "connection-lost"
         private const val CONNECTION_LOST_DELAY_MS = 1_000L

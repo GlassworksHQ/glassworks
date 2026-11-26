@@ -690,6 +690,8 @@ class WebIslandCardView(
         attachedOnce = true
         super.onAttachedToWindow()
         ctx.main.removeCallbacks(releaseIfDetached)
+        // Into a card that already has a layer (a child made later in a card of fixed size): off it, or it's blank.
+        dev.glassworks.engine.vitro.ui.VitroView.liftLayersAbove(this)
         // Back from a move (the observer was off while detached): the page catches up on what changed meanwhile.
         // The token watcher was off too: a token that arrived meanwhile goes first, then the states.
         if (wasDetached && !islandGone) synchronized(seedLock) {
