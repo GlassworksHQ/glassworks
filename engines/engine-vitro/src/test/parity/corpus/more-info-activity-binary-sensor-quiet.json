@@ -1,0 +1,63 @@
+{
+ "title": "More Info of a door sensor that logged nothing in 24 hours: its history, then the Activity section's \"No activity found\"",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "binary_sensor.front_door_contact"
+ },
+ "more_info": "binary_sensor.front_door_contact",
+ "expect": {
+  "binary_sensor.front_door_contact": "off"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "binary_sensor.front_door_contact": {
+    "state": "off",
+    "last_changed": -108000,
+    "attributes": {
+     "device_class": "door",
+     "friendly_name": "Front Door Contact"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "binary_sensor.front_door_contact",
+    "pl": "zha",
+    "di": "dev-front-door",
+    "en": "Contact",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-front-door",
+    "name": "Front Door"
+   }
+  ],
+  "history": {
+   "binary_sensor.front_door_contact": {
+    "steps": [
+     [
+      "-30h",
+      "off"
+     ]
+    ]
+   }
+  },
+  "logbook": []
+ }
+}

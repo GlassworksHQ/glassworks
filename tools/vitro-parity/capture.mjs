@@ -1132,7 +1132,7 @@ async function capture() {
             drawnStates = snapshotStates(states, ids);
             // The history and statistics the graphs drew, as of the screenshot (an answer after it would be data HA
             // never showed: the same check as the states).
-            drawnGraphs = snapshotCalls(graphs.calls).filter((call) => keepCall(call, fakeMode, config));
+            drawnGraphs = snapshotCalls(graphs.calls).filter((call) => keepCall(call, fakeMode, config, c.more_info));
             // The images the screenshot shows, read just before it and checked again after (bracketed like the
             // states): saved for Vitro's fixture server after the checks.
             drawn = await page.evaluate(DRAWN_IMAGES_JS, slots);
@@ -1156,7 +1156,7 @@ async function capture() {
             // One instant for the PNG, its states and its images: anything that moved meanwhile starts it over.
             const sameStates = JSON.stringify(snapshotStates(states, ids)) === JSON.stringify(drawnStates);
             const sameImages = JSON.stringify(await page.evaluate(DRAWN_IMAGES_JS, slots)) === JSON.stringify(drawn);
-            const sameGraphs = JSON.stringify(graphs.calls.filter((call) => keepCall(call, fakeMode, config))) === JSON.stringify(drawnGraphs);
+            const sameGraphs = JSON.stringify(graphs.calls.filter((call) => keepCall(call, fakeMode, config, c.more_info))) === JSON.stringify(drawnGraphs);
             // Only the drawn images' bodies: another card loading a picture meanwhile changes nothing here.
             const drawnPaths = drawn.drawn.map((url) => { try { const u = new URL(url); return u.origin === creds.origin ? u.pathname : null; } catch { return null; } }).filter(Boolean);
             const sameBodies = drawnPaths.every((p) => images.loaded.get(p) === loadedAtShot.get(p));

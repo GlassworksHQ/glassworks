@@ -1129,6 +1129,9 @@ object HaTimelineChart {
      */
     private val genericColors = HashMap<String, Int>()
 
+    /** Forgets the generic colors handed out, as a fresh HA page starts its own map (the parity harness, per case). */
+    internal fun resetGenericColors() = synchronized(genericColors) { genericColors.clear() }
+
     /**
      * `computeTimelineColor`: unavailable and unknown; a state-colored domain's active or inactive color; an option of
      * an `input_select`, `select` or enum sensor by its index among the options; any other value a graph color of its
@@ -1413,7 +1416,7 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
 }
 
 /** `.entry-container`: a line chart 8 px down, a first timeline 16 px down; later ones under a 2 px divider. */
-internal fun historyEntry(ctx: VitroCardContext, child: View, timeline: Boolean, first: Boolean): View {
+internal fun historyEntry(ctx: VitroCardContext, child: View, timeline: Boolean, first: Boolean, timelineTopMargin: Float = 16f): View {
     val box = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
     if (!first) {
         box.addView(View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) },
@@ -1424,7 +1427,9 @@ internal fun historyEntry(ctx: VitroCardContext, child: View, timeline: Boolean,
         if (!first && !timeline) topMargin = Math.round(8f * ctx.dp)
     })
     val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    lp.topMargin = Math.round((if (first) (if (timeline) 16f else 0f) else if (timeline) 32f else 16f) * ctx.dp)
+    // `.entry-container.timeline:first-child { margin-top: var(--timeline-top-margin) }`: the history graph card sets it
+    // to 16 px; More Info leaves it unset ([timelineTopMargin] 0).
+    lp.topMargin = Math.round((if (first) (if (timeline) timelineTopMargin else 0f) else if (timeline) 32f else 16f) * ctx.dp)
     box.layoutParams = lp
     return box
 }

@@ -1548,19 +1548,41 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             }
             labels.addView(name, LinearLayout.LayoutParams(MATCH_PARENT, Math.round(16.8f * ctx.dp)))
             labels.addView(time, LinearLayout.LayoutParams(MATCH_PARENT, Math.round(22.4f * ctx.dp)))
-            row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = ctx.px(8f) })
+            val number = id.substringBefore('.') in NUMBER_DOMAINS
             val value = cssText(ctx, 14f, theme.primaryTextColor).apply {
                 maxLines = 1
                 gravity = Gravity.CENTER_VERTICAL or Gravity.END
             }
-            row.addView(value, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(40f)).apply { marginStart = ctx.px(8f) })
-            body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f)).apply {
-                marginStart = side
-                marginEnd = side
-                if (historyLoaded() || logbook) bottomMargin = ctx.px(16f)
-            })
+            var control: EntityRowControls.Control? = null
+            if (number) {
+                // state-card-number / state-card-input_number: state-info, then the slider and its state (or the box)
+                // in the `.flex` that takes the rest of the row.
+                row.removeView(badge)
+                val card = StateCardRow(ctx.context, badge, labels, ctx.dp)
+                val c = EntityRowControls.stateCardNumber(ctx, id, { HaDisplay.nameParts(id, ctx.store[id]?.friendlyName ?: id).let { it.entity ?: it.device ?: id } },
+                    rowWidthCss = { card.rowWidthPx / ctx.dp }, flexWidthCss = { card.flexWidthPx / ctx.dp })
+                control = c
+                card.setControl(c.view)
+                body.addView(card, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                    marginStart = side
+                    marginEnd = side
+                    if (historyLoaded() || logbook) bottomMargin = ctx.px(16f)
+                })
+            } else {
+                row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = ctx.px(8f) })
+                row.addView(value, LinearLayout.LayoutParams(WRAP_CONTENT, ctx.px(40f)).apply { marginStart = ctx.px(8f) })
+                body.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(40f)).apply {
+                    marginStart = side
+                    marginEnd = side
+                    if (historyLoaded() || logbook) bottomMargin = ctx.px(16f)
+                })
+            }
             update = { s ->
-                icon.setIcon(MdiIcons.resolveIconName(null, s), theme.stateIconColor)
+                control?.update?.invoke(s)
+                // state-info's state-badge (`stateColor`): an active entity in its state's color (a tracker at home
+                // green), anything else in the icon color.
+                val tint = s?.takeIf { it.isActive }?.let { HaStateColor.of(ctx, it) } ?: theme.stateIconColor
+                icon.setIcon(MdiIcons.resolveIconName(null, s), tint)
                 // formatEntityName(stateObj, { type: "entity" }): the entity's own name, else its device's.
                 val parts = HaDisplay.nameParts(id, s?.friendlyName ?: id)
                 name.text = parts.entity ?: parts.device ?: s?.friendlyName ?: id
@@ -1852,6 +1874,9 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             "select", "input_select", "lock", "media_player", "alarm_control_panel", "button", "input_button", "script", "scene",
         )
 
+        /** The domains whose state row is a slider or a box (`state-card-number`, `state-card-input_number`). */
+        val NUMBER_DOMAINS = setOf("number", "input_number")
+
         /** The domains drawn from HA's own parts ([MoreInfoVacuumView]), inside its 24 px `.content`. */
         val CONTENT_DOMAINS = setOf("vacuum")
 
@@ -1932,6 +1957,68 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             if (lastChangedSec <= 0.0) return ""
             return HaFormat.capitalize(HaFormat.relativeTime((lastChangedSec * 1000).toLong(), nowMs))
         }
+    }
+}
+
+/**
+ * A number's `state-card-*` row: `state-info` (the 40 px badge, 8 px, the name over the time), at least 120 px and as
+ * wide as its text, then the control in the `.flex` that takes the rest ([flexWidthPx]), all centred on the row's
+ * height (at least 40 px).
+ */
+@SuppressLint("ViewConstructor")
+internal class StateCardRow(context: Context, private val badge: View, private val labels: View, private val dp: Float) : android.view.ViewGroup(context) {
+    private var control: View? = null
+
+    /** The row's width and the `.flex`'s, as last measured (px): what the slider shares. */
+    var rowWidthPx = 0
+        private set
+    var flexWidthPx = 0
+        private set
+
+    init {
+        addView(badge)
+        addView(labels)
+    }
+
+    fun setControl(v: View) {
+        control?.let(::removeView)
+        control = v
+        addView(v)
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        val unspecified = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        val badgePx = Math.round(40f * dp)
+        badge.measure(MeasureSpec.makeMeasureSpec(badgePx, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(badgePx, MeasureSpec.EXACTLY))
+        labels.measure(unspecified, unspecified)
+        val info = maxOf(Math.round(120f * dp), badgePx + Math.round(8f * dp) + labels.measuredWidth).coerceAtMost(w)
+        rowWidthPx = w
+        flexWidthPx = (w - info).coerceAtLeast(0)
+        // The labels get what state-info has after the badge (they ellipsize).
+        labels.measure(MeasureSpec.makeMeasureSpec((info - badgePx - Math.round(8f * dp)).coerceAtLeast(0), MeasureSpec.EXACTLY), unspecified)
+        var h = badgePx
+        control?.let { c ->
+            val lp = c.layoutParams
+            val hs = if (lp != null && lp.height > 0) MeasureSpec.makeMeasureSpec(lp.height, MeasureSpec.EXACTLY) else unspecified
+            c.measure(MeasureSpec.makeMeasureSpec(flexWidthPx, MeasureSpec.AT_MOST), hs)
+            h = maxOf(h, c.measuredHeight)
+        }
+        h = maxOf(h, labels.measuredHeight)
+        setMeasuredDimension(w, h)
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        val h = b - t
+        val w = r - l
+        fun center(v: View, x: Int) {
+            val top = (h - v.measuredHeight) / 2
+            v.layout(x, top, x + v.measuredWidth, top + v.measuredHeight)
+        }
+        center(badge, 0)
+        center(labels, badge.measuredWidth + Math.round(8f * dp))
+        // `.flex { justify-content: flex-end }`: the control at the row's end.
+        control?.let { c -> center(c, w - c.measuredWidth) }
     }
 }
 

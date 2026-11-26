@@ -22,7 +22,7 @@ export const RECORDED_TYPES = new Set([
   // capture records it in the same list (restHistoryCall), and Vitro's fetchHistory is answered from it.
   'rest/history/period',
   // Who a logbook entry's `context_user_id` is: recorded only from the fake HA, whose users are made up, and only for a
-  // case with a logbook (capture.mjs keepCall). A real HA's user list is never kept.
+  // case with a logbook or a More Info dialog (capture.mjs keepCall). A real HA's user list is never kept.
   'config/auth/list',
   // Which streams a live camera offers (`camera_view: live`, ha-camera-stream): Vitro picks its player from the same
   // answer. The stream itself (`camera/stream`, the video) isn't recorded: the video is masked out of the comparison.
@@ -93,11 +93,12 @@ const ONE_SHOT = new Set(['history/history_during_period', 'recorder/statistics_
 
 /**
  * Whether a recorded call belongs in a reference: the user list only from the fake HA ([fake]) and only for a case
- * whose card shows a logbook ([config]); every other recorded call always.
+ * whose card shows a logbook ([config]) or that opens a More Info dialog ([moreInfo]), whose Activity section is one;
+ * every other recorded call always.
  */
-export function keepCall(call, fake, config) {
+export function keepCall(call, fake, config, moreInfo) {
   if (call?.request?.type !== 'config/auth/list') return true;
-  return Boolean(fake) && JSON.stringify(config ?? null).includes('"logbook"');
+  return Boolean(fake) && (Boolean(moreInfo) || JSON.stringify(config ?? null).includes('"logbook"'));
 }
 
 /**

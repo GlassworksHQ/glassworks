@@ -46,9 +46,28 @@ internal object HaLogbook {
      * "pressed"), under `ui.components.logbook.messages`.
      */
     private val STATE_ACTION_MESSAGES = mapOf(
-        "button" to "pressed", "input_button" to "pressed", "scene" to "activated", "tag" to "scanned",
-        "image" to "updated", "notify" to "sent", "wake_word" to "detected", "stt" to "transcribed", "tts" to "spoke",
-        "conversation" to "responded", "ai_task" to "ran", "infrared" to "command_sent", "radio_frequency" to "command_sent",
+        "button" to "ui.components.logbook.messages.pressed",
+        "input_button" to "ui.components.logbook.messages.pressed",
+        "scene" to "ui.components.logbook.messages.activated",
+        "tag" to "ui.components.logbook.messages.scanned",
+        "image" to "ui.components.logbook.messages.updated",
+        "notify" to "ui.components.logbook.messages.sent",
+        "wake_word" to "ui.components.logbook.messages.detected",
+        "stt" to "ui.components.logbook.messages.transcribed",
+        "tts" to "ui.components.logbook.messages.spoke",
+        "conversation" to "ui.components.logbook.messages.responded",
+        "ai_task" to "ui.components.logbook.messages.ran",
+        "infrared" to "ui.components.logbook.messages.command_sent",
+        "radio_frequency" to "ui.components.logbook.messages.command_sent",
+    )
+
+    /** HA's trigger-type labels (`ui.components.logbook.trigger_type.*`), by the platform a source parses to. */
+    private val TRIGGER_TYPE_LABELS = mapOf(
+        "state" to "ui.components.logbook.trigger_type.state",
+        "numeric_state" to "ui.components.logbook.trigger_type.numeric_state",
+        "event" to "ui.components.logbook.trigger_type.event",
+        "time" to "ui.components.logbook.trigger_type.time",
+        "time_pattern" to "ui.components.logbook.trigger_type.time_pattern",
     )
 
     /** `RESTORABLE_BUTTON_DOMAINS`: a restored button's timestamp isn't a press. */
@@ -191,7 +210,7 @@ internal object HaLogbook {
         val stamp = dev.glassworks.engine.vitro.data.EntityStore.parseIsoEpochSeconds(state)
         val matchesEntry = stamp != null && kotlin.math.abs(stamp * 1000 - e.whenSec * 1000) < 1000
         if (action != null && (domain !in RESTORABLE_BUTTON_DOMAINS || matchesEntry)) {
-            return HaText.ui("ui.components.logbook.messages.$action")
+            return HaText.ui(action)
         }
         return historic.formattedState()
     }
@@ -300,15 +319,16 @@ internal object HaLogbook {
                 when (platform) {
                     "state", "numeric_state" -> {
                         val name = if (entityId != null) primary(entityId) ?: entityId
-                        else HaText.ui("ui.components.logbook.trigger_type.$platform").ifEmpty { platform }
+                        else TRIGGER_TYPE_LABELS[platform]?.let { HaText.ui(it) }.orEmpty().ifEmpty { platform }
                         return Cause("state", name, entityId = entityId)
                     }
                     "time", "time_pattern" -> return Cause("scheduled", "")
                     "homeassistant" -> {
-                        val key = if (source.startsWith("Home Assistant starting")) "homeassistant_starting" else "homeassistant_stopping"
-                        return Cause("homeassistant", HaText.ui("ui.components.logbook.$key").ifEmpty { source })
+                        val key = if (source.startsWith("Home Assistant starting")) "ui.components.logbook.homeassistant_starting"
+                        else "ui.components.logbook.homeassistant_stopping"
+                        return Cause("homeassistant", HaText.ui(key).ifEmpty { source })
                     }
-                    else -> return Cause("integration", HaText.ui("ui.components.logbook.trigger_type.$platform").ifEmpty { platform })
+                    else -> return Cause("integration", TRIGGER_TYPE_LABELS[platform]?.let { HaText.ui(it) }.orEmpty().ifEmpty { platform })
                 }
             }
         }

@@ -269,9 +269,8 @@ internal class MoreInfoLogbookView(
         }
         val value = valueText(e)
         val primary = cssText(ctx, 14f, theme.primaryTextColor).apply {
+            // overflow-wrap: anywhere; a long value wraps (the row grows past its 40 px).
             text = value
-            // overflow-wrap: anywhere; a long value wraps.
-            setPadding(0, px(9f), 0, px(9f))
         }
         lineBox(ctx, primary, 14f, 1.6f)
         line.addView(primary, LayoutParams(0, WRAP_CONTENT, 1f))

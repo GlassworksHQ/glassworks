@@ -353,7 +353,7 @@ internal class MoreInfoHistoryView(
             val rows = history.timeline
             val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = HaTimelineChart.height(rows.size) }
             chart.setScene { w -> HaTimelineChart.scene(rows, emptyMap(), start, end, padding, w, ctx, false) }
-            charts.addView(historyEntry(ctx, chart, timeline = true, first = index++ == 0))
+            charts.addView(historyEntry(ctx, chart, timeline = true, first = index++ == 0, timelineTopMargin = 0f))
             drawn = chart
         }
         for (spec in specs) {

@@ -319,22 +319,22 @@ class VitroCardContext(
 
     private fun runAction(action: ActionConfig, defaultEntityId: String?) {
         // HA's handleAction tells in a toast when an action has nothing to act on.
-        fun missing(key: String) = showToast(HaToast(HaText.ui("ui.panel.lovelace.cards.actions.$key")))
+        fun missing(key: String) = showToast(HaToast(HaText.ui(key)))
         when (action.action) {
             "none" -> Unit
-            "toggle" -> defaultEntityId?.let(::toggleEntity) ?: missing("no_entity_toggle")
+            "toggle" -> defaultEntityId?.let(::toggleEntity) ?: missing("ui.panel.lovelace.cards.actions.no_entity_toggle")
             // HA's handleAction: the action's own `entity`, else the card's.
-            "more-info" -> (action.entity ?: defaultEntityId)?.let(openMoreInfo) ?: missing("no_entity_more_info")
-            "navigate" -> action.navigationPath?.takeIf { it.isNotEmpty() }?.let(navigate) ?: missing("no_navigation_path")
+            "more-info" -> (action.entity ?: defaultEntityId)?.let(openMoreInfo) ?: missing("ui.panel.lovelace.cards.actions.no_entity_more_info")
+            "navigate" -> action.navigationPath?.takeIf { it.isNotEmpty() }?.let(navigate) ?: missing("ui.panel.lovelace.cards.actions.no_navigation_path")
             "call-service", "perform-action" -> {
-                val svc = action.service?.takeIf { it.isNotEmpty() } ?: return missing("no_action")
+                val svc = action.service?.takeIf { it.isNotEmpty() } ?: return missing("ui.panel.lovelace.cards.actions.no_action")
                 val domain = svc.substringBefore('.', "")
                 val name = svc.substringAfter('.', "")
                 if (domain.isNotEmpty() && name.isNotEmpty()) {
                     callService(domain, name, action.serviceData, action.target)
                 }
             }
-            "url" -> action.urlPath?.takeIf { it.isNotEmpty() }?.let(navigate) ?: missing("no_url")
+            "url" -> action.urlPath?.takeIf { it.isNotEmpty() }?.let(navigate) ?: missing("ui.panel.lovelace.cards.actions.no_url")
         }
     }
 
