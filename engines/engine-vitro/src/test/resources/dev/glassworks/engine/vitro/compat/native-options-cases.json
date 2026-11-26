@@ -30,7 +30,7 @@
         { "entity": "automation.porch", "secondary_info": "last-triggered" }, { "entity": "switch.kettle", "secondary_info": "entity-id" },
         { "entity": "light.desk", "secondary_info": "brightness" }, { "entity": "sensor.a", "secondary_info": "position" },
         { "entity": "input_boolean.b", "secondary_info": "tilt-position" }] } },
-    { "what": "W5: secondary_info area (HA's area name) isn't drawn", "route": "frontend",
+    { "what": "W5: secondary_info area (HA's area name, formatEntityName's area part)", "route": "native",
       "card": { "type": "entities", "entities": [{ "entity": "light.desk", "secondary_info": "area" }] } },
     { "what": "B2/I1: an input_datetime row", "route": "frontend",
       "card": { "type": "entities", "entities": ["input_datetime.alarm"] } },

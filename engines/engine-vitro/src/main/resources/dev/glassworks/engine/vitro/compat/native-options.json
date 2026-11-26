@@ -144,7 +144,7 @@
         "name": "@name",
         "icon": "@icon",
         "secondary_info": {
-          "values": ["last-changed", "last-updated", "last-triggered", "entity-id", "brightness", "position", "tilt-position", "none"],
+          "values": ["last-changed", "last-updated", "last-triggered", "entity-id", "brightness", "position", "tilt-position", "area", "none"],
           "why": "a secondary line Vitro doesn't draw as HA does",
           "note": "HA's entities card migrates these to state-display contents (last_triggered, current_position, ...); EntityRowControls.secondaryText draws them (parity case entities-secondary-info)"
         },
