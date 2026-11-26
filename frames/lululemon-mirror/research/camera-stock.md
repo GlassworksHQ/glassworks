@@ -5,11 +5,14 @@ evidence: verified
 
 # The camera on stock Android 6: why Home Assistant got green stills and a stream with no pictures
 
-**Status (2026-11-25): partly working.** The cause is verified on a Mirror with a spike app: about a third of camera
-sessions start with no frames or with all-zero frames, whichever camera API or output is used. The camera pane now
-treats a blank frame as no frame and reopens the session, never sends a blank still, keeps the frame reader off
-most of the stream's frames on a LEGACY camera, and paces its retries while another app holds the camera. That
-change is tested off the device only; a run on a Mirror is pending.
+**Status (2026-11-26): working on the Mirror.** The causes are verified on a Mirror with a spike app: the pane's fixed
+15–15 fps request, which the camera lists but runs broken, and about a third of sessions starting with no frames or
+blank ones. The camera pane now asks every camera for its top rate's steadiest range, treats a blank frame as no
+frame and reopens the session, keeps the frame reader off most of every stream's frames (on every camera, not only
+LEGACY ones), paces its retries while another app holds the camera, and turns stills and the stream upright. On the
+Mirror (2026-11-26, verified; attempts 6 and 7) Home Assistant's still is a real, upright picture and the RTSP stream
+is 720×1280, upright, in real color. Still owed: a run on a non-LEGACY camera (the Pixel Tablet) of the GPU path at a
+turn of 0, and the long-run questions at the end.
 
 Device: lululemon Studio Mirror, original Qualcomm MSM8916 board, stock Android 6.0.1 with a 5 MP front camera behind
 Qualcomm's HAL1 (`mm-camera`). Camera2 sees it as LEGACY (hardware level 2), through Android's Camera1 shim.

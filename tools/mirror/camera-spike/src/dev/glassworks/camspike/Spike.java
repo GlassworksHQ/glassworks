@@ -38,7 +38,10 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-/** Throwaway camera spike. am start -n dev.glassworks.camspike/.Spike --es test c1|c1enc|c2 [--es c2out both|reader|enc] */
+/**
+ * Throwaway camera spike. am start -n dev.glassworks.camspike/.Spike --es test c1|c1enc|c2 [--es c2out both|reader|enc]
+ * [--es run <id>]: with a run id, the run's done file holds that id, and a launch it ignores writes ignored-<id>.
+ */
 public class Spike extends Activity {
     static final String TAG = "CAMSPIKE";
     static final int W = 1280, H = 720;
@@ -53,10 +56,22 @@ public class Spike extends Activity {
 
     void handle(final Intent i) {
         final String test = i.getStringExtra("test");
-        if (test == null || busy) { Log.i(TAG, "ignored test=" + test + " busy=" + busy); return; }
+        final String run = i.getStringExtra("run");
+        final String name = i.getStringExtra("name") != null ? i.getStringExtra("name")
+            : test == null ? null : test + (i.getStringExtra("c2out") != null ? "-" + i.getStringExtra("c2out") : "");
+        if (test == null || busy) {
+            Log.i(TAG, "ignored test=" + test + " busy=" + busy);
+            // Tell run.sh at once, so it fails instead of waiting for, or taking, another run's result.
+            if (run != null && name != null) {
+                File d = new File(getExternalFilesDir(null), name);
+                d.mkdirs();
+                try { new FileOutputStream(new File(d, "ignored-" + run)).close(); } catch (Exception e) {}
+            }
+            return;
+        }
         busy = true;
         new Thread(new Runnable() { public void run() {
-            dir = new File(getExternalFilesDir(null), i.getStringExtra("name") != null ? i.getStringExtra("name") : test + (i.getStringExtra("c2out") != null ? "-" + i.getStringExtra("c2out") : ""));
+            dir = new File(getExternalFilesDir(null), name);
             dir.mkdirs();
             for (File f : dir.listFiles()) f.delete();
             try {
@@ -73,7 +88,9 @@ public class Spike extends Activity {
             } finally {
                 p("DONE");
                 log.close();
-                try { new FileOutputStream(new File(dir, "done")).close(); } catch (Exception e) {}
+                try (FileOutputStream done = new FileOutputStream(new File(dir, "done"))) {
+                    if (run != null) done.write(run.getBytes());
+                } catch (Exception e) {}
                 busy = false;
             }
         }}, "spike").start();
@@ -136,6 +153,19 @@ public class Spike extends Activity {
         Enc(boolean surfaceMode, int colorFormat) throws Exception {
             this.surfaceMode = surfaceMode;
             codec = MediaCodec.createByCodecName(CODEC);
+            try {
+                setUp(colorFormat);
+            } catch (Exception e) {
+                // A format the codec rejects: nobody gets this Enc to stop, so free what it made here.
+                if (surface != null) surface.release();
+                try { codec.stop(); } catch (Exception x) {}
+                codec.release();
+                if (out != null) try { out.close(); } catch (Exception x) {}
+                throw e;
+            }
+        }
+
+        private void setUp(int colorFormat) throws Exception {
             MediaFormat f = MediaFormat.createVideoFormat("video/avc", W, H);
             f.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
             f.setInteger(MediaFormat.KEY_BIT_RATE, 2_000_000);
@@ -232,6 +262,8 @@ public class Spike extends Activity {
         final Enc[] encOut = {null};
         final SurfaceTexture[] stOut = {null};
         final GlConsumer[] glOut = {null};
+        final ImageReader[] irOut = {null};
+        final HandlerThread[] ihtOut = {null};
         try {
             c.setErrorCallback(new Camera.ErrorCallback() { public void onError(int e, Camera cc) { p("camera error " + e); }});
             Camera.Parameters prm = c.getParameters();
@@ -251,15 +283,18 @@ public class Spike extends Activity {
                 c.setPreviewTexture(st0);
             } else if (disp.equals("ir")) {
                 final ImageReader ir = ImageReader.newInstance(W, H, ImageFormat.YUV_420_888, 4);
+                irOut[0] = ir;
                 final int[] irn = {0};
                 HandlerThread iht = new HandlerThread("ir"); iht.start();
+                ihtOut[0] = iht;
                 ir.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() { public void onImageAvailable(ImageReader r) {
-                    try { Image im = r.acquireLatestImage(); if (im == null) return;
+                    Image im = null;
+                    try { im = r.acquireLatestImage(); if (im == null) return;
                         int k = ++irn[0];
                         if (k == 1 || k % 30 == 0) { byte[] nv = toNv21(im); p("ir frame " + k + " fmt=" + im.getFormat() + " " + stats(nv, W, H, W));
                             if (k == 60) saveJpeg(nv, "c1-ir-frame60.jpg"); }
-                        im.close();
                     } catch (Throwable t) { p("ir " + t); }
+                    finally { if (im != null) im.close(); }
                 }}, new Handler(iht.getLooper()));
                 c.setPreviewDisplay(new Holder(ir.getSurface()));
             } else {
@@ -322,6 +357,14 @@ public class Spike extends Activity {
             if (encOut[0] != null) encOut[0].stop();
             if (stOut[0] != null) stOut[0].release();
             if (glOut[0] != null) glOut[0].close();
+            if (irOut[0] != null) {
+                // On the reader's own thread, after any frame it is still handling; then the thread goes.
+                final ImageReader ir = irOut[0];
+                final CountDownLatch closed = new CountDownLatch(1);
+                new Handler(ihtOut[0].getLooper()).post(new Runnable() { public void run() { ir.close(); closed.countDown(); }});
+                closed.await(2, TimeUnit.SECONDS);
+            }
+            if (ihtOut[0] != null) ihtOut[0].quitSafely();
             ht.quitSafely();
         }
     }
@@ -331,91 +374,96 @@ public class Spike extends Activity {
         final boolean useReader = !outs.equals("enc"), useEnc = !outs.equals("reader");
         HandlerThread ht = new HandlerThread("c2"); ht.start();
         final Handler h = new Handler(ht.getLooper());
-        CameraManager m = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        CameraCharacteristics ch = m.getCameraCharacteristics("0");
-        p("hw level=" + ch.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL));
-        Range<Integer>[] ranges = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
-        p("fps ranges=" + Arrays.toString(ranges));
-        Range<Integer> fps = null;
-        for (Range<Integer> r : ranges) if (r.getUpper() == 30 && (fps == null || r.getLower() > fps.getLower())) fps = r;
-        // want, the run's own fps extra: e.g. "15,15", the AE target range to ask for instead
-        if ("template".equals(want)) fps = null; // keep the template's own range
-        else if (want != null) { String[] a = want.split(","); fps = new Range<>(Integer.parseInt(a[0].trim()), Integer.parseInt(a[1].trim())); }
-        final Enc enc = useEnc ? new Enc(true, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) : null;
-        final ImageReader reader = useReader ? ImageReader.newInstance(W, H, ImageFormat.YUV_420_888, 3) : null;
-        final int[] n = {0};
-        final long[] t0 = {0};
-        if (reader != null) reader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() { public void onImageAvailable(ImageReader r) {
-            Image im = r.acquireLatestImage();
-            if (im == null) return;
-            try {
-                int k = ++n[0];
-                if (k == 1) { t0[0] = System.nanoTime();
-                    Image.Plane[] pl = im.getPlanes();
-                    p("planes: Y rs=" + pl[0].getRowStride() + " ps=" + pl[0].getPixelStride() + " U rs=" + pl[1].getRowStride() + " ps=" + pl[1].getPixelStride() + " V rs=" + pl[2].getRowStride() + " ps=" + pl[2].getPixelStride() + " ts=" + im.getTimestamp());
-                }
-                if (k <= 5 || k % 15 == 0 || k == 30 || k == 45 || k == 60) {
-                    byte[] nv21 = toNv21(im);
-                    if (k <= 5 || k % 15 == 0) p("frame " + k + " " + stats(nv21, W, H, W));
-                    if (k == 30 || k == 45 || k == 60) saveJpeg(nv21, "c2-frame" + k + ".jpg");
-                }
-            } catch (Exception e) { p("image " + e); }
-            finally { im.close(); }
-        }}, h);
-
+        Enc enc0 = null;
+        ImageReader reader0 = null;
+        CameraDevice got = null;
         final CameraDevice[] dev = new CameraDevice[1];
         final boolean[] gaveUp = {false};
-        final CountDownLatch opened = new CountDownLatch(1);
-        m.openCamera("0", new CameraDevice.StateCallback() {
-            public void onOpened(CameraDevice d) {
-                // Opened after the wait gave up: nobody will close it, so close it here.
-                synchronized (dev) { if (gaveUp[0]) { d.close(); return; } dev[0] = d; }
-                opened.countDown();
-            }
-            public void onDisconnected(CameraDevice d) { p("disconnected"); d.close(); opened.countDown(); }
-            public void onError(CameraDevice d, int e) { p("camera2 error " + e); d.close(); opened.countDown(); }
-        }, h);
-        opened.await(10, TimeUnit.SECONDS);
-        CameraDevice got;
-        synchronized (dev) { got = dev[0]; if (got == null) gaveUp[0] = true; }
-        if (got == null) {
-            p("open failed");
-            if (enc != null) enc.stop();
-            if (reader != null) reader.close();
-            ht.quitSafely();
-            return;
-        }
-        final CameraDevice d = got;
-        final List<Surface> targets = new ArrayList<>();
-        if (reader != null) targets.add(reader.getSurface());
-        if (enc != null) targets.add(enc.surface);
-        final Range<Integer> fpsR = fps;
-        final CountDownLatch configured = new CountDownLatch(1);
         final CameraCaptureSession[] sess = new CameraCaptureSession[1];
-        d.createCaptureSession(targets, new CameraCaptureSession.StateCallback() {
-            public void onConfigured(CameraCaptureSession s) {
+        try {
+            CameraManager m = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+            CameraCharacteristics ch = m.getCameraCharacteristics("0");
+            p("hw level=" + ch.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL));
+            Range<Integer>[] ranges = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+            p("fps ranges=" + Arrays.toString(ranges));
+            Range<Integer> fps = null;
+            for (Range<Integer> r : ranges) if (r.getUpper() == 30 && (fps == null || r.getLower() > fps.getLower())) fps = r;
+            // want, the run's own fps extra: e.g. "15,15", the AE target range to ask for instead
+            if ("template".equals(want)) fps = null; // keep the template's own range
+            else if (want != null) { String[] a = want.split(","); fps = new Range<>(Integer.parseInt(a[0].trim()), Integer.parseInt(a[1].trim())); }
+            enc0 = useEnc ? new Enc(true, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) : null;
+            reader0 = useReader ? ImageReader.newInstance(W, H, ImageFormat.YUV_420_888, 3) : null;
+            final Enc enc = enc0;
+            final ImageReader reader = reader0;
+            final int[] n = {0};
+            final long[] t0 = {0};
+            if (reader != null) reader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() { public void onImageAvailable(ImageReader r) {
+                Image im = r.acquireLatestImage();
+                if (im == null) return;
                 try {
-                    CaptureRequest.Builder rb = d.createCaptureRequest(enc != null ? CameraDevice.TEMPLATE_RECORD : CameraDevice.TEMPLATE_PREVIEW);
-                    for (Surface t : targets) rb.addTarget(t);
-                    p("template fps " + rb.get(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE));
-                    if (fpsR != null) rb.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsR);
-                    s.setRepeatingRequest(rb.build(), null, h);
-                    sess[0] = s;
-                    p("session configured, fps " + fpsR);
-                } catch (Exception e) { p("repeat " + e); }
-                configured.countDown();
-            }
-            public void onConfigureFailed(CameraCaptureSession s) { p("configure failed"); configured.countDown(); }
-        }, h);
-        configured.await(10, TimeUnit.SECONDS);
-        Thread.sleep(5500);
-        p("reader frames=" + n[0] + (n[0] > 1 ? String.format(" (%.1f fps)", (n[0] - 1) / ((System.nanoTime() - t0[0]) / 1e9)) : ""));
-        if (sess[0] != null) { try { sess[0].stopRepeating(); } catch (Exception e) {} sess[0].close(); }
-        d.close();
-        Thread.sleep(500);
-        if (enc != null) enc.stop();
-        if (reader != null) reader.close();
-        ht.quitSafely();
+                    int k = ++n[0];
+                    if (k == 1) { t0[0] = System.nanoTime();
+                        Image.Plane[] pl = im.getPlanes();
+                        p("planes: Y rs=" + pl[0].getRowStride() + " ps=" + pl[0].getPixelStride() + " U rs=" + pl[1].getRowStride() + " ps=" + pl[1].getPixelStride() + " V rs=" + pl[2].getRowStride() + " ps=" + pl[2].getPixelStride() + " ts=" + im.getTimestamp());
+                    }
+                    if (k <= 5 || k % 15 == 0 || k == 30 || k == 45 || k == 60) {
+                        byte[] nv21 = toNv21(im);
+                        if (k <= 5 || k % 15 == 0) p("frame " + k + " " + stats(nv21, W, H, W));
+                        if (k == 30 || k == 45 || k == 60) saveJpeg(nv21, "c2-frame" + k + ".jpg");
+                    }
+                } catch (Exception e) { p("image " + e); }
+                finally { im.close(); }
+            }}, h);
+
+            final CountDownLatch opened = new CountDownLatch(1);
+            m.openCamera("0", new CameraDevice.StateCallback() {
+                public void onOpened(CameraDevice d) {
+                    // Opened after the wait gave up: nobody will close it, so close it here.
+                    synchronized (dev) { if (gaveUp[0]) { d.close(); return; } dev[0] = d; }
+                    opened.countDown();
+                }
+                public void onDisconnected(CameraDevice d) { p("disconnected"); d.close(); opened.countDown(); }
+                public void onError(CameraDevice d, int e) { p("camera2 error " + e); d.close(); opened.countDown(); }
+            }, h);
+            opened.await(10, TimeUnit.SECONDS);
+            synchronized (dev) { got = dev[0]; if (got == null) gaveUp[0] = true; }
+            if (got == null) { p("open failed"); return; }
+            final CameraDevice d = got;
+            final List<Surface> targets = new ArrayList<>();
+            if (reader != null) targets.add(reader.getSurface());
+            if (enc != null) targets.add(enc.surface);
+            final Range<Integer> fpsR = fps;
+            final CountDownLatch configured = new CountDownLatch(1);
+            d.createCaptureSession(targets, new CameraCaptureSession.StateCallback() {
+                public void onConfigured(CameraCaptureSession s) {
+                    try {
+                        CaptureRequest.Builder rb = d.createCaptureRequest(enc != null ? CameraDevice.TEMPLATE_RECORD : CameraDevice.TEMPLATE_PREVIEW);
+                        for (Surface t : targets) rb.addTarget(t);
+                        p("template fps " + rb.get(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE));
+                        if (fpsR != null) rb.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsR);
+                        s.setRepeatingRequest(rb.build(), null, h);
+                        p("session configured, fps " + fpsR);
+                    } catch (Exception e) { p("repeat " + e); }
+                    synchronized (sess) { sess[0] = s; }
+                    configured.countDown();
+                }
+                public void onConfigureFailed(CameraCaptureSession s) { p("configure failed"); configured.countDown(); }
+            }, h);
+            configured.await(10, TimeUnit.SECONDS);
+            Thread.sleep(5500);
+            p("reader frames=" + n[0] + (n[0] > 1 ? String.format(" (%.1f fps)", (n[0] - 1) / ((System.nanoTime() - t0[0]) / 1e9)) : ""));
+        } finally {
+            // A failed probe (openCamera or createCaptureSession throwing, say) frees everything too, before the run
+            // says DONE: a later probe in this process must not fail on, or measure, what this one left.
+            synchronized (dev) { if (got == null) gaveUp[0] = true; }
+            CameraCaptureSession s;
+            synchronized (sess) { s = sess[0]; }
+            if (s != null) { try { s.stopRepeating(); } catch (Exception e) {} s.close(); }
+            if (got != null) { got.close(); Thread.sleep(500); }
+            if (enc0 != null) enc0.stop();
+            if (reader0 != null) reader0.close();
+            ht.quitSafely();
+        }
     }
 
     static byte[] toNv21(Image im) {

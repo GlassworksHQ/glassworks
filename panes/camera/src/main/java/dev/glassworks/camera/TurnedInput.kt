@@ -71,8 +71,19 @@ class TurnedInput(
                 ready.countDown()
             }
         }
-        if (!ready.await(SETUP_WAIT_MS, TimeUnit.MILLISECONDS)) failure = IllegalStateException("GL setup timed out")
-        failure?.let { release(); throw it }
+        var interrupted = false
+        try {
+            if (!ready.await(SETUP_WAIT_MS, TimeUnit.MILLISECONDS)) failure = IllegalStateException("GL setup timed out")
+        } catch (e: InterruptedException) {
+            interrupted = true
+            failure = e
+        }
+        failure?.let {
+            release()
+            // Set again only after the release, whose own wait would fail at once on an interrupted thread.
+            if (interrupted) Thread.currentThread().interrupt()
+            throw it
+        }
         surface = cameraSurface!!
     }
 

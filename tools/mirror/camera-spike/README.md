@@ -62,8 +62,9 @@ fps.sh a30:30,30 a15:15,15 a24:24,24 a730:7,30 b30:30,30 b15:15,15
 fps.sh t1:template t2:template t3:template    # the request template's own range
 ```
 
-`run.sh` stops with an error when the spike doesn't finish a run in 60 s (a launch without `--es test`, or one
-while a run is still going, is ignored), so it never shows an earlier run's log. A run name is one folder name.
+`run.sh` gives each launch its own id and takes only the result that carries it. It stops with an error at once when
+the spike ignores the launch (one without `--es test`, or one while a run is still going), and after 60 s when the
+spike doesn't finish, so it never shows another run's log. A run name is one folder name.
 
 Each writes `out/<name>/log.txt` and, for good sessions, a JPEG or PNG of a frame. Saved frames show the room:
 don't commit or share them.

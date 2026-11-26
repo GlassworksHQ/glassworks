@@ -21,15 +21,22 @@ D=/sdcard/Android/data/dev.glassworks.camspike/files
 # adb shell joins its arguments into one line for the device's shell: quote each one for it, so a value such as
 # 'recording-hint=true;picture-size=1920x1080' reaches the spike whole.
 quote() { local a out=""; for a in "$@"; do out+="'${a//\'/\'\\\'\'}' "; done; printf '%s' "$out"; }
+# Each launch carries its own id: the spike writes it into the run's done file, and writes ignored-<id> for a launch it
+# ignores, so this run never takes another run's result.
+id="$(date +%s)-$$-$RANDOM"
 $ADB shell "rm -f $(quote "$D/$name/done")"
-$ADB shell "am start -n dev.glassworks.camspike/.Spike --es name $(quote "$name" "$@")"
+$ADB shell "am start -n dev.glassworks.camspike/.Spike --es run $(quote "$id") --es name $(quote "$name" "$@")"
 finished=""
 for _ in $(seq 1 60); do
-  if $ADB shell "test -f $(quote "$D/$name/done") && echo y" | grep -q y; then finished=1; break; fi
+  got=$($ADB shell "cat $(quote "$D/$name/done") 2>/dev/null; test -f $(quote "$D/$name/ignored-$id") && echo ignored" | tr -d '\r')
+  case "$got" in
+    *ignored*) echo "the spike ignored this launch (no --es test, or a run still going)" >&2; exit 1 ;;
+  esac
+  if [ "$got" = "$id" ]; then finished=1; break; fi
   sleep 1
 done
 if [ -z "$finished" ]; then
-  echo "no result in 60 s: the spike ignored the launch (no --es test, or a run still going) or is stuck" >&2
+  echo "no result in 60 s: the spike is stuck" >&2
   exit 1
 fi
 mkdir -p "$OUT" && rm -rf "${OUT:?}/$name"

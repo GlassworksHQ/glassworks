@@ -39,7 +39,8 @@ fun interface EncoderInput {
 /**
  * The stream's encoder for one RTSP server's life: started when someone watches, stopped when nobody
  * does, replaced when it fails while someone still watches, at most once every [RESTART_MS] (a later
- * attempt is posted, not dropped). Each running encoder holds the privacy indicator on through
+ * attempt is posted, not dropped). An encoder that can't be made while someone watches (the GPU's input fails to set
+ * up) is tried again, paced as the camera's reconnects are ([ConnectBackoff]). Each running encoder holds the privacy indicator on through
  * [egress]. After [close], nothing more happens, so a stopped server's late reports change nothing. A camera
  * that can't stream ([StreamFit.Refused]) gets no encoder, and the indicator stays off.
  *
@@ -63,6 +64,8 @@ internal class ViewerEncoder(
     private var viewing: AutoCloseable? = null
     private var closed = false
     private var lastRestartMs = Long.MIN_VALUE / 2
+    private val retry = ConnectBackoff()
+    private var retryPosted = false
 
     /** RTSP's count of viewers, waiting ones included. */
     fun viewers(count: Int) {
@@ -93,8 +96,10 @@ internal class ViewerEncoder(
             encoders.create(size, turn, fps, onAccessUnit, ::failed)
         } catch (ex: Exception) {
             log("H.264 encoder failed: ${ex.javaClass.simpleName}")
+            retryLater()
             return
         }
+        retry.reset()
         current = e
         input.setEncoder(e)
         viewing = egress.stream()
@@ -127,6 +132,20 @@ internal class ViewerEncoder(
                 }
             }
         }
+    }
+
+    /** One posted try at a time; it does nothing once the server stopped, an encoder runs, or nobody watches. */
+    private fun retryLater() {
+        if (retryPosted) return
+        retryPosted = true
+        after(retry.failed(clock()), Runnable {
+            synchronized(lock) {
+                retryPosted = false
+                if (closed || current != null || !watched()) return@synchronized
+                lastRestartMs = clock()
+                start()
+            }
+        })
     }
 
     private fun failed(e: StreamEncoder) {

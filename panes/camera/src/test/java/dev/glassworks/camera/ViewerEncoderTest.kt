@@ -35,6 +35,8 @@ class ViewerEncoderTest {
         val posted = mutableListOf<Pair<Long, Runnable>>()
         val made = mutableListOf<Encoder>()
         var watching = true
+        /** How many more times making an encoder throws, as when the GPU's input can't set up. */
+        var throwsLeft = 0
         val egressSeen = mutableListOf<Boolean>()
         val egress = FrameEgress({ now }, { _, _ -> }) { egressSeen += it }
         val ve = ViewerEncoder(
@@ -42,7 +44,9 @@ class ViewerEncoderTest {
                 override fun setEncoder(encoder: StreamEncoder?) { events += "input ${encoder ?: "none"}"; if (encoder == null) detach() }
                 override val streamFit get() = fit
             },
-            encoders = { size, _, _, _, failed -> sizes += size; Encoder(made.size + 1, failed, releaseThrows).also { made += it; events += "made ${it.n}" } },
+            encoders = { size, _, _, _, failed ->
+                if (throwsLeft > 0) { throwsLeft--; throw IllegalStateException("GL setup timed out") }
+                sizes += size; Encoder(made.size + 1, failed, releaseThrows).also { made += it; events += "made ${it.n}" } },
             egress = egress, onAccessUnit = { _, _ -> }, watched = { watching },
             clock = { now }, after = { ms, r -> posted += (now + ms) to r },
         )
@@ -123,6 +127,35 @@ class ViewerEncoderTest {
         r.watching = false
         r.runPosted(ViewerEncoder.RESTART_MS)
         assertEquals(2, r.made.size)
+        assertFalse(r.egress.leaving)
+    }
+
+    /** CodeRabbit on #924: a replacement that can't be made while someone watches is tried again, paced, until one runs. */
+    @Test fun aReplacementThatCantBeMadeIsTriedAgainWhileSomeoneWatches() {
+        val r = Rig()
+        r.ve.viewers(1)
+        r.throwsLeft = 2
+        r.made[0].fail(r.made[0])
+        assertEquals("the replacement failed to be made", 1, r.made.size)
+        assertEquals(1, r.posted.size)
+        assertEquals(ConnectBackoff.FIRST_MS, r.posted[0].first - r.now)
+        r.runPosted(r.posted[0].first)
+        assertEquals("the second try failed too, and the next waits longer", 1, r.posted.size)
+        assertEquals(2 * ConnectBackoff.FIRST_MS, r.posted[0].first - r.now)
+        r.runPosted(r.posted[0].first)
+        assertEquals(2, r.made.size)
+        assertTrue(r.egress.leaving)
+        assertTrue("nothing more is posted once one runs", r.posted.isEmpty())
+    }
+
+    @Test fun aPostedTryAfterStopMakesNoEncoder() {
+        val r = Rig()
+        r.throwsLeft = 1
+        r.ve.viewers(1)
+        assertEquals(1, r.posted.size)
+        r.ve.close()
+        r.runPosted(r.posted[0].first)
+        assertTrue(r.made.isEmpty())
         assertFalse(r.egress.leaving)
     }
 
