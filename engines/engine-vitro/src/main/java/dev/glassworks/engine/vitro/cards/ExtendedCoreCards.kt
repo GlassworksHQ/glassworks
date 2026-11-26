@@ -450,7 +450,11 @@ internal class BrightnessDialView(
             removeCallbacks(holdCheck)
             parent?.requestDisallowInterceptTouchEvent(false)
         }
-        if (!enabled) dragFraction = null
+        if (!enabled) {
+            dragFraction = null
+            // A key edit under way ends too: its release must not send (an off light's fallback would turn it on at 1 %).
+            access.cancel()
+        }
         this.enabled = enabled
         isEnabled = enabled
         sentFraction = null

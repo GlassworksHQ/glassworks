@@ -285,6 +285,22 @@ class RangeControlsA11yTest {
         assertFalse(down(dial, KeyEvent.KEYCODE_DPAD_LEFT))
     }
 
+    @Test
+    fun aLightDialDisabledMidKeyEditSendsNothingOnRelease() {
+        val brightness = ArrayList<Int>()
+        val dial = BrightnessDialView(activity, 0xFFFFA000.toInt(), 0xFF888888.toInt(), 0xFF888888.toInt(), 0xFF03A9F4.toInt()).apply {
+            onBrightness = { brightness += it }
+            update(true, BrightnessDialView.fractionOf(40), "mdi:lightbulb")
+        }
+        attach(dial, 200, 200)
+        assertTrue(down(dial, KeyEvent.KEYCODE_DPAD_RIGHT))
+        // Unavailable while the key is held, then back as off: the release must not turn the light on at 1 %.
+        dial.update(false, 0f, "mdi:lightbulb", enabled = false)
+        dial.update(false, 0f, "mdi:lightbulb", enabled = true)
+        up(dial, KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertTrue(brightness.toString(), brightness.isEmpty())
+    }
+
     /** The humidifier card's dial: the thermostat's, with HA's humidity control ([ThermostatDialView.humidifier]). */
     private fun humidityDial(sent: MutableList<Double>, min: Double, max: Double, target: Double?) =
         ThermostatDialView(context(), "%").apply {
@@ -323,6 +339,46 @@ class RangeControlsA11yTest {
         dial.bind(30.0, 80.0, 1.0, current = 45.0, target = null, mode = "off", action = "off", stateLabel = "Off")
         up(dial, KeyEvent.KEYCODE_DPAD_LEFT)
         assertTrue(sent.toString(), sent.isEmpty())
+    }
+
+    @Test
+    fun aHumidityKeyEditIsDroppedWhenTheTargetGoesAndComesBack() {
+        val sent = ArrayList<Double>()
+        val dial = humidityDial(sent, 30.0, 80.0, 50.0)
+        assertTrue(down(dial, KeyEvent.KEYCODE_DPAD_LEFT))
+        // Off and on again while the key is held: the release has no edit left to send.
+        dial.bind(30.0, 80.0, 1.0, current = 45.0, target = null, mode = "off", action = "off", stateLabel = "Off")
+        dial.bind(30.0, 80.0, 1.0, current = 45.0, target = 55.0, mode = "on", action = "humidifying", stateLabel = "On")
+        up(dial, KeyEvent.KEYCODE_DPAD_LEFT)
+        assertTrue(sent.toString(), sent.isEmpty())
+        assertEquals(55f, dial.node().rangeInfo.current, 0f)
+    }
+
+    @Test
+    fun talkBackSetsAndStepsTheHumidityByATenth() {
+        val sent = ArrayList<Double>()
+        val dial = humidityDial(sent, 30.0, 80.0, 50.0)
+        assertTrue(dial.node().has(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS))
+        // HA's _tenPercentStep: a tenth of 30–80 is 5.
+        assertTrue(dial.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null))
+        assertEquals(listOf(55.0), sent)
+        val args = Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 65f) }
+        assertTrue(dial.performAccessibilityAction(android.R.id.accessibilityActionSetProgress, args))
+        assertEquals(listOf(55.0, 65.0), sent)
+        // Outside the limits: the nearest end.
+        args.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 95f)
+        assertTrue(dial.performAccessibilityAction(android.R.id.accessibilityActionSetProgress, args))
+        assertEquals(80.0, sent.last(), 0.0)
+        // A thermostat keeps its step per swipe and takes no set-progress.
+        val temps = ArrayList<Double>()
+        val thermostat = ThermostatDialView(context(), "°C").apply {
+            onCommit = { temps += it }
+            bind(7.0, 35.0, 0.5, current = 20.0, target = 21.0, mode = "heat", action = "heating", stateLabel = "Heat")
+            attach(this, 300, 300)
+        }
+        assertFalse(thermostat.node().has(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS))
+        thermostat.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, null)
+        assertEquals(listOf(21.5), temps)
     }
 
     @Test
