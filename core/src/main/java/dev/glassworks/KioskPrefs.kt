@@ -142,6 +142,8 @@ class KioskPrefs(
         set(v) {
             val e = sp.edit().putBoolean(KEY_VITRO_ENABLED, v)
             if (v) e.remove(KEY_VITRO_STRIKES).remove(KEY_VITRO_OFF_REASON).remove(KEY_VITRO_OFF_AT).remove(KEY_VITRO_OFF_NOTICE)
+            // On or off, the last start's marker goes: it belonged to the setting before this one.
+            e.remove(KEY_VITRO_START).remove(KEY_VITRO_STARTS)
             e.commit()
         }
 
@@ -151,6 +153,51 @@ class KioskPrefs(
         set(v) {
             if (v == 0) sp.edit().remove(KEY_VITRO_STRIKES).commit() else sp.edit().putInt(KEY_VITRO_STRIKES, v).commit()
         }
+
+    /**
+     * One start with Vitro on, as [VitroSentinel] marks it before Vitro draws: start [n] of this setting, on boot [boot]
+     * (null where Android can't tell one boot from the next), in process [pid], at [atMs] on the elapsed clock and
+     * [atWallMs] on the wall clock. [drawn] once the first page was drawn.
+     */
+    class VitroStart(val n: Int, val boot: String?, val pid: Int, val atMs: Long, val atWallMs: Long, val drawn: Boolean = false) {
+        internal fun encode(): String = listOf("1", n, if (drawn) 1 else 0, pid, atMs, atWallMs, boot.orEmpty()).joinToString("|")
+
+        internal companion object {
+            fun decode(s: String?): VitroStart? = runCatching {
+                val f = s?.split('|', limit = 7)?.takeIf { it.size == 7 && it[0] == "1" } ?: return@runCatching null
+                VitroStart(f[1].toInt(), f[6].ifEmpty { null }, f[3].toInt(), f[4].toLong(), f[5].toLong(), f[2] == "1")
+            }.getOrNull()
+        }
+    }
+
+    /** The last start's marker ([VitroStart]), while it is still open: begun, and not yet settled. */
+    val vitroStart: VitroStart?
+        get() = VitroStart.decode(sp.getString(KEY_VITRO_START, null))
+
+    /** The number the next start with Vitro on gets (1, 2, …), counted from when the setting last changed. */
+    val nextVitroStart: Int
+        get() = sp.getInt(KEY_VITRO_STARTS, 0) + 1
+
+    /** Marks [start] as begun, before Vitro draws anything. commit(): a native crash a moment later must find it. */
+    fun beginVitroStart(start: VitroStart): Boolean =
+        sp.edit().putString(KEY_VITRO_START, start.encode()).putInt(KEY_VITRO_STARTS, start.n).commit()
+
+    /** The open start drew its first page: from here only a crash Android names ([VitroSentinel]) counts. */
+    fun markVitroStartDrawn(): Boolean {
+        val s = vitroStart ?: return false
+        if (s.drawn) return true
+        return sp.edit().putString(KEY_VITRO_START, VitroStart(s.n, s.boot, s.pid, s.atMs, s.atWallMs, drawn = true).encode()).commit()
+    }
+
+    /** The open start is accounted for (it stayed up, the app restarted itself, its end was counted): no marker left. */
+    fun settleVitroStart(): Boolean = !sp.contains(KEY_VITRO_START) || sp.edit().remove(KEY_VITRO_START).commit()
+
+    /** [strikes] crashes in a row ([vitroCrashStrikes]) and the open start settled, in one commit: never counted twice. */
+    fun recordVitroStrikes(strikes: Int): Boolean {
+        val e = sp.edit().remove(KEY_VITRO_START)
+        if (strikes == 0) e.remove(KEY_VITRO_STRIKES) else e.putInt(KEY_VITRO_STRIKES, strikes)
+        return e.commit()
+    }
 
     /** [VitroSentinel] turned Vitro off: why (the exception and where it came from), and when (ms since the epoch). */
     class VitroTurnedOff(val reason: String, val atMs: Long)
@@ -164,7 +211,7 @@ class KioskPrefs(
      * Labs page and a notice at the next start. One commit(), from the crashing thread: the process ends right after.
      */
     fun turnVitroOffAfterCrashes(reason: String, atMs: Long): Boolean =
-        sp.edit().putBoolean(KEY_VITRO_ENABLED, false).remove(KEY_VITRO_STRIKES)
+        sp.edit().putBoolean(KEY_VITRO_ENABLED, false).remove(KEY_VITRO_STRIKES).remove(KEY_VITRO_START).remove(KEY_VITRO_STARTS)
             .putString(KEY_VITRO_OFF_REASON, reason).putLong(KEY_VITRO_OFF_AT, atMs).putBoolean(KEY_VITRO_OFF_NOTICE, true)
             .commit()
 
@@ -566,6 +613,8 @@ class KioskPrefs(
         private const val KEY_VITRO_OFF_REASON = "vitro_off_reason"
         private const val KEY_VITRO_OFF_AT = "vitro_off_at"
         private const val KEY_VITRO_OFF_NOTICE = "vitro_off_notice"
+        private const val KEY_VITRO_START = "vitro_start"
+        private const val KEY_VITRO_STARTS = "vitro_starts"
         const val KEY_UPDATE_CHANNEL = "update_channel"
         const val KEY_HA_SEEN = "ha_seen"
         const val KEY_WIFI_SEEN = "wifi_seen"

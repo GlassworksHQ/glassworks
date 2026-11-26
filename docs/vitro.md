@@ -19,13 +19,23 @@ To go back, turn **Vitro renderer** off the same way. The app restarts and shows
 
 ## If something goes wrong
 
-If the app keeps crashing right after it starts with Vitro on, it turns Vitro off by itself. Two crashes in a row, each within a minute of starting, are enough. The panel then opens your dashboard in its browser, as it did before you turned Vitro on, and tells you what happened:
+If the app keeps failing right after it starts with Vitro on, it turns Vitro off by itself. Two failed starts in a row, each within a minute of starting, are enough. The panel then opens your dashboard in its browser, as it did before you turned Vitro on, and tells you what happened:
 
 - a short message on the panel says Vitro was turned off because the app kept stopping;
 - **Settings → Labs** says **Vitro was turned off** and why, until you turn Vitro on again;
 - the **Engine** tile on the Manage page's Overview turns red, reads **Vitro turned off after crashes**, and opens Labs.
 
-Only the crashes the app can catch itself count. If the app freezes ("isn't responding"), crashes inside a native library, or is closed by Android to free memory, Vitro stays on, so turn it off yourself. The same goes for a dashboard that misbehaves without the app stopping. When the panel's own settings menu is hard to reach, turn Vitro off from **Labs** on the Manage page. Developers with adb can also start the app with the extra `--ez vitro false`, which turns Vitro off and restarts the app.
+These count as a failed start:
+
+| What happens | When it counts |
+|---|---|
+| The app crashes | Within a minute of starting, before or after the dashboard shows |
+| The app stops some other way, such as a crash inside a native library or closing it when Android says it "isn't responding" | Before the dashboard shows. After it shows, only on Android 11 and newer, where Android says it was a crash or that the app wasn't responding |
+| The app freezes | When it stops responding for 30 seconds within the first minute. The app then closes itself so it can start again |
+
+These never count: the panel restarting or losing power, an app update, Android closing the app to free memory, someone stopping the app, the app restarting itself after a settings change, and a start that shows the setup or sign-in screen instead of a dashboard. Turning Vitro off or on, or resetting the panel, starts the count over.
+
+A dashboard that misbehaves without the app stopping won't turn Vitro off, so turn it off yourself. When the panel's own settings menu is hard to reach, turn Vitro off from **Labs** on the Manage page. Developers with adb can also start the app with the extra `--ez vitro false`, which turns Vitro off and restarts the app.
 
 If Vitro turned itself off, please [report it](#report-a-card-that-looks-wrong) and attach the panel's log: **Download diagnostics** on the Manage page's **Log** saves it.
 

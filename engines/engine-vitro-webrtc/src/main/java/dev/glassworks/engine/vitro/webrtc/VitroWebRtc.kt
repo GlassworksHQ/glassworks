@@ -45,6 +45,9 @@ object VitroWebRtc {
     internal class Factory(private val host: CameraStreamHost) : CameraStreamFactory {
         override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
             if (kind == CameraStreamKind.WEB_RTC) WebRtcCameraStream(HaWebRtcPlayer(host.context, HostChannel(host), entityId, OPTIONS)) else null
+
+        /** libwebrtc's factory and EGL get made off the main thread while the view builds. */
+        override fun prewarm() = HaWebRtcPlayer.prewarm(host.context)
     }
 }
 
@@ -75,6 +78,10 @@ internal class HostChannel(private val host: CameraStreamHost) : HaCommandChanne
  * frame is HA's `hasVideo: true`. An error is the player giving up (HA's `start_failed` or `connect_failed`, a
  * connection that failed and couldn't come back, or no video in 20 s), which makes Vitro's choice fall back. WebRTC
  * has no end from the server's side, so [CameraStream.Listener.onEnded] isn't called.
+ *
+ * Paused, Vitro's player closes its session at once ([VitroWebRtc.OPTIONS]) and would keep only its threads and EGL
+ * surface: so it's [closeWhenHidden], and the card opens a new one when it shows again (libwebrtc's shared parts
+ * linger meanwhile, so that costs a new session, as a resume does).
  */
 internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraStream, CameraStreamVideoSize {
     override val view: View get() = player.view
@@ -105,6 +112,10 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
     override fun setActive(active: Boolean) = player.setActive(active)
 
     override fun connectionRestored() = player.connectionRestored()
+
+    override fun setRendering(rendering: Boolean) = player.setRendering(rendering)
+
+    override val closeWhenHidden: Boolean get() = true
 
     override fun close() {
         if (closed) return

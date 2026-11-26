@@ -84,6 +84,11 @@ internal class ClarityCameras(private val now: () -> Double) {
         return null
     }
 
+    /** [s] was made (before its card places and starts it): its [Rec.openedAt]. */
+    internal fun opened(s: MeasuredCameraStream) {
+        rec(s)
+    }
+
     internal fun started(s: MeasuredCameraStream) {
         val r = rec(s)
         if (r.startedAt == null) r.startedAt = now()
@@ -181,6 +186,13 @@ internal class ClarityCameras(private val now: () -> Double) {
                     // The stream's own time to that same first picture (one at or before t1, whatever came after).
                     .put("first_frame_since_start_ms", graded.flatMap { it.sinceStart }.firstOrNull { it.first == first }?.second
                         ?: JSONObject.NULL)
+                    // When that stream was made and started, from nav: what passed before the stream's own clock ran
+                    // (the view's build up to the card, capabilities, the player's set-up).
+                    .let { o ->
+                        val rec = graded.firstOrNull { first in it.firstFrames }
+                        o.put("opened_ms", rec?.let { ClarityStats.round1(it.openedAt - nav) } ?: JSONObject.NULL)
+                            .put("started_ms", rec?.startedAt?.let { ClarityStats.round1(it - nav) } ?: JSONObject.NULL)
+                    }
                     .put("frames", frames)
                     .put("shown_pct", ClarityStats.round1(min(100.0, 100.0 * frames / (fps * dur / 1000))))
                     .put("max_gap_ms", ClarityStats.round1(gaps.maxGapMs))
@@ -243,6 +255,9 @@ internal class ClarityCameras(private val now: () -> Double) {
         private class Measured(private val inner: CameraStreamFactory) : CameraStreamFactory {
             override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
                 inner.create(entityId, kind)?.let { MeasuredCameraStream(it, entityId, kind) }
+                    ?.also { ClarityCameras.current?.opened(it) }
+
+            override fun prewarm() = inner.prewarm()
         }
 
         /** The kind's name in the page lines: the web harness's `path` names, and `mjpeg`. */
@@ -322,6 +337,10 @@ internal class MeasuredCameraStream(
     override fun setActive(active: Boolean) = inner.setActive(active)
 
     override fun connectionRestored() = inner.connectionRestored()
+
+    override fun setRendering(rendering: Boolean) = inner.setRendering(rendering)
+
+    override val closeWhenHidden: Boolean get() = inner.closeWhenHidden
 
     override fun close() {
         ClarityCameras.current?.closed(this)

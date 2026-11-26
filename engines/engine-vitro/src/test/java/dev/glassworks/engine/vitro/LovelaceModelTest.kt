@@ -265,8 +265,14 @@ class LovelaceModelTest {
 
     @Test
     fun tierTwoIsThePopularCustomCardsWithNativeFastPaths() {
-        for (t in listOf("custom:mushroom-entity-card", "custom:bubble-card", "custom:mini-graph-card", "custom:clock-weather-card")) {
+        for (t in listOf("custom:mushroom-entity-card", "custom:mushroom-template-card", "custom:mushroom-chips-card", "custom:swipe-card")) {
             assertEquals("$t is Tier 2", CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "$t"}""")))
+        }
+        // A fast path that doesn't match its card (the strict compat rule) goes to the island when a Lovelace resource
+        // provides its script, and is drawn natively only when none does.
+        for (t in listOf("custom:bubble-card", "custom:mini-graph-card", "custom:clock-weather-card")) {
+            assertEquals("$t with its script", CardTier.WEB_ISLAND, CardRouter.tier(card("""{"type": "$t"}""")))
+            assertEquals("$t without one", CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "$t"}"""), dev.glassworks.engine.vitro.compat.IslandScripts.of(emptyList())))
         }
     }
 
@@ -293,7 +299,7 @@ class LovelaceModelTest {
                      {"type": "tile", "entity": "light.a"},
                      {"type": "custom:acme-floorplan-card"}
                    ]},
-                   {"type": "custom:mini-graph-card", "entities": ["sensor.kitchen_temp"]}
+                   {"type": "custom:mushroom-entity-card", "entity": "sensor.kitchen_temp"}
                  ]}
                ],
                "cards": [{"type": "entities", "entities": ["sensor.kitchen_temp"]}]}""",

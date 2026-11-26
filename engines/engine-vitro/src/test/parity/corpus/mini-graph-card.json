@@ -1,5 +1,6 @@
 {
  "title": "mini-graph-card: a day of one temperature sensor",
+ "route": "island",
  "card": {
   "type": "custom:mini-graph-card",
   "entities": [
