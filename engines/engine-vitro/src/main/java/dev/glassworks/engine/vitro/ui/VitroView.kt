@@ -291,6 +291,115 @@ class VitroView(
 
     /** The view whose cards [buildViewTree] is building (Clarity's card registry). */
     private var buildingIndex = -1
+
+    /**
+     * The cards a masonry build still has to make and attach, in config order, collected while [buildViewTree] runs:
+     * [renderView] hands them to a [SlicedBuild]. Null outside a build.
+     */
+    private var pendingSteps: MutableList<() -> View>? = null
+
+    /**
+     * A view on screen whose cards are still being added, as HA's masonry view adds them (`hui-masonry-view.ts`
+     * `_createColumns`): its columns are on screen first, then its cards are made and attached in config order, for
+     * at most [SLICE_BUDGET_MS] at a time, with a frame drawn between, so the first screen draws after the first
+     * slice instead of after the whole view. Where each card goes is decided before any is built ([HaMasonry.place]),
+     * so the finished view is the one a build in one go makes. What waits for the whole view (the islands no card took
+     * back, the readiness and metrics, the rebuild for guessed states) waits for its last slice ([finishBuild]).
+     */
+    private inner class SlicedBuild(
+        val index: Int,
+        val viewCfg: ViewConfig,
+        val startedAt: Long,
+        steps: List<() -> View>,
+    ) {
+        val steps = ArrayDeque(steps)
+        var slices = 0
+        var longestMs = 0L
+        val run = Runnable { runSlice(this) }
+        private var scheduled: (() -> Unit)? = null
+
+        fun schedule() {
+            scheduled = afterNextFrame(run)
+        }
+
+        fun unschedule() {
+            scheduled?.invoke()
+            scheduled = null
+        }
+    }
+
+    /**
+     * HA's `nextRender()` (`requestAnimationFrame`, then a task): runs [task] once the next frame has been drawn, and
+     * returns what cancels it. The Choreographer's frame callback runs before the frame's layout and draw, so the task
+     * it posts runs after them. Tests give their own.
+     */
+    internal var afterNextFrame: (Runnable) -> (() -> Unit) = { task ->
+        val frame = android.view.Choreographer.FrameCallback { mainHandler.post(task) }
+        android.view.Choreographer.getInstance().postFrameCallback(frame)
+        val cancel = {
+            android.view.Choreographer.getInstance().removeFrameCallback(frame)
+            mainHandler.removeCallbacks(task)
+        }
+        cancel
+    }
+
+    /** The view build still adding cards ([SlicedBuild]), or null. */
+    private var building: SlicedBuild? = null
+
+    /**
+     * The clock a slice's budget is read on ([SLICE_BUDGET_MS]). Tests set one that moves: Robolectric's stands still
+     * while the main thread works, so every view builds there in one slice, as before.
+     */
+    internal var sliceClock: () -> Long = { SystemClock.uptimeMillis() }
+
+    /** The view on screen is still adding its cards ([SlicedBuild]). Tests. */
+    internal val buildInProgress: Boolean get() = building != null
+
+    /**
+     * Stops the build in progress: no card is made or added after this. [dropPartial]: its half-built view goes too,
+     * its islands closed (another view is shown, so none is handed over); else the caller drops or rebuilds it.
+     */
+    private fun cancelBuild(dropPartial: Boolean) {
+        val b = building ?: return
+        building = null
+        b.unschedule()
+        if (dropPartial) dropView(b.index, keepIslands = false)
+    }
+
+    /**
+     * One slice of [b]: cards made and attached in config order until [SLICE_BUDGET_MS] has passed (at least one), as
+     * HA's loop checks its 16 ms before each card. The rest wait for the next frame; the last slice finishes the view.
+     */
+    private fun runSlice(b: SlicedBuild) {
+        if (building !== b) return
+        val start = sliceClock()
+        b.slices++
+        val added = ArrayList<View>()
+        buildingIndex = b.index
+        try {
+            // A card whose build ends this one (a re-entrant render or drop) leaves the rest unmade.
+            while (building === b && b.steps.isNotEmpty()) {
+                if (added.isNotEmpty() && sliceClock() - start > SLICE_BUDGET_MS) break
+                added += b.steps.removeFirst().invoke()
+            }
+        } finally {
+            buildingIndex = -1
+        }
+        b.longestMs = maxOf(b.longestMs, sliceClock() - start)
+        if (building !== b) return
+        // Islands of the cards just added run only while their view is on screen, as [updateIslandsShown] sets them.
+        val root = viewCache[b.index]
+        if (root != null) {
+            val shown = dashboardShown && activityShown && b.index == currentViewIndex && root.visibility == VISIBLE
+            for (card in added) islandsIn(card).forEach { it.setShown(shown && visibleWithin(it as View, root)) }
+        }
+        if (b.steps.isEmpty()) {
+            building = null
+            finishBuild(b.index, b.viewCfg, b.startedAt, cached = false, slices = b.slices, longestSliceMs = b.longestMs)
+        } else {
+            b.schedule()
+        }
+    }
     var onViewSelected: ((ViewConfig) -> Unit)? = null
 
     /**
@@ -336,8 +445,24 @@ class VitroView(
             ?: (if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) })
             ?: WebFallback.matchedRowsReason(view, IslandScripts.of(resourcesList), store.all().values, store::get)
             ?: WebFallback.haIframeReason(view, haOrigin())
-            ?: IslandBudget.reason(view, IslandScripts.of(resourcesList), islandBudget)
-            ?: BubbleFallback.reason(view, IslandScripts.of(resourcesList))
+            ?: scriptVerdict(view).let { v -> IslandBudget.reason(v.islands, islandBudget) ?: v.bubble }
+
+    /** What [view]'s config says with the dashboard's island scripts: its island pages, and its Bubble reason. */
+    private class ScriptVerdict(val scripts: IslandScripts, val islands: Int, val bubble: String?)
+
+    /**
+     * [ScriptVerdict]s by view config (its identity; a new dashboard's configs are new objects, and [setDashboard] lets
+     * the old ones go). Both answers follow from the config and the scripts alone, so a view's are worked out once per
+     * script list, not on every open ([fallbackReason] runs on each). Main thread.
+     */
+    private val scriptVerdicts = java.util.IdentityHashMap<ViewConfig, ScriptVerdict>()
+
+    private fun scriptVerdict(view: ViewConfig): ScriptVerdict {
+        val scripts = IslandScripts.of(resourcesList)
+        scriptVerdicts[view]?.let { if (it.scripts == scripts) return it }
+        return ScriptVerdict(scripts, IslandBudget.islandCount(view, scripts), BubbleFallback.reason(view, scripts))
+            .also { scriptVerdicts[view] = it }
+    }
 
     /**
      * The origin of the Home Assistant this dashboard is from, or null while none: an `iframe` card of a page on it goes
@@ -556,6 +681,7 @@ class VitroView(
         waited.clear()
         stateRebuilds.values.forEach { it() }
         stateRebuilds.clear()
+        scriptVerdicts.clear()
         closeMoreInfo()
         dashboard = null
         viewBackStack.clear()
@@ -698,6 +824,7 @@ class VitroView(
         waited.clear()
         stateRebuilds.values.forEach { it() }
         stateRebuilds.clear()
+        scriptVerdicts.clear()
         dashboard = config
         viewBackStack.clear()
         // An island whose card is in the new config the same as before keeps its page.
@@ -994,14 +1121,24 @@ class VitroView(
      */
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
-    /** True when the view on screen has been built (not waiting for its first states). */
-    val currentViewBuilt: Boolean get() = viewCache[currentViewIndex] != null
+    /**
+     * True when the view on screen has been built: not waiting for its first states, nor still adding its cards
+     * ([SlicedBuild]). The page counts it ready then.
+     */
+    val currentViewBuilt: Boolean get() = viewCache[currentViewIndex] != null && building?.index != currentViewIndex
+
+    /**
+     * True when the view on screen has a tree on screen, its cards all added or still being added ([SlicedBuild]):
+     * Clarity's harness counts it past HA's launch screen, as HA's masonry view is once its columns are there.
+     */
+    internal val currentViewOnScreen: Boolean get() = viewCache[currentViewIndex] != null
 
     /**
      * The page is gone: a view waiting for its first states isn't built later (a late build would make cards, and
      * islands, nothing shows), and no guessed view is built again.
      */
     fun cancelPendingBuilds() {
+        cancelBuild(dropPartial = false)
         holding?.cancel?.invoke()
         holding = null
         stateRebuilds.values.forEach { it() }
@@ -1101,10 +1238,16 @@ class VitroView(
         // Nothing to build: no island a rebuild gave up waits for it.
         val cfg = dashboard ?: return closePooledIslands()
         val viewCfg = cfg.views.getOrNull(index) ?: return closePooledIslands()
+        // A view still adding its cards stops unless it's the one shown again as it is: no card is added to a view
+        // that's left. Another view's half-built tree goes; a rebuild of the same view takes its islands back below.
+        building?.let { b ->
+            if (b.index != index || forceRebuild || index in staleViews) cancelBuild(dropPartial = b.index != index)
+        }
         // Before anything is selected or built: the page leaves for HA's frontend, and this view stays as it was. No
         // build follows, so no island a rebuild gave up waits for one.
         onWebView?.let { show ->
             fallbackReason(viewCfg)?.let { reason ->
+                cancelBuild(dropPartial = true)
                 closePooledIslands()
                 show(viewCfg, reason)
                 return
@@ -1137,6 +1280,7 @@ class VitroView(
             updateCardsHidden()
             return
         }
+        var steps: List<() -> View> = emptyList()
         val viewRoot = if (cached != null) {
             cached
         } else {
@@ -1149,6 +1293,8 @@ class VitroView(
             fontsFor = cardCtx.haBase to cardCtx.resources
             val pinned = ArrayList<Pair<View, FrameLayout.LayoutParams>>()
             pendingPinned = pinned
+            val deferred = ArrayList<() -> View>()
+            pendingSteps = deferred
             guessedStates.clear()
             // The view's old tree, if it has one, goes first: its islands wait for this build to take them back.
             dropView(index, keepIslands = true)
@@ -1159,9 +1305,10 @@ class VitroView(
                 buildViewTree(viewCfg, cardCtx)
             } finally {
                 pendingPinned = null
+                pendingSteps = null
                 buildingIndex = -1
             }
-            rebuildWhenStatesLand(index, guessedStates.toSet())
+            steps = deferred
             viewCache[index] = built
             builtScripts[index] = IslandScripts.of(cardCtx.resources)
             contentHost.addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -1188,6 +1335,32 @@ class VitroView(
             val child = overlayLayer.getChildAt(i)
             child.visibility = if (child === activeOverlay) VISIBLE else GONE
         }
+        // Shown again while it's still adding its cards: its build goes on, and finishes the view ([finishBuild]).
+        if (cached != null && building?.index == index) {
+            updateIslandsShown()
+            updateCardsHidden()
+            return
+        }
+        if (steps.isEmpty()) {
+            finishBuild(index, viewCfg, t0, cached = cached != null)
+            return
+        }
+        // The columns are on screen; the cards follow, the first slice now ([SlicedBuild]).
+        updateIslandsShown()
+        updateCardsHidden()
+        val b = SlicedBuild(index, viewCfg, t0, steps)
+        building = b
+        runSlice(b)
+    }
+
+    /**
+     * The view [index] is built (or shown from the cache, [cached]): the islands no card took back close, only its
+     * islands run, and its metrics are reported, which is when the page counts it ready. A first build also listens
+     * for the states it guessed at ([rebuildWhenStatesLand]). [slices]: how many slices a masonry build took
+     * ([SlicedBuild]), and the longest of them.
+     */
+    private fun finishBuild(index: Int, viewCfg: ViewConfig, t0: Long, cached: Boolean, slices: Int = 1, longestSliceMs: Long = -1) {
+        if (!cached) rebuildWhenStatesLand(index, guessedStates.toSet())
         // Islands the build didn't take back (their card is gone or changed) close; only this view's islands run.
         closePooledIslands()
         updateIslandsShown()
@@ -1207,18 +1380,19 @@ class VitroView(
             nativeHacsCards = tiers[CardTier.NATIVE_HACS] ?: 0,
             webIslandCards = tiers[CardTier.WEB_ISLAND] ?: 0,
             subscribedEntities = entities.size,
-            cacheHit = cached != null,
+            cacheHit = cached,
             islands = islands.map { "${it.path}: ${it.verdict.reasons.joinToString("; ")}" },
         )
         lastMetrics = metrics
+        val sliced = if (slices > 1) ", slices=$slices, longest slice=$longestSliceMs ms" else ""
         Log.i(
             TAG,
             "View '${metrics.viewTitle}' (${metrics.viewType}) built in ${metrics.buildTimeMs} ms " +
                 "(cache=${metrics.cacheHit}, core=${metrics.nativeCoreCards}, hacs=${metrics.nativeHacsCards}, " +
-                "islands=${metrics.webIslandCards}, entities=${metrics.subscribedEntities})",
+                "islands=${metrics.webIslandCards}, entities=${metrics.subscribedEntities}$sliced)",
         )
         // The checker's answer for this view, once per build: why each island falls back.
-        if (cached == null) metrics.islands.forEach { Log.i(TAG, "Island $it") }
+        if (!cached) metrics.islands.forEach { Log.i(TAG, "Island $it") }
         onMetrics?.invoke(metrics)
     }
 
@@ -1295,6 +1469,8 @@ class VitroView(
 
     /** Drops built view [index] and its pinned cards. */
     private fun dropView(index: Int, keepIslands: Boolean) {
+        // A view still adding its cards adds none once it's dropped.
+        if (building?.index == index) cancelBuild(dropPartial = false)
         staleViews -= index
         viewCache.remove(index)?.let { retireIslands(it, keepIslands); contentHost.removeView(it) }
         overlayFrames.remove(index)?.let { retireIslands(it, keepIslands); overlayLayer.removeView(it) }
@@ -1304,6 +1480,7 @@ class VitroView(
 
     /** Drops every built view and the pinned cards. */
     private fun dropBuiltViews(keepIslands: Boolean) {
+        cancelBuild(dropPartial = false)
         staleViews.clear()
         viewCache.values.forEach { retireIslands(it, keepIslands) }
         overlayFrames.values.forEach { retireIslands(it, keepIslands) }
@@ -1846,14 +2023,20 @@ class VitroView(
         val row = MasonryColumnsLayout(context, px(if (widthDp < 600) 600f else 500f)).apply { applyViewPadding(this, ctx) }
         val columns = (0 until count).map { cardColumn(ctx) }
         columns.forEach { row.addView(it, LinearLayout.LayoutParams(0, WRAP_CONTENT)) }
-        placed.forEachIndexed { k, (configIndex, card) ->
-            val column = columns[placement[k]]
-            val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
-            clarity?.cardBuilt(buildingIndex, configIndex, card, v)
-            cacheCardAsLayer(v, card, ctx)
-            startCamerasEarly(v)
-            column.addView(v, cardMarginParams(ctx, widthDp))
+        val viewIndex = buildingIndex
+        // Each card in config order, into the column it was placed in: in slices once the columns are on screen
+        // ([SlicedBuild], HA's `_createColumns`), or here, outside a view build.
+        val steps = placed.mapIndexed { k, (configIndex, card) ->
+            {
+                val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
+                clarity?.cardBuilt(viewIndex, configIndex, card, v)
+                cacheCardAsLayer(v, card, ctx)
+                startCamerasEarly(v)
+                columns[placement[k]].addView(v, cardMarginParams(ctx, widthDp))
+                v
+            }
         }
+        pendingSteps?.addAll(steps) ?: steps.forEach { it() }
         return row
     }
 
@@ -2470,6 +2653,12 @@ class VitroView(
 
         /** How long a rebuilt view keeps scrolling back to where it was while its islands report their heights. */
         private const val RESTORE_SCROLL_MS = 5_000L
+
+        /**
+         * How long a masonry build works before it lets a frame draw ([SlicedBuild]): HA's `_createColumns` waits for
+         * the next render once more than 16 ms went by since its slice began (`hui-masonry-view.ts`).
+         */
+        internal const val SLICE_BUDGET_MS = 16L
 
         /** Whether a card is drawn through a hardware layer: never when it casts a shadow, which the layer's bounds would clip. */
         internal fun cardLayerWanted(themeElevationDp: Float, viewElevation: Float): Boolean =

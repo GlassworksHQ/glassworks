@@ -420,7 +420,7 @@ class VitroClarity internal constructor(
             val head = (0 until minOf(nCfg, headCards)).map { rendered(cards[it]?.second) }
             st = ClarityStats.usableStep(
                 ClarityStats.Look(
-                    launch = cfg == null || view.statusShowing || !view.currentViewBuilt,
+                    launch = cfg == null || view.statusShowing || !view.currentViewOnScreen,
                     viewIndex = if (cfg == null) null else view.currentViewIndex,
                     wantIndex = want,
                     head = head,

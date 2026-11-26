@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.compat
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.DashboardConfig
+import dev.glassworks.engine.vitro.model.ViewConfig
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicInteger
@@ -14,8 +15,9 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * Routes every card of a freshly parsed dashboard on a background thread, the view about to open first, so the UI
  * thread building it finds each answer ready. It computes the same lazy values the build reads ([CardConfig.nativeOnly],
- * [CardConfig.compat]): a card is never checked twice, and its answer can't differ ([CardCompat.check] is pure, and
- * its caches are synchronized). A card the build reaches first is checked there, and this thread waits for it.
+ * [CardConfig.compat], and each view's [ViewConfig.webFallbackReason]): a card is never checked twice, and its answer
+ * can't differ ([CardCompat.check] and [WebFallback.viewReason] read the config alone, and the caches are synchronized).
+ * A card or view the build reaches first is checked there, and this thread waits for it.
  */
 object CompatWarmup {
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "vitro-compat").apply { isDaemon = true } }
@@ -37,6 +39,9 @@ object CompatWarmup {
             for (root in CardRouter.viewRoots(view)) {
                 if (!warm(root.card, cancelled)) return
             }
+            // The view's own verdict ([ViewConfig.webFallbackReason]): config alone, read on every open of it.
+            if (cancelled()) return
+            view.webFallbackReason
         }
     }
 
