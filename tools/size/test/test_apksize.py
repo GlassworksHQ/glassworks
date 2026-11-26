@@ -106,6 +106,13 @@ class Owners(unittest.TestCase):
         self.assertEqual(r["engine:vitro"]["total"], 10)
         self.assertEqual(A.label("engine:vitro"), "Engine (Vitro)")
 
+    def test_vitro_owns_its_java_resources(self):
+        """Vitro's Java resources (its locale tables, native-options.json) sit at the APK's root under its package
+        path: Vitro's row, not core's."""
+        for path in ("dev/glassworks/engine/vitro/locale/de.json", "dev/glassworks/engine/vitro/compat/native-options.json"):
+            self.assertEqual(A.owner_of_file(path, PARTS, []), (("engine", "vitro"), "other"))
+        self.assertEqual(A.owner_of_file("dev/glassworks/other.json", PARTS, []), (("core", None), "other"))
+
     def test_vitro_carries_libwebrtc(self):
         """Vitro's WebRTC cameras (libs/ha-webrtc, engines/engine-vitro-webrtc): libwebrtc's classes, the library's and
         its native library count in Vitro's row, not core's."""
