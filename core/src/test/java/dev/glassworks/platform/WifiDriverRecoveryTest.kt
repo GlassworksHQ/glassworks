@@ -67,6 +67,28 @@ class WifiDriverRecoveryTest {
         assertFalse("no extras", WifiDriverRecovery.isDriverFailure(-1, -1))
     }
 
+    @Test fun `the Mirror's stock Android says the failure as state 5, its vendor failed state`() {
+        val failed = WifiDriverRecovery.VENDOR_STATE_FAILED
+        assertTrue("the broadcast the Mirror sends (2026-11-25)", WifiDriverRecovery.isDriverFailure(failed, WIFI_STATE_DISABLED))
+        assertTrue(WifiDriverRecovery.isDriverFailure(failed, WIFI_STATE_ENABLING))
+        assertTrue("a switch-off right after it", WifiDriverRecovery.isDriverFailure(WIFI_STATE_DISABLED, failed))
+        assertFalse("not a plain switch-off", WifiDriverRecovery.isSwitchOff(WIFI_STATE_DISABLED, failed))
+    }
+
+    @Test fun `on the Mirror's broadcast alone it switches Wi-Fi on`() {
+        // What the Mirror does (dumpsys activity broadcasts, 2026-11-25): one broadcast, 5 after 1, and Android's
+        // switch-off after it sends none, so this is also the sticky state an app that starts later gets.
+        driverLoads = true
+        state = WifiDriverRecovery.VENDOR_STATE_FAILED
+        recovery.onState(WifiDriverRecovery.VENDOR_STATE_FAILED, WIFI_STATE_DISABLED)
+        assertTrue(recovery.running)
+        advance(5_000)
+        assertEquals(1, enables)
+        state = WIFI_STATE_ENABLED
+        recovery.onState(WIFI_STATE_ENABLED, WIFI_STATE_ENABLING)
+        assertFalse(recovery.running)
+    }
+
     @Test fun `after the failure it switches Wi-Fi on once Android's own switch-off is through, and stops when it's on`() {
         driverLoads = true
         driverFails()

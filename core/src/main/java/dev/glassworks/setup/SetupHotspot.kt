@@ -66,6 +66,14 @@ class SetupHotspot(
      * on e7d2d49d). A stop while it runs means no start.
      */
     private val beforeStart: (start: () -> Unit) -> Unit = { it() },
+    /**
+     * Before rule 1 starts the hotspot by itself: switches a Wi-Fi radio that is off on, where the app may, and says
+     * true when it did. Then no saved network could have joined while the rule waited, so it waits again from now
+     * ([SetupHotspotPolicy.radioSwitchedOn]) and the hotspot doesn't take the radio from the network as it joins (the
+     * Mirror, 2026-11-25: Wi-Fi off after a failed driver load, the hotspot switched it on and started 4 s later, and
+     * held the radio its 15 minutes). An asked start doesn't wait.
+     */
+    private val switchRadioOn: () -> Boolean = { false },
 ) {
     /** What the setup screen shows. */
     sealed interface View {
@@ -144,7 +152,13 @@ class SetupHotspot(
             error = null
             if (policy.state != SetupHotspotPolicy.State.Idle) policy.configured(clock())
         }
-        val d = policy.update(connected(), clock())
+        var d = policy.update(connected(), clock())
+        val rule = policy.state
+        if (d.on && run == null && rule is SetupHotspotPolicy.State.On && !rule.asked && switchRadioOn()) {
+            log("setup hotspot: Wi-Fi was off, so it switched it on; the saved network gets its minutes first")
+            policy.radioSwitchedOn(clock())
+            d = policy.update(connected(), clock())
+        }
         apply(d)
     }
 

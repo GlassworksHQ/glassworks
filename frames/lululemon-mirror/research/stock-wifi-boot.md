@@ -68,16 +68,46 @@ app is the fix and Kiln only sets the switch.
    granted to shell on Android 6). WifiService reads `WIFI_ON` once, when it starts (AOSP 6.0.1
    `WifiSettingsStore`), so the write takes effect at the next boot and changes nothing before it.
 
+5. **The first Mirror run of the recovery: it never fired** (2026-11-25, verified, test build at `dbafc237f`). Three
+   reboots over Wi-Fi adb, Ethernet unplugged. Each boot lost the race (`Wi-Fi state is failed` at about 19 s).
+   Restarts 1 and 2 were back on Wi-Fi about 6.5 minutes after the reboot; restart 3 only after about 35 minutes.
+   The recovery should have had Wi-Fi back within a minute of boot, so something else brought it back. logcat of
+   restart 3 (Mirror clock):
+
+   | Time | Who | What |
+   |---|---|---|
+   | 02:12:32 | WifiService | `Wi-Fi state is failed`, then `setWifiEnabled: false` as system |
+   | 02:18:02 | Glassworks (uid of the app) | `setWifiEnabled: true`: the setup hotspot's start (`WifiRadio.ensureOn` before its scan), 5.5 minutes in, not the recovery |
+   | 02:18:08 | WifiService | `wifiApState=12`, then `13`: the hotspot took the radio about 4 s after switching it on, before the saved network joined (kernel: `wlan: disconnected`, the driver reloaded in AP mode) |
+   | 02:33:02 | WifiService | `wifiApState=10`, `11`, and `setWifiEnabled: true` from the app: the hotspot's 15 minutes were up, and Wi-Fi joined |
+
+   Restarts 1 and 2 came back the same way, the saved network winning the race against the hotspot. The app's own
+   lines from early boot weren't there to read: the Mirror's log rings are 256 KB each, Glassworks fills the main
+   one in minutes, and stock's shell can't make them bigger (`setprop persist.logd.size` does nothing).
+
+6. **Why the recovery didn't fire** (2026-11-25, verified). One more reboot with Ethernet plugged in, so adb was up
+   about 40 s into the boot and logcat streamed from there. `KioskService started` came 250 ms before
+   `Failed to load driver`, so the app's receiver was registered; it logged nothing. `dumpsys activity broadcasts`
+   then showed the one broadcast the failure sends:
+   ```
+   * Sticky action android.net.wifi.WIFI_STATE_CHANGED:
+     Bundle[{previous_wifi_state=1, wifi_state=5}]
+   ```
+   AOSP has no Wi-Fi state 5 (0 to 4, with `WIFI_STATE_UNKNOWN` = 4 for a failed load). The vendor's WifiService
+   says the failure as its own state 5, and its switch-off right after sends no broadcast, so 5 stays the sticky
+   state. The recovery only knew 4. It now treats 5 as the failure too (`VENDOR_STATE_FAILED`).
+
 ## Result
 
 | Who | What it does now |
 |---|---|
-| Glassworks (core, `WifiDriverRecovery` in `KioskService`) | When Wi-Fi goes to `WIFI_STATE_UNKNOWN` (the driver failed), or reads disabled right after it, and the app may switch Wi-Fi on (Android 9 and older, or the Device Owner), it switches Wi-Fi on after 5 s and tries again with backoff for about two and a half minutes, until Wi-Fi is on. A plain switch-off is left alone |
+| Glassworks (core, `WifiDriverRecovery` in `KioskService`) | When Wi-Fi goes to a failed state (the Mirror's vendor state 5, or AOSP's `WIFI_STATE_UNKNOWN`), or reads disabled right after it, and the app may switch Wi-Fi on (Android 9 and older, or the Device Owner), it switches Wi-Fi on after 5 s and tries again with backoff for about two and a half minutes, until Wi-Fi is on. A plain switch-off is left alone |
+| Glassworks (core, the setup hotspot) | When its rule is about to open the hotspot by itself and Wi-Fi is switched off, it switches Wi-Fi on and gives the saved network the rule's minutes again before it opens the hotspot. One failed boot no longer costs 15 minutes offline. A hotspot asked for on the setup screen doesn't wait |
 | Kiln (`keepWifiOn` in `installer/src/inplace.ts`) | Reads `wifi_on`; when it reads `0`, writes `1` for the next start and says so. No `svc wifi enable`. This covers a switch that is already off when a boot starts: Android then never tries the driver, so there is no failure for the app to react to |
 
-The app's recovery and Kiln's step are **untested on a Mirror** so far: the next run should reboot the Mirror a
-few times after the apps are optimized and check `settings get global wifi_on` and the `Glassworks.Wifi` log
-lines.
+The first build of the recovery didn't fire on the Mirror (attempts 5 and 6). The fixed one, and Kiln's step, are
+**untested on a Mirror** so far: the next run reboots it a few times, with Ethernet plugged in so the log streams
+from early boot, and checks `settings get global wifi_on` and the `Glassworks.Wifi` lines.
 
 ## How to reproduce
 
@@ -92,10 +122,12 @@ From a Mirror on stock with Glassworks installed in place, on adb. It reboots th
    2. `adb reboot`, then once adb is back:
       `adb shell settings get global wifi_on` (`0` after a lost race),
       `adb logcat -d | grep -E "Failed to load driver|Wi-Fi state is failed|Glassworks.Wifi"` and
+      `adb shell dumpsys activity broadcasts | grep -A2 "Sticky action android.net.wifi.WIFI_STATE_CHANGED"` and
       `adb shell dmesg | grep -E "WCNSS driver not ready|wcnss_wlan triggered"`: the order above. Save them per
       boot: the next reboot clears both logs.
    3. With the app's recovery, the `Glassworks.Wifi` lines show the tries, and Wi-Fi is on again within a minute
-      or two.
+      or two. The main log ring rolls in minutes: with Ethernet plugged in, adb is up early, and
+      `adb logcat -v time > boot.log` started then keeps the early lines.
 3. Put the switch back as step 1 found it: `adb shell settings put global wifi_on <value>`.
 
 ## Open questions

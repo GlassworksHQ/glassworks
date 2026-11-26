@@ -16,7 +16,8 @@ line of each version is what Home Assistant shows on the update card. A change o
   the Wi-Fi chip not ready yet, and Android then switched Wi-Fi off and kept it off, so the panel stayed offline
   until someone turned Wi-Fi back on. Glassworks now turns Wi-Fi back on by itself when that happens, trying for a
   couple of minutes. A Wi-Fi you switch off on purpose stays off. Kiln's in-place install also sets Wi-Fi's switch
-  back on when it finds it off.
+  back on when it finds it off. And when the setup hotspot finds Wi-Fi switched off, it turns Wi-Fi on and gives
+  your saved network a few minutes to join before it opens, so it no longer takes the panel offline for 15 minutes.
 - **The Mirror's screen never stays dark while it's awake.** On the Mirror, brightness 0 turns the backlight off, so
   a panel whose system brightness was at 0 came up awake but black, and waking it from Home Assistant didn't help.
   Glassworks now keeps the Mirror's screen at a visible level whenever it's awake, whatever the system or manual

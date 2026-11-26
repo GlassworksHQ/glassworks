@@ -160,6 +160,9 @@ open class KioskService : Service() {
                 if (!WifiRadio.ensureOn(this)) Log.w(HOTSPOT_TAG, "Wi-Fi is off, and it didn't come on")
                 scanFirst(start)
             },
+            // Rule 1's own start finds Wi-Fi off (the Mirror's driver failed at boot): on first, and the saved network
+            // gets its minutes before the hotspot takes the radio.
+            switchRadioOn = { WifiRadio.switchedOff(this) && WifiRadio.ensureOn(this) },
         )
         glassworks.setupHotspot = hs
         val cb = object : ConnectivityManager.NetworkCallback() {

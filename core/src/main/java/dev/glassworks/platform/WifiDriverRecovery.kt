@@ -11,8 +11,9 @@ import android.net.wifi.WifiManager
  *
  * Why: on the lululemon Mirror's stock Android 6, Android starts the Wi-Fi driver before the vendor scripts have
  * started the Wi-Fi chip's firmware. Once the apps are optimized the boot is fast enough to lose that race every
- * time: the driver doesn't load, Wi-Fi goes to [WifiManager.WIFI_STATE_UNKNOWN], and Android then switches Wi-Fi
- * off for good (`Settings.Global.WIFI_ON` 0, kept across reboots). Switching it on a few seconds later works.
+ * time: the driver doesn't load, Wi-Fi goes to the vendor's failed state ([VENDOR_STATE_FAILED]; AOSP's
+ * [WifiManager.WIFI_STATE_UNKNOWN] elsewhere), and Android then switches Wi-Fi off for good (`Settings.Global.WIFI_ON`
+ * 0, kept across reboots). Switching it on a few seconds later works.
  * The stock apps the in-place install hides used to do that; now the app does
  * (`frames/lululemon-mirror/research/stock-inplace-parity.md`).
  *
@@ -47,16 +48,26 @@ class WifiDriverRecovery(
         const val OWN_ANSWER_MS = 60_000L
 
         /**
-         * The driver didn't load: [WifiManager.WIFI_STATE_UNKNOWN], or the switch-off Android makes right after it (a
-         * disable whose previous state was unknown). Also what the sticky broadcast says to an app that started after.
+         * The Mirror's stock Android 6 says a failed driver load as Wi-Fi state 5, which AOSP doesn't have: its
+         * WifiService logs "Wi-Fi state is failed", broadcasts `wifi_state=5, previous_wifi_state=1`, and switches Wi-Fi
+         * off without another broadcast, so 5 stays the sticky state (verified on the Mirror, 2026-11-25:
+         * `dumpsys activity broadcasts`). AOSP says the same failure as [WifiManager.WIFI_STATE_UNKNOWN].
+         */
+        const val VENDOR_STATE_FAILED = 5
+
+        /** The state says the driver didn't load: AOSP's unknown, or the vendor's failed ([VENDOR_STATE_FAILED]). */
+        private fun failed(state: Int): Boolean = state == WifiManager.WIFI_STATE_UNKNOWN || state == VENDOR_STATE_FAILED
+
+        /**
+         * The driver didn't load ([failed]), or the switch-off Android makes right after it (a disable whose previous
+         * state was a failure). Also what the sticky broadcast says to an app that started after.
          */
         fun isDriverFailure(state: Int, previous: Int): Boolean =
-            state == WifiManager.WIFI_STATE_UNKNOWN ||
-                (state == WifiManager.WIFI_STATE_DISABLED && previous == WifiManager.WIFI_STATE_UNKNOWN)
+            failed(state) || (state == WifiManager.WIFI_STATE_DISABLED && failed(previous))
 
         /**
          * A switch-off from on or coming on (a person, or another app), not the driver failing: a failed load goes
-         * through [WifiManager.WIFI_STATE_UNKNOWN] first ([isDriverFailure]).
+         * through a failed state first ([isDriverFailure]).
          */
         fun isSwitchOff(state: Int, previous: Int): Boolean =
             (state == WifiManager.WIFI_STATE_DISABLING || state == WifiManager.WIFI_STATE_DISABLED) &&
