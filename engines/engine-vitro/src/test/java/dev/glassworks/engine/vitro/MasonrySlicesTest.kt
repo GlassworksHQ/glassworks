@@ -8,6 +8,8 @@ import android.app.Activity
 import android.app.Application
 import android.view.View
 import android.view.ViewGroup
+import dev.glassworks.engine.vitro.cards.IframeCardView
+import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.ui.MasonryColumnsLayout
@@ -51,9 +53,15 @@ class MasonrySlicesTest {
     ).toString()
 
     /** A view of [dashboard]; [sliced]: on a clock that moves 5 ms per look, else on Robolectric's (one slice). */
-    private fun vitroView(dashboard: String, sliced: Boolean, metrics: MutableList<VitroMetrics> = ArrayList()): VitroView {
+    private fun vitroView(
+        dashboard: String,
+        sliced: Boolean,
+        metrics: MutableList<VitroMetrics> = ArrayList(),
+        layers: VitroView.CardLayers? = null,
+    ): VitroView {
         val store = EntityStore()
         val vv = VitroView(activity, store, 0xFF000000.toInt())
+        layers?.let { vv.cardLayers = it }
         if (sliced) {
             var t = 0L
             vv.sliceClock = { t += 5; t }
@@ -204,5 +212,35 @@ class MasonrySlicesTest {
         assertTrue("nothing waits for a frame", nextFrame.isEmpty())
         repeat(10) { frame() }
         assertEquals(4, attached(row).sum())
+    }
+
+    // #947's rules hold for cards a later slice adds: a card holding an island (a browser's SurfaceView, blank under a
+    // layer) never gets a layer, and an island attaches into a tree already on screen, where it lifts any layer above it.
+    @Test
+    fun cardsALaterSliceAddsKeepTheIslandLayerRules() {
+        val cards = cards("heavy", 10).apply {
+            put(JSONObject("""{"type": "iframe", "url": "https://example.com/", "aspect_ratio": "60%"}"""))
+            put(JSONObject("""{"type": "vertical-stack", "cards": [{"type": "iframe", "url": "https://example.com/", "aspect_ratio": "60%"}]}"""))
+            put(JSONObject().put("type", "markdown").put("content", "Last"))
+        }
+        val config = JSONObject().put("views", JSONArray().put(JSONObject().put("path", "heavy").put("cards", cards))).toString()
+        val vv = vitroView(config, sliced = true, layers = VitroView.CardLayers.ALL)
+        assertTrue("no island in the first slice", all(vv).filterIsInstance<IframeCardView>().isEmpty())
+        repeat(5) { frame() }
+        assertFalse(vv.buildInProgress)
+        val islands = all(vv).filterIsInstance<IframeCardView>()
+        assertEquals(2, islands.size)
+        for (island in islands) {
+            assertTrue("added to a tree on screen", island.isAttachedToWindow)
+            generateSequence(island as View) { it.parent as? View }.takeWhile { it !== vv }.forEach {
+                assertEquals("no layer on ${it.javaClass.simpleName} around an island", View.LAYER_TYPE_NONE, it.layerType)
+            }
+        }
+        val last = all(vv).filterIsInstance<MarkdownCardView>()
+            .single { card -> all(card).filterIsInstance<android.widget.TextView>().any { it.text.toString() == "Last" } }
+        assertTrue(
+            "the last slice's own card keeps its layer",
+            generateSequence(last as View) { it.parent as? View }.takeWhile { it !== vv }.any { it.layerType == View.LAYER_TYPE_HARDWARE },
+        )
     }
 }
