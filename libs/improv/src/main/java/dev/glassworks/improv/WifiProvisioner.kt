@@ -703,7 +703,7 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
         private fun currentBootId(ctx: Context): String? =
             runCatching { java.io.File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
                 ?.let { "kernel:$it" }
-                ?: (if (android.os.Build.VERSION.SDK_INT >= 24) runCatching {
+                ?: (if (Compat.hasBootCount) runCatching {
                     Settings.Global.getInt(ctx.contentResolver, Settings.Global.BOOT_COUNT)
                 }.getOrNull()?.let { "bootcount:$it" } else null)
                 ?: runCatching {
