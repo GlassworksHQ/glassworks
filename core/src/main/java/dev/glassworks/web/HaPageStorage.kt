@@ -37,12 +37,15 @@ class HaPageStorage(private val prefs: SharedPreferences) {
     }
 
     /**
-     * Removes the copy (the factory reset, [HaPageData]), after any write already sent with [putLater]: one that was
-     * waiting can't bring it back. False when it couldn't be written.
+     * Removes the copy (the factory reset, [HaPageData]), after any write already sent with [putLater], and keeps no
+     * copy again until the process ends ([closed]): the page still open behind the reset can't bring it back before
+     * the restart. False when it couldn't be written. Off the main thread: it waits for the writes before it.
      */
-    fun clear(): Boolean =
-        runCatching { writes.submit<Boolean> { prefs.edit().clear().commit() }.get(5, java.util.concurrent.TimeUnit.SECONDS) }
+    fun clear(): Boolean {
+        closed = true
+        return runCatching { writes.submit<Boolean> { prefs.edit().clear().commit() }.get(5, java.util.concurrent.TimeUnit.SECONDS) }
             .getOrDefault(false)
+    }
 
     /** The copy for [url]'s origin, or null when the panel has none for it (it never ran HA's web UI there). */
     fun items(url: String?): JSONObject? {
@@ -81,9 +84,18 @@ class HaPageStorage(private val prefs: SharedPreferences) {
          * whole app: a later report is never overtaken by an earlier one.
          */
         fun putLater(context: Context, url: String, json: String) {
+            if (closed) return
             val app = context.applicationContext
-            writes.execute { runCatching { of(app).put(url, json) } }
+            // A report queued before a reset's [clear] runs before it; one that comes after it is dropped here.
+            writes.execute { if (!closed) runCatching { of(app).put(url, json) } }
         }
+
+        /**
+         * True from a factory reset's [clear] until the process ends: the app keeps no copy of HA's storage then, so the
+         * reset leaves none behind. The reset restarts the process, and the next one starts open.
+         */
+        @Volatile
+        var closed = false
 
         /** True for a key that is never kept ([SECRET]). */
         fun secret(key: String): Boolean = SECRET.containsMatchIn(key)

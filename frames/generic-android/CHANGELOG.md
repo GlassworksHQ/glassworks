@@ -16,7 +16,7 @@ line of each version is what Home Assistant shows on the update card. A change o
   *Settings → Labs*, on the panel or the Manage page, and after the app restarts your Home Assistant dashboard is drawn
   with the device's own views instead of a browser. Cards it can't draw yet show in a small browser view, and a view it
   can't draw, such as one with a map, opens as Home Assistant draws it. It's off by default; while it's off, the app
-  shows your dashboard in its browser as it always has. If the app keeps stopping right after it starts with Vitro on,
+  shows your dashboard in its browser as it always has. If the app keeps crashing right after it starts with Vitro on,
   it turns Vitro off by itself, and Labs and the Manage page say why. A factory reset also clears what Vitro kept from
   Home Assistant's pages. In both builds; the legacy build (Android 6 and 7, the Mirror included) has seen the least
   testing so far.

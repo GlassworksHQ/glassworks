@@ -102,6 +102,7 @@ object S1Settings {
             },
             onMain = { main.post(it) },
             log = { Log.i(TAG, it) },
+            inBackground = { Thread(it, "factory-reset").start() },
         )
     }
 
