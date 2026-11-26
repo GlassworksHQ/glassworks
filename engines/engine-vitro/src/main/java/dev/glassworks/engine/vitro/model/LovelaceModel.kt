@@ -1076,13 +1076,22 @@ object LovelaceParser {
         return dash to view
     }
 
-    /** True when [url] is a Home Assistant Lovelace dashboard path rather than login, settings, or blueprints. */
+    /**
+     * True when [url] is a Home Assistant Lovelace dashboard path rather than login, settings, blueprints or a file.
+     * A path ending in a web file (`…/page.html`, `…/card.js`) is a file a server hands out, not a dashboard view,
+     * wherever it is served from: Clarity's SurfaceFlinger check page (`/clarity/page/sfcheck.html`) opens in the
+     * fallback, so the check reads the page's SurfaceView.
+     */
     fun isDashboardUrl(url: String): Boolean {
         val path = runCatching { java.net.URI(url).path }.getOrNull().orEmpty().trim('/')
         if (path.isEmpty()) return true
         val first = path.substringBefore('/')
-        return first !in NON_DASHBOARD_PREFIXES
+        if (first in NON_DASHBOARD_PREFIXES) return false
+        return !WEB_FILE.containsMatchIn(path.substringAfterLast('/'))
     }
+
+    /** A file name a web server hands out: a page, script, stylesheet, data or picture. */
+    private val WEB_FILE = Regex("""\.(html?|m?js|json|css|xml|txt|png|jpe?g|gif|webp|svg|ico)$""", RegexOption.IGNORE_CASE)
 
     private val NON_DASHBOARD_PREFIXES = setOf(
         "auth", "config", "developer-tools", "profile", "hassio", "hacs",

@@ -566,10 +566,13 @@ class VitroEngineTest {
     fun aDashboardWithNoViewsIsReady() {
         server.dashboardConfig = JSONObject("""{"views": []}""")
         val page = openPage(vitro())
+        // On screen, as the panel shows it: a detached view is never shown, so the check below would hold vacuously.
+        activity.setContentView(page.view)
         page.load("$base/wall-test/living")
         awaitMain("ready") { host.messages("ready").isNotEmpty() }
         assertEquals("vitro", host.messages("ready").single().getString("why"))
         assertEquals(listOf(true), host.pageStops.toList())
+        assertTrue("the page is on screen", vitroView(page).isAttachedToWindow && vitroView(page).isShown)
         fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
         assertFalse(
             "no \"Connecting…\" left on a ready page",

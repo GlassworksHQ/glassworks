@@ -11,6 +11,7 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import com.sun.net.httpserver.HttpServer
 import dev.glassworks.engine.vitro.cards.CustomButtonCardView
 import dev.glassworks.engine.vitro.cards.HaErrorCardView
 import dev.glassworks.engine.vitro.cards.LegacyWeatherCardView
@@ -23,7 +24,9 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,6 +35,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.net.InetSocketAddress
+import java.time.Duration
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.abs
 
 /**
@@ -46,6 +52,36 @@ class ButtonCardViewTest {
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
     private val store = EntityStore()
     private val calls = ArrayList<String>()
+
+    /** weather-card's icon folder, on loopback: a unit test never reaches the card's CDN. */
+    private val iconRequests = CopyOnWriteArrayList<String>()
+    private val icons = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+        createContext("/") { ex ->
+            iconRequests += ex.requestURI.path
+            val svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="#fc0"/></svg>""".toByteArray()
+            ex.responseHeaders.add("Content-Type", "image/svg+xml")
+            ex.sendResponseHeaders(200, svg.size.toLong())
+            ex.responseBody.use { it.write(svg) }
+        }
+        start()
+    }
+
+    @After
+    fun stopIcons() = icons.stop(0)
+
+    /**
+     * Runs the main looper until the picture loads this test started are back on it ([pendingBefore] left), or a
+     * deadline passes: a load still in flight when the test ends would land in a later test's looper.
+     */
+    private fun awaitImages(pendingBefore: Int) {
+        val deadline = System.nanoTime() + 10_000_000_000L
+        while (VitroCardContext.pendingImageLoads.get() != pendingBefore && System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(20))
+            Thread.sleep(5)
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("every picture load this test started has finished", pendingBefore, VitroCardContext.pendingImageLoads.get())
+    }
 
     private fun ctx(admin: Boolean = false) = VitroCardContext(
         context = activity, haBase = FakeHaServer.BASE, store = store,
@@ -286,8 +322,15 @@ class ButtonCardViewTest {
     fun weatherCardLaysOutCurrentAndDetails() {
         put("weather.studio_forecast", "partlycloudy", "temperature" to 8.6, "humidity" to 72, "pressure" to 1014,
             "wind_speed" to 11, "wind_bearing" to 240, "visibility" to 16)
-        val card = LegacyWeatherCardView(ctx(), LovelaceParser.parseCard(JSONObject("""{"type": "custom:weather-card", "entity": "weather.studio_forecast", "name": "Studio"}""")))
+        val pendingBefore = VitroCardContext.pendingImageLoads.get()
+        val folder = "http://127.0.0.1:${icons.address.port}/icons/"
+        val card = LegacyWeatherCardView(ctx(), LovelaceParser.parseCard(JSONObject("""{"type": "custom:weather-card", "entity": "weather.studio_forecast", "name": "Studio", "icons": "$folder"}""")))
         activity.setContentView(card, ViewGroup.LayoutParams(460, ViewGroup.LayoutParams.WRAP_CONTENT))
+        layout(card, 460)
+        awaitImages(pendingBefore)
+        assertEquals("the condition's icon, from the card's own folder", listOf("/icons/cloudy-day-3.svg"), iconRequests.toList())
+        val icon = all(card).single { it.javaClass.simpleName == "SvgView" }
+        assertNotNull("the icon is drawn", icon.javaClass.getDeclaredMethod("getSvg").apply { isAccessible = true }.invoke(icon))
         layout(card, 460)
         // HA (no sun.sun here): 1 + 18.2 + 33.6 + 49 + 2 rows of 24 + 18.2 + 1.
         near("height", 168.97f, card.measuredHeight)
