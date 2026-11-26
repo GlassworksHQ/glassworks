@@ -2,7 +2,7 @@
  "_comment": "Cases Vitro draws wrong today, each with the PR that owns its fix (#799: filed on the exp/vitro list, no fixer yet) and what's wrong. Not drift: the harness reports them as open and fails once one matches, so the fix drops its entry (ParityOpen in ParityReport.kt).",
  "mirror/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: the cards' places and heights match, weather high/low and the wrapped button names too. HA's capture counts the vertical stack's three rows as slots of their own (13 slots to Vitro's 10), which throws the bounds and text checks off; the weather forecast fits five days where HA's clips the fifth, and the media art differs (see m-media-control-*)"
+  "reason": "Masonry dashboard: the 10 cards pair up with HA's (the capture counts a stack as one card), and their places, heights and texts match. The weather card is what's left: its current temperature's unit is drawn at the value's 24 px where HA's is a 16 px superscript (the font check), and its forecast fits five days where HA's clips the fifth, so the day columns sit up to 40 px off (the region check)"
  },
  "mirror/d-sections-home": {
   "owner": "#799",
@@ -38,7 +38,7 @@
  },
  "s1/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: the cards' places and heights match, weather high/low and the wrapped button names too. HA's capture counts the vertical stack's three rows as slots of their own (13 slots to Vitro's 10), which throws the bounds and text checks off; the weather forecast fits five days where HA's clips the fifth, and the media art differs (see m-media-control-*)"
+  "reason": "Masonry dashboard: the 10 cards pair up with HA's (the capture counts a stack as one card), and their places, heights and texts match. The weather card is what's left: its current temperature's unit is drawn at the value's 24 px where HA's is a 16 px superscript (the font check), and its forecast fits five days where HA's clips the fifth, so the day columns sit up to 40 px off (the region check)"
  },
  "s1/d-sections-home": {
   "owner": "#799",
@@ -254,7 +254,7 @@
  },
  "tablet/d-masonry-home": {
   "owner": "#799",
-  "reason": "Masonry dashboard: the cards' places and heights match, weather high/low and the wrapped button names too. HA's capture counts the vertical stack's three rows as slots of their own (13 slots to Vitro's 10), which throws the bounds and text checks off; the weather forecast fits five days where HA's clips the fifth, and the media art differs (see m-media-control-*)"
+  "reason": "Masonry dashboard: the 10 cards pair up with HA's (the capture counts a stack as one card), and their places, heights and texts match. The weather card is what's left: its current temperature's unit is drawn at the value's 24 px where HA's is a 16 px superscript (the font check), and its forecast fits five days where HA's clips the fifth, so the day columns sit up to 40 px off (the region check); on the tablet the forecast's fifth high and the glance's 21.4 °C aren't found, and one edge is 2.1 px off"
  },
  "tablet/d-mushroom-dense": {
   "owner": "#799",

@@ -51,6 +51,7 @@ import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/
 import { FIXTURE_PREFIX, fixtureFile, fixtureResources } from './lib/fixtures.mjs';
 import { afterGrow, captureMode, capturedWithTouch } from './lib/pointer.mjs';
 import { launch } from './lib/browser.mjs';
+import { topLevelViewCards } from './lib/slots.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_CORPUS = join(ROOT, 'engines', 'engine-vitro', 'src', 'test', 'parity');
@@ -234,8 +235,12 @@ function loadCasesAll() {
 }
 
 
-/** Runs in the page: the top-level card slots (grid cells of each grid section), in order, document px. */
-const SLOTS_JS = () => {
+/**
+ * Runs in the page: the top-level card slots, in order, document px. A Sections view's are the grid cells of each grid
+ * section; another view's are its top-level cards (`topLevelViewCards`, lib/slots.mjs, passed in as source: a
+ * stack's rows are part of the stack's slot, never slots of their own).
+ */
+const slotsInPage = (topLevelViewCards) => {
   const all = [];
   const walk = (r) => r.querySelectorAll('*').forEach((e) => { all.push(e); if (e.shadowRoot) walk(e.shadowRoot); });
   walk(document);
@@ -260,28 +265,17 @@ const SLOTS_JS = () => {
   }
   // The other view layouts (masonry, sidebar, layout-card's): every top-level card, in document order.
   if (!all.some((e) => e.localName === 'hui-grid-section')) {
-    const views = all.filter((e) => ['hui-masonry-view', 'hui-sidebar-view', 'masonry-layout', 'grid-layout', 'horizontal-layout', 'vertical-layout'].includes(e.localName));
-    const seen = new Set();
-    for (const v of views) {
-      const inView = [];
-      const collect = (r) => r.querySelectorAll('*').forEach((e) => {
-        if (e.localName === 'hui-card') { inView.push(e); return; }
-        if (e.shadowRoot && !views.includes(e)) collect(e.shadowRoot);
-      });
-      collect(v.shadowRoot || v);
-      collect(v);
-      for (const card of inView) {
-        if (seen.has(card)) continue;
-        seen.add(card);
-        const inner = [...card.children].find((c) => c.localName !== 'style');
-        const r = card.getBoundingClientRect();
-        if (r.width < 1 || r.height < 1) continue;
-        slots.push({ x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height, type: inner ? inner.localName : null });
-      }
+    for (const card of topLevelViewCards(document)) {
+      const inner = [...card.children].find((c) => c.localName !== 'style');
+      const r = card.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      slots.push({ x: r.x + scrollX, y: r.y + scrollY, w: r.width, h: r.height, type: inner ? inner.localName : null });
     }
   }
   return { slots, docW: document.documentElement.scrollWidth, docH: document.documentElement.scrollHeight };
 };
+/** [slotsInPage] as the expression page.evaluate runs, with lib/slots.mjs's walk inlined. */
+const SLOTS_JS = `(${slotsInPage})(${topLevelViewCards})`;
 
 /**
  * Runs in the page: the URLs of the images drawn inside the given slots (document px): <img> sources, SVG <image>
