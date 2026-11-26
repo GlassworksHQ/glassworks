@@ -633,10 +633,15 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
     private val unconfirmed: MutableSet<Int> = store.read()?.takeIf { sameBoot(it) }?.ids.orEmpty()
         .map { if (it == CHANGING) ORPHAN else it }.toMutableSet()
 
-    /** Same boot: the kernel's boot ids agree, or, with one unknown, the clock since boot hasn't gone back (no wall clock). */
+    /**
+     * Same boot: two ids from the same source ("kernel:", "firstboot:") agree. With one unknown, or ids from different
+     * sources (the kernel's was readable then and not now), the clock since boot hasn't gone back (no wall clock).
+     */
     private fun sameBoot(k: Kept): Boolean {
         val now = bootId()
-        return if (now != null && k.bootId != null) now == k.bootId else elapsedMs() >= k.elapsedMs
+        val then = k.bootId
+        return if (now != null && then != null && now.substringBefore(':') == then.substringBefore(':')) now == then
+        else elapsedMs() >= k.elapsedMs
     }
 
     /**
@@ -688,6 +693,7 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
         /** This boot's id: the kernel's, else the wall time system_server noted at boot (fixed for the boot), else unknown. */
         private fun currentBootId(): String? =
             runCatching { java.io.File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
+                ?.let { "kernel:$it" }
                 ?: runCatching {
                     @SuppressLint("PrivateApi")
                     val sp = Class.forName("android.os.SystemProperties")

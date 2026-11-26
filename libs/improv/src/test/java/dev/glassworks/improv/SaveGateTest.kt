@@ -15,7 +15,7 @@ class SaveGateTest {
     }
 
     private var elapsed = 1_000L
-    private fun gate(store: MemStore = MemStore(), boot: String? = "boot-1") = SaveGate(store, { boot }, { elapsed })
+    private fun gate(store: MemStore = MemStore(), boot: String? = "kernel:boot-1") = SaveGate(store, { boot }, { elapsed })
 
     @Test fun nothingUnconfirmedSaves() = assertTrue(gate().maySave(4))
 
@@ -87,7 +87,7 @@ class SaveGateTest {
     @Test fun aRebootForgetsThem() {
         val store = MemStore()
         gate(store).unconfirmed(6)
-        assertTrue(gate(store, boot = "boot-2").maySave(4))
+        assertTrue(gate(store, boot = "kernel:boot-2").maySave(4))
     }
 
     @Test fun withoutABootIdAWallClockCorrectionKeepsThem() {
@@ -118,6 +118,17 @@ class SaveGateTest {
         assertTrue(after.beginChange())
         after.unconfirmed(8)
         assertFalse(after.maySave(8)) // A's change is still unnamed: no save this boot
-        assertTrue(gate(store, boot = "boot-2").maySave(8)) // the reboot put A's saved credential back
+        assertTrue(gate(store, boot = "kernel:boot-2").maySave(8)) // the reboot put A's saved credential back
+    }
+
+    @Test fun idsFromDifferentSourcesFallBackToTheTimeSinceBoot() {
+        // the kernel's id was readable when the hold was kept, only the fallback after the app restarted: same boot
+        val store = MemStore()
+        gate(store, boot = "kernel:abc").unconfirmed(6)
+        elapsed += 60_000
+        assertFalse(gate(store, boot = "firstboot:123").maySave(4))
+        // and a reboot still ends it: time since boot went back
+        elapsed = 10
+        assertTrue(gate(store, boot = "firstboot:999").maySave(4))
     }
 }
