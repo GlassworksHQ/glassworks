@@ -1907,7 +1907,8 @@ export class ImageSession {
       if (left() <= 0) throw late();
       let started: boolean;
       try {
-        started = (await p.run('getprop sys.boot_completed')).out.trim() === '1';
+        // bounded: a shell stream that never ends is a stall, handled like a dropped connection
+        started = (await bounded(p, this.d.frame).run('getprop sys.boot_completed')).out.trim() === '1';
       } catch (e) {
         if (!reopenAdb || run !== this.connects) throw e;
         const why = (e as Error).message;

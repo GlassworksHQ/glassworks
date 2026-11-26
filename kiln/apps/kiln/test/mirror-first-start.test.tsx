@@ -32,7 +32,7 @@ const REFUSED = 'No authenticator can handle the request';
 let handed: PanelShell[] = [];
 afterEach(() => { handed = []; });
 
-function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) => Promise<PanelShell>; reopen?: (o?: { authMs?: number }) => Promise<PanelShell>; tries?: number; picked?: () => boolean; windowMs?: number; fastboot?: () => Promise<FastbootLike> }) {
+function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) => Promise<PanelShell>; reopen?: (o?: { authMs?: number }) => Promise<PanelShell>; tries?: number; picked?: () => boolean; windowMs?: number; fastboot?: () => Promise<FastbootLike>; readMs?: number }) {
   const images: ImageMaker = {
     async fetch(_, onProgress) { onProgress(1); },
     async download() {},
@@ -51,7 +51,8 @@ function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) 
     async reboot() {},
   };
   const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
-  const f = new ImageSession({ frame: mirrorFrame, simulated: true,
+  const frame = adb.readMs ? { ...mirrorFrame, timings: { ...mirrorFrame.timings, readMs: adb.readMs } } : mirrorFrame;
+  const f = new ImageSession({ frame, simulated: true,
     images, refract: 'https://proxy.test', requestFastboot: adb.fastboot ?? (async () => fb), requestAdb: adb.request,
     ...(adb.reopen ? { reopenAdb: adb.reopen } : {}), ...(adb.tries !== undefined ? { adbTries: adb.tries } : {}), ...(adb.picked ? { adbPicked: adb.picked } : {}), ...(adb.windowMs !== undefined ? { adbWindowMs: adb.windowMs } : {}),
     adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
@@ -120,6 +121,20 @@ describe('connecting while the Mirror is still starting', () => {
     // every reconnect waits 5 s first: 6 minutes hold at most 72 of them, however many tries a reconnect may take
     expect(reopen.mock.calls.length).toBeLessThanOrEqual(72);
     expect(handed).toEqual([]);
+  });
+
+  it('a poll the device never answers is a stall: the frame\'s read watchdog ends it, and Kiln connects again', async () => {
+    // the shell takes the command and never finishes it (no signal of its own): only the watchdog's abort ends it
+    const stalled: PanelShell = { run: (_cmd, signal) => new Promise((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true })), push: async () => {} };
+    const again = new FirstBootMirror();
+    const reopen = vi.fn(async () => again);
+    const { f, mirror } = setup({ request: async () => stalled, reopen, readMs: 50 });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(reopen).toHaveBeenCalledTimes(1);
+    expect(f.state).toMatchObject({ screen: 'choose', firstBoot: expect.anything() });
+    expect(handed).toEqual([again]);
+    expect(f.state.log.some((l) => /didn't answer `getprop sys.boot_completed`/.test(l))).toBe(true);
   });
 
   it('a USB reset Kiln can\'t connect back from ends on the error screen, as before', async () => {

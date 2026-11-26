@@ -100,6 +100,8 @@ public final class BleProbeServer {
     private boolean saidOff;
     private int offPolls;
     private boolean settled;
+    /** When the settle delay ends (uptime ms): a second bring-up meanwhile (the poll, then STATE_ON) waits it out too. */
+    private long settleUntil;
     private boolean serviceAdded;
     private int gattTries;
 
@@ -251,8 +253,15 @@ public final class BleProbeServer {
             if (!settled) {
                 // Give a stack that just came up a moment before asking it for a GATT server.
                 settled = true;
+                settleUntil = SystemClock.uptimeMillis() + SETTLE_MS;
                 ProbeLog.i(TAG, "BLE: waiting " + (SETTLE_MS / 1000) + " s for the Bluetooth stack to settle");
                 h.postDelayed(pollAdapter, SETTLE_MS);
+                return;
+            }
+            long settling = settleUntil - SystemClock.uptimeMillis();
+            if (settling > 0) {
+                // brought up again while it settles (the poll saw it on before STATE_ON came): keep the rest of the wait
+                h.postDelayed(pollAdapter, settling);
                 return;
             }
             advertiser = adapter.getBluetoothLeAdvertiser();
