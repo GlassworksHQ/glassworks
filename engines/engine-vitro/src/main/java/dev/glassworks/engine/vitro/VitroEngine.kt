@@ -905,6 +905,7 @@ class VitroEngine(
                     touch = touchScreen,
                     needsFrontend = { card, tags, owners -> vitroView.cardNeedsFrontend(card, tags, owners, resources) },
                     islandFailed = { card, reason -> vitroView.cardFailedInIsland(card, reason, resources) },
+                    matchedNeedFrontend = { card, reason -> vitroView.matchedNeedFrontend(card, reason) },
                     haConnected = { haConnected },
                     haConnectionEpoch = { connectionEpoch },
                     watchConnection = { onChange ->

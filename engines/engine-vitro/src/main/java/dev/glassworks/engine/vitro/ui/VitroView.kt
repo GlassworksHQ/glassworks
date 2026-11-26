@@ -341,12 +341,14 @@ class VitroView(
 
     /**
      * Why [view] goes to HA's frontend now: its own reason ([ViewConfig.webFallbackReason]), a card in it that an
-     * island found drawing with Home Assistant's own elements this session ([IslandFrontend]), or more island pages
-     * than this device runs in one view ([islandBudget]). Null: Vitro draws it.
+     * island found drawing with Home Assistant's own elements this session ([IslandFrontend]), a row auto-entities
+     * matches now that Vitro doesn't draw natively ([WebFallback.matchedRowsReason]), or more island pages than this
+     * device runs in one view ([islandBudget]). Null: Vitro draws it.
      */
     fun fallbackReason(view: ViewConfig): String? =
         view.webFallbackReason ?: (if (gaveUpViews.isEmpty()) null else gaveUpViews[viewKey(view)])
             ?: (if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) })
+            ?: WebFallback.matchedRowsReason(view, IslandScripts.of(resourcesList), store.all().values, store::get)
             ?: IslandBudget.reason(view, IslandScripts.of(resourcesList), islandBudget)
             ?: BubbleFallback.reason(view, IslandScripts.of(resourcesList))
 
@@ -393,6 +395,17 @@ class VitroView(
     fun cardFailedInIsland(card: CardConfig, reason: String, resources: List<LovelaceResource> = resourcesList) {
         if (IslandFrontend.recordReason(resources, card.type, reason)) Log.w(TAG, "Island ${card.type}: handed to HA's frontend: $reason")
         leaveForFrontend()
+    }
+
+    /**
+     * A native auto-entities [card] matched a row Vitro doesn't draw natively ([reason]): the views whose matches now
+     * need HA's frontend ([WebFallback.matchedRowsReason]) leave, the one on screen included. Posted, since the card
+     * reports from its own build. Nothing is remembered: the view is decided again from the states each time it's
+     * shown, so one whose matches are all native again comes back to Vitro.
+     */
+    fun matchedNeedFrontend(card: CardConfig, reason: String) {
+        Log.i(TAG, "${card.type}: $reason")
+        mainHandler.post { leaveForFrontend() }
     }
 
     /**

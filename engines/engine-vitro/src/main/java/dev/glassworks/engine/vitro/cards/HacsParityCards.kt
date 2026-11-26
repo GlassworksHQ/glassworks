@@ -29,6 +29,7 @@ import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.HaCardSize
 import dev.glassworks.engine.vitro.model.LovelaceParser
+import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
@@ -556,7 +557,7 @@ class MushroomAlarmControlPanelCardView(ctx: VitroCardContext, config: CardConfi
                 else HaCodeDialog.ask(
                     ctx,
                     codeFormat = s.attributes["code_format"]?.toString(),
-                    title = HaText.ui("ui.card.alarm_control_panel." + if (disarm) "disarm" else "arm"),
+                    title = if (disarm) HaText.ui("ui.card.alarm_control_panel.disarm") else HaText.ui("ui.card.alarm_control_panel.arm"),
                 ) { code -> send(code) }
             }
         }
@@ -1780,6 +1781,29 @@ object AutoEntitiesFilter {
         return value == p
     }
 
+    /**
+     * The card auto-entities builds for [matches]: its `card:` (an `entities` card by default) with its `card_param`
+     * field (`entities` by default) holding one row per match, or under `card_param: cards` one card per match (a
+     * `tile` by default) from its rule's `options`.
+     */
+    fun innerCard(raw: JSONObject, matches: List<Match>): CardConfig {
+        val base = raw.optJSONObject("card")?.let { JSONObject(it.toString()) } ?: JSONObject()
+        if (!base.has("type")) base.put("type", "entities")
+        val param = raw.optString("card_param", "entities").ifEmpty { "entities" }
+        val items = JSONArray()
+        for (m in matches) {
+            if (param == "cards") {
+                val card = m.options?.let { JSONObject(it.toString()) } ?: JSONObject()
+                if (!card.has("type")) card.put("type", "tile")
+                items.put(card.put("entity", m.entityId))
+            } else {
+                items.put(m.options?.let { JSONObject(it.toString()).put("entity", m.entityId) } ?: m.entityId)
+            }
+        }
+        base.put(param, items)
+        return LovelaceParser.parseCard(base)
+    }
+
     /** `sort: { method, reverse, numeric, ignore_case, attribute }`, stable. */
     fun sort(list: List<Match>, sort: JSONObject, lookup: (String) -> EntityState?): List<Match> {
         val method = sort.optString("method", "none")
@@ -1861,7 +1885,12 @@ class AutoEntitiesCardView(
         }
     }
 
-    /** Re-runs the filter now and rebuilds the inner card if the matches changed. */
+    /**
+     * Re-runs the filter now and rebuilds the inner card if the matches changed. A match Vitro doesn't draw natively
+     * (the strict rule a config is checked by, [WebFallback.matchedReason]) is reported ([VitroCardContext.matchedNeedFrontend]):
+     * the view goes to HA's frontend, as a view whose config holds such a row does. Until it's gone (a view with no
+     * page stays), the card draws what it matched as it can.
+     */
     fun refresh() {
         val matches = AutoEntitiesFilter.evaluate(config.raw, ctx.store.all().values, ctx.store::get)
         val sig = matches.joinToString("\n") { it.entityId + "|" + (it.options?.toString() ?: "") }
@@ -1874,27 +1903,11 @@ class AutoEntitiesCardView(
             return
         }
         visibility = VISIBLE
-        val inner = build(innerCard(matches))
+        val innerConfig = AutoEntitiesFilter.innerCard(config.raw, matches)
+        WebFallback.matchedReason(innerConfig)?.let { ctx.matchedNeedFrontend(config, it) }
+        val inner = build(innerConfig)
         onInnerBuilt?.invoke(inner)
         addView(inner, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-    }
-
-    private fun innerCard(matches: List<AutoEntitiesFilter.Match>): CardConfig {
-        val base = config.raw.optJSONObject("card")?.let { JSONObject(it.toString()) } ?: JSONObject()
-        if (!base.has("type")) base.put("type", "entities")
-        val param = config.raw.optString("card_param", "entities").ifEmpty { "entities" }
-        val items = JSONArray()
-        for (m in matches) {
-            if (param == "cards") {
-                val card = m.options?.let { JSONObject(it.toString()) } ?: JSONObject()
-                if (!card.has("type")) card.put("type", "tile")
-                items.put(card.put("entity", m.entityId))
-            } else {
-                items.put(m.options?.let { JSONObject(it.toString()).put("entity", m.entityId) } ?: m.entityId)
-            }
-        }
-        base.put(param, items)
-        return LovelaceParser.parseCard(base)
     }
 
     override fun onDetachedFromWindow() {

@@ -104,6 +104,16 @@ data class ViewConfig(
 
     /** Why this view goes to HA's own frontend instead of being drawn ([WebFallback.viewReason]), or null. */
     val webFallbackReason: String? by lazy { WebFallback.viewReason(this) }
+
+    /**
+     * True when a card the view builds is (or holds) `custom:auto-entities`, whose matches are checked at run time
+     * ([WebFallback.matchedRowsReason]).
+     */
+    internal val hasAutoEntities: Boolean by lazy {
+        fun walk(c: CardConfig): Boolean =
+            c.type == "custom:auto-entities" || CardRouter.producedCards(c, perEntity = false).any { walk(it.value) }
+        CardRouter.viewRoots(this).any { walk(it.card) }
+    }
 }
 
 /** The view types layout-card registers (`masonry-layout`, ...), as a view's `type`. */
