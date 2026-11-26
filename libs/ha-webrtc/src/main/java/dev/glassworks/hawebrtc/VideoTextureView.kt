@@ -130,7 +130,14 @@ internal class VideoTextureView(
         updateLayout()
     }
 
-    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) = attach(surface)
+    override val surfaceReady: Boolean get() = isAvailable
+
+    override var onSurfaceReady: (() -> Unit)? = null
+
+    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+        attach(surface)
+        onSurfaceReady?.invoke()
+    }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = updateLayout()
 

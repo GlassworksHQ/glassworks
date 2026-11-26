@@ -49,6 +49,9 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         /** Each frame drawn after the first. */
         public fun onFrameRendered() {}
 
+        /** The view has a surface to draw on (again, after it lost one): [surfaceReady] is true. */
+        public fun onSurfaceReady() {}
+
         /** The connection failed and the player is reconnecting (connection [attempt] of a row). */
         public fun onReconnecting(attempt: Int, error: HaError) {}
 
@@ -75,6 +78,10 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
     /** Where the report goes. Main thread. */
     public var listener: Listener? = null
 
+    init {
+        video.onSurfaceReady = { if (!closed) listener?.onSurfaceReady() }
+    }
+
     /**
      * The picture's width in pixels as shown (rotation applied), 0 until the first frame. Main thread; it is up to date
      * when [Listener.onFirstFrame] and [Listener.onFrameRendered] are called.
@@ -85,6 +92,12 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
     /** The picture's height in pixels, as [videoWidth]. */
     public var videoHeight: Int = 0
         private set
+
+    /**
+     * The view has a surface to draw on: a frame can be on screen from now on. The view gets one once it is laid
+     * out in a window; [Listener.onSurfaceReady] says when. Main thread.
+     */
+    public val surfaceReady: Boolean get() = video.surfaceReady
 
     /** The picture. Place it before [start]; it stays usable until [close]. */
     public val view: View get() = video.view

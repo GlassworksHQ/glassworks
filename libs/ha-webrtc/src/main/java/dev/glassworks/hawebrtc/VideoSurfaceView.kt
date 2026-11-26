@@ -119,9 +119,14 @@ internal class VideoSurfaceView(context: Context, scaling: VideoScaling) : Surfa
         updateLayout()
     }
 
+    override val surfaceReady: Boolean get() = surfaceAlive
+
+    override var onSurfaceReady: (() -> Unit)? = null
+
     override fun surfaceCreated(holder: SurfaceHolder) {
         surfaceAlive = true
         attach()
+        onSurfaceReady?.invoke()
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = updateLayout()

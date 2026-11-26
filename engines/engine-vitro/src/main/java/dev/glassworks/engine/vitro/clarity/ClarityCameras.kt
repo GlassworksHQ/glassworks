@@ -321,6 +321,10 @@ internal class MeasuredCameraStream(
                 listener?.onFrameRendered()
             }
 
+            override fun onSurfaceReady() {
+                listener?.onSurfaceReady()
+            }
+
             override fun onError(reason: String) {
                 ClarityCameras.current?.error(this@MeasuredCameraStream, reason)
                 listener?.onError(reason)
@@ -345,6 +349,8 @@ internal class MeasuredCameraStream(
     override fun setRendering(rendering: Boolean) = inner.setRendering(rendering)
 
     override val closeWhenHidden: Boolean get() = inner.closeWhenHidden
+
+    override val surfaceReady: Boolean get() = inner.surfaceReady
 
     override fun close() {
         ClarityCameras.current?.closed(this)

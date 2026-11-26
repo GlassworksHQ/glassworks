@@ -12,6 +12,11 @@ import android.view.ViewGroup
  * Holds one stream's view and fits it in its own bounds as CSS `object-fit` fits HA's `<video>` or `<img>`:
  * `contain` (letterboxed, the video's default), `cover` (cropped) or `fill` (stretched, the image's default). Until
  * the picture's size is known ([setVideoSize]) the view fills the frame. The frame clips what `cover` puts outside.
+ *
+ * A player on a SurfaceView ([surfaceShown]) is composited under the window, so it can't fade with its card: while
+ * the frame or anything above it is partly transparent (a card's visibility fading it in or out, a view switching),
+ * the frame doesn't draw it, which leaves no hole in the window, and the card's still shows, fading with the card as
+ * HA fades the whole card, video included. Fully opaque again, the video is back.
  */
 class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
     var fit: String = fit
@@ -26,6 +31,51 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
 
     init {
         clipChildren = true
+    }
+
+    /** False while a SurfaceView player is held back because something above it is partly transparent. Main thread. */
+    var surfaceShown = true
+        private set
+
+    private val checkFade = android.view.ViewTreeObserver.OnPreDrawListener {
+        updateSurfaceShown()
+        true
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        viewTreeObserver.addOnPreDrawListener(checkFade)
+    }
+
+    override fun onDetachedFromWindow() {
+        viewTreeObserver.removeOnPreDrawListener(checkFade)
+        super.onDetachedFromWindow()
+    }
+
+    /** Whether the frame draws its player now: always, but a SurfaceView's only while all above it is opaque. */
+    internal fun updateSurfaceShown(): Boolean {
+        val want = !holdsSurface() || opaqueUpToRoot()
+        if (want != surfaceShown) {
+            surfaceShown = want
+            invalidate()
+        }
+        return want
+    }
+
+    private fun holdsSurface(): Boolean = (0 until childCount).any { getChildAt(it) is android.view.SurfaceView }
+
+    /** This frame and every view above it at alpha 1 (alpha 0 draws nothing anyway). */
+    private fun opaqueUpToRoot(): Boolean {
+        var v: View? = this
+        while (v != null) {
+            if (v.alpha < 1f) return false
+            v = v.parent as? View
+        }
+        return true
+    }
+
+    override fun dispatchDraw(canvas: android.graphics.Canvas) {
+        if (surfaceShown) super.dispatchDraw(canvas)
     }
 
     fun setVideoSize(width: Int, height: Int) {

@@ -51,6 +51,12 @@ internal interface VideoOutput : VideoSink {
     /** False: frames aren't drawn (off screen), once one has been. Any thread reads it. */
     var rendering: Boolean
 
+    /** The view's surface exists: a frame can be drawn on it. Main thread. */
+    val surfaceReady: Boolean
+
+    /** Called on the main thread each time the view gets a surface (again, after one went). */
+    var onSurfaceReady: (() -> Unit)?
+
     /** Starts the render thread on [egl]'s context (the decoders' textures). Any thread. */
     fun init(egl: EglBase.Context)
 

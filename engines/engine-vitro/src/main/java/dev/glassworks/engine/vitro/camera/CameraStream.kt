@@ -52,12 +52,22 @@ interface CameraStream {
 
     val closeWhenHidden: Boolean get() = false
 
+    /**
+     * The view has a surface a frame can be drawn on (it got one once laid out in a window). The choice's own wait for
+     * video ([dev.glassworks.engine.vitro.cards.LiveCameraFeed.ALONE_TIMEOUT_MS]) counts from then: a view built long
+     * before it is drawn (a heavy view's build) doesn't use the wait up. True for a player that doesn't say.
+     */
+    val surfaceReady: Boolean get() = true
+
     var listener: Listener?
 
     interface Listener {
         fun onFirstFrame(sinceStartMs: Long)
 
         fun onFrameRendered()
+
+        /** The view got its surface ([surfaceReady] is true now). */
+        fun onSurfaceReady() {}
 
         fun onError(reason: String)
 

@@ -113,6 +113,10 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
                 if (!closed) listener?.onFrameRendered()
             }
 
+            override fun onSurfaceReady() {
+                if (!closed) listener?.onSurfaceReady()
+            }
+
             override fun onError(error: HaError) {
                 if (!closed) listener?.onError(listOf(error.code, error.message).filter { it.isNotEmpty() }.joinToString(": "))
             }
@@ -128,6 +132,8 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
     override fun setRendering(rendering: Boolean) = player.setRendering(rendering)
 
     override val closeWhenHidden: Boolean get() = true
+
+    override val surfaceReady: Boolean get() = player.surfaceReady
 
     override fun close() {
         if (closed) return

@@ -91,6 +91,15 @@ class LiveCameraFeedTest {
         }
 
         fun fail() = listener?.onError("test")
+
+        /** Its view has a surface (a player built before its view is laid out has none yet). */
+        var hasSurface = true
+        override val surfaceReady: Boolean get() = hasSurface
+
+        fun surface() {
+            hasSurface = true
+            listener?.onSurfaceReady()
+        }
     }
 
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
@@ -106,6 +115,9 @@ class LiveCameraFeedTest {
     private var pendingCaps: ArrayList<(Boolean, Any?, JSONObject?) -> Unit>? = null
     private val nullFor = HashSet<CameraStreamKind>()
     private val throwFor = HashSet<CameraStreamKind>()
+
+    /** Kinds whose players start without a surface (their view not laid out yet). */
+    private val noSurfaceFor = HashSet<CameraStreamKind>()
     private val closesWhenHiddenFor = HashSet<CameraStreamKind>()
 
     /** The kinds whose factory was asked to get ready, in order. */
@@ -127,6 +139,7 @@ class LiveCameraFeedTest {
                 override fun create(entityId: String, kind: CameraStreamKind): CameraStream? {
                     if (kind in nullFor) return null
                     return FakeStream(kind, activity).also {
+                        it.hasSurface = kind !in noSurfaceFor
                         it.throwOnStart = kind in throwFor
                         it.closesWhenHidden = kind in closesWhenHiddenFor
                         made += it
@@ -1176,6 +1189,27 @@ class LiveCameraFeedTest {
         assertTrue(made.first { it.kind == WEB_RTC }.closed)
         assertEquals(listOf(HLS), f.runningKinds)
         assertEquals(1, CameraVideoBudget.inUse)
+    }
+
+    @Test
+    fun webRtcAlonesWaitForVideoCountsFromItsSurfaceNotItsStart() {
+        // One slot, and a player started while its view is still being built: no surface yet.
+        CameraVideoBudget.max = 1
+        noSurfaceFor += WEB_RTC
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        // A long build: the wait hasn't started.
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS * 2)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        // Laid out: the wait counts from here.
+        live(WEB_RTC).surface()
+        idle()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS - 100)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        ms(100)
+        assertEquals(listOf(HLS), f.runningKinds)
     }
 
     @Test
