@@ -450,7 +450,14 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
                 // HA's ha-slider takes focus and keys; one that can't seek has nothing to move.
                 isFocusable = v > 0.0
                 if (v <= 0.0) access.cancel()
+                // A key edit means a second, not a place on the bar: drawn on the new length (the release clamps it).
+                editSeconds?.let { fraction = fractionOfSeconds(it) }
             }
+
+        /** The second a key edit under way shows, kept in seconds so a new duration doesn't move it; null with none. */
+        private var editSeconds: Int? = null
+
+        private fun fractionOfSeconds(sec: Int): Float = if (duration > 0.0) (sec / duration).toFloat().coerceIn(0f, 1f) else 0f
         var dragging = false
             private set
 
@@ -463,14 +470,21 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
          */
         private val access = AdjustableAccess(
             min = { 0 }, max = { duration.toInt() }, step = { 1 },
-            value = { (fraction * duration).roundToInt() },
+            value = { editSeconds ?: (fraction * duration).roundToInt() },
             preview = { v ->
-                fraction = if (duration > 0.0) (v / duration).toFloat().coerceIn(0f, 1f) else 0f
+                editSeconds = v
+                fraction = fractionOfSeconds(v)
                 VitroAccess.valueChanged(this)
             },
-            commit = { v -> seek(v) },
+            commit = { v ->
+                editSeconds = null
+                seek(v)
+            },
             // A cancelled key or focus gone: HA's position again, nothing sent.
-            restore = { updateProgress(last) },
+            restore = {
+                editSeconds = null
+                updateProgress(last)
+            },
         )
 
         override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {

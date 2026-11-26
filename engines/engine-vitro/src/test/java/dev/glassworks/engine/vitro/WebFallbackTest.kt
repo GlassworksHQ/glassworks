@@ -67,16 +67,20 @@ class WebFallbackTest {
     }
 
     @After fun tearDown() {
-        awaitImageLoads(pendingImagesBefore)
-        IslandFrontend.clear()
-        engines.forEach { runCatching { it.islandServer.stop() } }
-        opened.forEach { page ->
-            runCatching {
-                val f = page.javaClass.getDeclaredField("client"); f.isAccessible = true
-                (f.get(page) as? HaDashboardClient)?.close()
+        // The servers and clients close whether or not the picture loads came back (that failure still fails the test).
+        try {
+            awaitImageLoads(pendingImagesBefore)
+        } finally {
+            IslandFrontend.clear()
+            engines.forEach { runCatching { it.islandServer.stop() } }
+            opened.forEach { page ->
+                runCatching {
+                    val f = page.javaClass.getDeclaredField("client"); f.isAccessible = true
+                    (f.get(page) as? HaDashboardClient)?.close()
+                }
             }
+            server.shutdown()
         }
-        server.shutdown()
     }
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()

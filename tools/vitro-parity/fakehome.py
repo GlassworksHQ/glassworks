@@ -524,6 +524,28 @@ def _change(values, increasing):
     return change
 
 
+def _accepted_before(s, t, increasing):
+    """The reading the recorder holds at [t]: the series' value then, or for a total_increasing meter whose value then
+    is negative (skipped, `warn_negative`), the last non-negative reading before it. None when there is none."""
+    v = s.value(t)
+    if v is None or not _num(v):
+        return None
+    if not increasing or float(v) >= 0:
+        return float(v)
+    if s.changes is not None:
+        for ct, cv in reversed(s.changes):
+            if ct < t and cv is not None and _num(cv) and float(cv) >= 0:
+                return float(cv)
+        return None
+    back = t - s.step
+    for _ in range(10_000):
+        bv = s.value(back)
+        if bv is not None and _num(bv) and float(bv) >= 0:
+            return float(bv)
+        back -= s.step
+    return None
+
+
 def _meta(eid):
     st = states().get(eid)
     override = (fixture().get("statistics") or {}).get(eid) or {}
@@ -583,11 +605,15 @@ def statistics(ids, start, end, period, types):
                 else:
                     # HA's change runs from the previous hour's close (a step right at b belongs to this bucket),
                     # through every value held, a meter reset included.
-                    before = s.value(b - 1e-6)
-                    opening = float(before) if before is not None and _num(before) else samples[0]
-                    change = _change([opening] + samples, _state_class(eid) == "total_increasing")
+                    # A meter's skipped negative reading carries the last accepted one over the hour.
+                    increasing = _state_class(eid) == "total_increasing"
+                    before = _accepted_before(s, b - 1e-6, increasing)
+                    opening = before if before is not None else samples[0]
+                    change = _change([opening] + samples, increasing)
                     total += change
-                    for k, v in (("change", change), ("state", samples[-1]), ("sum", total)):
+                    taken = [v for v in [opening] + samples if v >= 0] if increasing else samples
+                    state = taken[-1] if taken else samples[-1]
+                    for k, v in (("change", change), ("state", state), ("sum", total)):
                         if k in types:
                             row[k] = round(v, 6)
                 rows.append(row)
@@ -672,6 +698,11 @@ def statistic_during_period(m):
         # The recorder's sum over the window: a meter's reset, dip and negative readings as statistics() reads them.
         increasing = _state_class(eid) == "total_increasing"
         readings = [v for _, v in points if v is not None and (v >= 0 or not increasing)]
+        # The window opens from the reading the recorder held then, a skipped negative one's predecessor included.
+        if increasing and points and points[0][1] is not None and points[0][1] < 0:
+            held = _accepted_before(series, points[0][0], True)
+            if held is not None:
+                readings.insert(0, held)
         out["change"] = round(_change(readings, increasing), 6) if readings else None
     types = m.get("types")
     return {k: v for k, v in out.items() if not types or k in types}

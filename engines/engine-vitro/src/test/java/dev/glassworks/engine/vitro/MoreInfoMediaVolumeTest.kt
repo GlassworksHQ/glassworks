@@ -68,6 +68,22 @@ class MoreInfoMediaVolumeTest {
         assertEquals(1, levels.size)
     }
 
+    @Test
+    fun aCancelledKeyEditShowsHasLatestVolume() {
+        val bar = volume()
+        val down = KeyEvent(0L, 0L, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, 0)
+        assertTrue(bar.dispatchKeyEvent(down))
+        val edit = bar.progress
+        // HA's volume changes while the key is held (another remote): the bar keeps the edit meanwhile.
+        store.putLocal(EntityState(PLAYER, "playing", mapOf("media_title" to "Song", "volume_level" to 0.6, "supported_features" to 4)))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals(edit, bar.progress)
+        // The key is cancelled: nothing is sent, and the bar shows HA's volume now, not the one before the edit.
+        bar.dispatchKeyEvent(KeyEvent.changeFlags(KeyEvent(0L, 50L, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT, 0), KeyEvent.FLAG_CANCELED))
+        assertTrue(levels.toString(), levels.isEmpty())
+        assertEquals(60, bar.progress)
+    }
+
     private companion object {
         const val PLAYER = "media_player.lounge"
     }

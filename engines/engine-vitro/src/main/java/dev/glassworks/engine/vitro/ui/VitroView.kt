@@ -612,14 +612,27 @@ class VitroView(
         reopen?.let { openMoreInfo(it) }
     }
 
-    /** Scrolls [scroll] to [y] once it's laid out (before that it has no content to scroll, and would stay at 0). */
+    /**
+     * Scrolls [scroll] to [y] as it's laid out: before that it has no content to scroll, and an island reports its
+     * height later, so each layout scrolls on (clamped to the content there is) until [y] is reached. It stops then,
+     * when anything else moved the scroll since (the user), or after [RESTORE_SCROLL_MS].
+     */
     private fun scrollOnLayout(scroll: ScrollView, y: Int) {
-        scroll.addOnLayoutChangeListener(object : OnLayoutChangeListener {
+        val listener = object : OnLayoutChangeListener {
+            var placed = -1
+
             override fun onLayoutChange(v: View, l: Int, t: Int, r: Int, b: Int, ol: Int, ot: Int, or: Int, ob: Int) {
-                v.removeOnLayoutChangeListener(this)
+                if (placed >= 0 && v.scrollY != placed) {
+                    v.removeOnLayoutChangeListener(this)
+                    return
+                }
                 v.scrollTo(0, y)
+                placed = v.scrollY
+                if (placed >= y) v.removeOnLayoutChangeListener(this)
             }
-        })
+        }
+        scroll.addOnLayoutChangeListener(listener)
+        scroll.postDelayed({ scroll.removeOnLayoutChangeListener(listener) }, RESTORE_SCROLL_MS)
     }
 
     /**
@@ -2371,6 +2384,9 @@ class VitroView(
     }
 
     companion object {
+        /** How long a rebuilt view keeps scrolling back to where it was while its islands report their heights. */
+        private const val RESTORE_SCROLL_MS = 5_000L
+
         /** Whether a card is drawn through a hardware layer: never when it casts a shadow, which the layer's bounds would clip. */
         internal fun cardLayerWanted(themeElevationDp: Float, viewElevation: Float): Boolean =
             themeElevationDp == 0f && viewElevation == 0f

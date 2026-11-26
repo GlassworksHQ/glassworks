@@ -1301,8 +1301,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             gravity = Gravity.CENTER_VERTICAL
         }
         var tracking = false
-        fun setVolume(percent: Int) =
+        // The volume HA reported last, or the one sent since: what a dropped key edit shows again.
+        var bound = -1
+        fun setVolume(percent: Int) {
+            bound = percent
             ctx.callService("media_player", "volume_set", JSONObject().put("entity_id", id).put("volume_level", percent / 100.0), null)
+        }
         // HA's slider sends a key edit when its key comes up (`keyup`), as a drag on release: a held arrow is one call.
         var keyEdit = 0
         var keyFrom = 0
@@ -1320,7 +1324,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
                 if (keyEdit == 0 || keyCode != keyEdit) return super.onKeyUp(keyCode, event)
                 keyEdit = 0
-                if (event.isCanceled) progress = keyFrom else if (progress != keyFrom) setVolume(progress)
+                if (event.isCanceled) progress = if (bound >= 0) bound else keyFrom else if (progress != keyFrom) setVolume(progress)
                 return true
             }
 
@@ -1329,7 +1333,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 // Focus left mid-edit: nothing is sent, HA's volume shows again.
                 if (!gainFocus && keyEdit != 0) {
                     keyEdit = 0
-                    progress = keyFrom
+                    progress = if (bound >= 0) bound else keyFrom
                 }
             }
         }.apply {
@@ -1362,7 +1366,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             play.contentDescription = HaText.ui(if (playing) "ui.card.media_player.media_pause" else "ui.card.media_player.media_play")
             val level = (s?.attributes?.get("volume_level") as? Number)?.toDouble()
             volumeRow.visibility = if (level == null) GONE else VISIBLE
-            if (level != null && !tracking && keyEdit == 0) volume.progress = (level * 100).roundToInt()
+            if (level != null) bound = (level * 100).roundToInt()
+            if (level != null && !tracking && keyEdit == 0) volume.progress = bound
         }
     }
 

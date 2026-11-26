@@ -173,6 +173,28 @@ class StateControlCardsTest {
     }
 
     @Test
+    fun aCancelledDragIsDescribedAsHasBrightnessAgain() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", dimmable + mapOf("brightness" to 128, "friendly_name" to "Desk")))
+        val card = LightCardView(context(store), LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}""")))
+        activity.setContentView(card)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val dial = all(card).filterIsInstance<BrightnessDialView>().single()
+        dial.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY))
+        dial.layout(0, 0, 400, 400)
+        val t = android.os.SystemClock.uptimeMillis()
+        // A drag on the ring's right (about 63 %), then the system takes the gesture.
+        dial.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_DOWN, 200f + 400f * 145f / 320f, 200f, 0))
+        assertFalse(dial.contentDescription.toString(), "50" in dial.contentDescription.toString())
+        dial.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 20, android.view.MotionEvent.ACTION_CANCEL, 200f, 200f, 0))
+        assertTrue(dial.contentDescription.toString(), "50" in dial.contentDescription.toString())
+        val info = android.view.accessibility.AccessibilityNodeInfo.obtain()
+        dial.onInitializeAccessibilityNodeInfo(info)
+        assertEquals(50f, info.rangeInfo.current, 0f)
+        assertTrue(calls.toString(), calls.isEmpty())
+    }
+
+    @Test
     fun theLightButtonRunsTheTapActionAndTheNameNone() {
         // Default: tap toggles.
         val (card, dial) = light("on", dimmable + ("brightness" to 128))

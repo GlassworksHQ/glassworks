@@ -43,6 +43,49 @@ class LocaleRebuildScrollTest {
         ShadowLooper.idleMainLooper()
     }
 
+    /** A card whose height comes later, as an island's does once its page reports it. */
+    private class LateCard(context: android.content.Context, var heightPx: Int) : View(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) =
+            setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), heightPx)
+    }
+
+    @Test
+    fun theScrollPositionWaitsForCardsThatGrowLater() {
+        val store = EntityStore()
+        val vv = VitroView(activity, store, 0xFF000000.toInt())
+        vv.contextFactory = { theme ->
+            VitroCardContext(
+                context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
+                accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                fetchHistory = { _, _, done -> done(emptyMap()) }, subscribeTemplate = { _, _ -> {} },
+            )
+        }
+        val built = ArrayList<LateCard>()
+        // The first build's card is tall at once; the rebuilt one starts short and grows, as an island's page does.
+        vv.testCards = { card, ctx -> if (card.type == "custom:late") LateCard(ctx.context, if (built.isEmpty()) 3000 else 100).also { built += it } else null }
+        val cards = JSONArray().put(JSONObject().put("type", "custom:late"))
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject().put("views", JSONArray().put(JSONObject().put("title", "Home").put("cards", cards)))), null)
+        activity.setContentView(vv)
+        drawAll(vv)
+        vv.currentScroll()!!.scrollTo(0, 600)
+        assertEquals(600, vv.currentScroll()!!.scrollY)
+
+        vv.setLocale(FrontendLocale(language = "de"), "UTC", HaText.version)
+        drawAll(vv)
+        assertEquals("the rebuilt card is short for now", 2, built.size)
+        // Its height arrives: the view scrolls on to where it was.
+        built.last().heightPx = 3000
+        built.last().requestLayout()
+        drawAll(vv)
+        assertEquals(600, vv.currentScroll()!!.scrollY)
+        // Restored: a later change of height leaves the scroll alone.
+        vv.currentScroll()!!.scrollTo(0, 100)
+        built.last().heightPx = 3200
+        built.last().requestLayout()
+        drawAll(vv)
+        assertEquals(100, vv.currentScroll()!!.scrollY)
+    }
+
     @Test
     fun aLocaleChangeKeepsTheScrollPosition() {
         val store = EntityStore()

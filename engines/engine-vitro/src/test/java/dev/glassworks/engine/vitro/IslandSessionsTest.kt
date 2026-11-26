@@ -827,6 +827,29 @@ class IslandSessionsTest {
         next.release()
     }
 
+    @Test fun aSnapshotThatCompletesBeforeTheNextCardListensStillSeedsItsEarlyBridge() {
+        val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
+        val pages = ArrayList<RecordingPage>()
+        val store = EntityStore()
+        val old = WebIslandCardView(context(store, islands, dark = true, pages), LovelaceParser.parseCard(JSONObject(cardJson)))
+        slots(islands).values.single().onConnected {}
+        old.handleIslandMessage(JSONObject().put("type", "watchAll")) {}
+        val handed = old.handOff()!!
+
+        // The kept page's bridge connects while HA hasn't answered, and HA's answer lands before the new card has
+        // registered its snapshot listener (both inside its constructor here).
+        val sent = ArrayList<JSONObject>()
+        val ctx = context(store, islands, dark = true, pages, onWatchAll = {
+            slots(islands).values.single().onConnected { sent += it }
+            store.putLocal(lamp("on"))
+            store.markSnapshot(setOf("light.lounge_lamp"))
+        })
+        val next = WebIslandCardView(ctx, LovelaceParser.parseCard(JSONObject(cardJson)), adopted = handed)
+        idle()
+        assertTrue(sent.toString(), sent.any { it.getString("type") == "snapshot" && it.getBoolean("complete") })
+        next.release()
+    }
+
     @Test fun anIframesPageHandedOffPausedResumesWhenItsNextCardShows() {
         val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
         val pages = ArrayList<RecordingPage>()

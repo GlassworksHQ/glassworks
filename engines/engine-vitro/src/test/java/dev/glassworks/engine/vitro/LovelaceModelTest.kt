@@ -384,6 +384,20 @@ class LovelaceModelTest {
     }
 
     @Test
+    fun moreInfoTargetsOfActionsAreReferenced() {
+        // A tap that opens another entity's More Info (HA's handleAction: the action's `entity`): the sheet reads that
+        // entity from the store, so the subscription covers it. On the card and on its rows; none means the card's own.
+        val v = view(
+            """{"cards": [
+                 {"type": "tile", "entity": "light.desk", "tap_action": {"action": "more-info", "entity": "light.hall"},
+                  "hold_action": {"action": "more-info"}},
+                 {"type": "entities", "entities": [{"entity": "switch.kettle", "double_tap_action": {"action": "more-info", "entity": "sensor.kettle_power"}}]}
+               ]}""",
+        )
+        assertEquals(setOf("light.desk", "light.hall", "switch.kettle", "sensor.kettle_power"), CardRouter.referencedEntities(v))
+    }
+
+    @Test
     fun referencedEntitiesReachCustomCardsInsideStacks() {
         val v = view(
             """{"cards": [{"type": "horizontal-stack", "cards": [

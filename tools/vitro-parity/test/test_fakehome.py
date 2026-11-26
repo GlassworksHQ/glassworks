@@ -233,6 +233,14 @@ class Home(unittest.TestCase):
         self.assertEqual(H.statistic_during_period({"statistic_id": "sensor.n", **window}), {"change": 10.0})
         rows = H.statistics(["sensor.n"], H.iso(start), None, "hour", ["change", "sum"])["sensor.n"]
         self.assertEqual((rows[0]["change"], rows[0]["sum"]), (10.0, 10.0))
+        # A negative reading held across the hour: the next hour opens from the last reading the recorder took (100),
+        # so 110 at 8:30 is +10 there, and its state is never the negative one.
+        self.case({"states": {"sensor.b": {"state": "110", "attributes": {"state_class": "total_increasing", "unit_of_measurement": "kWh"}}},
+                   "history": {"sensor.b": {"points": [["-3h08m", "100"], ["-2h18m", "-5"], ["-1h38m", "110"]]}}})
+        rows = H.statistics(["sensor.b"], H.iso(start), None, "hour", ["change", "state", "sum"])["sensor.b"]
+        self.assertEqual([(r["change"], r["state"], r["sum"]) for r in rows[:2]], [(0.0, 100.0, 0.0), (10.0, 110.0, 10.0)])
+        from_eight = {"fixed_period": {"start_time": H.iso(start + 3600), "end_time": H.iso(H.NOW)}}
+        self.assertEqual(H.statistic_during_period({"statistic_id": "sensor.b", **from_eight}), {"change": 10.0})
         # The fixture's own state class (its `statistics` override) is the one read, as in statistics().
         self.case({"states": {"sensor.o": {"state": "105", "attributes": {"unit_of_measurement": "kWh"}}},
                    "statistics": {"sensor.o": {"state_class": "total_increasing"}},

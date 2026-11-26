@@ -232,6 +232,28 @@ class MediaControlCardTest {
     }
 
     @Test
+    fun aKeyEditKeepsItsPositionWhenTheDurationChanges() {
+        val c = card(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 120, "media_position" to 10)))
+        c.measure(View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        c.layout(0, 0, c.measuredWidth, c.measuredHeight)
+        val bar = progressOf(c)
+        assertTrue(bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_RIGHT)))
+        // HA reports a longer track while the key is held: the edit still means second 11, drawn on the new length.
+        store.putLocal(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 240, "media_position" to 10)))
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(11f / 240f, fractionOf(bar), 0.001f)
+        bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
+        assertTrue(calls.toString(), calls.single().contains("\"seek_position\":11"))
+        // A shorter one: the edit is clamped to its end.
+        calls.clear()
+        assertTrue(bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MOVE_END)))
+        store.putLocal(player("paused", 8321599, mapOf("media_title" to "Song", "media_duration" to 100, "media_position" to 10)))
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        bar.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_MOVE_END))
+        assertTrue(calls.toString(), calls.single().contains("\"seek_position\":100"))
+    }
+
+    @Test
     fun anUnavailablePlayerShowsOnlyItsName() {
         val c = card(player("unavailable", 8321599))
         assertEquals(listOf("Lounge"), texts(c))

@@ -459,10 +459,10 @@ internal class BrightnessDialView(
         basePath = MdiIcons.pathFor(iconName)
         tint = iconColor
         dims = dimmable
+        val dragEnded = !enabled && touchMode == TOUCH_DRAG
         if (!enabled && touchMode != TOUCH_NONE) {
             // The light went unavailable mid-gesture: the whole gesture ends (no MOVE or UP of it acts later, no hold
             // fires), and the dial waits for a fresh press.
-            if (touchMode == TOUCH_DRAG) onDragging?.invoke(null)
             touchMode = TOUCH_NONE
             removeCallbacks(holdCheck)
             parent?.requestDisallowInterceptTouchEvent(false)
@@ -472,6 +472,8 @@ internal class BrightnessDialView(
             // A key edit under way ends too: its release must not send (an off light's fallback would turn it on at 1 %).
             access.cancel()
         }
+        // Told once the preview is gone, so the card describes what HA reports, not the dropped drag.
+        if (dragEnded) onDragging?.invoke(null)
         this.enabled = enabled
         isEnabled = enabled
         sentFraction = null
@@ -580,8 +582,9 @@ internal class BrightnessDialView(
             }
             MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(holdCheck)
-                if (touchMode == TOUCH_DRAG) onDragging?.invoke(null)
+                // Nothing was sent: the preview goes first, so the card describes HA's brightness again.
                 dragFraction = null
+                if (touchMode == TOUCH_DRAG) onDragging?.invoke(null)
                 touchMode = TOUCH_NONE
                 invalidate()
             }
