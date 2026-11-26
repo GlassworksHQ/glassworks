@@ -178,6 +178,12 @@ class HaDashboardClient(
     @Volatile private var priorityEntities: Set<String> = emptySet()
 
     /**
+     * Ids the page follows that aren't entity ids HA accepts ([isValidEntityId]): never sent, as one fails HA's whole
+     * `subscribe_entities`, and marked missing at once (HA's frontend shows them as not found).
+     */
+    @Volatile private var invalidEntities: Set<String> = emptySet()
+
+    /**
      * True once the page has said which entities it follows. Until then nothing is subscribed: an empty
      * [activeEntityFilter] means "every entity" (auto-entities), and on a large Home Assistant that first snapshot can
      * outgrow the socket's message limit before the dashboard's scoped one is asked for. Kept across reconnects.
@@ -395,14 +401,22 @@ class HaDashboardClient(
      * view's scope). A wish to follow every entity, or to stop, always replaces.
      */
     fun followEntities(entityIds: Set<String>, first: Set<String> = emptySet(), additive: Boolean = false) {
+        // HA validates every id of a subscribe_entities (`cv.entity_ids`): one malformed id anywhere on the dashboard
+        // would fail the whole command, the view on screen's entities with it. Only valid ones go on the wire; a list
+        // of nothing but invalid ids follows nothing, never every entity.
+        val (valid, invalid) = entityIds.partition(::isValidEntityId)
         synchronized(entitySubLock) {
-            activeEntityFilter = entityIds
-            priorityEntities = first
+            activeEntityFilter = valid.toCollection(LinkedHashSet())
+            priorityEntities = first.filterTo(LinkedHashSet(), ::isValidEntityId)
+            invalidEntities = invalid.toSet()
             scopeSelected = true
             if (socket == null) return
             val live = entitySubs?.takeIf { it.gen == connectionGen.get() }
             if (live == null) return replaceEntitySubs()
             val cover = live.cover
+            markInvalidMissing(entityOwner)
+            if (followsNothing()) return replaceEntitySubs()
+            val entityIds = activeEntityFilter
             when {
                 // Every entity is followed already.
                 cover.isEmpty() && entityIds.isEmpty() -> Unit
@@ -415,7 +429,7 @@ class HaDashboardClient(
                     when {
                         stale > cover.size - stale -> replaceEntitySubs()
                         added.isNotEmpty() -> {
-                            val id = subscribeEntityPart(added, entityOwner)
+                            val id = subscribeEntityPart(added, entityOwner, live.gen)
                             entitySubs = if (id > 0) EntitySubs(live.gen, live.ids + id, cover + added) else null
                         }
                     }
@@ -1375,6 +1389,15 @@ class HaDashboardClient(
         listener.onUserTheme(name?.trim()?.takeIf { it.isNotEmpty() }, dark)
     }
 
+    /** True when the page follows only ids HA can't accept: nothing to subscribe. */
+    private fun followsNothing() = activeEntityFilter.isEmpty() && invalidEntities.isNotEmpty()
+
+    /** The invalid ids the page follows: HA will never have them, so they're missing now (under [entitySubLock]). */
+    private fun markInvalidMissing(owner: Any?) {
+        val invalid = invalidEntities
+        if (invalid.isNotEmpty()) store.markSnapshot(invalid, owner)
+    }
+
     /** A new connection: everything the page follows, asked for again ([replaceEntitySubs]). */
     private fun resubscribeEntities() = synchronized(entitySubLock) { replaceEntitySubs() }
 
@@ -1395,11 +1418,14 @@ class HaDashboardClient(
         val owner = Any()
         entityOwner = owner
         store.resetSnapshot(owner)
+        markInvalidMissing(owner)
+        // Only invalid ids: nothing to ask HA for (an empty filter would ask for every entity).
+        if (followsNothing()) return
         val head = if (filter.isEmpty()) emptySet() else priorityEntities.filterTo(LinkedHashSet()) { it in filter }
         val parts = if (head.isEmpty() || head.size == filter.size) listOf(filter) else listOf(head, filter.filterTo(LinkedHashSet()) { it !in head })
         val ids = ArrayList<Int>(parts.size)
         for (part in parts) {
-            val id = subscribeEntityPart(part, owner)
+            val id = subscribeEntityPart(part, owner, gen)
             // Not sent: the connection is going, and the next one asks for everything again.
             if (id <= 0) return
             ids += id
@@ -1412,13 +1438,24 @@ class HaDashboardClient(
      * first event is its snapshot: an entity of [filter] missing from it is gone (deleted while the panel was offline)
      * and leaves the store. Later events are diffs. The wire id, or -1 when it wasn't sent.
      */
-    private fun subscribeEntityPart(filter: Set<String>, owner: Any?): Int {
+    private fun subscribeEntityPart(filter: Set<String>, owner: Any?, gen: Int): Int {
         val msg = JSONObject().put("type", "subscribe_entities")
         if (filter.isNotEmpty()) msg.put("entity_ids", JSONArray(filter.toList()))
         val first = AtomicBoolean(true)
-        return subscribe(msg) { ev -> synchronized(storeWriteLock) {
+        // Refused by HA: its ids are no longer counted as followed, so the next followEntities asks for them again.
+        val onError: (JSONObject?) -> Unit = { _ ->
+            synchronized(entitySubLock) {
+                val live = entitySubs
+                if (live != null && live.gen == gen && live.cover.isNotEmpty() && filter.isNotEmpty()) {
+                    val left = live.cover - filter
+                    // Nothing left followed: the next followEntities subscribes anew (an empty cover reads as every entity).
+                    entitySubs = if (left.isEmpty()) null else EntitySubs(live.gen, live.ids, left)
+                }
+            }
+        }
+        return subscribeWithId(msg, onError = onError) { _, ev -> synchronized(storeWriteLock) {
             // Checked under the lock close() takes: a closed client never writes to the (shared) store again.
-            if (closed.get() || entityOwner !== owner) return@subscribe
+            if (closed.get() || entityOwner !== owner) return@subscribeWithId
             val isFirst = first.getAndSet(false)
             store.applyCompressedEvent(ev, snapshotScope = if (isFirst) filter else null)
             if (isFirst) {
@@ -1584,6 +1621,15 @@ class HaDashboardClient(
         /** The default dashboard's panel (`lovelace`), the one a request with no url path opens. */
         const val DEFAULT_DASHBOARD_PANEL = "lovelace"
         const val SEND_FAILED = "send_failed"
+
+        /**
+         * Home Assistant's `valid_entity_id` (core `VALID_ENTITY_ID`, homeassistant/core.py): lowercase letters, digits
+         * and single underscores, a domain and an object id, neither starting or ending with `_`. `subscribe_entities`
+         * refuses the whole command for one id that isn't.
+         */
+        private val VALID_ENTITY_ID = Regex("^(?!.+__)(?!_)[\\da-z_]+(?<!_)\\.(?!_)[\\da-z_]+(?<!_)$")
+
+        fun isValidEntityId(id: String): Boolean = VALID_ENTITY_ID.matches(id)
 
         /** A result the client made up for a failed connection, not an answer from Home Assistant. */
         fun isTransportError(res: JSONObject): Boolean =

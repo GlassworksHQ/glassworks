@@ -142,6 +142,23 @@ class DashboardSubscriptionTest {
     }
 
     @Test
+    fun aMalformedIdInAnotherViewNeverStopsTheDashboardsEntities() {
+        // HA refuses a whole subscribe_entities for one malformed id (the fake does too): a typo in a third view must
+        // not cost the view on screen, or the kitchen's, their states.
+        val bad = JSONObject(dashboard)
+        bad.getJSONArray("views").put(JSONObject("""{"title": "Typo", "path": "typo", "cards": [{"type": "tile", "entity": "not-an-id"}]}"""))
+        server.dashboardConfig = bad
+        val page = readyPage()
+        val store = store(page)
+        awaitMain("every valid state") { union.all { store[it] != null } }
+        assertTrue("never sent", subs().none { "not-an-id" in ids(it) })
+        assertTrue("HA's frontend shows it as not found", store.isMissing("not-an-id"))
+        switchTo(page, "kitchen", 1)
+        assertTrue("the kitchen's view builds with its state", vitroView(page).currentViewBuilt)
+        assertEquals("21.5", store["sensor.kitchen_temp"]?.state)
+    }
+
+    @Test
     fun aViewThatFollowsEveryEntityDoesSoOnlyWhileItShows() {
         val page = readyPage()
         awaitMain("both parts") { subs().size == 2 }

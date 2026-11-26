@@ -825,6 +825,43 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun aMalformedIdIsNeverSentAndIsMissingAtOnce() {
+        // HA's cv.entity_ids refuses the whole subscribe_entities for one malformed id: it's left out, and its card
+        // shows it as not found, as HA's frontend does.
+        assertTrue(HaDashboardClient.isValidEntityId("sensor.office_2"))
+        for (bad in listOf("not-an-id", "Light.Lounge", "sensor.", ".x", "_sensor.x", "sensor.x_", "sensor.a__b", "sensor.x.y")) {
+            assertFalse(bad, HaDashboardClient.isValidEntityId(bad))
+        }
+        val c = newClient()
+        c.followEntities(setOf("light.lounge_lamp", "not-an-id", "sensor.kitchen_temp"), first = setOf("light.lounge_lamp"), additive = true)
+        c.start(null)
+        awaitCondition("both valid states") { store["light.lounge_lamp"] != null && store["sensor.kitchen_temp"] != null }
+        assertTrue(server.commands("subscribe_entities").none { "not-an-id" in ids(it) })
+        assertTrue(store.isMissing("not-an-id"))
+        // Nothing but malformed ids follows nothing: never every entity.
+        c.followEntities(setOf("not-an-id"))
+        readerBarrier(c)
+        assertTrue("every entity never asked for", server.commands("subscribe_entities").all { it.has("entity_ids") })
+        assertTrue(store.isMissing("not-an-id"))
+    }
+
+    @Test
+    fun aRefusedPartIsAskedForAgainOnTheNextFollow() {
+        val c = newClient()
+        server.refuseEntityIds = setOf("binary_sensor.front_door")
+        c.followEntities(setOf("light.lounge_lamp", "binary_sensor.front_door"), first = setOf("light.lounge_lamp"), additive = true)
+        c.start(null)
+        awaitCondition("the view's part answered") { server.commands("subscribe_entities").size == 2 && store["light.lounge_lamp"] != null }
+        readerBarrier(c)
+        // HA is fine again: the next follow (a view switch) asks for the refused id, and only it.
+        server.refuseEntityIds = emptySet()
+        c.followEntities(setOf("light.lounge_lamp", "binary_sensor.front_door"), first = setOf("binary_sensor.front_door"), additive = true)
+        awaitCondition("asked again") { server.commands("subscribe_entities").size == 3 }
+        assertEquals(setOf("binary_sensor.front_door"), ids(server.commands("subscribe_entities")[2]))
+        awaitCondition("its state") { store["binary_sensor.front_door"] != null }
+    }
+
+    @Test
     fun anotherDashboardOrEveryEntityReplacesTheSubscription() {
         val c = newClient()
         c.followEntities(setOf("light.lounge_lamp", "sensor.kitchen_temp"), first = setOf("light.lounge_lamp"), additive = true)
