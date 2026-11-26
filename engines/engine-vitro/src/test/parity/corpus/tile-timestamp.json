@@ -1,0 +1,19 @@
+{
+ "title": "Tile: a timestamp sensor (state-display draws it relative)",
+ "card": {
+  "type": "tile",
+  "entity": "sensor.next_sunrise"
+ },
+ "fixture": {
+  "states": {
+   "sensor.next_sunrise": {
+    "state": "@+3h",
+    "last_changed": "-5h",
+    "attributes": {
+     "device_class": "timestamp",
+     "friendly_name": "Next sunrise"
+    }
+   }
+  }
+ }
+}

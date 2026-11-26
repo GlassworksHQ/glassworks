@@ -74,5 +74,6 @@
  "ui.panel.lovelace.cards.todo-list.today": "Aujourd'hui",
  "ui.panel.lovelace.cards.todo-list.unchecked_items": "Actifs",
  "ui.panel.lovelace.components.timestamp-display.invalid": "Horodatage non valide",
+ "ui.panel.lovelace.components.timestamp-display.invalid_format": "Format d'affichage non valide",
  "ui.panel.lovelace.editor.action-editor.actions.more-info": "Plus d'infos"
 }

@@ -44,6 +44,9 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.HaErrorSeverity
 import dev.glassworks.engine.vitro.ui.errorCardContent
+import dev.glassworks.engine.vitro.ui.TimestampText
+import dev.glassworks.engine.vitro.ui.showRelativeOr
+import dev.glassworks.engine.vitro.ui.showTimestampOr
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.HaWeatherSvg
@@ -1440,15 +1443,19 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val hideState = config.raw.optBoolean("hide_state", false)
         stateView.visibility = if (hideState) GONE else VISIBLE
         ctx.main.removeCallbacks(stateTick)
-        stateView.text = when {
-            s == null -> "…"
-            // HA's <state-display>: the `state_content` parts (or the domain's own), joined by " · ".
-            isTile -> HaStateDisplay.of(s, HaStateDisplay.contentOf(config.raw.opt("state_content")), ctx.now(), ctx.haConfig()).let { d ->
+        when {
+            // HA's <state-display>: the `state_content` parts (or the domain's own), joined by " · ". It draws a
+            // timestamp relative ("In 3 hours").
+            isTile && s != null -> stateView.text = HaStateDisplay.of(s, HaStateDisplay.contentOf(config.raw.opt("state_content")), ctx.now(), ctx.haConfig()).let { d ->
                 // A relative time or a running timer changes on its own: drawn again when it does, while on screen.
                 if (!hideState && d.tickMs != null && isAttachedToWindow) ctx.main.postDelayed(stateTick, d.tickMs)
                 d.text
             }
-            else -> s.formattedState()
+            // Mushroom's cards write HA's formatEntityState ("On") with their own percentages, and a timestamp
+            // sensor's, a scene's or a button's state relative.
+            config.type.startsWith("custom:mushroom-") ->
+                ctx.showRelativeOr(stateView, s, s?.let { mushroomStateLine(config.type, it) } ?: "…", TimestampText.MUSHROOM)
+            else -> stateView.text = s?.formattedState() ?: "…"
         }
         if (isTile) renderPicture(s)
         updateBadge(s, active = s?.isActive == true)
@@ -1600,6 +1607,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 return
             }
             tintBadge(color)
+            return
+        }
+        if (config.type.startsWith("custom:mushroom-") && config.type != MUSHROOM_TEMPLATE) {
+            // Mushroom's shape always shows, in its own colors (not HA's tile colors).
+            val inset = ctx.px(6f)
+            iconWrap.setPadding(inset, inset, inset, inset)
+            iconBadge.setIcon(iconName, iconBadge.tintColor)
+            tintBadge(mushroomIconColor(config.type, config.raw, s, ctx.theme) ?: mushroomDisabled)
             return
         }
         if (domain in BARE_ICON_DOMAINS) {
@@ -2376,12 +2391,21 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         }
         val title = config.title
         val rows = config.entities()
-        // HA's header toggle: shown when the card has a title and holds toggleable entities, on while any is on.
-        // Every row whose config names an entity (`"entity" in conf`), a button row's included.
-        val toggleIds = rows.filter { it.isEntity || it.rowType == "button" }.map { it.entity }
-            .filter { it.substringBefore('.') in SWITCH_DOMAINS }.distinct()
+        // HA's header toggle (hui-entities-card's `_showHeaderToggle`, frontend 20261028.5): with a title and no
+        // `show_header_toggle`, shown once two of the rows that name an entity (`"entity" in conf`, a button row's
+        // included) are of a toggle domain (DOMAINS_TOGGLE). An entity filter builds its card from the rows that pass,
+        // so only those count, and the switch comes and goes as they change. `hui-entities-toggle` then switches the
+        // rows' toggle-domain entities that exist, and is on while any of them is "on".
+        val toggleRows = ArrayList<Pair<String, () -> Boolean>>()
+        val explicitToggle = if (config.raw.has("show_header_toggle") && !config.raw.isNull("show_header_toggle")) {
+            config.raw.optBoolean("show_header_toggle", false)
+        } else {
+            null
+        }
         val masterSwitch: HaSwitchView? =
-            if (title != null && config.raw.optBoolean("show_header_toggle", true) && toggleIds.isNotEmpty()) HaSwitchView(ctx) else null
+            if (title != null && explicitToggle != false && rows.any { it.countsForHeaderToggle() }) HaSwitchView(ctx) else null
+        fun shownToggleIds(): List<String> = toggleRows.filter { it.second() }.map { it.first }
+        fun headerToggleIds(): List<String> = shownToggleIds().filter { ctx.store[it] != null }.distinct()
         if (title != null) {
             val header = LinearLayout(ctx.context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -2399,12 +2423,14 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 masterSwitch.isClickable = true
                 masterSwitch.contentDescription = "Toggle entities"
                 masterSwitch.setOnClickListener {
+                    val ids = headerToggleIds()
+                    if (ids.isEmpty()) return@setOnClickListener
                     val turnOn = !masterSwitch.isOn
                     masterSwitch.setOn(turnOn)
                     ctx.callService(
                         "homeassistant",
                         if (turnOn) "turn_on" else "turn_off",
-                        JSONObject().put("entity_id", JSONArray(toggleIds)),
+                        JSONObject().put("entity_id", JSONArray(ids)),
                         null,
                     )
                 }
@@ -2415,10 +2441,12 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             col.setPadding(0, ctx.px(16f), 0, ctx.px(16f))
         }
         fun refreshMaster() {
-            masterSwitch?.setOn(toggleIds.any { ctx.store[it]?.isActive == true })
+            val sw = masterSwitch ?: return
+            val ids = headerToggleIds()
+            val shown = (explicitToggle ?: (shownToggleIds().size >= 2)) && ids.isNotEmpty()
+            sw.visibility = if (shown) VISIBLE else GONE
+            sw.setOn(ids.any { ctx.store[it]?.state == "on" })
         }
-        // Every toggle entity keeps the header switch current, a button row's included (its own row doesn't).
-        if (masterSwitch != null) toggleIds.forEach { id -> observe(id) { refreshMaster() } }
 
         // `entity-filter` support: when `state_filter` is present, rows whose state isn't listed are hidden.
         val filterArr = config.raw.optJSONArray("state_filter")
@@ -2457,6 +2485,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         fun refreshFilter() {
             rowViews.forEachIndexed { i, row -> row.visibility = if (rowVisible[i]) VISIBLE else GONE }
             fixGaps()
+            refreshMaster()
         }
 
         fun entityRow(rowCfg: EntityRowConfig): View {
@@ -2578,7 +2607,8 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                         refreshMaster()
                     }
                     isCover -> Unit
-                    else -> valueView.text = s?.formattedState() ?: "…"
+                    // hui-sensor-entity-row and hui-simple-entity-row draw a timestamp with hui-timestamp-display.
+                    else -> ctx.showTimestampOr(valueView, s, s?.formattedState() ?: "…")
                 }
             }
             if (secondaryView != null && rowCfg.secondaryInfo in EntityRowControls.RELATIVE_SECONDARY_INFO) {
@@ -2693,7 +2723,15 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             val gapAbove = prevWasRow
             prevWasRow = true
             col.addView(entityRow(rowCfg), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (gapAbove) topMargin = ctx.px(8f) })
+            if (rowCfg.countsForHeaderToggle()) {
+                val idx = rowViews.lastIndex
+                toggleRows += rowCfg.entity to { rowVisible[idx] }
+            }
         }
+        // A button row names its entity too, and is never filtered out.
+        rows.filter { it.rowType == "button" && it.countsForHeaderToggle() }.forEach { toggleRows += it.entity to { true } }
+        // Every toggle entity keeps the header switch current, a button row's included (its own row doesn't).
+        if (masterSwitch != null) toggleRows.map { it.first }.distinct().forEach { id -> observe(id) { refreshMaster() } }
         refreshFilter()
         if (relativeLines.isNotEmpty()) {
             renewing {
@@ -2734,6 +2772,11 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             for (p in props) HaStateColor.property(ctx, p)?.let { return it }
             return ctx.theme.stateIconColor
         }
+        /** HA's DOMAINS_TOGGLE (frontend 20261028.5), the domains the header toggle counts and switches. */
+        val HEADER_TOGGLE_DOMAINS = setOf("fan", "input_boolean", "light", "switch", "group", "automation", "humidifier", "valve")
+
+        fun EntityRowConfig.countsForHeaderToggle(): Boolean =
+            (isEntity || rowType == "button") && entity.substringBefore('.') in HEADER_TOGGLE_DOMAINS
         val COVER_BUTTONS = listOf("mdi:arrow-up" to "open_cover", "mdi:stop" to "stop_cover", "mdi:arrow-down" to "close_cover")
 
         fun dividerLine(ctx: VitroCardContext): View = View(ctx.context).apply { setBackgroundColor(ctx.theme.dividerColor) }
@@ -2869,7 +2912,8 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                     val tint = if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor
                     icon.setIcon(MdiIcons.resolveIconName(e.icon, s), tint)
                     name.text = e.nameFor(s) ?: s?.displayName ?: e.entity
-                    state.text = s?.plainState() ?: "…"
+                    // hui-glance-card: a timestamp state through hui-timestamp-display ("In 3 hours").
+                    ctx.showTimestampOr(state, s, s?.plainState() ?: "…")
                 }
                 row.addView(cell, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { bottomMargin = ctx.px(12f) })
             }
@@ -3488,13 +3532,14 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             bindHoldAction(holdActionFor(config.raw, eid), eid)
             observe(eid) { s ->
                 applyStateFilter(s)
+                // hui-picture-entity-card: HA's formatEntityState, without the tile's extras ("On", not "65%").
                 if (config.type == "picture-entity" && showName && showState) {
                     caption.text = label(s) ?: s?.displayName ?: eid
-                    stateCaption.text = s?.formattedState().orEmpty()
+                    stateCaption.text = s?.plainState().orEmpty()
                 } else {
                     val parts = buildList {
                         if (showName) add(label(s) ?: s?.displayName ?: eid)
-                        if (showState && s != null && glanceEntities.isEmpty()) add(s.formattedState())
+                        if (showState && s != null && glanceEntities.isEmpty()) add(s.plainState())
                     }
                     caption.text = parts.joinToString(" · ")
                 }
@@ -3908,7 +3953,6 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
             }
             else -> if (eid != null) {
                 val render: (EntityState?) -> Unit = { s ->
-                    val active = s?.isActive == true
                     if (type == "weather") {
                         // Mushroom's weather chip: its copy of HA's weather picture (night variant), then the
                         // conditions and the temperature, each only when asked for, joined by " ⸱ ".
@@ -3916,20 +3960,26 @@ class MushroomChipsCardView(private val ctx: VitroCardContext, config: CardConfi
                         icon.picture = s?.let { HaWeatherSvg.forCondition(it.state, night = true, vars = ctx.theme.vars, mushroom = true) }
                         setLabel(weatherChipLabel(c, s))
                     } else {
-                        // An idle entity chip's icon takes the chip's text colour (HA: --primary-text-color).
-                        val tint = staticColor ?: when {
-                            !active -> ctx.theme.primaryTextColor
-                            else -> s.lightTintColor() ?: ctx.theme.activeColor(s.domain)
-                        }
+                        // Mushroom's entity chip: `ha-state-icon.active { color: var(--color) }`, where `--color` is
+                        // only its `icon_color`; otherwise the icon takes the chip's text color (--primary-text-color),
+                        // whatever the state (a person at home, a light that is on: parity case mushroom-chips-person).
+                        val tint = staticColor?.takeIf { s != null && mushroomActive(s) } ?: ctx.theme.primaryTextColor
                         icon.setIcon(MdiIcons.resolveIconName(c.optString("icon", "").ifEmpty { null }, s), tint)
                         setLabel(
                             when (c.optString("content_info", "state")) {
                                 "name" -> c.optString("name", "").ifEmpty { s?.friendlyName ?: eid }
-                                "last-changed", "last-updated" -> s?.relativeLastChanged(ctx.now() / 1000.0).orEmpty()
+                                "last-changed" -> s?.relativeLastChanged(ctx.now() / 1000.0).orEmpty()
+                                "last-updated" -> s?.let { it.copy(lastChanged = it.lastUpdated.takeIf { u -> u > 0.0 } ?: it.lastChanged) }
+                                    ?.relativeLastChanged(ctx.now() / 1000.0).orEmpty()
                                 "none" -> ""
-                                else -> s?.formattedState() ?: "…"
+                                // Mushroom's entity chip: HA's formatEntityState, without the tile's extras.
+                                else -> s?.plainState() ?: "…"
                             },
                         )
+                        // Its `state` info draws a timestamp sensor's, a scene's or a button's state relative.
+                        if (c.optString("content_info", "state") !in setOf("name", "last-changed", "last-updated", "none")) {
+                            ctx.showRelativeOr(label, s, label.text.toString(), TimestampText.MUSHROOM)
+                        }
                     }
                 }
                 bind {

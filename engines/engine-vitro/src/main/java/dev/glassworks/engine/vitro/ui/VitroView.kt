@@ -1426,7 +1426,8 @@ class VitroView(
             val (name, state) = badgeLines(badge, s)
             nameView.text = name.orEmpty()
             nameView.visibility = if (name != null && state != null) VISIBLE else GONE
-            stateView.text = state ?: name.orEmpty()
+            // hui-entity-badge draws its state with state-display: a timestamp relative ("In 3 hours").
+            if (state != null) ctx.showTimestampOr(stateView, s, state, anyDomain = true) else stateView.text = name.orEmpty()
             // Neither line asked for: no text slot at all.
             texts.visibility = if (name == null && state == null) GONE else VISIBLE
             // An icon-only badge is still a button: named after its entity for TalkBack.

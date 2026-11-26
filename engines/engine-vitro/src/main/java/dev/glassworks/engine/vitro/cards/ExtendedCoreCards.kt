@@ -191,7 +191,8 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     private fun render(s: EntityState?) {
         nameView.text = config.name(s) ?: s?.displayName ?: config.entity.orEmpty()
         val color = if (colored(s)) stateColor(s) else null
-        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color ?: ctx.theme.stateIconColor)
+        // HA's `filter: stateColorBrightness`: a colored light's icon dims with its brightness.
+        iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color?.let { stateColorBrightness(s, it) } ?: ctx.theme.stateIconColor)
         val (value, unit) = valueAndUnit(config.raw, s)
         valueView.text = value
         unitView.text = unit
@@ -219,7 +220,8 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
                 }
                 return (number ?: s.state) to unit
             }
-            return s.formattedState() to ""
+            // formatEntityStateToParts: HA's formatEntityState, without the tile's extras ("On", not "65%").
+            return s.plainState() to ""
         }
     }
 }
