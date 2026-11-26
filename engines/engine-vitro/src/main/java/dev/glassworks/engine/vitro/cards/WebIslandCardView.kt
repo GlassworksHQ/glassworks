@@ -818,6 +818,13 @@ class WebIslandCardView(
                 ?: error("frontend-watch.js is missing from the engine's resources")
         }
 
+        /** HA's formatDuration for the island page's state text (`format-duration.js`, next to `frontend-watch.js`), read once. */
+        internal val FORMAT_DURATION_JS: String by lazy {
+            WebIslandCardView::class.java.getResourceAsStream("/dev/glassworks/engine/vitro/island/format-duration.js")
+                ?.use { it.readBytes().toString(Charsets.UTF_8) }
+                ?: error("format-duration.js is missing from the engine's resources")
+        }
+
         /**
          * What makes two builds of a card the same island: its whole config and whether it fills the view. A
          * rebuild that only changed the theme, or other cards, hands the island over ([handOff]) instead of opening
@@ -1490,6 +1497,9 @@ window.loadCardHelpers = () => Promise.resolve({
 <script>
 ${FRONTEND_WATCH_JS.replace(SCRIPT_END, "<\\\\/$1")}
 </script>
+<script>
+${FORMAT_DURATION_JS.replace(SCRIPT_END, "<\\\\/$1")}
+</script>
 $resourceScripts
 </head>
 <body>
@@ -1757,7 +1767,14 @@ function vitroStateLabel(stateObj, state) {
 function vitroFormatState(stateObj, state) {
   const s = state !== undefined && state !== null ? state : (stateObj ? stateObj.state : '');
   const str = String(s == null ? '' : s);
-  const unit = stateObj && stateObj.attributes ? stateObj.attributes.unit_of_measurement : undefined;
+  const attrs = stateObj && stateObj.attributes ? stateObj.attributes : {};
+  const unit = attrs.unit_of_measurement;
+  // HA's computeStateDisplay: a duration in minutes, hours or days reads as one ("1h 30m"), at the entity's display
+  // precision; one DurationFormat refuses falls through to the number with its unit (format-duration.js).
+  if (unit && attrs.device_class === 'duration' && VITRO_DURATION_UNITS.includes(unit) && str !== 'unavailable' && str !== 'unknown') {
+    const entry = stateObj.entity_id ? registries.entities[String(stateObj.entity_id)] : undefined;
+    try { return vitroFormatDuration(haLocale, str, unit, entry ? entry.display_precision : undefined); } catch (e) {}
+  }
   if (unit && str !== 'unavailable' && str !== 'unknown') return vitroFormatNumber(str) + vitroBlankBeforeUnit(unit) + unit;
   return vitroStateLabel(stateObj, str) || vitroTitle(str);
 }
@@ -2230,8 +2247,23 @@ function moreInfo(id) {
 }
 
 function navigateTo(path) {
-  // Never the island's own address: only a dashboard path a card navigated to.
+  // Never the island's own address: only a dashboard path a card navigated to, or an outside page's full URL, which
+  // Vitro opens as a page (never in this island's own window).
   if (path && typeof path === 'string' && !path.startsWith('/__vitro/')) sendBridge({ type: 'navigate', path });
+}
+
+// A link the card's user tapped: the island's window never leaves the card for it. One to another site goes to
+// Vitro whole (it shows the page as it is); one on this page's origin is a path on Home Assistant, as on HA's page.
+function linkTarget(ev) {
+  const path = ev && typeof ev.composedPath === 'function' ? ev.composedPath() : [];
+  for (const el of path) {
+    if (!el || String(el.localName || '').toLowerCase() !== 'a' || !el.href) continue;
+    let u;
+    try { u = new URL(String(el.href), location.href); } catch (e) { return null; }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return u.origin === location.origin ? u.pathname + u.search + u.hash : u.href;
+  }
+  return null;
 }
 
 // HA's handleAction for a `hass-action` event: the card says which gesture, its config says what it does.
@@ -2256,7 +2288,8 @@ function runAction(config, gesture) {
       if (dot > 0) hassBase.callService(svc.slice(0, dot), svc.slice(dot + 1), action.data || action.service_data, action.target);
       break;
     }
-    case 'url': if (action.url_path) window.open(action.url_path, '_blank'); break;
+    // HA opens it with window.open; here that would load it in the island's own window, over the card.
+    case 'url': if (action.url_path) navigateTo(String(action.url_path)); break;
     default: break;
   }
 }
@@ -2279,6 +2312,14 @@ function wireEvents() {
   window.addEventListener('hass-navigate', (ev) => {
     const p = ev && ev.detail && ev.detail.path;
     navigateTo(p);
+  });
+  // After the card's own handlers: a link the card handles itself (preventDefault) stays the card's.
+  window.addEventListener('click', (ev) => {
+    if (!ev || ev.defaultPrevented || ev.button > 0) return;
+    const target = linkTarget(ev);
+    if (!target) return;
+    ev.preventDefault();
+    navigateTo(target);
   });
 }
 
