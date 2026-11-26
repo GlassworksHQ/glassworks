@@ -75,8 +75,10 @@ build if one is missing here.
   Copyright: Oracle and/or its affiliates, and Google LLC. Upstream and source: https://github.com/google/desugar_jdk_libs
   (release 2.1.5). Allowed by the maintainer on 2026-11-16 as the one exception to the repo's no-GPL rule
   (`AGENTS.md`, rule 4), in two apps: this legacy APK, and the legacy engine's debug test app
-  (`dev.glassworks.s1.legacy`, never released; test builds on branches named `legacy` upload it). Only those two
-  ship its classes. The current generic builds (minSdk 26) set desugaring up too, because AGP turns it on per
+  (`dev.glassworks.s1.legacy`, never released; test builds on branches named `legacy` upload it). Extended by the
+  maintainer on 2026-11-25 to a third: Vitro's debug test app (`dev.glassworks.vitro.test`,
+  `engines/engine-vitro/test-app`, minSdk 23, debug only and never released; CI builds it for the emulator jobs).
+  Only those three ship its classes. The current generic builds (minSdk 26) set desugaring up too, because AGP turns it on per
   module, but none of its classes go into their APKs. The S1 app doesn't use it.
 - **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current
   build's (all Apache-2.0; copyright, upstream and source as for the current versions under Kotlin and AndroidX):
@@ -295,6 +297,15 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
   - Upstream: https://pictogrammers.com/library/mdi/
   - Source: https://github.com/Templarian/MaterialDesign-SVG (npm `@mdi/svg` 7.4.47)
   - Used by Vitro to draw the same icons Home Assistant shows.
+- `dev/glassworks/engine/vitro/locale/*.json` (Java resources, in APKs that carry the Vitro engine): Vitro's
+  **locale tables**, the number marks, plural rules, relative-time patterns, month, weekday and day-period names and
+  week data it formats numbers, dates and times with. They are **Unicode CLDR** data, captured by
+  `tools/vitro-parity/locale-data.mjs` from the `Intl` of Chromium 141.0.7390.37 (its ICU's CLDR, as
+  `languages.json` records) and, for the 16 languages whose tables say `"source":"node"`, from Node.js's ICU.
+  - Licence: Unicode-3.0 (`LICENSES/Unicode-3.0.txt`)
+  - Copyright: © 1991-2025 Unicode, Inc.
+  - Upstream: https://cldr.unicode.org
+  - Source: https://github.com/unicode-org/cldr (through ICU, https://github.com/unicode-org/icu)
 - `dev.glassworks.platform.HttpsTrust` (in the code, as text): **ISRG Root X1**, Let's Encrypt's root CA
   certificate, unmodified, from https://letsencrypt.org/certs/isrgrootx1.pem (SHA-256
   `96bcec06264976f37460779acf28c5a7cfe8a3c0aae11a8ffcee05c0bddf08c6`, the same file as AOSP's
@@ -658,6 +669,14 @@ renders above:
   https://github.com/home-assistant/core (tag `2026.11.0`). **Distributed in the source tree** under Apache-2.0
   with this notice; not in an APK, the bundle or a web page. The parity harness's fake HA answers the frontend's
   `frontend/get_translations` and `frontend/get_icons` with it.
+- **Home Assistant frontend's English, German and French UI strings**
+  (`engines/engine-vitro/src/test/resources/dev/glassworks/engine/vitro/locale/strings-{en,de,fr}.json`, test data
+  in the repo): the values, unmodified, of the frontend keys Vitro's code names, copied from the pinned frontend
+  20261028.5's `static/translations` by `tools/vitro-parity/locale-data.mjs`. Apache-2.0
+  ([`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt)), Copyright Home Assistant contributors,
+  https://github.com/home-assistant/frontend (tag `20261028.5`). **Distributed in the source tree** under
+  Apache-2.0 with this notice; not in an APK, the bundle or a web page. Vitro's tests read them; on a panel, Vitro
+  reads HA's strings from the signed-in Home Assistant.
 - **Community Lovelace cards** (host only, test inputs of the parity harness): `tools/vitro-parity/cards.py`
   downloads each from its GitHub release (or its repo at the tag, as HACS does), pinned by release and by the
   SHA-256 of every file in `tools/vitro-parity/cards.json`, into a cache on the computer that captures the
@@ -715,7 +734,7 @@ renders above:
 | BusyBox 1.36.1, inside the Magisk APK | GPL-2.0-only | installer, panel boot image | https://github.com/topjohnwu/ndk-busybox/tree/android-ndk-1.36.1 (built by Magisk's build as `busybox-1.36.1.1.zip`) |
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
 | GeckoView 144 | MPL-2.0 (some parts LGPL-2.1-or-later) | the generic app's legacy APK (#198) | https://hg.mozilla.org/releases/mozilla-release/rev/5f480a9ab713ba79e5a14face39aacb038c36f30 |
-| desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198), the legacy engine's debug test APK | https://github.com/google/desugar_jdk_libs (release 2.1.5) |
+| desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198), the legacy engine's debug test APK, Vitro's debug test APK | https://github.com/google/desugar_jdk_libs (release 2.1.5) |
 | GNU C Library, static in `otbr-agent`/`ot-ctl` | LGPL-2.1-or-later | installer, radio bundle | Ubuntu 22.04 source package `cross-toolchain-base` 59ubuntu3, which built `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 from Ubuntu's `glibc` 2.35 source: https://launchpad.net/ubuntu/+source/cross-toolchain-base/59ubuntu3. To relink `otbr-agent`/`ot-ctl` with a modified C library, rebuild them from source with [`frames/aqara-s1-plus/tools/radio/build-otbr.sh`](frames/aqara-s1-plus/tools/radio/build-otbr.sh). |
 | GNU C Library, `sisdk/lib/` | LGPL-2.1-or-later | radio bundle | The Ubuntu source packages named in `sisdk/NOTICE.txt` (Ubuntu snapshot `20261101T000000Z`, see `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`). The libraries can be replaced: the bundle loads them from that directory. |
 | libstdc++, libgcc_s | GPL-3.0-or-later WITH GCC-exception-3.1 | installer, radio bundle | The Ubuntu GCC cross source packages: `gcc-11-cross` for the static copies in `otbr-agent`/`ot-ctl`, and those named in `sisdk/NOTICE.txt` for `sisdk/lib/`. All are on https://launchpad.net/ubuntu |

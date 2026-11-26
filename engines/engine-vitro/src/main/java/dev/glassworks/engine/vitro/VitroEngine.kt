@@ -50,6 +50,7 @@ import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroMetrics
 import dev.glassworks.engine.vitro.ui.VitroView
+import dev.glassworks.web.HaPageData
 import dev.glassworks.web.HaPageStorage
 import org.json.JSONArray
 import org.json.JSONObject
@@ -151,6 +152,10 @@ class VitroEngine(
     override val lockedDown: Boolean
         get() = fallback.lockedDown
 
+    /** The islands start from HA's `localStorage` (#881): only while Vitro draws in this process. */
+    override val keepsPageStorage: Boolean
+        get() = activeInProcess == true
+
     override fun isContentProcess(processName: String): Boolean = fallback.isContentProcess(processName)
 
     override fun open(activity: Activity, host: PageHost, background: Int): Page {
@@ -162,7 +167,7 @@ class VitroEngine(
         startedSettings = cfg
         MdiIcons.init(activity.applicationContext)
         // HA's frontend strings, kept per frontend version and language for a start without HA (HaFrontend).
-        HaFrontend.cacheDir = java.io.File(activity.applicationContext.cacheDir, "vitro-frontend")
+        HaFrontend.cacheDir = java.io.File(activity.applicationContext.cacheDir, HaPageData.FRONTEND_CACHE)
         Log.i(logTag, "Starting $VERSION_NAME (native Lovelace renderer; fallback=${fallback.name.ifEmpty { "lazy" }})")
         // A recreated activity opens a new page: the old one's socket and reader thread go with it.
         activePage?.dispose()
@@ -1265,7 +1270,7 @@ class VitroEngine(
         const val VERSION_NAME = "Vitro 0.0.1 (experimental)"
 
         /** The preferences that keep the island server's port, and its key ([islandPort]). */
-        private const val ISLAND_PREFS = "vitro_island"
+        private const val ISLAND_PREFS = HaPageData.ISLAND_PREFS // the factory reset clears it
         private const val ISLAND_PORT = "port"
 
         /** How long a view's first build waits for its first states. */

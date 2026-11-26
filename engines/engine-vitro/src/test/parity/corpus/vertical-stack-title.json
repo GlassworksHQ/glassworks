@@ -1,0 +1,64 @@
+{
+ "title": "Vertical stack with a title",
+ "card": {
+  "type": "vertical-stack",
+  "title": "Kitchen",
+  "cards": [
+   {
+    "type": "tile",
+    "entity": "cover.office_blind"
+   },
+   {
+    "type": "tile",
+    "entity": "sensor.fridge_power",
+    "name": "Fridge power"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "cover.office_blind": {
+    "state": "open",
+    "last_changed": "-133m",
+    "attributes": {
+     "is_closed": false,
+     "current_position": 100,
+     "assumed_state": true,
+     "friendly_name": "Office Blind",
+     "supported_features": 11
+    }
+   },
+   "sensor.fridge_power": {
+    "state": "48.6",
+    "last_changed": "-199m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "W",
+     "device_class": "power",
+     "friendly_name": "Fridge Power"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   },
+   {
+    "ei": "sensor.fridge_power",
+    "pl": "demo",
+    "dp": 0,
+    "di": "dev-fridge",
+    "en": "Power",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-fridge",
+    "name": "Fridge"
+   }
+  ]
+ }
+}

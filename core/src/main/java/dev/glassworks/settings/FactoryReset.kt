@@ -25,6 +25,11 @@ class FactoryReset(
     /** Runs a step on the main thread (the sign-out answers on the auth thread). */
     private val onMain: (() -> Unit) -> Unit,
     private val log: (String) -> Unit = {},
+    /**
+     * Runs [clearSettings] off the main thread: it writes files and deletes a cache, and waits for page-storage writes
+     * already queued. The answer and the restart wait for it, back on [onMain].
+     */
+    private val inBackground: (() -> Unit) -> Unit = { it() },
 ) {
     fun run(done: (String?) -> Unit) {
         signOut { signedOut ->
@@ -39,14 +44,19 @@ class FactoryReset(
                     done(BROWSERS_STAYED)
                     return@onMain
                 }
-                if (!clearSettings()) {
-                    log("Factory reset stopped: the settings couldn't be cleared")
-                    done(NOT_CLEARED)
-                    return@onMain
+                inBackground {
+                    val cleared = runCatching { clearSettings() }.getOrDefault(false)
+                    onMain {
+                        if (!cleared) {
+                            log("Factory reset stopped: the settings couldn't be cleared")
+                            done(NOT_CLEARED)
+                            return@onMain
+                        }
+                        log("Factory reset: settings, Home Assistant sign-in and browsers cleared; restarting into setup")
+                        done(null)
+                        restart()
+                    }
                 }
-                log("Factory reset: settings, Home Assistant sign-in and browsers cleared; restarting into setup")
-                done(null)
-                restart()
             }
         }
     }
