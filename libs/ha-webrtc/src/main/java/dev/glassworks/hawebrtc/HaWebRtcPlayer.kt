@@ -199,6 +199,7 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         }
     }
 
+    /** What every player shares: libwebrtc's parts, made ahead of one with [prewarm]. */
     public companion object {
         /**
          * Makes libwebrtc's shared parts (its factory and EGL context) off the main thread, ahead of a player that is
