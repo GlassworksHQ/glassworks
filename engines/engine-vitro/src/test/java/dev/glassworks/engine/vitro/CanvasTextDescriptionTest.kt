@@ -83,8 +83,8 @@ class CanvasTextDescriptionTest {
         fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
         val described = { all(card).filter { it !is ViewGroup && !it.contentDescription.isNullOrBlank() }.map { it.contentDescription.toString() } }
         assertEquals(true, "Brightness 50%" in described())
-        // HA's brightness line shows the percentage while on.
-        assertEquals(true, all(card).filterIsInstance<android.widget.TextView>().any { it.text.toString() == "50%" && it.visibility == View.VISIBLE })
+        // HA's brightness line is hidden (opacity 0) but while a drag shows it: no "50%" under the dial.
+        assertEquals(false, all(card).filterIsInstance<android.widget.TextView>().any { it.text.toString().contains("%") && it.visibility == View.VISIBLE })
         store.putLocal(EntityState("light.desk", "off", mapOf("supported_color_modes" to listOf("brightness"), "friendly_name" to "Desk")))
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         assertEquals(true, "Off" in described())
