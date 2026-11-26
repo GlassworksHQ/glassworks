@@ -131,4 +131,16 @@ class SaveGateTest {
         elapsed = 10
         assertTrue(gate(store, boot = "firstboot:999").maySave(4))
     }
+
+    @Test fun withoutABootIdAHoldReadEarlyInTheNextBootEndsForGood() {
+        // the boot receiver reads the record soon after a reboot, while the time since boot is short: it's an earlier
+        // boot's, so it's replaced, and a process started much later in this boot doesn't take it back
+        val store = MemStore()
+        elapsed = 300_000
+        gate(store, boot = null).unconfirmed(6)
+        elapsed = 40_000 // BOOT_COMPLETED in the next boot
+        assertTrue(gate(store, boot = null).maySave(4))
+        elapsed = 900_000 // the app restarted long after
+        assertTrue(gate(store, boot = null).maySave(4))
+    }
 }

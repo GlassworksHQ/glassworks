@@ -630,8 +630,16 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
     // only this boot's: a restart put every saved credential back, so an older boot's ids mean nothing now
     // A change another process began and never named (it died between beginChange and addNetwork's answer, or its
     // write of the name failed) can't be told apart from a new one's: it becomes ORPHAN, which only a reboot clears
-    private val unconfirmed: MutableSet<Int> = store.read()?.takeIf { sameBoot(it) }?.ids.orEmpty()
-        .map { if (it == CHANGING) ORPHAN else it }.toMutableSet()
+    private val unconfirmed: MutableSet<Int>
+
+    init {
+        val kept = store.read()
+        val thisBoot = kept != null && sameBoot(kept)
+        unconfirmed = (if (thisBoot) kept!!.ids else emptySet()).map { if (it == CHANGING) ORPHAN else it }.toMutableSet()
+        // an earlier boot's record is replaced at once with this boot's, so a later process in this boot, when the time
+        // since boot has passed the old record's, can't take it for its own ([SaveGateBootReceiver] reads it early)
+        if (kept != null && !thisBoot) keep()
+    }
 
     /**
      * Same boot: two ids from the same source ("kernel:", "firstboot:") agree. With one unknown, or ids from different
@@ -687,13 +695,17 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
         @Volatile private var shared: SaveGate? = null
 
         fun of(ctx: Context): SaveGate = shared ?: synchronized(this) {
-            shared ?: SaveGate(PrefsStore(ctx.applicationContext), ::currentBootId, SystemClock::elapsedRealtime).also { shared = it }
+            val app = ctx.applicationContext
+            shared ?: SaveGate(PrefsStore(app), { currentBootId(app) }, SystemClock::elapsedRealtime).also { shared = it }
         }
 
         /** This boot's id: the kernel's, else the wall time system_server noted at boot (fixed for the boot), else unknown. */
-        private fun currentBootId(): String? =
+        private fun currentBootId(ctx: Context): String? =
             runCatching { java.io.File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
                 ?.let { "kernel:$it" }
+                ?: (if (android.os.Build.VERSION.SDK_INT >= 24) runCatching {
+                    Settings.Global.getInt(ctx.contentResolver, Settings.Global.BOOT_COUNT)
+                }.getOrNull()?.let { "bootcount:$it" } else null)
                 ?: runCatching {
                     @SuppressLint("PrivateApi")
                     val sp = Class.forName("android.os.SystemProperties")
@@ -712,5 +724,15 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
         }
         override fun write(kept: Kept): Boolean = prefs.edit().putString("boot", kept.bootId).putLong("elapsed", kept.elapsedMs)
             .putStringSet("ids", kept.ids.map { it.toString() }.toSet()).commit()
+    }
+}
+
+/**
+ * Reads [SaveGate]'s record early in every boot, so a hold an earlier boot kept is recognised as that boot's while the
+ * time since boot is still short (the fallback when no boot id can be read), and replaced with this boot's.
+ */
+internal class SaveGateBootReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: android.content.Intent) {
+        if (intent.action == android.content.Intent.ACTION_BOOT_COMPLETED) SaveGate.of(context)
     }
 }
