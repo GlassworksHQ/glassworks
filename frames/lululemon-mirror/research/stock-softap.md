@@ -183,18 +183,18 @@ it `MirrorApService` and the stock hotspot.
     "startConfirmationCodeOff":"0x2d8b08","patchedCodeUnits":25,
     "deviceOwner":{"hasFeatureMoveResultPc":51,"hasFeatureReg":0,"setBackupServiceActivePc":71},
     "stockAp":{"codeOff":"0xf54dc","insnsSize":95}}
-   $ dexdump -c services.patched.jar
+   $ dexdump -c /tmp/services.patched.jar
    Checksum verified
    ```
    Same length in and out, and the patcher found `systemReady()` at the offset dexdump shows.
 
 4. **Decompile the patched jar** (2026-11-25, verified off-device)
    ```
-   $ jadx -d out --single-class com.android.server.MirrorApService services.patched.jar
+   $ jadx -d out --single-class com.android.server.MirrorApService /tmp/services.patched.jar
    $ grep -n 'void systemReady' -A1 out/sources/com/android/server/MirrorApService.java
    60:    void systemReady() {
    61-    }
-   $ jadx -d out-usb --single-class com.android.server.usb.UsbDebuggingManager services.patched.jar
+   $ jadx -d out-usb --single-class com.android.server.usb.UsbDebuggingManager /tmp/services.patched.jar
        public void startConfirmation(String str, String str2) {
            if ("unable to start <FP>        ".substring(16, 63).equals(str2)) {
                allowUsbDebugging(true, str);
@@ -202,7 +202,7 @@ it `MirrorApService` and the stock hotspot.
                denyUsbDebugging();
            }
        }
-   $ jadx -d out-dpms --single-class com.android.server.devicepolicy.DevicePolicyManagerService services.patched.jar
+   $ jadx -d out-dpms --single-class com.android.server.devicepolicy.DevicePolicyManagerService /tmp/services.patched.jar
    $ grep -n 'this.mHasFeature = ' .../DevicePolicyManagerService.java
    898:        this.mHasFeature = true;
    $ grep -c setBackupServiceActive .../DevicePolicyManagerService.java
@@ -233,7 +233,7 @@ it `MirrorApService` and the stock hotspot.
    repo; read-only:
    ```
    $ dexdump -d "$STOCK_JAR" > orig.dump
-   $ dexdump -d services.patched.jar > patched.dump
+   $ dexdump -d /tmp/services.patched.jar > patched.dump
    $ norm() { tail -n +3 "$1" | sed -E \
        -e 's/^[0-9a-f]{6}: ([0-9a-f]{4} )+ *\|/|/' -e 's/^[0-9a-f]{6}: *\|/|/' \
        -e 's/(string|method|field|type)@[0-9a-f]+//g' -e 's/\[[0-9a-f]{6}\]//'; }
