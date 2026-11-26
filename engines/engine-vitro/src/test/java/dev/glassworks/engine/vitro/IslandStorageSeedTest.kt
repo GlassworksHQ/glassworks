@@ -16,21 +16,17 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /**
  * An island starts its card's `localStorage` from Home Assistant's on this panel (#881). The page gets HA's copy before
  * any card script runs ([WebIslandCardView.storageSeedScript]), and the merge ([WebIslandCardView.ISLAND_STORAGE_JS])
- * runs under node against a Map-backed `Storage`. Without node the merge cases are skipped on a desk and fail on CI
- * (`CI` set), where pr.yml installs node.
+ * runs under node against a Map-backed `Storage` ([IslandNode]: skipped on a desk without node, failed on CI).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
@@ -81,26 +77,33 @@ class IslandStorageSeedTest {
 
     // ---- The merge, under node ----
 
-    private fun node(): String? = listOf("node", "/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node").firstOrNull { n ->
-        runCatching { ProcessBuilder(n, "--version").redirectErrorStream(true).start().waitFor(10, TimeUnit.SECONDS) }.getOrDefault(false)
-    }
-
     @Test
     fun theMergeKeepsWhatTheIslandChangedAndTakesWhatHaChanged() {
-        val node = node()
-        if (node == null) {
-            if (System.getenv("CI") != null) fail("node isn't installed: pr.yml's app job sets it up (actions/setup-node)")
-            assumeTrue("node isn't installed", false)
-        }
+        val node = IslandNode.require()
         val harness = File.createTempFile("island-storage", ".mjs")
         try {
             harness.writeText(WebIslandCardView.ISLAND_STORAGE_JS + HARNESS)
-            val p = ProcessBuilder(node, "--test", harness.path).redirectErrorStream(true).start()
-            val out = p.inputStream.bufferedReader().readText()
-            if (!p.waitFor(60, TimeUnit.SECONDS)) { p.destroyForcibly(); fail("node --test didn't finish:\n$out") }
-            assertEquals(out, 0, p.exitValue())
+            val (code, out) = IslandNode.run(node, listOf("--test", harness.path))
+            assertEquals(out, 0, code)
         } finally {
             harness.delete()
+        }
+    }
+
+    @Test
+    fun aNodeThatStallsFailsTheTestInsteadOfHangingIt() {
+        val node = IslandNode.require()
+        val script = File.createTempFile("island-stall", ".mjs")
+        try {
+            // Writes a line, then never ends: the run must not wait for its output's end.
+            script.writeText("console.log('started'); setInterval(() => {}, 1000);\n")
+            val started = System.nanoTime()
+            val failure = runCatching { IslandNode.run(node, listOf(script.path), timeoutSeconds = 2) }.exceptionOrNull()
+            assertTrue("a stalled node fails the test: $failure", failure is AssertionError && "didn't finish" in failure.message.orEmpty())
+            assertTrue("with its output", "started" in failure!!.message.orEmpty())
+            assertTrue("within the timeout", System.nanoTime() - started < 20_000_000_000L)
+        } finally {
+            script.delete()
         }
     }
 
@@ -199,6 +202,27 @@ test('a value that does not fit, with no room to correct the record, drops the r
   s.setItem = put;
   vitroSeedStorage(s, HA, { a: '1', b: '2' });
   assert.deepEqual(s.own(), { a: '1', b: '2' });
+});
+
+test('a correction that does not fit keeps the record less the failed keys, so the island changes stay its own', () => {
+  const s = new MemStorage();
+  vitroSeedStorage(s, HA, { a: '1', r: 'x' });
+  s.setItem('a', 'card'); // the card changes a value HA's copy put in
+  // A full storage: a record longer than the one stored doesn't fit, and the removal of r fails.
+  const put = s.setItem;
+  const remove = s.removeItem;
+  s.setItem = function (k, v) {
+    if (k === '__vitro_ha_storage' && String(v).length > (this.getItem(k) || '').length) throw new Error('QuotaExceededError');
+    put.call(this, k, v);
+  };
+  s.removeItem = function () { throw new Error('nope'); };
+  vitroSeedStorage(s, HA, { a: '1' }); // HA dropped r
+  const kept = JSON.parse(s.getItem('__vitro_ha_storage'));
+  assert.deepEqual(kept.items, { a: '1' }, 'the record stays, without the key that failed');
+  s.setItem = put;
+  s.removeItem = remove;
+  vitroSeedStorage(s, HA, { a: '1' });
+  assert.equal(s.getItem('a'), 'card', 'the island change survives the failed correction');
 });
 
 test('no copy leaves the island as it is', () => {

@@ -108,6 +108,21 @@ class VitroCardContext(
         onEvent: (event: JSONObject, first: Boolean) -> Unit,
         onError: (JSONObject?) -> Unit,
     ) -> () -> Unit = { message, onEvent, onError -> subscribeWs(message(), { onEvent(it, false) }, onError) },
+    /**
+     * A subscription on the connection of now only, which also says when Home Assistant accepted it (`onStarted`, on
+     * any thread): what a web island's `subscribeMessage` resolves on. The island starts it again itself after a
+     * reconnect. `onError` also runs (its `error`) if the connection drops before HA answered. The default (tests, no
+     * engine) is [subscribeWs], and says it started as soon as it's asked.
+     */
+    val subscribeWsStarted: (
+        msg: JSONObject,
+        onStarted: () -> Unit,
+        onEvent: (JSONObject) -> Unit,
+        onError: (JSONObject?) -> Unit,
+    ) -> () -> Unit = { msg, onStarted, onEvent, onError ->
+        var failed = false
+        subscribeWs(msg, onEvent) { e -> failed = true; onError(e) }.also { if (!failed) onStarted() }
+    },
     /** The wall clock, ms since the epoch: what HA's frontend reads as `new Date()` for its time windows. */
     val now: () -> Long = System::currentTimeMillis,
     /** The dashboard's own URL (HA's page `location`), which relative links resolve against; null when unknown. */
@@ -146,6 +161,23 @@ class VitroCardContext(
      * ([dev.glassworks.engine.vitro.compat.IslandFrontend]). Main thread. The default (tests, no engine) does nothing.
      */
     val needsFrontend: (card: CardConfig, tags: List<String>, owners: List<String>) -> Unit = { _, _, _ -> },
+    /**
+     * A web island's [card] threw on something an island page doesn't have and drew nothing ([reason] names it): its
+     * view goes to HA's frontend, as for [needsFrontend]. Main thread. The default (tests, no engine) does nothing.
+     */
+    val islandFailed: (card: CardConfig, reason: String) -> Unit = { _, _ -> },
+    /**
+     * Whether the page's connection to Home Assistant is up now: what a web island's `hass.connected` says. The
+     * default (tests, no engine) is up.
+     */
+    val haConnected: () -> Boolean = { true },
+    /**
+     * [onChange] runs (on any thread) each time the connection to Home Assistant goes down (false) or is up again
+     * (true), until the returned handle is called: a web island's `hass.connection` fires `disconnected` and `ready`,
+     * and its subscriptions start again. HA drops a connection's subscriptions with it. The default (tests, no engine)
+     * never calls it.
+     */
+    val watchConnection: (onChange: (connected: Boolean) -> Unit) -> () -> Unit = { { } },
     /**
      * What Home Assistant's web UI keeps in `localStorage` on this panel ([dev.glassworks.web.HaPageStorage]), or null
      * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
@@ -198,6 +230,7 @@ class VitroCardContext(
         cameraPlayers = cameraPlayers,
         subscribeWs = subscribeWs,
         subscribeWsFresh = subscribeWsFresh,
+        subscribeWsStarted = subscribeWsStarted,
         now = now,
         pageUrl = pageUrl,
         watchEntity = watchEntity,
@@ -206,6 +239,9 @@ class VitroCardContext(
         watchToken = watchToken,
         touch = touch,
         needsFrontend = needsFrontend,
+        islandFailed = islandFailed,
+        haConnected = haConnected,
+        watchConnection = watchConnection,
         pageStorage = pageStorage,
     ).also {
         it.cardVars = cardVars

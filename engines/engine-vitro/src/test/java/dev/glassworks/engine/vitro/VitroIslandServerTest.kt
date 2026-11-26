@@ -112,6 +112,10 @@ class VitroIslandServerTest {
                 HttpResponse(200, mapOf("Content-Type" to "application/javascript"), "export {};".toByteArray())
             // A public path that redirects to a token-bearing one.
             req.path == "/local/to-api" -> HttpResponse(302, mapOf("Location" to "/api/private"), ByteArray(0))
+            // HA accepts only the renewed token here (a token that expired under the island).
+            req.path == "/api/expiring" ->
+                if (req.headers["authorization"] == "Bearer renewed-token") HttpResponse(200, mapOf("Content-Type" to "application/json"), "{\"ok\":true}".toByteArray())
+                else HttpResponse.text(401, "401: Unauthorized")
             req.path == "/api/camera_proxy/cam" ->
                 HttpResponse(200, mapOf("Content-Type" to "image/jpeg"), byteArrayOf(1, 2, 3, 4))
             req.path == "/api/services/light/turn_on" && req.method == "POST" ->
@@ -252,6 +256,63 @@ class VitroIslandServerTest {
     }
 
     // ---- Lifecycle ----
+
+    // ---- A token that expired (401) ----
+
+    @Test
+    fun aRefusedTokenIsRenewedAndTheRequestTriedOnceMore() {
+        island.stop()
+        val renewals = java.util.concurrent.atomic.AtomicInteger()
+        island = VitroIslandServer(
+            session = { haBase to token },
+            renewSession = { done -> renewals.incrementAndGet(); token = "renewed-token"; done(haBase to token) },
+        )
+        val reply = get(island.ensureStarted() + "/api/expiring", method = "POST", body = "{\"a\":1}")
+        assertEquals(200, reply.code)
+        assertEquals("{\"ok\":true}", reply.text)
+        assertEquals(1, renewals.get())
+        val asked = haSeen.filter { it.target == "/api/expiring" }
+        assertEquals(listOf("Bearer fake-token-0001", "Bearer renewed-token"), asked.map { it.authorization })
+        assertEquals("the body goes again with the retry", listOf("{\"a\":1}", "{\"a\":1}"), asked.map { it.body })
+
+        // Already renewed by another request: no second forced refresh, the current token is used.
+        token = "renewed-token"
+        assertEquals(200, get(island.ensureStarted() + "/api/expiring").code)
+        assertEquals(1, renewals.get())
+    }
+
+    /** A GET of [path] on [server] with that server's own capability cookie (each server has its own). */
+    private fun getOn(server: VitroIslandServer, path: String): Reply {
+        val cookie = get(server.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
+        return get(server.ensureStarted() + path, headers = mapOf("Cookie" to cookie), capability = false)
+    }
+
+    @Test
+    fun aRefusalStaysARefusalWhenNothingBetterComes() {
+        island.stop()
+        val renewals = java.util.concurrent.atomic.AtomicInteger()
+        // Renewed, but HA refuses that one too: one retry only, and the page gets HA's 401.
+        island = VitroIslandServer(session = { haBase to token }, renewSession = { done ->
+            renewals.incrementAndGet()
+            token = "still-bad-${renewals.get()}"
+            done(haBase to token)
+        })
+        assertEquals(401, getOn(island, "/api/expiring").code)
+        assertEquals(1, renewals.get())
+        assertEquals(2, haSeen.count { it.target == "/api/expiring" })
+        island.stop()
+
+        // A renewal for another Home Assistant, or none in time: no retry with it.
+        haSeen.clear()
+        island = VitroIslandServer(session = { haBase to token }, renewSession = { done -> done("http://192.0.2.20:8123" to "renewed-token") })
+        assertEquals(401, getOn(island, "/api/expiring").code)
+        assertEquals(1, haSeen.count { it.target == "/api/expiring" })
+        island.stop()
+        haSeen.clear()
+        island = VitroIslandServer(session = { haBase to token }, renewSession = { _ -> }, renewTimeoutMs = 200)
+        assertEquals(401, getOn(island, "/api/expiring").code)
+        assertEquals(1, haSeen.count { it.target == "/api/expiring" })
+    }
 
     @Test
     fun theServerListensOnLoopbackAndKeepsItsPort() {

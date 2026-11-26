@@ -874,6 +874,23 @@ class VitroEngineTest {
     }
 
     @Test
+    fun aRestartTellsTheIslandsTheOldConnectionWentBeforeTheNewOneIsUp() {
+        val page = readyPage()
+        awaitMain("connected") { server.commands("auth").size == 1 }
+        // A web island's view of the connection (VitroCardContext.watchConnection), as a card built now gets it.
+        val ctx = vitroView(page).contextFactory!!(ThemeResolver.resolve(ThemeCatalog(), true))
+        val heard = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+        ctx.watchConnection { heard += it }
+        assertTrue("up before the restart", ctx.haConnected())
+        page.restart()
+        // The old client's own disconnect is dropped as stale: the restart itself says the connection went.
+        assertEquals(listOf(false), heard.toList())
+        awaitMain("second connection") { server.commands("auth").size == 2 && heard.size == 2 }
+        assertEquals("then up on the new client, where the islands start their subscriptions again", listOf(false, true), heard.toList())
+        assertTrue(ctx.haConnected())
+    }
+
+    @Test
     fun viewAddressesJoinOriginDashboardAndView() {
         assertEquals("$base/wall-test/living", VitroEngine.buildViewUrl("$base/", "wall-test", "living"))
         assertEquals("$base/lovelace/0", VitroEngine.buildViewUrl(base, null, "0"))
@@ -960,7 +977,7 @@ class VitroEngineTest {
         assertTrue(html.contains("const QUEUED_CALL_MS = 5000;"))
         // A new states object (a proxy over a copy) after every change, as HA's frontend hands cards (#885).
         assertTrue(html.contains("if (!statesView) statesView = new Proxy(Object.assign({}, rawStates), statesHandler);"))
-        assertTrue(html.contains("const h = Object.assign({}, hassBase, { states: currentStates() });"))
+        assertTrue(html.contains("const h = Object.assign({}, hassBase, { states: currentStates(), connected: haConnected });"))
         assertEquals("snapshot and patch both start a new states object", 2, Regex("^\\s+statesView = null;", RegexOption.MULTILINE).findAll(html).count())
         assertTrue(html.contains("sendBridge({ type: 'watch', entity_id: prop })"))
         // hass.callService is HA's call_service over the same bridge, so its promise carries HA's answer.
@@ -1099,15 +1116,15 @@ class VitroEngineTest {
         assertTrue(html.contains("callApi: vitroCallApi"))
         assertTrue(html.contains("fetch('/api/' + String(path || '').replace(/^\\/+/, ''), init)"))
         assertTrue(html.contains("fetchWithAuth(path, init) { return fetch(path, init || {}); }"))
-        assertTrue(html.contains("localize: vitroLocalize"))
+        assertTrue(html.contains("localize: makeLocalize(),"))
         assertTrue(html.contains("formatEntityState: vitroFormatState"))
         assertTrue(html.contains("formatEntityAttributeValue: vitroFormatAttribute"))
         // hass.locale and hass.language are the user's (HaLocale): English and HA's defaults here.
         assertTrue(html.contains("""const haLocale = {"language":"en","number_format":"language","time_format":"language","date_format":"language","first_weekday":"language","time_zone":"local"};"""))
         assertTrue(html.contains("locale: haLocale,"))
         assertTrue(html.contains("language: haLocale.language,"))
-        assertTrue(html.contains("<html lang=\"en\">"))
-        assertTrue(html.contains("themes: {} }"))
+        assertTrue(html.contains("<html lang=\"en\" dir=\"ltr\">"))
+        assertTrue(html.contains("themes: {} },"))
         assertTrue(html.contains("const ANON_USER = { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false };"))
         assertTrue(html.contains("user: ANON_USER,"))
         // HA's registries, asked for on a card's first read of one; and every state once a card walks them.
@@ -1120,7 +1137,7 @@ class VitroEngineTest {
         assertTrue(html.contains("ownKeys(target) {"))
         assertTrue(html.contains("sendBridge({ type: 'watchAll' });"))
         assertTrue("no lookup watch once it follows all", html.contains("if (!walksAll && typeof prop === 'string' && prop.includes('.'))"))
-        assertTrue(html.contains("auth: { data: { access_token: accessToken, hassUrl: location.origin }"))
+        assertTrue(html.contains("data: { get access_token() { return accessToken; }, hassUrl: location.origin },"))
         // Navigation and actions go back over the bridge.
         assertTrue(html.contains("window.addEventListener('location-changed'"))
         assertTrue(html.contains("window.addEventListener('hass-navigate'"))
@@ -1428,7 +1445,7 @@ class VitroEngineTest {
             // A socket that connects later (a reconnect) gets them right after its snapshot.
             val later = CopyOnWriteArrayList<JSONObject>()
             handler.onConnected { later += it }
-            assertEquals(listOf("theme", "auth", "snapshot", "registries"), later.map { it.getString("type") })
+            assertEquals(listOf("theme", "auth", "conn", "snapshot", "registries"), later.map { it.getString("type") })
 
             // Gone with the island.
             val parent = FrameLayout(activity)

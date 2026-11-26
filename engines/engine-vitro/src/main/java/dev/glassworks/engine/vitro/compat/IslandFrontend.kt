@@ -26,7 +26,14 @@ object IslandFrontend {
 
     /** Records that [type], with these [resources], draws with HA elements [tags]. True when it's new. */
     fun record(resources: List<LovelaceResource>, type: String, tags: List<String>): Boolean =
-        learned.putIfAbsent(key(resources, type), describe(type, tags)) == null
+        recordReason(resources, type, describe(type, tags))
+
+    /**
+     * Records that [type], with these [resources], needs HA's frontend for [reason] (as the log and the fallback show
+     * it): a card that threw on something an island page doesn't have and drew nothing. True when it's new.
+     */
+    fun recordReason(resources: List<LovelaceResource>, type: String, reason: String): Boolean =
+        learned.putIfAbsent(key(resources, type), reason) == null
 
     /** Why a [type] card with these [resources] needs HA's frontend, or null when no island found it. */
     fun reason(resources: List<LovelaceResource>, type: String): String? =

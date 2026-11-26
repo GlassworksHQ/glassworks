@@ -548,16 +548,19 @@ class HaDashboardClient(
      *
      * Without [resubscribe] (a one-off exchange, such as a camera's WebRTC offer) it lives on this connection only:
      * [onError] runs once if Home Assistant rejects it, the connection drops before it starts (its `error`), or with
-     * null when it can't be sent. Cancelling with the returned handle never calls it.
+     * null when it can't be sent. Cancelling with the returned handle never calls it. [onStarted] runs once Home
+     * Assistant accepted it (its `result`), unless it was cancelled first: what a web island's `subscribeMessage`
+     * resolves on (an island holds its own subscriptions across reconnects, so it asks without [resubscribe]).
      */
     fun subscribeWs(
         msg: JSONObject,
         onEvent: (JSONObject) -> Unit,
         onError: (JSONObject?) -> Unit,
         resubscribe: Boolean = true,
+        onStarted: () -> Unit = {},
     ): () -> Unit {
         if (resubscribe) return hold({ JSONObject(msg.toString()) }, { ev, _ -> onEvent(ev) }, onError)
-        val subId = subscribeWithId(JSONObject(msg.toString()), onError) { _, ev -> onEvent(ev) }
+        val subId = subscribeWithId(JSONObject(msg.toString()), onError, onStarted) { _, ev -> onEvent(ev) }
         if (subId <= 0) onError(null)
         return { if (subId > 0) unsubscribe(subId) }
     }
@@ -1254,6 +1257,7 @@ class HaDashboardClient(
     private fun subscribeWithId(
         msg: JSONObject,
         onError: ((JSONObject?) -> Unit)? = null,
+        onStarted: (() -> Unit)? = null,
         onEvent: (id: Int, event: JSONObject) -> Unit,
     ): Int = synchronized(queueLock) {
         val id = nextId.getAndIncrement()
@@ -1263,10 +1267,12 @@ class HaDashboardClient(
         subscriptionStates[id] = state
         pending[id] = { res ->
             // The result and a cancel decide under the subscription's own lock, so neither can slip past the other.
+            var started = false
             val report = synchronized(state) {
                 state.settled = true
                 subscriptionStates.remove(id)
                 if (res.optBoolean("success", false)) {
+                    started = !state.cancelled
                     false
                 } else {
                     subscriptions.remove(id)
@@ -1276,6 +1282,7 @@ class HaDashboardClient(
                 }
             }
             if (report) onError?.invoke(res.optJSONObject("error"))
+            if (started) onStarted?.invoke()
         }
         if (!send(msg)) {
             subscriptions.remove(id)

@@ -76,6 +76,7 @@ object HaDisplay {
         deviceAreas = emptyMap()
         areas = emptyMap()
         componentIcons.clear(); platformIcons.clear(); stateLabels.clear()
+        labelRevision++
         translatedDomains.clear(); translatedPlatforms.clear(); iconDomains.clear(); iconPlatforms.clear()
     }
 
@@ -224,7 +225,7 @@ object HaDisplay {
         val keys = res.keys()
         while (keys.hasNext()) {
             val k = keys.next()
-            if (".state." in k) res.optString(k).takeIf { it.isNotEmpty() }?.let { stateLabels[k] = it }
+            if (".state." in k) res.optString(k).takeIf { it.isNotEmpty() }?.let { if (stateLabels.put(k, it) != it) labelRevision++ }
         }
         if (component) translatedDomains += requested else translatedPlatforms += requested
     }
@@ -300,6 +301,16 @@ object HaDisplay {
     }
 
     /** The domain's own word for [state] (`component.<domain>.entity_component._.state.<state>`), when loaded. */
+    /**
+     * Every state label read so far (`component.<domain>.entity_component.<class>.state.<state>`, and an
+     * integration's `component.<platform>.entity.…`), keyed as HA's `localize` reads them: for web islands.
+     */
+    fun stateLabels(): Map<String, String> = HashMap(stateLabels)
+
+    /** Counts changes to the state labels (one added or replaced, or all forgotten): [stateLabels] differ after one. */
+    @Volatile var labelRevision: Long = 0
+        private set
+
     fun domainStateLabel(domain: String, state: String): String? = stateLabels["component.$domain.entity_component._.state.$state"]
 
     fun displayPrecision(entityId: String): Int? = registry[entityId]?.displayPrecision

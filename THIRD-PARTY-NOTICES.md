@@ -328,6 +328,11 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
   synthesised with Piper's `en_US-kristin-medium` voice (https://huggingface.co/rhasspy/piper-voices,
   MIT; trained from scratch on public-domain LibriVox recordings) by `tools/voice/mww_reference.py`.
   No recording of a person.
+- `engines/engine-vitro/src/test/ha-frontend/hass-types.ts` (Vitro's island contract test, not in the APK): the
+  `HomeAssistant` interfaces of home-assistant/frontend's `src/types.ts` (commit
+  `421f8b19861cacc162da79a0459f522db2c1ec30`) and the public members of home-assistant-js-websocket's `Connection`
+  (commit `afcb55a4f76fa9855de52ea8fdb9717c314da267`), trimmed. Apache-2.0 (`LICENSES/Apache-2.0.txt`), Copyright
+  Home Assistant contributors and Paulus Schoutsen and contributors.
 - `engines/engine-vitro/src/test/parity/fixtures/fonts/` (Vitro's web-font tests and parity cases, not in the APK):
   three fonts from google/fonts at commit `83c62e30d87daa70216dab6b984d00d20d96d585`, subset to Latin with
   fontTools `pyftsubset` and saved as TTF, WOFF and WOFF2. None has a Reserved Font Name. Licence: OFL-1.1

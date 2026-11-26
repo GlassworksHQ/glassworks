@@ -55,6 +55,8 @@ export async function probeIsland(root, caseFile, opts = {}) {
     await ctx.route(origin + '/__vitro/island/probe', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: readFileSync(pageFile, 'utf8') }));
     // The island server's icons: an empty one (this probe is about the card, not MDI).
     await ctx.route((u) => u.pathname.startsWith('/__vitro/icon/'), (r) => r.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"></svg>' }));
+    // HA's strings for the island's localize: none here (a miss is "", as before HA's files load).
+    await ctx.route((u) => u.pathname.startsWith('/__vitro/strings/'), (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
     // The made-up cards, from island-cases/cards/ only.
     const testDir = join(root, 'tools', 'vitro-parity', 'island-cases', 'cards');
     await ctx.route((u) => u.pathname.startsWith(TEST_PREFIX), (r) => {
@@ -74,6 +76,8 @@ export async function probeIsland(root, caseFile, opts = {}) {
           sent.push(msg);
           if (msg.type === 'registries') ws.send(JSON.stringify({ type: 'registries', registries: { entities: {}, devices: {}, areas: {}, floors: {} } }) + '\n');
           if (msg.type === 'callWs') ws.send(JSON.stringify({ type: 'wsReply', id: msg.id, ok: false, error: { code: 'not_supported', message: 'island-probe answers no calls' } }) + '\n');
+          // hass.connection.subscribeMessage: refused too, as HA refuses a command of an integration it doesn't have.
+          if (msg.type === 'subscribe') ws.send(JSON.stringify({ type: 'subError', sid: msg.sid, error: { code: 'not_supported', message: 'island-probe answers no subscriptions' } }) + '\n');
         }
       });
       const snapshot = () => ws.send(JSON.stringify({ type: 'snapshot', states }) + '\n');
