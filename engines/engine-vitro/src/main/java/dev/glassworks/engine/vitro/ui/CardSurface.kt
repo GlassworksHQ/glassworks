@@ -206,6 +206,11 @@ class VitroCardContext(
      * that failed after its dialog closed). Main thread. The default (tests, no engine) shows nothing.
      */
     val showToast: (HaToast) -> Unit = {},
+    /**
+     * [navigate] for a `navigate` action with `navigation_replace: true` (HA's `navigate(path, {replace: true})`): the
+     * page it leaves is no step in the history. The default (tests, no engine) is [navigate].
+     */
+    val navigateReplace: (path: String) -> Unit = navigate,
 ) {
     val dp: Float = context.resources.displayMetrics.density
     /** The main thread, for the card's own updates: one that throws is logged and dropped ([GuardedHandler]). */
@@ -276,6 +281,7 @@ class VitroCardContext(
         watchConfig = watchConfig,
         pageStorage = pageStorage,
         showToast = showToast,
+        navigateReplace = navigateReplace,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout
@@ -332,7 +338,8 @@ class VitroCardContext(
             "toggle" -> defaultEntityId?.let(::toggleEntity) ?: missing("ui.panel.lovelace.cards.actions.no_entity_toggle")
             // HA's handleAction: the action's own `entity`, else the card's.
             "more-info" -> (action.entity ?: defaultEntityId)?.let(openMoreInfo) ?: missing("ui.panel.lovelace.cards.actions.no_entity_more_info")
-            "navigate" -> action.navigationPath?.takeIf { it.isNotEmpty() }?.let(navigate) ?: missing("ui.panel.lovelace.cards.actions.no_navigation_path")
+            "navigate" -> action.navigationPath?.takeIf { it.isNotEmpty() }?.let(if (action.replace) navigateReplace else navigate)
+                ?: missing("ui.panel.lovelace.cards.actions.no_navigation_path")
             "call-service", "perform-action" -> {
                 val svc = action.service?.takeIf { it.isNotEmpty() } ?: return missing("ui.panel.lovelace.cards.actions.no_action")
                 val domain = svc.substringBefore('.', "")

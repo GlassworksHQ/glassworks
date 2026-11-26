@@ -21,6 +21,7 @@ import dev.glassworks.engine.vitro.clarity.ClarityHttp
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDashboardClient
+import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.LovelaceResource
@@ -861,6 +862,75 @@ class VitroEngineTest {
     }
 
     @Test
+    fun aNavigateActionWithNavigationReplaceLeavesNoStepInTheHistory() {
+        // HA's navigate(path, {replace: true}): back skips the view the action left (#799 review).
+        val page = readyPage()
+        val vv = vitroView(page)
+        page.load("$base/wall-test/wall")
+        idle()
+        val ctx = vv.contextFactory!!(ThemeResolver.resolve(ThemeCatalog(), true))
+        val replace = ActionConfig.parse(JSONObject("""{"action": "navigate", "navigation_path": "/wall-test/living", "navigation_replace": true}"""))
+        assertTrue(replace.replace)
+        ctx.performAction(replace, null)
+        idle()
+        assertEquals(0, vv.currentViewIndex)
+        host.pageStarts.clear()
+        page.goBack()
+        idle()
+        assertEquals("back goes past the replaced view, to the one before it", listOf("$base/wall-test/living"), host.pageStarts.toList())
+        assertFalse("nothing older", page.canGoBack)
+
+        // Without it, the view left is a step back.
+        page.load("$base/wall-test/wall")
+        idle()
+        ctx.performAction(ActionConfig.parse(JSONObject("""{"action": "navigate", "navigation_path": "/wall-test/living"}""")), null)
+        idle()
+        host.pageStarts.clear()
+        page.goBack()
+        idle()
+        assertEquals(listOf("$base/wall-test/wall"), host.pageStarts.toList())
+    }
+
+    @Test
+    fun viewsHiddenFromTheSignedInUserHaveNoTabUnlessOnScreen() {
+        // HA's hui-root: `visible: false` and a `visible` list without this user hide the tab (not the view: its path
+        // still opens it, and then its tab shows), and a dashboard with no view path opens the first visible view.
+        server.dashboardConfig = JSONObject(
+            """{"views": [
+              {"title": "Secret", "path": "secret", "visible": false, "cards": [{"type": "markdown", "content": "s"}]},
+              {"title": "Theirs", "path": "theirs", "visible": [{"user": "someone-else"}], "cards": [{"type": "markdown", "content": "t"}]},
+              {"title": "Living", "path": "living", "cards": [{"type": "markdown", "content": "l"}]},
+              {"title": "Mine", "path": "mine", "visible": [{"user": "wall-user"}], "cards": [{"type": "markdown", "content": "m"}]},
+              {"title": "Detail", "path": "detail", "subview": true, "cards": [{"type": "markdown", "content": "d"}]}
+            ]}""",
+        )
+        val page = openPage(vitro())
+        page.load("$base/wall-test")
+        awaitMain("first ready") { host.messages("ready").isNotEmpty() }
+        val vv = vitroView(page)
+        assertEquals("the first view visible to this user", 2, vv.currentViewIndex)
+        vv.hideHeader = false
+        idle()
+        fun tab(index: Int): View? = (0 until vv.childCount).asSequence()
+            .flatMap { vv.getChildAt(it).let { c -> if (c is android.view.ViewGroup) c.allViews() else sequenceOf(c) } }
+            .firstOrNull { it.tag == index && it.isClickable }
+        assertEquals(View.GONE, tab(0)!!.visibility)
+        assertEquals(View.GONE, tab(1)!!.visibility)
+        assertEquals(View.VISIBLE, tab(2)!!.visibility)
+        assertEquals(View.VISIBLE, tab(3)!!.visibility)
+        assertNull("a subview never has a tab", tab(4))
+
+        // Its path still opens a hidden view, and its tab shows while it's on screen.
+        page.load("$base/wall-test/secret")
+        idle()
+        assertEquals(0, vv.currentViewIndex)
+        assertEquals(View.VISIBLE, tab(0)!!.visibility)
+        tab(2)!!.performClick()
+        idle()
+        assertEquals(View.GONE, tab(0)!!.visibility)
+    }
+
+    @Test
     fun logLinesLeaveOutQueriesAndProxiedPaths() {
         assertEquals("http://…/auth/…?…", VitroEngine.forLog("http://192.0.2.10:8123/auth/authorize?client_id=a&state=secret"))
         // No Home Assistant address either: an origin, a host or an IP a connection error names.
@@ -961,6 +1031,7 @@ class VitroEngineTest {
         resources: List<LovelaceResource> = emptyList(),
         token: String? = FakeHaServer.TOKEN,
         navigate: (String) -> Unit = {},
+        navigateReplace: (String) -> Unit = navigate,
         store: EntityStore = EntityStore(),
         user: JSONObject = JSONObject(),
         needsFrontend: (CardConfig, List<String>, List<String>) -> Unit = { _, _, _ -> },
@@ -979,6 +1050,7 @@ class VitroEngineTest {
         subscribeTemplate = { _, _ -> {} },
         haUser = { user },
         needsFrontend = needsFrontend,
+        navigateReplace = navigateReplace,
     )
 
     private fun islandCard() = LovelaceParser.parseCard(
@@ -1197,10 +1269,21 @@ class VitroEngineTest {
         assertTrue(html.contains("window.addEventListener('location-changed'"))
         assertTrue(html.contains("window.addEventListener('hass-navigate'"))
         assertTrue(html.contains("window.addEventListener('hass-action'"))
-        assertTrue(html.contains("sendBridge({ type: 'navigate', path })"))
+        assertTrue(html.contains("sendBridge({ type: 'navigate', path, replace: replace === true })"))
         // Resizes are debounced, and a 0 px measurement is sent only once the card rendered (island-hass.test.mjs).
         assertTrue(html.contains("timer = setTimeout(reportSize, 50);"))
         assertTrue(html.contains("if ((h === 0 && !cardSettled) || h === lastH) return;"))
+    }
+
+    @Test
+    fun anIslandNavigateWithReplaceLeavesNoStepInTheHistory() {
+        val paths = mutableListOf<String>()
+        val island = WebIslandCardView(cardContext(navigate = { paths += "push $it" }, navigateReplace = { paths += "replace $it" }), islandCard())
+        val noReply: (JSONObject) -> Unit = { throw AssertionError("navigate needs no reply") }
+        island.handleIslandMessage(JSONObject().put("type", "navigate").put("path", "/lovelace/energy").put("replace", true), noReply)
+        island.handleIslandMessage(JSONObject().put("type", "navigate").put("path", "/lovelace/1").put("replace", false), noReply)
+        idle()
+        assertEquals(listOf("replace /lovelace/energy", "push /lovelace/1"), paths)
     }
 
     @Test
