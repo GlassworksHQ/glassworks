@@ -76,6 +76,14 @@ class LiveCameraFeedTest {
             calls += "restored"
         }
 
+        override fun setRendering(rendering: Boolean) {
+            calls += "rendering $rendering"
+        }
+
+        /** Like WebRTC's: closed rather than paused when its camera hides. */
+        var closesWhenHidden = false
+        override val closeWhenHidden: Boolean get() = closesWhenHidden
+
         fun frame(w: Int = 1280, h: Int = 720) {
             videoWidth = w
             videoHeight = h
@@ -93,8 +101,15 @@ class LiveCameraFeedTest {
     private val wsCalls = ArrayList<JSONObject>()
     private var capabilities: Any? = JSONObject().put("frontend_stream_types", JSONArray().put("hls").put("web_rtc"))
     private var capabilitiesOk = true
+
+    /** Set: capabilities requests wait here for the test to answer them. */
+    private var pendingCaps: ArrayList<(Boolean, Any?, JSONObject?) -> Unit>? = null
     private val nullFor = HashSet<CameraStreamKind>()
     private val throwFor = HashSet<CameraStreamKind>()
+    private val closesWhenHiddenFor = HashSet<CameraStreamKind>()
+
+    /** The kinds whose factory was asked to get ready, in order. */
+    private val prewarmed = ArrayList<CameraStreamKind>()
 
     @Before
     fun setUp() = CameraVideoBudget.reset()
@@ -109,9 +124,14 @@ class LiveCameraFeedTest {
                     if (kind in nullFor) return null
                     return FakeStream(kind, activity).also {
                         it.throwOnStart = kind in throwFor
+                        it.closesWhenHidden = kind in closesWhenHiddenFor
                         made += it
                         peakVideo = maxOf(peakVideo, made.count { m -> !m.closed && m.kind != MJPEG })
                     }
+                }
+
+                override fun prewarm() {
+                    prewarmed += it
                 }
             }
         },
@@ -128,7 +148,9 @@ class LiveCameraFeedTest {
         callWs = { msg, done ->
             wsCalls += msg
             if (msg.optString("type") == "camera/capabilities") {
-                if (capabilitiesOk) done(true, capabilities, null) else done(false, null, JSONObject().put("code", "not_found"))
+                val held = pendingCaps
+                if (held != null) held += done
+                else if (capabilitiesOk) done(true, capabilities, null) else done(false, null, JSONObject().put("code", "not_found"))
             } else {
                 done(false, null, null)
             }
@@ -148,6 +170,9 @@ class LiveCameraFeedTest {
         LiveCameraFeed(ctx, "camera.porch", { null }, host = host, onVideoSize = onSize) {}
 
     private fun idle() = ShadowLooper.idleMainLooper()
+
+    /** WebRTC has played alone for its first [LiveCameraFeed.EXTRA_DELAY_MS]: HLS may load beside it now. */
+    private fun extraDue() = ShadowLooper.idleMainLooper(LiveCameraFeed.EXTRA_DELAY_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
     private fun live(kind: CameraStreamKind) = made.last { it.kind == kind && !it.closed }
     private fun running() = made.filter { !it.closed }.map { it.kind }
 
@@ -168,14 +193,19 @@ class LiveCameraFeedTest {
         f.start()
         idle()
         assertEquals("camera/capabilities", wsCalls.single().optString("type"))
-        assertEquals(listOf(HLS, WEB_RTC), f.runningKinds)
-        // HLS shows, WebRTC loads hidden.
+        // WebRTC alone first, shown (clear until its first frame, over the still).
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        assertEquals(1f, host.getChildAt(0).alpha)
+        // No video yet after its first moments: HLS loads beside it, as HA's do side by side. HLS shows, WebRTC
+        // loads hidden.
+        extraDue()
+        assertEquals(listOf(WEB_RTC, HLS), f.runningKinds)
         val frames = (0 until host.childCount).map { host.getChildAt(it) as CameraFitFrame }
-        assertEquals(listOf(1f, 0f), frames.map { it.alpha })
+        assertEquals(listOf(0f, 1f), frames.map { it.alpha })
         live(HLS).frame()
         idle()
         assertEquals(HLS, f.shownKind)
-        assertEquals(listOf(HLS, WEB_RTC), f.runningKinds)
+        assertEquals(listOf(WEB_RTC, HLS), f.runningKinds)
         live(WEB_RTC).frame()
         idle()
         // Both have video: WebRTC alone, HLS closed and its view gone.
@@ -414,6 +444,7 @@ class LiveCameraFeedTest {
         val first = feed(ctx)
         first.start()
         idle()
+        extraDue()
         // HLS drew first: it shows while WebRTC loads, as HA's side-by-side does.
         live(HLS).frame()
         idle()
@@ -453,7 +484,8 @@ class LiveCameraFeedTest {
         val first = feed(ctx)
         first.start()
         idle()
-        assertEquals(listOf(HLS, WEB_RTC), first.runningKinds)
+        extraDue()
+        assertEquals(listOf(WEB_RTC, HLS), first.runningKinds)
         assertEquals(1, CameraVideoBudget.extrasInUse)
         // WebRTC fails: HLS, held as the extra, is now the camera's only (main) player.
         live(WEB_RTC).fail()
@@ -461,9 +493,10 @@ class LiveCameraFeedTest {
         assertEquals(listOf(HLS), first.runningKinds)
         assertEquals(0, CameraVideoBudget.extrasInUse)
         // Two more cameras need main players: one takes the free slot, the other waits on MJPEG. Neither takes the
-        // first camera's HLS.
-        val second = feed(ctx)
-        val third = feed(ctx)
+        // first camera's HLS. (Other cameras, whose WebRTC hasn't failed: here another connection's.)
+        val others = context(store())
+        val second = feed(others)
+        val third = feed(others)
         second.start()
         third.start()
         idle()
@@ -525,7 +558,8 @@ class LiveCameraFeedTest {
         val first = feed(ctx)
         first.start()
         idle()
-        assertEquals(listOf(HLS, WEB_RTC), first.runningKinds)
+        extraDue()
+        assertEquals(listOf(WEB_RTC, HLS), first.runningKinds)
         assertEquals(2, CameraVideoBudget.inUse)
         val second = feed(ctx)
         second.start()
@@ -552,9 +586,10 @@ class LiveCameraFeedTest {
         // One slot left: the main player (WebRTC, the kind HA settles on) alone and shown, not HLS first.
         assertEquals(listOf(WEB_RTC), both.runningKinds)
         assertEquals(2, CameraVideoBudget.inUse)
-        // The other camera goes: HLS starts beside WebRTC, as HA loads them.
+        // The other camera goes: HLS starts beside WebRTC (still without video), as HA loads them.
         holder.stop()
         idle()
+        extraDue()
         assertEquals(listOf(WEB_RTC, HLS), both.runningKinds)
         assertEquals(2, CameraVideoBudget.inUse)
     }
@@ -674,7 +709,8 @@ class LiveCameraFeedTest {
         activity.setContentView(parent)
         idle()
         assertTrue(made.isEmpty())
-        assertTrue(wsCalls.isEmpty())
+        // Only HA's capabilities are asked, as the card is built.
+        assertEquals(listOf("camera/capabilities"), wsCalls.map { it.optString("type") })
         showWindow(activity.window.decorView)
         idle()
         val hls = live(HLS)
@@ -706,9 +742,9 @@ class LiveCameraFeedTest {
         sheet.show("camera.porch")
         idle()
         idle()
-        // The sheet's window is GONE: nothing starts.
+        // The sheet's window is GONE: nothing starts (HA's capabilities are asked, as the sheet is built).
         assertTrue(made.isEmpty())
-        assertTrue(wsCalls.isEmpty())
+        assertEquals(listOf("camera/capabilities"), wsCalls.map { it.optString("type") })
         showWindow(activity.window.decorView)
         idle()
         val hls = live(HLS)
@@ -766,10 +802,10 @@ class LiveCameraFeedTest {
         showWindow(activity.window.decorView)
         idle()
         assertTrue(made.isEmpty())
-        assertTrue(wsCalls.isEmpty())
+        assertEquals(listOf("camera/capabilities"), wsCalls.map { it.optString("type") })
         parent.visibility = View.VISIBLE
         idle()
-        assertEquals(listOf(HLS, WEB_RTC), running())
+        assertEquals(listOf(WEB_RTC), running())
     }
 
     @Test
@@ -816,6 +852,7 @@ class LiveCameraFeedTest {
     private fun droppedToMjpeg(f: LiveCameraFeed, mjpegPlays: Boolean) {
         f.start()
         idle()
+        extraDue()
         live(HLS).frame()
         live(WEB_RTC).frame()
         idle()
@@ -840,14 +877,14 @@ class LiveCameraFeedTest {
 
         LiveCameraFeed.connectionRestored(s)
         idle()
-        // The choice starts over as HA's does (HLS and WebRTC side by side); MJPEG stays on screen until video draws.
-        assertEquals(listOf(MJPEG, HLS, WEB_RTC), f.runningKinds)
+        // The choice starts over from WebRTC; MJPEG stays on screen until video draws.
+        assertEquals(listOf(MJPEG, WEB_RTC), f.runningKinds)
         assertEquals(MJPEG, f.shownKind)
         assertTrue("MJPEG heard it too", "restored" in mjpeg.calls)
         live(WEB_RTC).frame()
         idle()
-        // WebRTC shows; HLS goes on hidden until it reports, as HA's ha-camera-stream runs it.
-        assertEquals(listOf(HLS, WEB_RTC), f.runningKinds)
+        // WebRTC shows, and HLS needn't load.
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
         assertEquals(WEB_RTC, f.shownKind)
         assertTrue(mjpeg.closed)
     }
@@ -861,7 +898,7 @@ class LiveCameraFeedTest {
         assertTrue(f.isPolling)
         LiveCameraFeed.connectionRestored(s)
         idle()
-        assertEquals(listOf(HLS, WEB_RTC), f.runningKinds)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
         // The stills go on until the video draws.
         assertTrue(f.isPolling)
         live(WEB_RTC).frame()
@@ -870,7 +907,7 @@ class LiveCameraFeedTest {
         assertFalse(f.isPolling)
         // MJPEG's retry was dropped with its failure: it doesn't open over the video later.
         ms(LiveCameraFeed.RETRY_MS)
-        assertEquals(listOf(HLS, WEB_RTC), f.runningKinds)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
     }
 
     @Test
@@ -879,7 +916,6 @@ class LiveCameraFeedTest {
         val f = feed(context(s))
         f.start()
         idle()
-        live(HLS).frame()
         live(WEB_RTC).frame()
         idle()
         val rtc = live(WEB_RTC)
@@ -920,7 +956,7 @@ class LiveCameraFeedTest {
         assertTrue("nothing opens while hidden", made.none { !it.closed && it.kind != MJPEG })
         f.setActive(true)
         idle()
-        assertEquals(listOf(MJPEG, HLS, WEB_RTC), f.runningKinds)
+        assertEquals(listOf(MJPEG, WEB_RTC), f.runningKinds)
     }
 
     @Test
@@ -936,7 +972,7 @@ class LiveCameraFeedTest {
         ms(LiveCameraFeed.LONG_HIDE_MS)
         f.setActive(true)
         idle()
-        assertEquals(listOf(MJPEG, HLS, WEB_RTC), f.runningKinds)
+        assertEquals(listOf(MJPEG, WEB_RTC), f.runningKinds)
     }
 
     @Test
@@ -946,16 +982,18 @@ class LiveCameraFeedTest {
         ms(LiveCameraFeed.VIDEO_RETRY_MS - 1_000)
         assertEquals(listOf(MJPEG), f.runningKinds)
         ms(1_000)
-        assertEquals(listOf(MJPEG, HLS, WEB_RTC), f.runningKinds)
+        assertEquals(listOf(MJPEG, WEB_RTC), f.runningKinds)
         // It fails again: back on MJPEG, and the next try is a whole wait away.
         live(WEB_RTC).fail()
+        idle()
+        assertEquals(listOf(MJPEG, HLS), f.runningKinds)
         live(HLS).fail()
         idle()
         assertEquals(listOf(MJPEG), f.runningKinds)
         ms(LiveCameraFeed.VIDEO_RETRY_MS - 1_000)
         assertEquals(listOf(MJPEG), f.runningKinds)
         ms(1_000)
-        assertEquals(listOf(MJPEG, HLS, WEB_RTC), f.runningKinds)
+        assertEquals(listOf(MJPEG, WEB_RTC), f.runningKinds)
     }
 
     @Test
@@ -996,5 +1034,487 @@ class LiveCameraFeedTest {
         c.fail("test", IllegalStateException("boom"))
         idle()
         assertTrue(hls.closed)
+    }
+
+    // ---- More Info comes first for a slot (#799 C2)
+
+    /** Four cameras on WebRTC, one slot each, with video: every slot held by a main player. */
+    private fun fourOnWebRtc(ctx: VitroCardContext): List<LiveCameraFeed> {
+        val cams = (0 until 4).map { feed(ctx) }
+        cams.forEach { it.start() }
+        idle()
+        made.filter { it.kind == WEB_RTC && !it.closed }.forEach { it.frame() }
+        idle()
+        for (c in cams) assertEquals(listOf(WEB_RTC), c.runningKinds)
+        assertEquals(4, CameraVideoBudget.inUse)
+        return cams
+    }
+
+    @Test
+    fun theMoreInfoCameraTakesASlotFromACardBehindAndGivesItBackWhenItCloses() {
+        val st = store()
+        val cams = fourOnWebRtc(context(st))
+        val sheet = dev.glassworks.engine.vitro.cards.MoreInfoSheet(context(st)) {}
+        activity.setContentView(sheet)
+        showWindow(activity.window.decorView)
+        sheet.show("camera.porch")
+        idle()
+        idle()
+        // The sheet plays WebRTC, not MJPEG; the card granted last plays MJPEG meanwhile, and the cap holds.
+        val sheetRtc = made.last { it.kind == WEB_RTC }
+        assertFalse(sheetRtc.closed)
+        assertEquals(listOf(MJPEG), cams.last().runningKinds)
+        for (c in cams.dropLast(1)) assertEquals(listOf(WEB_RTC), c.runningKinds)
+        assertEquals(4, CameraVideoBudget.inUse)
+        assertTrue("peak $peakVideo", peakVideo <= CameraVideoBudget.MAX_VIDEO_CAMERAS)
+        // The sheet closes: that card takes WebRTC up again.
+        sheet.dismiss()
+        activity.setContentView(View(activity))
+        idle()
+        idle()
+        assertTrue(sheetRtc.closed)
+        assertEquals(listOf(WEB_RTC), cams.last().runningKinds)
+    }
+
+    @Test
+    fun aCardNeverTakesASlotFromAnotherCardOnlyMoreInfoDoes() {
+        val ctx = context(store())
+        val cams = fourOnWebRtc(ctx)
+        val fifth = feed(ctx)
+        fifth.start()
+        idle()
+        assertEquals(listOf(MJPEG), fifth.runningKinds)
+        for (c in cams) assertEquals(listOf(WEB_RTC), c.runningKinds)
+        // A foreground camera (More Info's) does, and the card it took the slot from is first in line for the next.
+        val sheet = LiveCameraFeed(ctx, "camera.porch", { null }, host = FrameLayout(activity), foreground = true) {}
+        sheet.start()
+        idle()
+        assertEquals(listOf(WEB_RTC), sheet.runningKinds)
+        assertEquals(listOf(MJPEG), cams.last().runningKinds)
+        sheet.stop()
+        idle()
+        assertTrue(WEB_RTC in cams.last().runningKinds)
+        assertEquals(listOf(MJPEG), fifth.runningKinds)
+    }
+
+    // ---- WebRTC that can't connect (#799 C3)
+
+    @Test
+    fun aWebRtcThatCouldntConnectSendsTheCamerasOtherPicturesToHlsForAWhile() {
+        val ctx = context(store())
+        val first = feed(ctx)
+        first.start()
+        idle()
+        live(WEB_RTC).fail()
+        idle()
+        assertEquals(listOf(HLS), first.runningKinds)
+        // The camera's picture made again (a rebuilt view, More Info): HLS at once, no WebRTC to wait for.
+        val again = feed(ctx)
+        again.start()
+        idle()
+        assertEquals(listOf(HLS), again.runningKinds)
+        again.stop()
+        // Later, WebRTC is tried first again.
+        ms(dev.glassworks.engine.vitro.camera.CameraKnowledge.WEBRTC_FAILED_FOR_MS)
+        val later = feed(ctx)
+        later.start()
+        idle()
+        assertEquals(listOf(WEB_RTC), later.runningKinds)
+    }
+
+    @Test
+    fun aWebRtcThatFailedForWantOfHasConnectionIsNotHeldAgainstTheCamera() {
+        val ctx = context(store())
+        val first = feed(ctx)
+        first.start()
+        idle()
+        live(WEB_RTC).listener!!.onError("start_failed: not_connected: no connection")
+        idle()
+        val again = feed(ctx)
+        again.start()
+        idle()
+        assertEquals(listOf(WEB_RTC), again.runningKinds)
+    }
+
+    @Test
+    fun webRtcAloneWithoutVideoGivesWayToHlsSoonerThanItsOwnTimeout() {
+        // One slot: WebRTC can't have HLS beside it.
+        CameraVideoBudget.max = 1
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS - 100)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        ms(100)
+        assertTrue(made.first { it.kind == WEB_RTC }.closed)
+        assertEquals(listOf(HLS), f.runningKinds)
+        assertEquals(1, CameraVideoBudget.inUse)
+    }
+
+    @Test
+    fun webRtcWithHlsBesideItKeepsItsOwnTimeout() {
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        extraDue()
+        assertEquals(listOf(WEB_RTC, HLS), f.runningKinds)
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS * 2)
+        assertEquals(listOf(WEB_RTC, HLS), f.runningKinds)
+    }
+
+    @Test
+    fun aWebRtcThatShowsVideoInTimeIsntCutOff() {
+        CameraVideoBudget.max = 1
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS / 2)
+        live(WEB_RTC).frame()
+        idle()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        assertEquals(WEB_RTC, f.shownKind)
+    }
+
+    // ---- The first frame's levers (#799 C4)
+
+    @Test
+    fun capabilitiesAreAskedAsTheCardIsBuiltAndOnceForEveryPictureOfTheCamera() {
+        val ctx = context(store())
+        val first = feed(ctx)
+        // Built, not started: asked already.
+        assertEquals(listOf("camera/capabilities"), wsCalls.map { it.optString("type") })
+        val second = feed(ctx)
+        idle()
+        first.start()
+        second.start()
+        idle()
+        assertEquals(1, wsCalls.count { it.optString("type") == "camera/capabilities" })
+        assertEquals(listOf(WEB_RTC), first.runningKinds)
+        assertEquals(listOf(WEB_RTC), second.runningKinds)
+        // HA offers WebRTC: its player got ready while the view built.
+        assertEquals(listOf(WEB_RTC), prewarmed)
+    }
+
+    @Test
+    fun theConnectionBackAfterADropAsksForCapabilitiesAgain() {
+        val s = store()
+        feed(context(s))
+        idle()
+        LiveCameraFeed.connectionRestored(s)
+        val f = feed(context(s))
+        idle()
+        f.start()
+        idle()
+        assertEquals(2, wsCalls.count { it.optString("type") == "camera/capabilities" })
+    }
+
+    @Test
+    fun aCameraThatOffersNoWebRtcPrewarmsNothing() {
+        capabilities = JSONObject().put("frontend_stream_types", JSONArray().put("hls"))
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        assertEquals(listOf(HLS), f.runningKinds)
+        assertTrue(prewarmed.isEmpty())
+    }
+
+    @Test
+    fun webRtcWithVideoInItsFirstMomentsNeverLoadsHls() {
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        live(WEB_RTC).frame()
+        idle()
+        extraDue()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        assertTrue(made.none { it.kind == HLS })
+        assertEquals(1, CameraVideoBudget.inUse)
+    }
+
+    @Test
+    fun hlsLoadingBesideWebRtcStopsOnceWebRtcHasVideo() {
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        extraDue()
+        assertEquals(listOf(WEB_RTC, HLS), f.runningKinds)
+        live(WEB_RTC).frame()
+        idle()
+        // HA would run HLS hidden until it loads, then show WebRTC anyway (muted): it goes now.
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        assertEquals(1, CameraVideoBudget.inUse)
+    }
+
+    @Test
+    fun heavysFourCamerasNeverOpenAnHlsTheNextCameraTakesBack() {
+        val ctx = context(store())
+        val cams = (0 until 4).map { feed(ctx) }
+        for (c in cams) {
+            c.start()
+            idle()
+        }
+        made.filter { it.kind == WEB_RTC && !it.closed }.forEach { it.frame() }
+        idle()
+        extraDue()
+        for (c in cams) assertEquals(listOf(WEB_RTC), c.runningKinds)
+        assertTrue(made.none { it.kind == HLS })
+        assertEquals(4, made.size)
+    }
+
+    // ---- Hidden and off-screen cameras (#799 C6, C7; G L4)
+
+    @Test
+    fun aPlayerThatKeepsNothingWorthKeepingIsClosedWhenHiddenAndOpenedAgainOnShow() {
+        closesWhenHiddenFor += WEB_RTC
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        val rtc = live(WEB_RTC)
+        rtc.frame()
+        idle()
+        f.setActive(false)
+        assertTrue(rtc.closed)
+        assertFalse("closed, not paused", "active false" in rtc.calls)
+        assertEquals(0, CameraVideoBudget.inUse)
+        f.setActive(true)
+        idle()
+        // A new one, straight to WebRTC (it had video): no HLS beside it.
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        assertTrue(live(WEB_RTC) !== rtc)
+        assertEquals(1, CameraVideoBudget.inUse)
+    }
+
+    @Test
+    fun aReplacementOpenedOnShowThatShowsNoVideoStillGivesWayToHls() {
+        closesWhenHiddenFor += WEB_RTC
+        CameraVideoBudget.max = 1
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        live(WEB_RTC).frame()
+        idle()
+        f.setActive(false)
+        f.setActive(true)
+        idle()
+        // The new player has shown nothing: it gets WebRTC's short wait alone, then HLS takes over.
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
+        assertEquals(listOf(HLS), f.runningKinds)
+    }
+
+    @Test
+    fun aParkedCamerasReplacementThatShowsNoVideoStillGivesWayToHls() {
+        CameraVideoBudget.max = 1
+        val top = feed(context(store()))
+        top.start()
+        idle()
+        live(WEB_RTC).frame()
+        idle()
+        val below = feed(context(store()))
+        below.start()
+        idle()
+        top.setOnScreen(false)
+        ms(LiveCameraFeed.PARK_MS)
+        idle()
+        assertEquals(emptyList<CameraStreamKind>(), top.runningKinds)
+        // The camera below goes; the top one, back on screen, takes the slot with a new WebRTC that shows nothing.
+        below.stop()
+        top.setOnScreen(true)
+        idle()
+        assertEquals(listOf(WEB_RTC), top.runningKinds)
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
+        assertEquals(listOf(HLS), top.runningKinds)
+    }
+
+    @Test
+    fun aCardMoreInfoTookTheSlotFromComesBackAsANewPlayer() {
+        val st = store()
+        val cams = fourOnWebRtc(context(st))
+        val sheet = LiveCameraFeed(context(st), "camera.porch", { null }, host = FrameLayout(activity), foreground = true) {}
+        sheet.start()
+        idle()
+        assertEquals(listOf(MJPEG), cams.last().runningKinds)
+        sheet.stop()
+        idle()
+        // Its new WebRTC has shown nothing: loading, so with no slot for HLS beside it, it gets WebRTC's short wait
+        // alone and then HLS, as any new player.
+        assertEquals(listOf(WEB_RTC), cams.last().runningKinds)
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
+        assertEquals(listOf(HLS), cams.last().runningKinds)
+    }
+
+    @Test
+    fun aCameraThatLostTheStreamFeatureIsReadAgainOnStartAndReconnect() {
+        val st = EntityStore().apply {
+            putLocal(EntityState("camera.porch", "streaming", mapOf("supported_features" to 2)))
+        }
+        val f = feed(context(st))
+        f.start()
+        idle()
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        // HA restarts and the camera lost its STREAM feature: MJPEG, without asking.
+        st.putLocal(EntityState("camera.porch", "streaming", mapOf("supported_features" to 0)))
+        LiveCameraFeed.connectionRestored(st)
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        assertEquals(1, wsCalls.count { it.optString("type") == "camera/capabilities" })
+        f.stop()
+        f.start()
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+    }
+
+    @Test
+    fun aCapabilitiesRequestLostToAReconnectIsAskedAgain() {
+        // HA never answers the first request: the connection dropped with it.
+        val pending = ArrayList<(Boolean, Any?, JSONObject?) -> Unit>()
+        pendingCaps = pending
+        val s = store()
+        val f = feed(context(s))
+        f.start()
+        idle()
+        assertEquals(1, pending.size)
+        LiveCameraFeed.connectionRestored(s)
+        idle()
+        assertEquals(2, pending.size)
+        // The old reply lands late: dropped. The new one is the answer.
+        pending[0](true, JSONObject().put("frontend_stream_types", JSONArray()), null)
+        idle()
+        assertTrue(f.runningKinds.isEmpty())
+        pending[1](true, capabilities, null)
+        idle()
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+    }
+
+    @Test
+    fun aCameraHeardBackAfterADropAsksHaAgainAndTakesUpWhatItOffersNow() {
+        // HA offered no stream type; it restarts with HLS on.
+        capabilities = JSONObject().put("frontend_stream_types", JSONArray())
+        val s = store()
+        val f = feed(context(s))
+        f.start()
+        idle()
+        assertEquals(listOf(MJPEG), f.runningKinds)
+        capabilities = JSONObject().put("frontend_stream_types", JSONArray().put("hls"))
+        LiveCameraFeed.connectionRestored(s)
+        idle()
+        assertEquals(2, wsCalls.count { it.optString("type") == "camera/capabilities" })
+        assertTrue(HLS in f.runningKinds)
+        // Stopped and started again, it takes the connection's answer, not a copy of its own from before.
+        f.stop()
+        f.start()
+        idle()
+        assertEquals(listOf(HLS), f.runningKinds)
+    }
+
+    @Test
+    fun anOffScreenCameraStopsDrawingAtOnceAndDrawsAgainBackOnScreen() {
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        val rtc = live(WEB_RTC)
+        rtc.frame()
+        idle()
+        f.setOnScreen(false)
+        assertEquals("rendering false", rtc.calls.last())
+        assertFalse(rtc.closed)
+        f.setOnScreen(true)
+        assertEquals("rendering true", rtc.calls.last())
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+    }
+
+    @Test
+    fun anOffScreenCamerasSlotGoesToACameraOnScreenThatWaits() {
+        CameraVideoBudget.max = 1
+        val ctx = context(store())
+        val top = feed(ctx)
+        top.start()
+        idle()
+        live(WEB_RTC).frame()
+        idle()
+        val below = feed(context(store()))
+        below.start()
+        idle()
+        assertEquals(listOf(MJPEG), below.runningKinds)
+        // Scrolled: the top camera off screen, the one below on it. A moment off screen changes nothing.
+        top.setOnScreen(false)
+        ms(LiveCameraFeed.PARK_MS - 100)
+        assertEquals(listOf(WEB_RTC), top.runningKinds)
+        assertEquals(listOf(MJPEG), below.runningKinds)
+        ms(100)
+        idle()
+        // Off screen a while: its slot goes to the camera on screen, and it rests (no MJPEG off screen either).
+        assertEquals(emptyList<CameraStreamKind>(), top.runningKinds)
+        assertTrue(WEB_RTC in below.runningKinds)
+        assertEquals(1, CameraVideoBudget.inUse)
+        // Back on screen: it waits for a slot on MJPEG, as any camera past the cap.
+        top.setOnScreen(true)
+        idle()
+        assertEquals(listOf(MJPEG), top.runningKinds)
+        assertTrue(peakVideo <= 1)
+    }
+
+    @Test
+    fun anOffScreenCameraNobodyWaitsForKeepsPlaying() {
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        live(WEB_RTC).frame()
+        idle()
+        f.setOnScreen(false)
+        ms(LiveCameraFeed.PARK_MS * 10)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        // Then one does: the slot goes at once.
+        CameraVideoBudget.max = 1
+        val other = feed(context(store()))
+        other.start()
+        idle()
+        idle()
+        assertEquals(emptyList<CameraStreamKind>(), f.runningKinds)
+        assertTrue(WEB_RTC in other.runningKinds)
+    }
+
+    /** What a frame does after a scroll: the window's scroll listeners hear it. */
+    private fun scrolled() = org.robolectric.util.ReflectionHelpers.callInstanceMethod<Unit>(
+        activity.window.decorView.viewTreeObserver, "dispatchOnScrollChanged",
+    )
+
+    @Test
+    fun aCardScrolledOutOfSightTellsItsCameraItsOffScreen() {
+        val scroll = android.widget.ScrollView(activity)
+        val column = android.widget.LinearLayout(activity).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        scroll.addView(column)
+        val c = card(context(store(), kinds = setOf(HLS, MJPEG)), extra = ", \"aspect_ratio\": \"16:9\"")
+        column.addView(c, android.widget.LinearLayout.LayoutParams(720, 405))
+        column.addView(View(activity), android.widget.LinearLayout.LayoutParams(720, 4000))
+        activity.setContentView(scroll, android.view.ViewGroup.LayoutParams(720, 720))
+        showWindow(activity.window.decorView)
+        idle()
+        val hls = live(HLS)
+        assertFalse("rendering false" in hls.calls)
+        scroll.scrollTo(0, 2000)
+        idle()
+        scrolled()
+        assertEquals("rendering false", hls.calls.last())
+        scroll.scrollTo(0, 0)
+        scrolled()
+        assertEquals("rendering true", hls.calls.last())
+    }
+
+    // ---- Logged fallbacks (#799 C8)
+
+    @Test
+    fun aFallbackIsLoggedOnceWithItsCodeOnly() {
+        org.robolectric.shadows.ShadowLog.clear()
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        live(WEB_RTC).listener!!.onError("start_failed: webrtc_offer_failed: rtsp://user:secret@192.0.2.7/stream")
+        idle()
+        val lines = org.robolectric.shadows.ShadowLog.getLogsForTag("VitroCamera").map { it.msg }
+        assertEquals(listOf("camera.porch: web_rtc fell back (start_failed: webrtc_offer_failed)"), lines)
+        assertEquals("error", LiveCameraFeed.codeOf("Something: else"))
     }
 }

@@ -1,5 +1,6 @@
 {
  "title": "clock-weather-card: the clock, today's weather and five days (still icons)",
+ "route": "island",
  "card": {
   "type": "custom:clock-weather-card",
   "entity": "weather.forecast_home",

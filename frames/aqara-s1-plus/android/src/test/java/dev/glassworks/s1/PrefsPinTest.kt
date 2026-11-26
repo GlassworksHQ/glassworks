@@ -127,6 +127,11 @@ class PrefsPinTest {
         kiosk.turnVitroOffAfterCrashes("ClassCastException in WeatherCardView.showMetric", 1_700_000_000_000L)
         kiosk.vitroTurnedOff
         kiosk.takeVitroOffNotice()
+        // its boot marker: a start begun, drawn, then settled with a strike count
+        kiosk.beginVitroStart(KioskPrefs.VitroStart(1, "count:7", 4_000, 1_000L, 1_700_000_000_000L))
+        kiosk.markVitroStartDrawn()
+        kiosk.recordVitroStrikes(1)
+        kiosk.recordVitroStrikes(0)
         PanePrefs.PANE_FILES.keys.forEach(panes::paneFile)
         kiosk.remoteDebugging(BuildConfig.DEBUG) // the default the runtime passes (GlassworksRuntime.build)
         // #691: a custom theme's palettes, saved and cleared
@@ -265,6 +270,8 @@ class PrefsPinTest {
             "KioskPrefs.setHaDark",
             "KioskPrefs.setHaColors",
             "KioskPrefs.turnVitroOffAfterCrashes",
+            "KioskPrefs.beginVitroStart",
+            "KioskPrefs.recordVitroStrikes",
         )
     }
 }

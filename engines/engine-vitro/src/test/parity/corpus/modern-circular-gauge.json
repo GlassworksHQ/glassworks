@@ -1,5 +1,6 @@
 {
  "title": "modern-circular-gauge: humidity on a 0-100 ring",
+ "route": "island",
  "card": {
   "type": "custom:modern-circular-gauge",
   "entity": "sensor.living_room_humidity",

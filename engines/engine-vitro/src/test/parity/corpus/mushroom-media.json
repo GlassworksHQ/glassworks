@@ -1,5 +1,6 @@
 {
  "title": "Mushroom media player card, idle speaker",
+ "route": "island",
  "card": {
   "type": "custom:mushroom-media-player-card",
   "entity": "media_player.living_room_speaker",
