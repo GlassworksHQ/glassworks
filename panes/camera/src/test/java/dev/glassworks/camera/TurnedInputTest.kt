@@ -45,4 +45,11 @@ class TurnedInputTest {
         assertEquals(1280 to 720, turnedSize(1280, 720, 180))
         assertEquals(1280 to 720, turnedSize(1280, 720, 0))
     }
+
+    @Test fun anEncoderListedLandscapeTakesItsSizeTurned() {
+        val mirror = { w: Int, h: Int -> w <= 1920 && h <= 1088 }
+        assertEquals("720x1280 fits as 1280x720", true, takesEitherWay(720, 1280, mirror))
+        assertEquals(true, takesEitherWay(1280, 720, mirror))
+        assertEquals("too big either way", false, takesEitherWay(1088, 2400, mirror))
+    }
 }
