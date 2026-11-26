@@ -329,7 +329,7 @@
     "update_percentage": null,
     "skipped_version": null,
     "release_summary": null,
-    "release_url": "https://example.com/releases/2026.11.0",
+    "release_url": "https://homeassistant.local/releases/2026.11.0",
     "entity_picture": null,
     "supported_features": 21,
     "installed_version": "2026.10.1",
@@ -393,7 +393,7 @@
     "entity_id": "update.hallway_display_firmware"
    },
    "events": [],
-   "result": "## What's new\n\nThe display now wakes faster\nand dims at night.\n\n- **Faster** start\n- Fixed the [backlight](https://example.com/notes) flicker\n\n### Thanks\n\nTo everyone who tested it."
+   "result": "## What's new\n\nThe display now wakes faster\nand dims at night.\n\n- **Faster** start\n- Fixed the [backlight](https://homeassistant.local/notes) flicker\n\n### Thanks\n\nTo everyone who tested it."
   }
  ]
 }
