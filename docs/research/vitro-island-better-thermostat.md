@@ -251,6 +251,79 @@ The watch's logic also runs in CI against a fake DOM (`test/island-frontend.test
 What it rules out: a list of cards. Of four popular island cards, two use nothing an island lacks, one would hand off
 (and draws blank for another reason), and Better Thermostat's two cards from one script land on both sides.
 
+## Empty islands on the real-S1 run (2026-11-26)
+
+A video run on an S1 (exp/vitro `4fb3b5e`, before #915) showed the Mushroom islands with "Entity not found" (media
+player, fan, lock, entity cards, a climate card), mini-graph-card islands blank, Bubble Card islands fine, and white
+arcs on the rounded ends of Bubble's slider. The dashboard came from a fake HA on a loopback origin through
+`adb reverse`, while the panel stayed signed in to a real HA, so Vitro logged "Not sending the Home Assistant token to
+a dashboard on another origin than the panel's" (every 30 s: the client asks for its token that often; now once).
+
+### How we got here
+
+The first guess was the test setup. The parity harness's fake home (`tools/vitro-parity/fakehome.py`) serves one
+corpus case's fixture at a time, and its dashboard has one view per case, so every other case's entities really have
+no state there; Bubble's slider uses `light.living_room_lamp`, which most fixtures share. That explains some of it but
+not why a card whose state *is* there shows "Entity not found". So the cards ran in a real island page with their own
+fixture (`island-probe.mjs`, Chromium, 2026-11-26, **verified**):
+
+```
+$ node tools/vitro-parity/island-probe.mjs /tmp/mushroom-fan.json --eval 'c => { try { c.render(); return "ok" } catch (e) { return e.stack } }'
+eval: "TypeError: Cannot read properties of undefined (reading 'split')
+    at ge (…/hacsfiles/lovelace-mushroom/mushroom.js?hacstag=v5.3.0:1:24368)
+    at mg (…mushroom.js:816:29)
+    at OA.render (…mushroom.js:2274:1471)"
+```
+
+`mg` is Mushroom 5.3's name helper: `ge(hass.config.version, 2026, 4) ? hass.formatEntityName(...) : friendly_name`.
+The island's `hass.config` had no `version` (the page bakes in `get_config` as the panel has it when the page is
+made: `{}` before the client's answer, and on a new client after a reconnect), so `ge` threw. With a version of 2026.4
+or later, Mushroom calls `hass.formatEntityName`, which the island didn't have (#915 had listed it as a known gap), so
+it threw there instead. Mushroom's first render came before the bridge's states (`if (!stateObj) renderNotFound()`,
+which needs neither), so "Entity not found" was drawn, and every later render, now with the state, threw and left it
+there. Bubble and mini-graph don't read either member. **This is not an artifact of the setup:** any island built
+before the config arrived, or any Mushroom 5.3 island on HA 2026.4 or later, showed it.
+
+mini-graph-card fetches its history over REST through the island proxy; with the token withheld for the other origin
+(right), HA's answer is a 401 and the graph stays empty. That one is the setup: on a real panel the dashboard's origin
+is the panel's (another origin never authenticates, and the panel goes to sign-in).
+
+#915's safety net didn't catch it: the card wasn't blank (it had drawn "Entity not found"), and the net measured the
+card's host, which for an inline custom element around a block `ha-card` is 0 px tall (a false positive the probe
+showed too).
+
+### What changed
+
+- `hass.config` comes over the bridge with the states (`config`), and again when the panel's client reads it.
+- The page makes the card only once it has the panel's states, and HA's config (up to 3 s), as HA's frontend draws a
+  card once `hass` has them; while no states come, an honest notice ("Connection lost. Reconnecting…", HA's words)
+  takes the card's place instead of a blank or a card drawn with none.
+- `hass.formatEntityName` is HA's (`compute_entity_name_display.ts`), with the registries (`next_name_part` now
+  reaches the island); the attribute formatters are HA's for numbers, units and translations (Mushroom's fan shows
+  "20%", as HA, not "20").
+- The safety net measures what the card drew (its shadow root's content), and a card whose every update fails on a
+  missing member (3 in 10 s) goes to HA's frontend, drawn or not.
+
+### The white arcs on Bubble's slider (**untested on a panel**)
+
+Bubble's CSS has no white fallback on that path, the same card is clean in HA's own page on the same GeckoView, and a
+transparent Chromium shot of the island composites with dark edges. What differs is that an island page is
+transparent and HA's is opaque: every anti-aliased edge of an island is half transparent, and Android composites the
+island's surface over Vitro's view. Edges that come out lighter than their color, most visible on Bubble's light slider
+fill (`rgb(225,225,210)` at 0.7), fit alpha that isn't premultiplied the way the compositor expects. Gecko under
+Playwright's Firefox wouldn't start in this environment, so this is reasoned, not seen. The change: an inline island on
+a view of one opaque color paints that color itself (it has no half-transparent pixels left); on a picture or a
+gradient it stays transparent. A panel run decides it.
+
+### The check that would have caught it
+
+`IslandEndToEndTest` runs the real path: the corpus fixtures' states and registries in Vitro's store, Vitro's island
+server and bridge, and each island page drawn by headless Chromium with the pinned bundles from a fake HA on loopback
+(`src/test/js/island-e2e.mjs`). Mushroom (entity, media, fan), mini-graph-card and Bubble Card must show their states
+and HA's names, never "Entity not found" or a blank card; a guard case makes the page before the config, which arrives
+over the bridge 1.5 s later. With the guard's config held back, it fails with the panel's error (`reading 'split'`,
+drew nothing); with the fixes it passes in about 7 s. CI's `app` job runs it (`GW_VITRO_ISLAND_E2E=1`).
+
 ## Open questions
 
 - The island waits up to 4 s before it reports a missing element; HA shows its error card after 2 s. The longer wait
@@ -258,7 +331,7 @@ What it rules out: a list of cards. Of four popular island cards, two use nothin
 - The tablet's island memory numbers in its run (about 24 MiB per island) were taken with these blank islands; a card
   that draws will cost more.
 - ~~scheduler-card draws blank in an island~~: answered above (the missing members, and `cardBroken` for the next
-  one). Each island page reads HA's strings (about 1 MB of JSON for English) once from the browser's cache; what that
+  one). The white arcs on Bubble's slider: the opaque island page is the change; a panel run checks it. Each island page reads HA's strings (about 1 MB of JSON for English) once from the browser's cache; what that
   costs per island on the S1 isn't measured yet.
 - scheduler-card's `ha-button` shows its label when undefined (its text is its own children) but loses its button look.
   A stand-in for `ha-button` would keep such cards in islands; none is written yet.

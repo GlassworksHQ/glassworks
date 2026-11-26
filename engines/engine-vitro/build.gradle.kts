@@ -54,6 +54,14 @@ tasks.withType<Test>().configureEach {
     systemProperty("https.proxyPort", "9")
     systemProperty("http.nonProxyHosts", listOfNotNull("localhost", "127.*", "[::1]", robolectricRepo, "repo1.maven.org").joinToString("|"))
     inputs.dir("src/test/parity").withPropertyName("vitroParity").withPathSensitivity(PathSensitivity.RELATIVE)
+    // The island page's scripts under node (IslandHassContractTest, island-hass.test.mjs), HA's types it's held to, and
+    // the island end to end (IslandEndToEndTest, island-e2e.mjs): the pinned cards and the browser it drives.
+    inputs.dir("src/test/js").withPropertyName("vitroIslandJs").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir("src/test/ha-frontend").withPropertyName("vitroHaTypes").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(rootProject.file("tools/vitro-parity/cards.json"), rootProject.file("tools/vitro-parity/lib/browser.mjs"))
+        .withPropertyName("vitroIslandE2eTools").withPathSensitivity(PathSensitivity.RELATIVE)
+    // The end to end runs only with GW_VITRO_ISLAND_E2E=1 (CI's app job): a run with it is never one without it.
+    inputs.property("vitroIslandE2e", System.getenv("GW_VITRO_ISLAND_E2E") ?: "")
     // ClarityStatsTest holds Vitro's Clarity harness to the web harness's cases.
     inputs.file(rootProject.file("tools/perf/test/stats-cases.json")).withPropertyName("clarityStatsCases")
         .withPathSensitivity(PathSensitivity.RELATIVE)

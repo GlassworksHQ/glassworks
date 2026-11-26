@@ -24,7 +24,7 @@ object HassRegistries {
 
     /**
      * `hass.entities` from `list_for_display`'s compressed answer (`{entities: [{ei, di, ai, lb, ec, en, ic, pl, tk,
-     * hb, dp, hn}], entity_categories: {"0": "config", …}}`), as HA's frontend expands it: a field HA left out stays
+     * hb, dp, hn, np}], entity_categories: {"0": "config", …}}`), as HA's frontend expands it: a field HA left out stays
      * out (undefined to a card), and `labels` is always a list.
      */
     fun entities(result: JSONObject?): JSONObject {
@@ -51,6 +51,8 @@ object HassRegistries {
             copy("ic", "icon")
             copy("hb", "hidden")
             copy("dp", "display_precision")
+            // Whether the device's name comes before the entity's own (HA's name composition, formatEntityName).
+            copy("np", "next_name_part")
             out.put(id, entry)
         }
         return out

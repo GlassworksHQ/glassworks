@@ -172,12 +172,24 @@ class VitroCardContext(
      */
     val haConnected: () -> Boolean = { true },
     /**
+     * Counts the connections to Home Assistant that came up: a web island page whose bridge was down learns from it
+     * whether HA's connection changed meanwhile (its `resubscribe: false` subscriptions then ended). The default
+     * (tests, no engine) never changes.
+     */
+    val haConnectionEpoch: () -> Long = { 0L },
+    /**
      * [onChange] runs (on any thread) each time the connection to Home Assistant goes down (false) or is up again
      * (true), until the returned handle is called: a web island's `hass.connection` fires `disconnected` and `ready`,
      * and its subscriptions start again. HA drops a connection's subscriptions with it. The default (tests, no engine)
      * never calls it.
      */
     val watchConnection: (onChange: (connected: Boolean) -> Unit) -> () -> Unit = { { } },
+    /**
+     * [onChange] gets Home Assistant's config ([haConfig], `get_config`) each time a connection reads it, on any
+     * thread, until the returned handle is called: a web island's `hass.config` follows it (a page made before it
+     * arrived has none, and HA's cards read its `version`). The default (tests, no engine) never calls it.
+     */
+    val watchConfig: (onChange: (JSONObject) -> Unit) -> () -> Unit = { { } },
     /**
      * What Home Assistant's web UI keeps in `localStorage` on this panel ([dev.glassworks.web.HaPageStorage]), or null
      * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
@@ -241,7 +253,9 @@ class VitroCardContext(
         needsFrontend = needsFrontend,
         islandFailed = islandFailed,
         haConnected = haConnected,
+        haConnectionEpoch = haConnectionEpoch,
         watchConnection = watchConnection,
+        watchConfig = watchConfig,
         pageStorage = pageStorage,
     ).also {
         it.cardVars = cardVars

@@ -36,7 +36,10 @@ import java.io.File
 @Config(sdk = [34], application = Application::class)
 class IslandHassContractTest {
 
-    private fun page(): String {
+    private fun page(
+        config: JSONObject = JSONObject().put("version", "2026.11.0").put("components", org.json.JSONArray())
+            .put("unit_system", JSONObject().put("temperature", "°C").put("length", "km")),
+    ): String {
         val ctx = VitroCardContext(
             context = RuntimeEnvironment.getApplication(),
             haBase = "http://homeassistant.local:8123",
@@ -44,7 +47,7 @@ class IslandHassContractTest {
             theme = ThemeResolver.resolve(ThemeCatalog(), true),
             resources = emptyList(),
             accessToken = { "made-up-token" },
-            haConfig = { JSONObject().put("version", "2026.11.0").put("components", org.json.JSONArray()) },
+            haConfig = { config },
             callService = { _, _, _, _ -> },
             navigate = {},
             openMoreInfo = {},
@@ -69,13 +72,16 @@ class IslandHassContractTest {
         // Kept in the build folder: `ISLAND_MODULE=… HASS_TYPES=… node --test src/test/js/island-hass.test.mjs` runs it again.
         val module = File(RepoFiles.root, "engines/engine-vitro/build/vitro-island/island-module.js")
         module.parentFile.mkdirs()
+        // The same page made before the panel had HA's config: it waits for the bridge's.
+        val noConfig = File(module.parentFile, "island-module-no-config.js")
         run {
             module.writeText(bridgeModule(page()))
+            noConfig.writeText(bridgeModule(page(JSONObject())))
             val harness = File(RepoFiles.root, "engines/engine-vitro/src/test/js/island-hass.test.mjs")
             val types = File(RepoFiles.root, "engines/engine-vitro/src/test/ha-frontend/hass-types.ts")
             val (code, out) = IslandNode.run(
                 node, listOf("--test", harness.path),
-                env = mapOf("ISLAND_MODULE" to module.path, "HASS_TYPES" to types.path),
+                env = mapOf("ISLAND_MODULE" to module.path, "ISLAND_MODULE_NO_CONFIG" to noConfig.path, "HASS_TYPES" to types.path),
                 timeoutSeconds = 120,
             )
             assertEquals(out, 0, code)
@@ -105,8 +111,9 @@ class IslandHassContractTest {
             assertEquals(german.hash, IslandStrings.byHash(german.hash)?.hash)
             assertNull("never another set's strings", IslandStrings.byHash("0123456789abcdef01234567"))
             assertEquals("${IslandStrings.PREFIX}${german.hash}.json", IslandStrings.path())
-            // Back to English after three more sets, then one more: English, made again, is among the last ones kept.
-            for (lang in listOf("fr", "es", "it")) {
+            // Four sets (en, de, fr, es), English made again, then one more: English, made again, counts as the newest
+            // and stays; without that, the fifth would push it out as the oldest.
+            for (lang in listOf("fr", "es")) {
                 dev.glassworks.engine.vitro.data.HaText.install(lang, mapOf("ui.common.save" to lang))
                 IslandStrings.current()
             }
@@ -115,6 +122,10 @@ class IslandHassContractTest {
             dev.glassworks.engine.vitro.data.HaText.install("nl", mapOf("ui.common.save" to "Opslaan"))
             IslandStrings.current()
             assertEquals("made again counts as new", english.hash, IslandStrings.byHash(english.hash)?.hash)
+            assertNull("German, the oldest, went", IslandStrings.byHash(german.hash))
+            // A lookup makes no set, so it can't push out the one it looks for.
+            dev.glassworks.engine.vitro.data.HaText.install("pt", mapOf("ui.common.save" to "Guardar"))
+            assertEquals(english.hash, IslandStrings.byHash(english.hash)?.hash)
         } finally {
             dev.glassworks.engine.vitro.data.HaText.reset()
         }
