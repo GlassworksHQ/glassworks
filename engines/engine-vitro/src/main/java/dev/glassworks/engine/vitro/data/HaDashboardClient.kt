@@ -455,6 +455,8 @@ class HaDashboardClient(
                 }
                 if (due) return@request
             }
+            // A retry's answer is its fetch's alone: a newer fetch of the same dashboard has its own answer coming.
+            if (attempt > 0 && synchronized(pathLock) { dashboardFetch != fetch }) return@request
             // Nothing is handed on before HA has said whether this user may see the dashboard.
             afterAccessKnown {
                 val ok = res.optBoolean("success", false)

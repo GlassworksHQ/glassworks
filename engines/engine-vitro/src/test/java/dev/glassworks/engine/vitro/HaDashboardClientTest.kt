@@ -1605,15 +1605,27 @@ class HaDashboardClientTest {
         awaitCondition("the new name") { HaDisplay.deviceName("dev-1") == "Ceiling Lamp" }
     }
 
-    /** A socket whose reader waits while [open] is false: answers pile up, to be read in one go. */
+    /**
+     * A socket whose reader waits while [open] is false: answers pile up, to be read in one go. [atGate] says the reader
+     * is waiting there; a close lets it through.
+     */
     private class GatedSocket(private val inner: HaSocket) : HaSocket {
         @Volatile var open = true
+        @Volatile var atGate = false
+        @Volatile private var closed = false
         override fun send(text: String) = inner.send(text)
         override fun receive(): String? {
-            while (!open) Thread.sleep(5)
+            while (!open && !closed) {
+                atGate = true
+                Thread.sleep(5)
+            }
+            atGate = false
             return inner.receive()
         }
-        override fun close() = inner.close()
+        override fun close() {
+            closed = true
+            inner.close()
+        }
     }
 
     @Test
@@ -1626,10 +1638,10 @@ class HaDashboardClientTest {
         awaitCondition("the startup's display data") { HaDisplay.deviceName("dev-1") == "Ball Lamp" }
         val gate = sockets.last()
         gate.open = false
-        // The reader may be inside a read already: one answer more gets it out, and it then waits at the gate.
-        val through = java.util.concurrent.CountDownLatch(1)
-        c.callWs(JSONObject().put("type", "ping")) { _, _, _ -> through.countDown() }
-        assertTrue(through.await(5, TimeUnit.SECONDS))
+        // The reader may be inside a read already: one answer more gets it out, and it then waits at the gate. (If it
+        // is at the gate already, the answer waits there too, and is read with the rest.)
+        c.callWs(JSONObject().put("type", "ping")) { _, _, _ -> }
+        awaitCondition("the reader at the gate") { gate.atGate }
         val first = c.watchRegistries {}
         first() // stopped before any of its reads is answered
         server.deviceRegistry = JSONArray("""[{"id": "dev-1", "name": "Floor Lamp", "area_id": "lounge"}]""")

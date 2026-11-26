@@ -271,6 +271,9 @@ class VitroEngine(
                 // process (islands, in the same runtime, are reopened by their own hosts). It starts over in place,
                 // empty, as showVitroLayer leaves it. The activity isn't told: its answer, restart(), would close
                 // the native WebSocket and draw the whole dashboard again for a page the user wasn't looking at.
+                // Marked now: a page sent to the fallback before the restart below runs restarts it first (openInFallback),
+                // instead of loading into the session that went.
+                fallbackFresh = false
                 main.post {
                     if (disposed || fallbackInFront()) return@post
                     Log.w(logTag, "The hidden fallback page lost its content process (${if (killed) "killed" else "crashed"}); it starts over, the native dashboard stays")
@@ -1102,8 +1105,13 @@ class VitroEngine(
             override fun onConnected(haVersion: String) {
                 Log.i(logTag, "Connected to Home Assistant $haVersion over native WebSocket")
                 post {
-                    // A new connection tries again the dashboards whose config failed to read on the last one.
+                    // A new connection tries again the dashboards whose config failed to read on the last one. The one
+                    // HA's frontend shows for that reason now goes back to the native view; other fallback pages stay.
+                    val retry = currentUrl?.takeIf { url ->
+                        fallbackInFront() && (OAuth.origin(url) to LovelaceParser.parseRoute(url).first) in failedDashboards
+                    }
                     failedDashboards.clear()
+                    retry?.let(::load)
                     vitroView.setConnectionBanner(null)
                     vitroView.connectionRestored()
                 }

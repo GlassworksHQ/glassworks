@@ -555,6 +555,40 @@ class VitroFallbackReturnTest {
         assertEquals("not a reload of HA's page", 0, fp.reloads)
     }
 
+    @Test fun aPageSentToTheFallbackRightAfterAHiddenLossStartsOverFirst() {
+        // The posted restart hasn't run yet when a page goes to the fallback: it restarts before it loads.
+        val fb = RecordingEngine()
+        val page = readyPage(fb)
+        page.load("$base/energy")
+        val fp = fb.fallbackPage()
+        val fpHost = fb.fallbackOpen().host
+        page.goBack()
+        idle()
+        val restarts = fp.restarts
+        val loads = fp.loads.size
+        fpHost.onContentGone(killed = true)
+        page.load("$base/history") // before the main looper runs the posted restart
+        assertEquals("restarted before the load", restarts + 1, fp.restarts)
+        assertEquals(loads + 1, fp.loads.size)
+        idle()
+        assertEquals("and not again once it shows", restarts + 1, fp.restarts)
+        assertTrue(host.contentGone.isEmpty())
+    }
+
+    @Test fun aDashboardWhoseConfigFailedIsVitrosAgainOnTheNextConnection() {
+        server.configError = "error"
+        val fb = RecordingEngine()
+        val e = engine(fb).also { it.configRetryMs = longArrayOf(20, 20) }
+        val page = page(e)
+        page.load(living)
+        awaitMain("fallback") { fb.opens.isNotEmpty() && fb.fallbackPage().view.visibility == View.VISIBLE }
+        val fp = fb.fallbackPage()
+        server.configError = null
+        server.dropConnection()
+        awaitMain("native again") { host.messages("ready").isNotEmpty() }
+        assertNative(page, fp)
+    }
+
     @Test fun aFallbackPageBehindTheNativeViewReportsNothing() {
         val fb = RecordingEngine()
         val page = readyPage(fb)
