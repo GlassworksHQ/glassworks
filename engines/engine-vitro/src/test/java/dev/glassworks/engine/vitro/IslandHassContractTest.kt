@@ -1,0 +1,98 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.engine.vitro
+
+import android.app.Application
+import dev.glassworks.engine.vitro.cards.WebIslandCardView
+import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.model.LovelaceParser
+import dev.glassworks.engine.vitro.theme.ThemeCatalog
+import dev.glassworks.engine.vitro.theme.ThemeResolver
+import dev.glassworks.engine.vitro.ui.VitroCardContext
+import dev.glassworks.testing.RepoFiles
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import java.io.File
+
+/**
+ * An island's `hass` against Home Assistant's own (#799 D3–D5): the bridge module of a real island page runs under node
+ * (`src/test/js/island-hass.test.mjs`) and its `hass` is checked member by member against HA's `HomeAssistant` and
+ * `Connection` (`src/test/ha-frontend/hass-types.ts`, vendored), then for what the members do: HA's strings, backend
+ * translations, subscriptions that follow the connection, services, and the hand-off of a card that throws on a member
+ * the island lacks. Node: [IslandNode].
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class)
+class IslandHassContractTest {
+
+    private fun page(): String {
+        val ctx = VitroCardContext(
+            context = RuntimeEnvironment.getApplication(),
+            haBase = "http://homeassistant.local:8123",
+            store = EntityStore(),
+            theme = ThemeResolver.resolve(ThemeCatalog(), true),
+            resources = emptyList(),
+            accessToken = { "made-up-token" },
+            haConfig = { JSONObject().put("version", "2026.11.0").put("components", org.json.JSONArray()) },
+            callService = { _, _, _, _ -> },
+            navigate = {},
+            openMoreInfo = {},
+            fetchHistory = { _, _, _ -> },
+            subscribeTemplate = { _, _ -> {} },
+            pageUrl = { "http://homeassistant.local:8123/dashboard-wall/living" },
+        )
+        return WebIslandCardView.buildIslandHtml(ctx, LovelaceParser.parseCard(JSONObject("""{"type": "custom:acme-island-card"}""")))
+    }
+
+    /** The page's bridge module: the last module script, the one that makes `hass`. */
+    private fun bridgeModule(html: String): String {
+        val start = html.indexOf("<div id=\"mount\"></div>\n<script type=\"module\">")
+        assertTrue("the page has its bridge module", start >= 0)
+        val body = html.indexOf('>', html.indexOf("<script type=\"module\">", start)) + 1
+        return html.substring(body, html.indexOf("</script>", body))
+    }
+
+    @Test
+    fun theIslandHassIsHomeAssistantsShape() {
+        val node = IslandNode.require()
+        // Kept in the build folder: `ISLAND_MODULE=… HASS_TYPES=… node --test src/test/js/island-hass.test.mjs` runs it again.
+        val module = File(RepoFiles.root, "engines/engine-vitro/build/vitro-island/island-module.js")
+        module.parentFile.mkdirs()
+        run {
+            module.writeText(bridgeModule(page()))
+            val harness = File(RepoFiles.root, "engines/engine-vitro/src/test/js/island-hass.test.mjs")
+            val types = File(RepoFiles.root, "engines/engine-vitro/src/test/ha-frontend/hass-types.ts")
+            val (code, out) = IslandNode.run(
+                node, listOf("--test", harness.path),
+                env = mapOf("ISLAND_MODULE" to module.path, "HASS_TYPES" to types.path),
+                timeoutSeconds = 120,
+            )
+            assertEquals(out, 0, code)
+        }
+    }
+
+    @Test
+    fun aRightToLeftLanguageLaysTheIslandOutThatWay() {
+        assertEquals(JSONObject("""{"nativeName":"Deutsch","isRTL":false}""").toString(), WebIslandCardView.languageMeta("de").toString())
+        assertTrue(WebIslandCardView.languageMeta("ar").getBoolean("isRTL"))
+        assertTrue(WebIslandCardView.languageMeta("he").getBoolean("isRTL"))
+        assertTrue(WebIslandCardView.languageMeta("fa").getBoolean("isRTL"))
+        assertEquals("Español", WebIslandCardView.languageMeta("es").getString("nativeName"))
+        assertTrue("the page says so", page().contains("""<html lang="en" dir="ltr">"""))
+    }
+
+    @Test
+    fun panelUrlIsTheDashboardsPath() {
+        assertEquals("dashboard-wall", WebIslandCardView.panelUrlOf("http://homeassistant.local:8123/dashboard-wall/living"))
+        assertEquals("lovelace", WebIslandCardView.panelUrlOf(null))
+        assertEquals("lovelace", WebIslandCardView.panelUrlOf("http://homeassistant.local:8123/"))
+    }
+}

@@ -300,6 +300,15 @@ object HaDisplay {
     }
 
     /** The domain's own word for [state] (`component.<domain>.entity_component._.state.<state>`), when loaded. */
+    /**
+     * Every state label read so far (`component.<domain>.entity_component.<class>.state.<state>`, and an
+     * integration's `component.<platform>.entity.…`), keyed as HA's `localize` reads them: for web islands.
+     */
+    fun stateLabels(): Map<String, String> = HashMap(stateLabels)
+
+    /** How many state labels are known: changes when more are read ([stateLabels]). */
+    val stateLabelCount: Int get() = stateLabels.size
+
     fun domainStateLabel(domain: String, state: String): String? = stateLabels["component.$domain.entity_component._.state.$state"]
 
     fun displayPrecision(entityId: String): Int? = registry[entityId]?.displayPrecision

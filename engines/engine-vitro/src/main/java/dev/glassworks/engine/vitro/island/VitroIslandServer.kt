@@ -27,6 +27,7 @@ import java.util.concurrent.CopyOnWriteArraySet
  * Keeps Tier 3 100% GeckoView-consistent (zero `android.webkit.WebView`) across Android 6, 10,
  * and 15 while bypassing Home Assistant's 10+ MB frontend SPA:
  * - `GET /__vitro/island/<id>` serves the ~5 KB Micro-Host HTML (theme CSS vars + custom card JS).
+ * - `GET /__vitro/strings/<hash>.json` serves HA's strings for the islands' `hass.localize` ([IslandStrings]).
  * - `GET /__vitro/ws/<id>` upgrades to a loopback WebSocket bridging `hass.states` (Proxy-filtered),
  *   `hass.callWS`, `hass.callService`, `hass-more-info`, and auto-resize straight to Kotlin.
  * - Every other path the islands load (`/local/...`, `/hacsfiles/...`, `/api/...`, the dashboard's own Lovelace
@@ -231,6 +232,13 @@ class VitroIslandServer(
             val svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="$d"/></svg>"""
             return HttpResponse(200, mapOf("Content-Type" to "image/svg+xml; charset=utf-8", "Cache-Control" to "max-age=86400"), svg.toByteArray(Charsets.UTF_8))
         }
+        if (path.startsWith(IslandStrings.PREFIX)) {
+            // HA's strings for the islands' `hass.localize` (nothing secret: HA serves them to anyone). The address
+            // names their content, so the browser keeps them; a page made before they changed gets the new ones.
+            val strings = IslandStrings.current()
+            val cache = if (path == IslandStrings.PREFIX + strings.hash + ".json") "public, max-age=31536000, immutable" else "no-store"
+            return HttpResponse(200, mapOf("Content-Type" to "application/json; charset=utf-8", "Cache-Control" to cache), strings.body)
+        }
         if (path.startsWith("/__vitro/ws/")) {
             val id = path.removePrefix("/__vitro/ws/")
             val slot = slots[id] ?: return HttpResponse.text(404, "Unknown island slot")
@@ -364,6 +372,8 @@ class VitroIslandServer(
                         }
                     }
                     val code = conn.responseCode
+                    // TODO(#914): a 401 here is a token that expired under the island; retry once with the session
+                    //  VitroEngine.renewIslandSession(done) gives (it refreshes the token for every user of it).
                     val location = conn.getHeaderField("Location")
                     if (code in REDIRECTS && location != null && (req.method == "GET" || req.method == "HEAD")) {
                         val next = sameOriginRedirect(base, targetUrl, location)

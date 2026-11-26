@@ -397,6 +397,38 @@ class IslandSessionsTest {
         assertOnePagePerIsland(p)
     }
 
+    @Test fun anIslandWhosePageKeepsDyingGoesToHasFrontendInsteadOfReopening() {
+        server.dashboardConfig = JSONObject("""{"views": [
+            {"path": "a", "cards": [{"type": "custom:acme-a-card", "entity": "light.lounge_lamp"}]},
+            {"path": "b", "cards": [{"type": "custom:acme-b-card", "entity": "sensor.kitchen_temp"}]}]}""")
+        val p = page()
+        p.load("$base/wall-test/a")
+        awaitMain("view a built") { readyCount() == 1 && islandPages().size == 1 }
+        fun hostOf(page: RecordingPage) = fallback.opens[fallback.pages.indexOf(page)].host
+        fun webPages() = fallback.opens.indices.filter { fallback.opens[it].background != Color.TRANSPARENT }.map { fallback.pages[it] }
+
+        // A first loss: the card gets a new page, as before.
+        hostOf(islandPages().single()).onContentGone(killed = false)
+        idle()
+        assertEquals("a first loss reopens the card", 2, islandPages().size)
+        val second = islandPages()[1]
+        assertTrue(second.view.isAttachedToWindow)
+        assertTrue("nothing went to HA's frontend yet", webPages().isEmpty())
+
+        // A second loss within minutes: the card is given up, its view goes to HA's frontend, and no page reopens.
+        hostOf(second).onContentGone(killed = false)
+        idle()
+        assertTrue(second.closed)
+        assertEquals("no third page for it", 2, islandPages().size)
+        assertTrue("its view is HA's frontend now", webPages().single().loads.any { it.endsWith("/wall-test/a") })
+        assertTrue(openIslandPages().isEmpty())
+
+        // Another view's island still draws natively.
+        p.load("$base/wall-test/b")
+        awaitMain("view b built") { islandPages().size == 3 }
+        assertFalse(islandPages().last().closed)
+    }
+
     @Test fun aHiddenViewsLiveIslandKeepsItsPageWhenASiblingDies() {
         server.dashboardConfig = JSONObject("""{"views": [
             {"path": "a", "cards": [{"type": "custom:acme-a-card", "entity": "light.lounge_lamp"},

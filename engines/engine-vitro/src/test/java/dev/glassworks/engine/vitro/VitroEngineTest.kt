@@ -954,7 +954,7 @@ class VitroEngineTest {
         assertTrue(html.contains("const QUEUED_CALL_MS = 5000;"))
         // A new states object (a proxy over a copy) after every change, as HA's frontend hands cards (#885).
         assertTrue(html.contains("if (!statesView) statesView = new Proxy(Object.assign({}, rawStates), statesHandler);"))
-        assertTrue(html.contains("const h = Object.assign({}, hassBase, { states: currentStates() });"))
+        assertTrue(html.contains("const h = Object.assign({}, hassBase, { states: currentStates(), connected: haConnected });"))
         assertEquals("snapshot and patch both start a new states object", 2, Regex("^\\s+statesView = null;", RegexOption.MULTILINE).findAll(html).count())
         assertTrue(html.contains("sendBridge({ type: 'watch', entity_id: prop })"))
         // hass.callService is HA's call_service over the same bridge, so its promise carries HA's answer.
@@ -1093,15 +1093,15 @@ class VitroEngineTest {
         assertTrue(html.contains("callApi: vitroCallApi"))
         assertTrue(html.contains("fetch('/api/' + String(path || '').replace(/^\\/+/, ''), init)"))
         assertTrue(html.contains("fetchWithAuth(path, init) { return fetch(path, init || {}); }"))
-        assertTrue(html.contains("localize: vitroLocalize"))
+        assertTrue(html.contains("localize: makeLocalize(),"))
         assertTrue(html.contains("formatEntityState: vitroFormatState"))
         assertTrue(html.contains("formatEntityAttributeValue: vitroFormatAttribute"))
         // hass.locale and hass.language are the user's (HaLocale): English and HA's defaults here.
         assertTrue(html.contains("""const haLocale = {"language":"en","number_format":"language","time_format":"language","date_format":"language","first_weekday":"language","time_zone":"local"};"""))
         assertTrue(html.contains("locale: haLocale,"))
         assertTrue(html.contains("language: haLocale.language,"))
-        assertTrue(html.contains("<html lang=\"en\">"))
-        assertTrue(html.contains("themes: {} }"))
+        assertTrue(html.contains("<html lang=\"en\" dir=\"ltr\">"))
+        assertTrue(html.contains("themes: {} },"))
         assertTrue(html.contains("const ANON_USER = { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false };"))
         assertTrue(html.contains("user: ANON_USER,"))
         // HA's registries, asked for on a card's first read of one; and every state once a card walks them.
@@ -1114,7 +1114,7 @@ class VitroEngineTest {
         assertTrue(html.contains("ownKeys(target) {"))
         assertTrue(html.contains("sendBridge({ type: 'watchAll' });"))
         assertTrue("no lookup watch once it follows all", html.contains("if (!walksAll && typeof prop === 'string' && prop.includes('.'))"))
-        assertTrue(html.contains("auth: { data: { access_token: accessToken, hassUrl: location.origin }"))
+        assertTrue(html.contains("return { data: { access_token: accessToken, hassUrl: location.origin }, accessToken, expired: false, refreshAccessToken: vitroRefreshToken };"))
         // Navigation and actions go back over the bridge.
         assertTrue(html.contains("window.addEventListener('location-changed'"))
         assertTrue(html.contains("window.addEventListener('hass-navigate'"))

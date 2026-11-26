@@ -202,7 +202,7 @@ class VitroEngine(
                     val pages = deadIslandPages.toSet()
                     deadIslandPages.clear()
                     if (disposed) return@post
-                    Log.w(logTag, "${pages.size} island page(s) lost their content process (${if (killed) "killed" else "crashed"}); reopening them")
+                    Log.w(logTag, "${pages.size} island page(s) lost their content process (${if (killed) "killed" else "crashed"}); reopening them unless they keep dying")
                     vitroView.islandPagesGone(pages)
                 }
             }
@@ -214,6 +214,28 @@ class VitroEngine(
 
         /** The islands to tell when a new token or the signed-in user arrives ([VitroCardContext.watchToken]). Any thread. */
         private val tokenWatchers = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()
+
+        /**
+         * Whether the connection to Home Assistant is up, and the islands to tell when it goes down or comes back
+         * ([VitroCardContext.watchConnection]). Any thread.
+         */
+        private val haConnected: Boolean get() = connectedGeneration == clientGeneration
+        private val connectionWatchers = java.util.concurrent.CopyOnWriteArraySet<(Boolean) -> Unit>()
+
+        /** The client ([clientGeneration]) whose connection is up, -1 when none is: a new client starts down. */
+        @Volatile private var connectedGeneration = -1
+
+        /**
+         * Tells the islands the connection of the client of [generation] is [up] (or down), once per change. A new
+         * client's first connection is a change too, so the islands' subscriptions start on it.
+         */
+        private fun connectionIs(up: Boolean, generation: Int) {
+            if (generation != clientGeneration) return
+            val now = if (up) generation else -1
+            if (connectedGeneration == now) return
+            connectedGeneration = now
+            connectionWatchers.forEach { runCatching { it(up) } }
+        }
 
         /** Island pages whose content went away this turn ([IslandHost]), handled together. Main thread. */
         private val deadIslandPages = LinkedHashSet<Page>()
@@ -662,6 +684,12 @@ class VitroEngine(
                     },
                     touch = touchScreen,
                     needsFrontend = { card, tags, owners -> vitroView.cardNeedsFrontend(card, tags, owners, resources) },
+                    islandFailed = { card, reason -> vitroView.cardFailedInIsland(card, reason, resources) },
+                    haConnected = { haConnected },
+                    watchConnection = { onChange ->
+                        connectionWatchers += onChange
+                        ({ connectionWatchers -= onChange })
+                    },
                     pageStorage = { HaPageStorage.of(activity).items(haBase.ifEmpty { null }) },
                 )
             }
@@ -1038,6 +1066,8 @@ class VitroEngine(
 
             override fun onConnected(haVersion: String) {
                 Log.i(logTag, "Connected to Home Assistant $haVersion over native WebSocket")
+                // The islands' hass.connection is ready again: their subscriptions start over on this connection.
+                connectionIs(true, generation)
                 post {
                     vitroView.setConnectionBanner(null)
                     vitroView.connectionRestored()
@@ -1175,6 +1205,7 @@ class VitroEngine(
 
             override fun onDisconnected(reason: String) {
                 Log.w(logTag, "HA WebSocket disconnected: ${forLog(reason)}")
+                connectionIs(false, generation)
                 post {
                     if (firstPaintReported) {
                         vitroView.setConnectionBanner("Connection lost. Reconnecting…")

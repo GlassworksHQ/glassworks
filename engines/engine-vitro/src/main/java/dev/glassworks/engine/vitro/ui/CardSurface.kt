@@ -131,6 +131,23 @@ class VitroCardContext(
      */
     val needsFrontend: (card: CardConfig, tags: List<String>, owners: List<String>) -> Unit = { _, _, _ -> },
     /**
+     * A web island's [card] threw on something an island page doesn't have and drew nothing ([reason] names it): its
+     * view goes to HA's frontend, as for [needsFrontend]. Main thread. The default (tests, no engine) does nothing.
+     */
+    val islandFailed: (card: CardConfig, reason: String) -> Unit = { _, _ -> },
+    /**
+     * Whether the page's connection to Home Assistant is up now: what a web island's `hass.connected` says. The
+     * default (tests, no engine) is up.
+     */
+    val haConnected: () -> Boolean = { true },
+    /**
+     * [onChange] runs (on any thread) each time the connection to Home Assistant goes down (false) or is up again
+     * (true), until the returned handle is called: a web island's `hass.connection` fires `disconnected` and `ready`,
+     * and its subscriptions start again. HA drops a connection's subscriptions with it. The default (tests, no engine)
+     * never calls it.
+     */
+    val watchConnection: (onChange: (connected: Boolean) -> Unit) -> () -> Unit = { { } },
+    /**
      * What Home Assistant's web UI keeps in `localStorage` on this panel ([dev.glassworks.web.HaPageStorage]), or null
      * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
      */
@@ -189,6 +206,9 @@ class VitroCardContext(
         watchToken = watchToken,
         touch = touch,
         needsFrontend = needsFrontend,
+        islandFailed = islandFailed,
+        haConnected = haConnected,
+        watchConnection = watchConnection,
         pageStorage = pageStorage,
     ).also {
         it.cardVars = cardVars

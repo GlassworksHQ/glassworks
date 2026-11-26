@@ -225,6 +225,23 @@ bridge: [{"type":"callWs","id":1,"msg":{"type":"scheduler"}}]
 page errors: this.hass.connection.subscribeMessage is not a function | this.hass.loadBackendTranslation is not a function | …
 ```
 
+**After #799 D3–D5 (2026-11-26, verified with the same probe; the probe now refuses subscriptions as it refuses
+calls).** The island's `hass` has HA's whole `Connection` (`subscribeMessage`, `subscribeEvents`, `addEventListener`,
+`haVersion`, …), `loadBackendTranslation`, `services` and a `localize` that returns "" on a miss, checked member by
+member against HA's `src/types.ts` (`IslandHassContractTest`). scheduler-card now gets as far as HA's frontend does on
+the fake (its "Could not connect" notice, 80 px), draws with `ha-button`, and its view hands off:
+
+```
+$ node tools/vitro-parity/island-probe.mjs tools/vitro-parity/island-cases/scheduler-card.json
+island custom:scheduler-card: {"instance":true,"defined":true,"height":80,"elements":["ha-button","ha-card","hui-warning"],"undefined":["ha-button","hui-warning"]}
+bridge: [{"type":"callWs","id":1,"msg":{"type":"scheduler"}},{"type":"subscribe","sid":1,"msg":{"type":"scheduler_updated"},"resubscribe":true},{"type":"callWs","id":2,"msg":{"type":"frontend/get_translations","language":"en","category":"services"}},{"type":"resize","height":80},{"type":"needsFrontend","tags":["ha-button"],"cards":["scheduler-card"]}]
+```
+
+For the next member an island lacks, a safety net: a card that throws a `TypeError` and has drawn nothing after 1.5 s
+sends `cardBroken` with the member's name, and its view goes to HA's frontend as for `needsFrontend`. It's tested
+under node against a fake page (`src/test/js/island-hass.test.mjs`), including Gecko's and Chromium's messages; on a
+panel it's **untested**.
+
 The made-up cards in `island-cases/cards/test-cards.js` check the rule in Chromium
 (`test/island-detect.e2e.test.mjs`, pass 2026-11-25): one that draws `ha-control-circular-slider` and `ha-big-number`
 hands off; one that draws only the island's stand-ins, one that defines its own `ha-` element, one that defines its
@@ -240,9 +257,9 @@ What it rules out: a list of cards. Of four popular island cards, two use nothin
   covers resources that load over the bridge on a slow panel. Untested on a panel.
 - The tablet's island memory numbers in its run (about 24 MiB per island) were taken with these blank islands; a card
   that draws will cost more.
-- scheduler-card draws blank in an island because its `hass` has no `connection.subscribeMessage` or
-  `loadBackendTranslation`. The frontend check only sees elements a card drew, so a card that throws before it draws
-  anything stays a blank island. Whether such page errors should also hand the view to HA's frontend is open.
+- ~~scheduler-card draws blank in an island~~: answered above (the missing members, and `cardBroken` for the next
+  one). Each island page reads HA's strings (about 1 MB of JSON for English) once from the browser's cache; what that
+  costs per island on the S1 isn't measured yet.
 - scheduler-card's `ha-button` shows its label when undefined (its text is its own children) but loses its button look.
   A stand-in for `ha-button` would keep such cards in islands; none is written yet.
 - The 2.5 s grace on the tablet: untested on a panel. A slower panel defines nothing faster, since nothing but the

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // What a custom card draws in a Vitro island (#885): runs the island page Vitro would serve for a case's card (written
 // by IslandPageDumpTest) in headless Chromium, with the island's bridge socket answered here: a snapshot of the
-// fixture's states, empty registries, and every hass.callWS refused. It reports whether the card's element exists, how
+// fixture's states, empty registries, and every hass.callWS and connection subscription refused. It reports whether the card's element exists, how
 // tall it drew, the custom elements in it that nothing defines, what the page sent over the bridge (cardError,
 // needsFrontend, resize, callWs, …) and any page errors. `--click x,y` taps the page there and reports what the tap
 // sent. `--eval '<function>'` calls a function in the page with the card's element (null when there is none) and
