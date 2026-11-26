@@ -17,6 +17,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -1300,20 +1301,48 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             gravity = Gravity.CENTER_VERTICAL
         }
         var tracking = false
-        val volume = SeekBar(ctx.context).apply {
+        fun setVolume(percent: Int) =
+            ctx.callService("media_player", "volume_set", JSONObject().put("entity_id", id).put("volume_level", percent / 100.0), null)
+        // HA's slider sends a key edit when its key comes up (`keyup`), as a drag on release: a held arrow is one call.
+        var keyEdit = 0
+        var keyFrom = 0
+        val volume = object : SeekBar(ctx.context) {
+            override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+                if (keyEdit == 0) keyFrom = progress
+                val wasEdit = keyEdit
+                keyEdit = keyCode
+                val moved = super.onKeyDown(keyCode, event)
+                // A key the bar didn't take (focus moves on): no edit, unless it's the held one's repeat.
+                if (!moved && wasEdit != keyCode) keyEdit = wasEdit
+                return moved
+            }
+
+            override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+                if (keyEdit == 0 || keyCode != keyEdit) return super.onKeyUp(keyCode, event)
+                keyEdit = 0
+                if (event.isCanceled) progress = keyFrom else if (progress != keyFrom) setVolume(progress)
+                return true
+            }
+
+            override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+                super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+                // Focus left mid-edit: nothing is sent, HA's volume shows again.
+                if (!gainFocus && keyEdit != 0) {
+                    keyEdit = 0
+                    progress = keyFrom
+                }
+            }
+        }.apply {
             max = 100
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    // Keys (no touch) change it one step at a time: each goes to HA. A drag sends once, on release.
-                    if (fromUser && !tracking) {
-                        ctx.callService("media_player", "volume_set", JSONObject().put("entity_id", id).put("volume_level", progress / 100.0), null)
-                    }
+                    // TalkBack's steps go to HA at once. A held key sends when it comes up, a drag on release.
+                    if (fromUser && !tracking && keyEdit == 0) setVolume(progress)
                 }
                 override fun onStartTrackingTouch(sb: SeekBar?) { tracking = true }
                 override fun onStopTrackingTouch(sb: SeekBar?) {
                     tracking = false
-                    val level = (sb?.progress ?: return) / 100.0
-                    ctx.callService("media_player", "volume_set", JSONObject().put("entity_id", id).put("volume_level", level), null)
+                    setVolume(sb?.progress ?: return)
                 }
             })
         }
@@ -1333,7 +1362,7 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             play.contentDescription = HaText.ui(if (playing) "ui.card.media_player.media_pause" else "ui.card.media_player.media_play")
             val level = (s?.attributes?.get("volume_level") as? Number)?.toDouble()
             volumeRow.visibility = if (level == null) GONE else VISIBLE
-            if (level != null && !tracking) volume.progress = (level * 100).roundToInt()
+            if (level != null && !tracking && keyEdit == 0) volume.progress = (level * 100).roundToInt()
         }
     }
 
