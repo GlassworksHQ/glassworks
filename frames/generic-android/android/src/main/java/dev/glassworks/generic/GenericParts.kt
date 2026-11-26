@@ -281,6 +281,8 @@ class GenericParts : AppParts {
                 now = SystemClock::elapsedRealtime,
                 // A screen without touch (the Mirror) can't close a card: what would stay up closes by itself (#118).
                 touch = { runtime.frame.input == Input.TOUCH },
+                // A critical alert plays at full volume, even muted, and the volume comes back after each sound.
+                fullVolume = runtime.volume(ctx)::full,
             ),
         ) + runtime.frame.panes(paneContext, exec) +
             // Without Bluetooth LE the definition is CantRun, so there is no BluetoothProxyDefinition and no pane.

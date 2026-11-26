@@ -189,7 +189,7 @@ Home Assistant applies `disabled_by_default` only when an entity is registered f
 | `button` **Start Wi-Fi setup (Bluetooth)** | `improv_ble` | Starts Improv Wi-Fi provisioning over Bluetooth on demand (encrypted connection only). |
 | `button` **Allow setup over the network** | `lan_setup` | Opens `/setup` network pairing for 30 minutes ([Manage guide](manage.md#set-up-over-the-network)). |
 | `switch` **Hide HA header** | `hide_ha_header` | Hides Home Assistant's top header bar and sidebar live. |
-| `media_player` **Speaker** | `speaker` | Supports play, pause, stop, volume, mute, `play_media`, and `announce` (MP3 format). |
+| `media_player` **Speaker** | `speaker` | Supports play, pause, stop, volume, mute, `play_media`, and `announce` (MP3 format). Its volume and mute are the panel's master volume: they apply to everything the panel plays, including voice replies, timers, notifications, Music Assistant, and the dashboard's own sound, and they match the **Sound** page in the panel's settings. |
 | `switch` **Music Assistant player (Sendspin)** | `sendspin` | Enables or disables the native synchronized Sendspin player (encrypted connection required; [Sendspin guide](sendspin.md)). |
 | `text_sensor` **Music Assistant player status** | `sendspin_status` | Reports Sendspin pairing, active stream codec, track metadata, or `off`. |
 | `switch` **Mute microphone** | `mute_microphone` | Completely releases the microphone. |
