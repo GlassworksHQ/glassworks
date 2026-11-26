@@ -6,10 +6,14 @@ package dev.glassworks.update
 
 import android.Manifest
 import android.app.Application
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import dev.glassworks.platform.PlatformApi
 import dev.glassworks.update.SilentUpdates.Facts
 import dev.glassworks.update.SilentUpdates.Root
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -117,5 +121,38 @@ class SilentUpdatesTest {
         assertEquals(SilentUpdates.TargetTooLow("14", 31, 30), SilentUpdates.read(app, Root.NONE))
         shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
         assertEquals(SilentUpdates.TargetTooLow("14", 31, 30, unknownApps = false), SilentUpdates.read(app, Root.NONE))
+    }
+
+    @Test fun android6HasNoPerAppUnknownAppsCheck() {
+        val app = RuntimeEnvironment.getApplication()
+        assertTrue(SilentUpdates.canInstallPackages(app, PlatformApi(23)))
+        assertNull(UpdateManager.packageInstallerBlocker(app, hasRootBackend = false, platform = PlatformApi(23)))
+    }
+
+    @Test @Config(sdk = [29])
+    fun android10BlocksPackageInstallerUntilUnknownAppsOrPrivilegeIsGranted() {
+        val app = RuntimeEnvironment.getApplication()
+        val api29 = PlatformApi(29)
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
+        assertFalse(SilentUpdates.canInstallPackages(app, api29))
+        assertEquals(UpdateManager.UNKNOWN_APPS_S1, UpdateManager.packageInstallerBlocker(app, hasRootBackend = true, platform = api29))
+        assertEquals(UpdateManager.UNKNOWN_APPS_GENERIC, UpdateManager.packageInstallerBlocker(app, hasRootBackend = false, platform = api29))
+
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(true)
+        assertTrue(SilentUpdates.canInstallPackages(app, api29))
+        assertNull(UpdateManager.packageInstallerBlocker(app, hasRootBackend = true, platform = api29))
+
+        // Device owner and privileged system apps bypass the unknown-sources check.
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
+        val dpm = shadowOf(app.getSystemService(DevicePolicyManager::class.java))
+        dpm.setDeviceOwner(ComponentName(app.packageName, "Admin"))
+        assertTrue(SilentUpdates.canInstallPackages(app, api29))
+        assertNull(UpdateManager.packageInstallerBlocker(app, hasRootBackend = false, platform = api29))
+        dpm.setDeviceOwner(null)
+        assertFalse(SilentUpdates.canInstallPackages(app, api29))
+
+        shadowOf(app).grantPermissions(Manifest.permission.INSTALL_PACKAGES)
+        assertTrue(SilentUpdates.canInstallPackages(app, api29))
+        assertNull(UpdateManager.packageInstallerBlocker(app, hasRootBackend = false, platform = api29))
     }
 }

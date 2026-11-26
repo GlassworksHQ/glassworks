@@ -12,6 +12,7 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Fixed
+- **App updates fail fast when "Install unknown apps" is turned off.** On Android 8 and newer (unless Glassworks is a system app or device owner), starting a Home Assistant update without "Install unknown apps" allowed used to download the APK, open Android's refusal dialog, and wait 10 minutes before reporting a timeout. Glassworks now stops right away and tells you to enable "Install unknown apps" in Android's settings.
 - **Wi-Fi setup over Bluetooth finishes on the Mirror.** When Home Assistant or its phone app sent the Wi-Fi
   details over Bluetooth, the Mirror joined the network, but the phone or Home Assistant kept saying it was
   connecting because the Mirror dropped the Bluetooth connection before it could report back. It now stays

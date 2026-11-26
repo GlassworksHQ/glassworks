@@ -69,6 +69,7 @@ describe('provision (install.sh port)', () => {
       'Keyboard', 'Time zone America/Los_Angeles', 'Start the kiosk',
     ]);
     expect(p.cmds).toContain('pm install -r -g /data/local/tmp/glassworks.apk');
+    expect(p.cmds).toContain('appops set sh.edm.s1kiosk REQUEST_INSTALL_PACKAGES allow');
     expect(p.cmds).not.toContain('pm disable-user --user 0 com.aqara.inhome.vassistant');
     expect(p.cmds).toContain('pm disable-user --user 0 com.lumi.ota');
     // the launcher only after the kiosk is HOME
