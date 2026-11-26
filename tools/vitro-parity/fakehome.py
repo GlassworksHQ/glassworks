@@ -510,10 +510,11 @@ def statistics_metadata(ids):
 def _held(s, b, e):
     """[(t, value, seconds held)]: every numeric value series [s] holds in the bucket [b, e), as HA's recorder
     compiles one: the value at b, then each change before e (a change at e itself starts the next bucket). A value
-    that isn't a number (`unavailable`) holds its own time, which counts for none."""
+    that isn't a number (`unavailable`) holds its own time, which counts for none. Of points at one instant only the
+    last holds, as the recorder keeps it: an earlier one there lasts no time and is never read."""
     pts = s.changes_between(b, e - 1e-6)
     spans = [(t, v, (pts[i + 1][0] if i + 1 < len(pts) else e) - t) for i, (t, v) in enumerate(pts)]
-    return [(t, float(v), w) for t, v, w in spans if v is not None and _num(v)]
+    return [(t, float(v), w) for t, v, w in spans if w > 0 and v is not None and _num(v)]
 
 
 def statistics(ids, start, end, period, types):
