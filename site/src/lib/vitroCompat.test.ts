@@ -165,6 +165,8 @@ describe("auditDashboard and custom:button-card", () => {
     expect(audit([{ type: "custom:button-card", styles: { card: [{ border: "1px dashed red" }] } }]).totals.tier3).toBe(1);
     // A value the browser drops (a stray `;`) is dropped natively too.
     expect(audit([{ type: "custom:button-card", styles: { card: [{ padding: "0;" }] } }]).totals.tier3).toBe(0);
+    // A quoted slash-star is text: it doesn't hide the dashed border after it.
+    expect(audit([{ type: "custom:button-card", styles: { card: [{ border: "'/*' 1px dashed red '*/'" }] } }]).totals.tier3).toBe(1);
   });
 
   it("routes the other fast paths", () => {
