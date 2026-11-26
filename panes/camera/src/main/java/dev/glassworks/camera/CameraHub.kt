@@ -91,9 +91,8 @@ class CameraHub(
     private var luma = ByteArray(0)
     private var facingFront = true
     private var sensorDegrees = 0
+    /** The range asked for while streaming ([streamRange]); a LEGACY camera is asked for it always. */
     private var fpsRange: android.util.Range<Int>? = null
-    /** Presence's range on a LEGACY camera ([presenceRangeFor]), else null. */
-    private var presenceRange: android.util.Range<Int>? = null
     /** The reader's size: [width] x [height] when the camera lists it ([yuvSizeFor]). */
     private var size = width to height
     /** The stream on the open camera, read with [size]: the session never looks the camera up again. */
@@ -220,7 +219,7 @@ class CameraHub(
                     opening = false
                     if (released) { camera.close(); thread.quitSafely(); return }
                     device = camera
-                    log("camera $id open (${if (facingFront) "front" else "back"}, ${size.first}x${size.second}${if (presenceRange != null) ", legacy" else ""})")
+                    log("camera $id open (${if (facingFront) "front" else "back"}, ${size.first}x${size.second}${if (legacy) ", legacy" else ""}${fpsRange?.let { ", $it fps" } ?: ""})")
                     settle()
                 }
                 override fun onDisconnected(camera: CameraDevice) {
@@ -256,15 +255,18 @@ class CameraHub(
     }
 
     /**
-     * The range the camera is asked for while streaming ([fpsRangeFor]). Read once and kept: the first
+     * The range the camera is asked for while streaming ([fpsRangeFor], or [legacyRangeFor] on a LEGACY camera). Read once and kept: the first
      * reader may be the stream's start ([streamFps], off the hub's thread, before the camera opens) or
      * [pickCamera] on the hub's thread; `lazy` makes that safe, and the camera's ranges don't change.
      */
     private val streamRange: IntRange? by lazy {
         try {
             cameraId()?.let { id ->
-                val ranges = manager.getCameraCharacteristics(id).get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
-                fpsRangeFor(ranges?.map { it.lower..it.upper }, H264Encoder.FPS)
+                val c = manager.getCameraCharacteristics(id)
+                val ranges = c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+                val legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
+                val list = ranges?.map { it.lower..it.upper }
+                if (legacy) legacyRangeFor(list) else fpsRangeFor(list, H264Encoder.FPS)
             }
         } catch (e: Exception) {
             null
@@ -384,9 +386,6 @@ class CameraHub(
         size = read.reader
         openFit = read.fit
         legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
-        presenceRange = if (!legacy) null else presenceRangeFor(
-            c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { it.lower..it.upper }, CameraPresence.DEFAULT_FPS.toInt(),
-        )?.let { android.util.Range(it.first, it.last) }
         return id
     }
 
@@ -414,9 +413,8 @@ class CameraHub(
                         fun request(to: List<Surface>) = camera.createCaptureRequest(template).apply {
                             to.forEach(::addTarget)
                             // While streaming, the encoder's rate when the camera offers it (less CPU, a true a=framerate).
-                            if (encoder != null) fpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
-                            // Presence alone on a LEGACY camera: fewer frames for the shim to copy.
-                            else presenceRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+                            // A LEGACY camera gets its top rate always ([legacyRangeFor]): a lower one it lists broke the Mirror's frames.
+                            if (encoder != null || legacy) fpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
                         }.build()
                         val every = readerEvery(legacy, streaming = encoder != null, streamFloor)
                         if (every <= 1 || encoder == null) {

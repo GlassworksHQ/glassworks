@@ -141,11 +141,40 @@ series of connects from another crashed `mediaserver`.
    picture repeats in vertical streaks. 640×480 is exactly a third of 1280×720, so a bad session most likely fills
    the buffer with a 640×480 preview laid out at the wrong size (**untested**: the preview size isn't logged).
 
+6. **The cause: a fixed 15 fps range** (2026-11-25, verified, the same test build plus the green check above). With
+   the check catching the green frames, every session the pane opened was bad: five in a row after an install, and
+   five in a row again straight after a reboot, so a camera left stuck by a killed app was ruled out. `mm-camera`
+   logged the preview stream at 1280x720 (`stream_type 1, stream format 2,stream dimension 1280x720`), which ruled
+   out the 640×480 guess above. The camera spike, run with camera privacy on so the pane let go, got a clean picture
+   with its reader alone. The difference was the rate: the spike always asked for 30–30, while the pane asked for
+   15–15, for presence (the slowest range that covers 5 fps) and for the stream (the encoder's 15 fps). The spike got
+   an `fps` option, and fresh sessions (force-stopped between runs, since `am start` reuses the first launch's
+   extras otherwise) gave:
+
+   ```
+   $ /tmp/gw-mirror/spike-fps.sh a30:30,30 a15:15,15 a24:24,24 a730:7,30 b30:30,30 b15:15,15
+   a30 want=30,30: session configured, fps [30, 30] reader frames=45 (9.2 fps)  green rows 0%
+   a15 want=15,15: session configured, fps [15, 15] reader frames=44 (9.0 fps)  green rows 65%
+   a24 want=24,24: session configured, fps [24, 24] reader frames=43 (8.7 fps)  green rows 0%
+   a730 want=7,30: session configured, fps [7, 30] reader frames=45 (8.9 fps)  green rows 0%
+   b30 want=30,30: session configured, fps [30, 30] reader frames=0
+   b15 want=15,15: session configured, fps [15, 15] reader frames=45 (9.2 fps)  green rows 65%
+   ```
+
+   15–15 is in the camera's own list (`[15, 15], [24, 24], [7, 30], [30, 30]`) and broke every frame; the others
+   didn't (`b30` is the separate first-frame stall the watchdog already handles). The reader got about 9 fps whatever
+   was asked for: the shim's copy is the limit, so a lower range saved nothing. A LEGACY camera now gets its top
+   rate, the steadiest range at it, for presence and the stream alike; other cameras are unchanged.
+
+   Then the camera's own choice: with `--es fps template` the spike leaves the template's range alone and prints it.
+   The Mirror's preview template comes with 30–30, and three fresh sessions with it were all clean (8.8–9.0 fps,
+   green rows 0%). So the rule above picks what the camera recommends.
+
 ## Result
 
 | Problem | Cause | What the camera pane does now |
 |---|---|---|
-| Green stills | About a third of sessions deliver all-zero frames, and a frame was a frame | A frame with a quarter of its sampled rows dead (zero in Y and both chroma planes, or the green a LEGACY camera draws zero as) counts as no frame: it doesn't reach presence, doesn't answer a still, and the session is reopened by the existing silence watchdog and backoff. A dark room is never blank: its Y has noise and its chroma is near 128 |
+| Green stills | The pane asked the LEGACY camera for 15–15, which it lists but runs broken: a third of streaky picture over two thirds of green | A frame with a quarter of its sampled rows dead (zero in Y and both chroma planes, or the green a LEGACY camera draws zero as) counts as no frame: it doesn't reach presence, doesn't answer a still, and the session is reopened by the existing silence watchdog and backoff. A dark room is never blank: its Y has noise and its chroma is near 128 |
 | No pictures in the stream | The same blank or empty sessions | The reopen above. The reader stays in a few of the stream's requests, so the check still sees the stream's session |
 | Stream at 7 fps | The shim reads back every frame the reader gets | On a LEGACY camera the repeating request is a burst: the encoder gets every frame, the reader one in five at the Mirror's steady 15 fps (3 fps), enough for presence and stills. The interval comes from the slowest rate the camera may run at, so the reader keeps at least 3 fps; a camera that may run slower than 6 fps keeps the reader in every request. Other cameras are unchanged |
 | `mediaserver` crashes | Bursts of connects while another app held the camera | A failed open waits 5 s, then 10, 20, 40, up to 60 s, and nothing else tries in the meantime. When Android reports that camera free again, it's tried at once, but never within 2 s of the last failure |

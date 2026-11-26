@@ -48,12 +48,14 @@ fun legacyAspect(size: Pair<Int, Int>, sensor: Pair<Int, Int>): Boolean =
     Math.abs(size.first.toFloat() / size.second - sensor.first.toFloat() / sensor.second) < 0.01f
 
 /**
- * While only presence reads frames from a LEGACY camera: the range with the lowest top that still covers presence's
- * [want], with the lowest floor among those, so the camera may slow down in the dark. Android's Camera1 shim copies
- * every preview frame into the hub's reader on the CPU, so fewer frames cost less. Null: the camera's own rate.
+ * A LEGACY camera's range, for presence and the stream alike: the steadiest one at its top rate. On the Mirror's stock
+ * Android 6 camera a range from its own list, 15–15, broke every frame: a third of streaky picture over two thirds of
+ * the green a zero frame is drawn as, in the reader and the stream alike, while 7–30, 24–24 and 30–30 gave clean
+ * pictures (2026-11-25, the camera spike, fresh sessions). So a LEGACY camera isn't asked to slow down: on the Mirror
+ * this is the range its request templates come with (30–30, read with the spike), which gave clean pictures in three
+ * of three sessions. Null: the camera lists none and keeps its own rate.
  */
-fun presenceRangeFor(ranges: List<IntRange>?, want: Int): IntRange? =
-    ranges?.filter { it.last >= want }?.minWithOrNull(compareBy<IntRange> { it.last }.thenBy { it.first })
+fun legacyRangeFor(ranges: List<IntRange>?): IntRange? = ranges?.maxOfOrNull { it.last }?.let { fpsRangeFor(ranges, it) }
 
 /** What the stream can be on this camera: H.264 at [Size], or no stream, for [Refused.why]. */
 sealed interface StreamFit {
