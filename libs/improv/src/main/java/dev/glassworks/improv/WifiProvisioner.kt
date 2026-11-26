@@ -274,7 +274,7 @@ public class WifiProvisioner(
      * Saves the configured networks (Android 7 and earlier forget what addNetwork added until the app saves). Tries twice;
      * a failure is logged and the join still counts, since the network works until the next restart.
      */
-    /** Which saved networks a failed attempt may have changed: none of them gets saved while it may hold that change. */
+    /** Saved networks holding an attempt's untested credential (it failed, or another network came up): none is saved yet. */
     private val saveGate = SaveGate()
 
     @Suppress("DEPRECATION")
@@ -468,8 +468,11 @@ public class WifiProvisioner(
                 // joined: keep it past a restart. Android 7 and earlier forget a network addNetwork added until the app
                 // saves it (a Mirror on its stock Android 6 asked for Wi-Fi again on every boot, 2026-11-25)
                 // only once the network this attempt set up is the one that came up: without location access onTarget
-                // takes any network, and saving then would keep a credential nothing tested
-                if (netId != -1 && i.networkId == netId && Compat.mustSaveNetworks) saveNetworks(netId)
+                // takes any network. When another one came up, this attempt's entry is untested, so no later save may
+                // keep it until it connects itself
+                if (netId != -1 && Compat.mustSaveNetworks) {
+                    if (i.networkId == netId) saveNetworks(netId) else saveGate.failed(netId)
+                }
                 return Outcome.Connected(ssid, ip, method)
             }
             if (authErrors >= 2) return failAndRestore("wrong password (authentication failed)")
