@@ -126,7 +126,7 @@ object WebFallback {
 
     /**
      * [matchedReason] for every `custom:auto-entities` card Vitro draws natively in [view], over [states] now (an
-     * island runs the real card, which draws its own matches). Null when [view] has none, or each one's matches are
+     * island runs the real card, which draws its own matches), nested ones (one used as another's `card:`) included. Null when [view] has none, or each one's matches are
      * drawn natively. Read whenever the view is shown, so a view whose matches changed is decided again.
      */
     fun matchedRowsReason(
@@ -139,7 +139,11 @@ object WebFallback {
         fun walk(card: CardConfig): String? {
             if (card.inIsland(scripts)) return null
             if (card.type == AUTO_ENTITIES) {
-                return matchedReason(AutoEntitiesFilter.innerCard(card.raw, AutoEntitiesFilter.evaluate(card.raw, states, lookup)))
+                val inner = AutoEntitiesFilter.innerCard(card.raw, AutoEntitiesFilter.evaluate(card.raw, states, lookup))
+                matchedReason(inner)?.let { return it }
+                // The inner card can be (or hold) another auto-entities, which picks its own rows at run time from
+                // what this one wrote into it and its own filter: its matches are checked too, however deep.
+                return walk(inner)
             }
             for (child in CardRouter.producedCards(card, perEntity = false)) walk(child.value)?.let { return it }
             return null

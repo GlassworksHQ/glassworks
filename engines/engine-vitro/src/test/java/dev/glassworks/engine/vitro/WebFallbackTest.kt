@@ -763,6 +763,31 @@ class WebFallbackTest {
             IslandScripts.ANY, listOf(garage)) { null })
     }
 
+    @Test fun aNestedAutoEntitiesHasItsOwnMatchesCheckedToo() {
+        // The outer card matches lights; its `card:` is another auto-entities that adds covers to the lights it's given.
+        val view = LovelaceParser.parseView(0, JSONObject(
+            """{"cards": [{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]},
+                "card": {"type": "custom:auto-entities", "filter": {"include": [{"domain": "cover"}]}}}]}""",
+        ))
+        val lamp = EntityState("light.lamp", "on", mapOf("friendly_name" to "Lamp"))
+        val garage = EntityState("cover.garage", "closed", mapOf("friendly_name" to "Garage"))
+        fun reason(v: dev.glassworks.engine.vitro.model.ViewConfig, vararg states: EntityState) =
+            WebFallback.matchedRowsReason(v, IslandScripts.ANY, states.toList()) { id -> states.firstOrNull { it.entityId == id } }
+        assertNull(reason(view, lamp))
+        assertEquals(
+            "a row `custom:auto-entities` matched: `entities` `entities[1]` (a `cover` entity) isn't drawn natively: HA draws this domain's row with its own control or picture",
+            reason(view, lamp, garage),
+        )
+        // Two levels down, inside a stack: the innermost one's cover is found as well.
+        val deep = LovelaceParser.parseView(0, JSONObject(
+            """{"cards": [{"type": "vertical-stack", "cards": [{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]},
+                "card": {"type": "custom:auto-entities", "filter": {"include": [{"domain": "switch"}]},
+                  "card": {"type": "custom:auto-entities", "filter": {"include": [{"domain": "cover"}]}}}}]}]}""",
+        ))
+        assertNull(reason(deep, lamp))
+        assertNotNull(reason(deep, lamp, garage))
+    }
+
     @Test fun theReportSaysAnAutoEntitiesViewIsNativeIfItsMatchedRowsAre() {
         val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]}}]}"""))
         val report = CompatChecker.check(view)
