@@ -48,6 +48,9 @@ interface Glassworks {
     /** The glass orb's shared layers: the timer-done stage and the critical alert bake them once. Main thread. */
     val orbs: OrbBakes
 
+    /** The panel's master volume ([dev.glassworks.audio.MasterVolume]): one for the process, made on first use. */
+    fun volume(context: Context): dev.glassworks.audio.MasterVolume
+
     /**
      * Every pane's definition, made once: their on/off, setup steps, settings sections and adb extras.
      * MainActivity and KioskService ask for them first thing, before discovery can save an HA URL in

@@ -12,6 +12,15 @@ publish the matching section below as the release notes.
   the next restart until the app calls `saveConfiguration`, so it now does, once the join succeeds. Android 8 and
   newer save it themselves, so nothing changes there.
 
+## [0.2.1] - 2026-11-25
+
+### Fixed
+- **The client stays connected through a state change on Android 6 and 7.** Below Android 8, `ImprovBleServer`
+  refreshed the advertisement by stopping and restarting it, and on Android 6 that dropped the connected client
+  right after the PROVISIONING state, so the Wi-Fi result never reached it. While a client is connected the
+  refresh now waits until the last one leaves. A refresh that fails no longer reports `onAdvertising(false)`, which
+  told the app advertising couldn't start; only the first start does.
+
 ## [0.2.0] - 2026-11-22
 
 ### Added

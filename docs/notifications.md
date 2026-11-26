@@ -148,7 +148,7 @@ This is a standard Home Assistant bus event rather than a fixed event entity, so
 
 All notification tones are synthesized cleanly inside the app from sine waves ([`NotificationSounds.kt`](../panes/notifications/src/main/java/dev/glassworks/notifications/NotificationSounds.kt)), so no external audio files are required.
 
-High and critical notifications keep the screen awake for up to 10 minutes while unanswered, ensuring an alert does not leave a room lit all night. Playing a notification sound briefly pauses active music just like Assist voice runs do.
+High and critical notifications keep the screen awake for up to 10 minutes while unanswered, ensuring an alert does not leave a room lit all night. Playing a notification sound briefly pauses active music just like Assist voice runs do. The critical alert tone plays at full volume, even when the panel's volume is low or muted, and the volume goes back to where it was after each tone.
 
 ## Do not disturb
 

@@ -198,6 +198,8 @@ class PanelDevice(
     private val voicePlayer = ExoAudioPlayer(context, "voice", AudioAttributes.USAGE_ASSISTANT)
     private val mediaPlayer = ExoAudioPlayer(context, "media", AudioAttributes.USAGE_MEDIA)
     private var chimePlayer: TtsPlayer? = null
+    /** The master volume: Home Assistant's *Speaker* volume and mute set it, whichever panes are on. */
+    private val volume = runtime.volume(ctx)
     /** The features that add entities and react to the panel (Sendspin, voice, timers, ...); built in [initEntities]. */
     @Volatile private var panes: List<Pane> = emptyList()
     /**
@@ -213,6 +215,8 @@ class PanelDevice(
         exec.execute { onPrefChanged(key) }
     }
     private val screenListener: () -> Unit = { exec.execute { server?.publishStates() } }
+    /** The master volume changed (here, on the Sound page, or by the volume keys): Home Assistant hears it. runCatching: after [stop]. */
+    private val volumeListener: () -> Unit = { runCatching { exec.execute { applyVolume(); server?.publishStates() } } }
     private val authListener: (Boolean) -> Unit = { exec.execute { server?.publishStates() } }
     private val dashboardsListener: (List<Dashboard>) -> Unit = { exec.execute { checkDashboards() } }
 
@@ -237,6 +241,8 @@ class PanelDevice(
     fun stop() {
         synchronized(lifecycle) { stopped = true }
         prefs.unregisterListener(prefListener)
+        // A newer device may have set its own already.
+        if (volume.onChange === volumeListener) volume.onChange = null
         screen.removeListener(screenListener)
         HaAuth.removeListener(authListener)
         Dashboards.removeListener(dashboardsListener)
@@ -295,6 +301,7 @@ class PanelDevice(
         EspHomeLog.i("ESPHome device '${id.name}' mac ${id.macAddress}, voice=${id.voiceFeatures != 0}")
         if (!unlessStopped { initEntities(id); acquireLocks() }) return
         applyVolume()
+        if (!unlessStopped { volume.onChange = volumeListener }) return
         mediaPlayer.onStateChanged = { exec.execute { server?.publishStates() } }
         voicePlayer.onStateChanged = {
             host?.onVoicePlaying?.invoke(voicePlayer.isPlaying)
@@ -513,10 +520,7 @@ class PanelDevice(
 
     /** esphome-main thread. */
     private fun onPrefChanged(key: String?) {
-        when (key) {
-            "api_encryption", "api_key" -> onApiKeyPrefChanged()
-            "speaker_volume", "speaker_muted" -> applyVolume()
-        }
+        if (key == "api_encryption" || key == "api_key") onApiKeyPrefChanged()
         // Before the event, so a pane that hears its own switch is already started or stopped.
         if (switches.values.any { it.key == key }) applySwitches()
         emit(PanelEvent.SettingChanged(key))
@@ -559,7 +563,7 @@ class PanelDevice(
     }
 
     /** The chime player, made on first use (from the ESPHome, voice or main thread). */
-    private fun chimes(): TtsPlayer = synchronized(this) { chimePlayer ?: TtsPlayer().also { chimePlayer = it } }
+    private fun chimes(): TtsPlayer = synchronized(this) { chimePlayer ?: TtsPlayer { volume.gain }.also { chimePlayer = it } }
 
     /** Home Assistant is connected and listening to the panel's states now. */
     fun homeAssistantConnected(): Boolean = server?.hasSubscriber == true
@@ -726,8 +730,8 @@ class PanelDevice(
                         mediaPlayer.isPaused -> MediaState.PAUSED
                         else -> MediaState.IDLE
                     },
-                    volume = prefs.speakerVolume,
-                    muted = prefs.speakerMuted,
+                    volume = volume.level,
+                    muted = volume.muted,
                 )
             },
             handle = ::onMediaCommand,
@@ -775,7 +779,7 @@ class PanelDevice(
     )
 
     private fun onMediaCommand(c: MediaPlayerCommandData) {
-        c.volume?.let { prefs.speakerVolume = it.coerceIn(0f, 1f) }
+        c.volume?.let { volume.set(it) }
         c.mediaUrl?.takeIf { it.isNotEmpty() }?.let { raw ->
             val url = resolveUrl(raw)
             when {
@@ -790,10 +794,10 @@ class PanelDevice(
             MediaCommand.PAUSE -> mediaPlayer.pause()
             MediaCommand.STOP, MediaCommand.CLEAR_PLAYLIST -> mediaPlayer.stop()
             MediaCommand.TOGGLE -> if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.resume()
-            MediaCommand.MUTE -> prefs.speakerMuted = true
-            MediaCommand.UNMUTE -> prefs.speakerMuted = false
-            MediaCommand.VOLUME_UP -> prefs.speakerVolume = (prefs.speakerVolume + 0.1f).coerceAtMost(1f)
-            MediaCommand.VOLUME_DOWN -> prefs.speakerVolume = (prefs.speakerVolume - 0.1f).coerceAtLeast(0f)
+            MediaCommand.MUTE -> volume.mute(true)
+            MediaCommand.UNMUTE -> volume.mute(false)
+            MediaCommand.VOLUME_UP -> volume.step(up = true)
+            MediaCommand.VOLUME_DOWN -> volume.step(up = false)
         }
     }
 
@@ -811,10 +815,18 @@ class PanelDevice(
         }
     }
 
+    /**
+     * Android's media volume is the master ([volume]): the players play at full under it. Only where the device keeps
+     * its volume fixed do they scale themselves ([dev.glassworks.audio.MasterVolume.gain]): the voice and media
+     * players, the chimes and notification sounds, and the panes' own players ([PanelEvent.VolumeGain]). The
+     * dashboard's audio can't be reached there.
+     */
     private fun applyVolume() {
-        val v = if (prefs.speakerMuted) 0f else prefs.speakerVolume
-        voicePlayer.setVolume(v)
-        mediaPlayer.setVolume(v)
+        val g = volume.gain
+        voicePlayer.setVolume(g)
+        mediaPlayer.setVolume(g)
+        synchronized(this) { chimePlayer }?.setVolume(g)
+        emit(PanelEvent.VolumeGain(g))
     }
 
     /**
