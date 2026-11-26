@@ -46,8 +46,9 @@ fun stillRotation(sensorDegrees: Int, displayDegrees: Int, front: Boolean): Int 
  * shows as solid green with a dark noisy strip. A dark room still has sensor noise in Y (the Mirror's dark scene had a
  * Y mean of 4 to 5 and no row all zero) and chroma near 128, so it is never blank.
  *
- * Samples [BLANK_ROWS] rows of Y and half as many of each chroma plane, [BLANK_COLUMNS] points a row: blank when at
- * least [BLANK_SHARE] of the sampled rows are dead in Y and in both chroma planes. A dead row reads zero at every
+ * Samples [BLANK_ROWS] rows across the picture, [BLANK_COLUMNS] points a row, each row in Y and in the chroma row
+ * under it: blank when at least [BLANK_SHARE] of them are dead in all three planes at once, so dead rows in one plane
+ * can't add up with dead rows elsewhere in another. A dead row reads zero at every
  * point, or the green that zero becomes once a LEGACY camera has drawn it ([GREEN_Y], [GREEN_U], [GREEN_V]). No
  * picture has such a row (black still has chroma near 128), so a quarter of them is already a session gone wrong,
  * however much streaky picture the rest holds: on the Mirror (2026-11-25) a bad session's frames were two thirds dead
@@ -59,45 +60,45 @@ fun blankYuv(
     y: ByteBuffer, yRowStride: Int,
     u: ByteBuffer, v: ByteBuffer, uvRowStride: Int, uvPixelStride: Int,
 ): Boolean {
-    if (width <= 0 || height <= 0) return false
-    if (!mostRowsDead(y, width, height, yRowStride, 1, BLANK_ROWS, GREEN_Y)) return false
-    val rows = maxOf(1, BLANK_ROWS / 2)
-    return mostRowsDead(u, width / 2, height / 2, uvRowStride, uvPixelStride, rows, GREEN_U) &&
-        mostRowsDead(v, width / 2, height / 2, uvRowStride, uvPixelStride, rows, GREEN_V)
-}
-
-/**
- * Whether at least [BLANK_SHARE] of [rows] evenly spread rows of a plane are dead at [BLANK_COLUMNS] evenly spread
- * points: every point zero, or within [GREEN_SLACK] of [green], this plane's value of a drawn zero.
- */
-private fun mostRowsDead(plane: ByteBuffer, width: Int, height: Int, rowStride: Int, pixelStride: Int, rows: Int, green: Int): Boolean {
-    if (width <= 0 || height <= 0) return true
-    val sampled = minOf(rows, height)
-    val columns = minOf(BLANK_COLUMNS, width)
+    val chromaWidth = width / 2
+    val chromaHeight = height / 2
+    if (chromaWidth <= 0 || chromaHeight <= 0) return false
+    val sampled = minOf(BLANK_ROWS, chromaHeight)
     var dead = 0
     for (r in 0 until sampled) {
-        val row = ((2L * r + 1) * height / (2L * sampled)).toInt()
-        var allDead = true
-        for (c in 0 until columns) {
-            val x = ((2L * c + 1) * width / (2L * columns)).toInt()
-            val i = row * rowStride + x * pixelStride
-            if (i >= plane.limit()) { allDead = false; break }
-            val b = plane.get(i).toInt() and 0xFF
-            if (b != 0 && Math.abs(b - green) > GREEN_SLACK) { allDead = false; break }
-        }
-        if (allDead) dead++
+        val row = ((2L * r + 1) * chromaHeight / (2L * sampled)).toInt()
+        if (rowDead(y, width, 2 * row, yRowStride, 1, GREEN_Y) &&
+            rowDead(u, chromaWidth, row, uvRowStride, uvPixelStride, GREEN_U) &&
+            rowDead(v, chromaWidth, row, uvRowStride, uvPixelStride, GREEN_V)
+        ) dead++
     }
     return dead >= Math.ceil(sampled * BLANK_SHARE).toInt()
 }
 
-/** Rows of Y [blankYuv] samples; each chroma plane gets half. */
+/**
+ * Whether [row] of a plane is dead at [BLANK_COLUMNS] evenly spread points: every point zero, or within [GREEN_SLACK]
+ * of [green], this plane's value of a drawn zero. A row past the buffer's end isn't.
+ */
+private fun rowDead(plane: ByteBuffer, width: Int, row: Int, rowStride: Int, pixelStride: Int, green: Int): Boolean {
+    val columns = minOf(BLANK_COLUMNS, width)
+    for (c in 0 until columns) {
+        val x = ((2L * c + 1) * width / (2L * columns)).toInt()
+        val i = row * rowStride + x * pixelStride
+        if (i >= plane.limit()) return false
+        val b = plane.get(i).toInt() and 0xFF
+        if (b != 0 && Math.abs(b - green) > GREEN_SLACK) return false
+    }
+    return true
+}
+
+/** Rows [blankYuv] samples, each in Y and in the chroma row under it. */
 internal const val BLANK_ROWS = 24
 
 /** Points [blankYuv] samples in each row. */
 internal const val BLANK_COLUMNS = 64
 
 /**
- * The share of sampled rows that must be dead for a plane to count as blank. A quarter: the Mirror's bad sessions
+ * The share of sampled rows that must be dead for a frame to count as blank. A quarter: the Mirror's bad sessions
  * had two thirds of their rows dead, which the first threshold (90%) let through.
  */
 internal const val BLANK_SHARE = 0.25

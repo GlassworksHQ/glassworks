@@ -28,9 +28,17 @@ import java.util.concurrent.TimeUnit
  * Every stream goes through it, a turn of 0 included, so the encoder has one input path on every camera.
  *
  * Runs on its own thread. Throws from the constructor when EGL or the shader can't be set up; [release] stops drawing
- * and frees everything but [output], which belongs to the encoder.
+ * and frees everything but [output], which belongs to the encoder. A frame that fails to draw (the texture update
+ * throws, or the swap fails, as when EGL loses its context) stops the drawing and goes to [onFailure] once, on this
+ * thread, with why: its owner replaces the encoder from another thread, since [release] waits on this one.
  */
-class TurnedInput(private val output: Surface, width: Int, height: Int, private val turn: Int) {
+class TurnedInput(
+    private val output: Surface,
+    width: Int,
+    height: Int,
+    private val turn: Int,
+    private val onFailure: (why: String) -> Unit = {},
+) {
     private val thread = HandlerThread("glassworks-turn").apply { start() }
     private val handler = Handler(thread.looper)
     private lateinit var display: EGLDisplay
@@ -45,6 +53,7 @@ class TurnedInput(private val output: Surface, width: Int, height: Int, private 
     private val turnMatrix = textureTurn(turn)
     private val out = turnedSize(width, height, turn)
     @Volatile private var released = false
+    private var failed = false
 
     /** Where the camera draws. */
     val surface: Surface
@@ -101,7 +110,15 @@ class TurnedInput(private val output: Surface, width: Int, height: Int, private 
 
     /** One camera frame into the encoder, turned, stamped with the camera's time. */
     private fun draw() {
-        if (released) return
+        if (released || failed) return
+        try {
+            drawFrame()
+        } catch (e: Exception) {
+            fail("${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+
+    private fun drawFrame() {
         texture.updateTexImage()
         texture.getTransformMatrix(st)
         Matrix.multiplyMM(tex, 0, st, 0, turnMatrix, 0)
@@ -116,7 +133,13 @@ class TurnedInput(private val output: Surface, width: Int, height: Int, private 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         GLES20.glDisableVertexAttribArray(position)
         EGLExt.eglPresentationTimeANDROID(display, eglSurface, texture.timestamp)
-        EGL14.eglSwapBuffers(display, eglSurface)
+        if (!EGL14.eglSwapBuffers(display, eglSurface)) fail("eglSwapBuffers: EGL error 0x${Integer.toHexString(EGL14.eglGetError())}")
+    }
+
+    private fun fail(why: String) {
+        if (failed) return
+        failed = true
+        onFailure(why)
     }
 
     /** Stops drawing and frees the GL side, waiting for its thread. Take [surface] out of the camera session first. */

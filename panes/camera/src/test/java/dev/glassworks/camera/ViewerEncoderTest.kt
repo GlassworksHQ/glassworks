@@ -42,7 +42,7 @@ class ViewerEncoderTest {
                 override fun setEncoder(encoder: StreamEncoder?) { events += "input ${encoder ?: "none"}"; if (encoder == null) detach() }
                 override val streamFit get() = fit
             },
-            encoders = { size, _, failed -> sizes += size; Encoder(made.size + 1, failed, releaseThrows).also { made += it; events += "made ${it.n}" } },
+            encoders = { size, _, _, _, failed -> sizes += size; Encoder(made.size + 1, failed, releaseThrows).also { made += it; events += "made ${it.n}" } },
             egress = egress, onAccessUnit = { _, _ -> }, watched = { watching },
             clock = { now }, after = { ms, r -> posted += (now + ms) to r },
         )

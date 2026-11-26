@@ -53,5 +53,17 @@ run.sh c1c --es test c1 --es disp st
 run.sh c2e --es test c2 --es c2out enc
 ```
 
+The fps comparison in the note's attempt 6 (`a` and `b` are two passes of the same ranges, each run a fresh
+session) is `fps.sh`, which runs the Camera2 reader once per range with the spike force-stopped in between, and
+reads how much of a saved frame is the shim's drawn green:
+
+```sh
+fps.sh a30:30,30 a15:15,15 a24:24,24 a730:7,30 b30:30,30 b15:15,15
+fps.sh t1:template t2:template t3:template    # the request template's own range
+```
+
+`run.sh` stops with an error when the spike doesn't finish a run in 60 s (a launch without `--es test`, or one
+while a run is still going, is ignored), so it never shows an earlier run's log. A run name is one folder name.
+
 Each writes `out/<name>/log.txt` and, for good sessions, a JPEG or PNG of a frame. Saved frames show the room:
 don't commit or share them.

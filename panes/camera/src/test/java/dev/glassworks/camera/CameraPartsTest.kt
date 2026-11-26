@@ -110,6 +110,22 @@ class CameraPartsTest {
         ).blank())
     }
 
+    /**
+     * Four bands, each dead in a different plane only: drawn-green Y, then U, then V, then grey. Each plane alone has a
+     * quarter of its rows dead, but no row is dead in all three, so it's a picture.
+     */
+    @Test fun deadRowsInDifferentPlanesDontAddUp() {
+        fun band(row: Int) = row / 180
+        assertFalse(Yuv(
+            yAt = { _, r -> if (band(r) == 0) 79 else 128 },
+            uvAt = { x, r -> when {
+                x % 2 == 0 && band(r * 2) == 1 -> 83
+                x % 2 == 1 && band(r * 2) == 2 -> 71
+                else -> 128
+            } },
+        ).blank())
+    }
+
     /** A flat grey wall reads Y 79 across whole rows, but its chroma is grey: not blank. */
     @Test fun aFlatGreyWallIsNotBlank() {
         assertFalse(Yuv(yAt = { _, _ -> 79 }, uvAt = { _, _ -> 128 }).blank())
