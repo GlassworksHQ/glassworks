@@ -13,6 +13,7 @@ import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.DashboardSummary
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.model.LovelaceResource
+import dev.glassworks.engine.vitro.model.LovelaceResourceList
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import org.json.JSONArray
 import org.json.JSONObject
@@ -84,6 +85,8 @@ class HaDashboardClient(
      * once they are spent, the error goes to the listener.
      */
     private val configRetryMs: LongArray = CONFIG_RETRY_MS,
+    /** The HTTP status of a GET (null when unreadable), off the socket's threads: [BubbleModules]' legacy file. */
+    private val httpStatus: (url: String) -> Int? = BubbleModules::httpStatus,
 ) {
     interface Listener {
         fun onConnected(haVersion: String) {}
@@ -380,6 +383,7 @@ class HaDashboardClient(
         runCatching { socket?.close() }
         socket = null
         sendExecutor.shutdownNow()
+        bubbleProbeExecutor.shutdownNow()
         synchronized(registryLock) { timer?.shutdownNow() }
         held.clear()
     }
@@ -1300,7 +1304,7 @@ class HaDashboardClient(
                     val u = r.optString("url", "").ifEmpty { continue }
                     out += LovelaceResource(u, r.optString("type", "module"))
                 }
-                listener.onResources(out)
+                deliverResources(out)
             }
         }
         // 4. Active dashboard config (and live lovelace_updated notifications)
@@ -1545,6 +1549,49 @@ class HaDashboardClient(
         }
         id
     }
+
+    /**
+     * Hands [resources] to the listener, with whether Bubble Card modules may restyle Bubble cards here
+     * ([BubbleModules]), which only matters, and is only asked, when a resource loads Bubble Card. The three sources are
+     * asked in turn, and the first that may hold modules answers.
+     */
+    private fun deliverResources(resources: List<LovelaceResource>) {
+        if (!BubbleModules.loaded(resources)) {
+            listener.onResources(LovelaceResourceList(resources, bubbleModules = false))
+            return
+        }
+        val answered = AtomicBoolean(false)
+        fun answer(modules: Boolean) {
+            if (!closed.get() && answered.compareAndSet(false, true)) listener.onResources(LovelaceResourceList(resources, modules))
+        }
+        fun legacyFile() {
+            val url = (origin ?: haBase.trimEnd('/')) + BubbleModules.LEGACY_FILE
+            try {
+                bubbleProbeExecutor.execute { answer(BubbleModules.fileAnswer(httpStatus(url))) }
+            } catch (_: RejectedExecutionException) {
+                answer(true)
+            }
+        }
+        fun sensor() {
+            var subId = -1
+            val gotFirst = AtomicBoolean(false)
+            subId = subscribeWithId(
+                JSONObject().put("type", "subscribe_entities").put("entity_ids", JSONArray().put(BubbleModules.SENSOR)),
+                onError = { answer(true) },
+            ) { id, ev ->
+                if (!gotFirst.compareAndSet(false, true)) return@subscribeWithId
+                unsubscribe(id)
+                if (BubbleModules.sensorAnswer(ev)) answer(true) else legacyFile()
+            }
+            if (subId < 0) answer(true)
+        }
+        val sent = request(JSONObject().put("type", BubbleModules.TOOLS_COMMAND)) { res ->
+            if (BubbleModules.toolsAnswer(res)) answer(true) else sensor()
+        }
+        if (sent < 0) answer(true)
+    }
+
+    private val bubbleProbeExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "vitro-bubble-probe").apply { isDaemon = true } }
 
     /** Subscriptions cancelled before their result came: their failure is the cancel's, not an error to report. */
     /** One subscription until its result: whether it was cancelled first, and whether the result has settled it. */

@@ -1037,6 +1037,7 @@ class VitroView(
             // The view's body font rides on the cards' context, not only on VitroFonts.family: a card that builds a
             // child later (auto-entities' refresh) while another view is shown still gets this view's font.
             val cardCtx = contextFactory?.invoke(theme)?.withFontFamily(VitroFonts.familyFor(theme)) ?: return closePooledIslands()
+            cardCtx.viewType = viewCfg.type
             // The fonts the dashboard's stylesheets declare: read only once a card draws a family Vitro doesn't have.
             WebFonts.configure(cardCtx.haBase, cardCtx.resources, context.cacheDir)
             fontsFor = cardCtx.haBase to cardCtx.resources
@@ -1881,6 +1882,7 @@ class VitroView(
                 // The card's theme sets the body font for the text inside it only if it sets one; a theme of colors
                 // only keeps the font in force outside the card.
                 themed.withFontFamily(VitroFonts.declaredFamily(overrideTheme) ?: VitroFonts.familyOf(parentCtx.context))
+                    .also { it.viewType = parentCtx.viewType }
             } ?: parentCtx
         } else {
             parentCtx
