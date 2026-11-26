@@ -46,5 +46,16 @@ class SignInPageMockups {
             val state = OAuth.parseQuery(java.net.URI(s.handle(SignInServer.Request("GET", SignInServer.CONTINUE, mapOf("then" to "setup"), host)).headers["Location"]!!).rawQuery)["state"]!!
             s.handle(SignInServer.Request("GET", "/callback", mapOf("state" to state, "code" to "x"), host))
         })
+        // Kiln's sign-in on an Android that can't resolve .local names, with no address found for the name yet.
+        val offline = object : HttpPoster {
+            override fun postForm(url: String, body: String) = -1 to "Unable to resolve host"
+            override fun get(url: String, maxBytes: Int) = -1 to ""
+        }
+        save("12-not-found-yet", SignInServer(0, { ha }, HaTokenClient(offline), { _, _ -> },
+            reach = { dev.glassworks.web.LocalRoute.NoAddressYet(it, "homeassistant.local") }, addressWaitMs = 0).let { s ->
+            val host = mapOf("host" to "192.0.2.20:8099")
+            val state = OAuth.parseQuery(java.net.URI(s.handle(SignInServer.Request("GET", SignInServer.CONTINUE, mapOf("then" to "kiln"), host)).headers["Location"]!!).rawQuery)["state"]!!
+            s.handle(SignInServer.Request("GET", "/callback", mapOf("state" to state, "code" to "x"), host))
+        })
     }
 }
