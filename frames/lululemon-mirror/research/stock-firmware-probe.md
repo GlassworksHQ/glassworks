@@ -607,10 +607,25 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-onl
      `enable_wifi` marker to see if stock joins home Wi-Fi cleanly instead of `mirror-<serial>`
      SoftAP. Kiln now takes this path on a reinstall over Glassworks, whose patched services.jar has no
      SoftAP. Checked without USB on the dev Mirror (2026-11-26, Glassworks installed in place, network adb):
-     - **Verified:** `pm list packages dev.glassworks.generic_android.legacy` (the frame's `ownWifiGone`)
-       prints exactly `package:dev.glassworks.generic_android.legacy` with exit 0 as `shell`.
-     - **Verified:** no `hostapd` runs.
-     - **Verified:** `/system/etc/wifi/wpa_supplicant.conf` is the stage's `DEFAULT_WIFI_TEMPLATE`, line for line.
+     ```
+     $ adb shell 'id -u; pm list packages dev.glassworks.generic_android.legacy; echo "exit=$?"; ps | grep -c hostapd'
+     2000
+     package:dev.glassworks.generic_android.legacy
+     exit=0
+     0
+     $ adb shell cat /system/etc/wifi/wpa_supplicant.conf
+     update_config=1
+     eapol_version=1
+     ap_scan=1
+     fast_reauth=1
+     pmf=1
+     p2p_no_group_iface=1
+     ```
+     - **Verified:** as `shell` (uid 2000), the frame's `ownWifiGone` command prints exactly the one
+       `package:` line it looks for, with exit 0.
+     - **Verified:** no `hostapd` runs (count 0).
+     - **Verified:** the template is the stage's `DEFAULT_WIFI_TEMPLATE` line for line; `inplace.test.ts`
+       keeps this file as `MIRROR_WIFI_TEMPLATE` and fails if the constant changes.
      - **Read:** the agent's `CHANGE_WIFI_STATE`, its `wlan*` address for `lanIp`, and the CORS and
        `Access-Control-Allow-Private-Network` headers Chrome's local network access needs.
      - **Still untested on a Mirror:** the agent joining the network on the stage's first boot, and

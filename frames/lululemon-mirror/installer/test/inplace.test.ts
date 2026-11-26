@@ -24,6 +24,8 @@ import { FAKE_SERIAL, FakeMirror, buildFakeGwsbBundle, fakeAdbKey, fakeMirrorApk
 import { HAS_D8, buildSyntheticStockServicesJar } from './synthetic-services';
 
 const SECRET = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
+/** The Mirror's /system/etc/wifi/wpa_supplicant.conf, as `cat` printed it on stock 1.x (2026-11-26, research/stock-firmware-probe.md). */
+const MIRROR_WIFI_TEMPLATE = 'update_config=1\neapol_version=1\nap_scan=1\nfast_reauth=1\npmf=1\np2p_no_group_iface=1\n';
 const code = mirrorInPlace(design.device.words);
 const bytes = async (b: Blob) => new Uint8Array(await b.arrayBuffer());
 
@@ -55,9 +57,11 @@ describe('the stage', () => {
     expect([st.mode & 0o7777, st.uid, st.gid]).toEqual([0o600, DEFAULT_PROBE_APP_UID, DEFAULT_PROBE_APP_UID]);
     expect(await fs.label(secret)).toBe(STOCK_PROBE_LABELS.appData);
     expect(new TextDecoder().decode(await fs.readFile('/misc/wifi/wpa_supplicant.conf'))).not.toContain('not-a-real-password');
-    // the network as Android's Wi-Fi reads it on the agent's first start: the Mirror's own template (its
-    // /system/etc/wifi/wpa_supplicant.conf, read 2026-11-26), then the network with its PSK, system:wifi 0660
-    expect(new TextDecoder().decode(await fs.readFile(WIFI_CONF))).toBe(await wpaSupplicantConf(DEFAULT_WIFI_TEMPLATE, { ssid: 'Home Net', password: 'not-a-real-password' }));
+    // the network as Android's Wi-Fi reads it on the agent's first start: the Mirror's own template, then the network
+    // with its PSK, system:wifi 0660. The template is the Mirror's file as read, not the constant, so a change to the
+    // constant fails here.
+    expect(DEFAULT_WIFI_TEMPLATE).toBe(MIRROR_WIFI_TEMPLATE);
+    expect(new TextDecoder().decode(await fs.readFile(WIFI_CONF))).toBe(await wpaSupplicantConf(MIRROR_WIFI_TEMPLATE, { ssid: 'Home Net', password: 'not-a-real-password' }));
     const conf = await fs.stat(WIFI_CONF);
     expect([conf.mode & 0o7777, conf.uid, conf.gid]).toEqual([0o660, AID.system, AID.wifi]);
     expect([await fs.label('/misc/wifi'), await fs.label(WIFI_CONF)]).toEqual([LABELS.wifi, LABELS.wifi]);
