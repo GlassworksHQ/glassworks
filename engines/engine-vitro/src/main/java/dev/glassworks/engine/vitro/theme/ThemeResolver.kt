@@ -336,6 +336,59 @@ object ThemeResolver {
     }
 
     private const val NO_QUOTE = '\u0000'
+
+    /**
+     * Which characters of [css] are quoted text: a string, its quotes included, or a backslash escape and the
+     * character after it. A brace, `;` or `,` there isn't structure (`--label: "{ ; }"`), so the rule readers
+     * ([cssRulesImportant], [hostDeclarations]) skip it. A string ends as in [stripCssComments].
+     */
+    private fun quotedChars(css: String): BooleanArray {
+        val quoted = BooleanArray(css.length)
+        var quote = NO_QUOTE
+        var i = 0
+        while (i < css.length) {
+            val c = css[i]
+            when {
+                c == '\\' && i + 1 < css.length -> {
+                    quoted[i] = true
+                    quoted[i + 1] = true
+                    i += 2
+                    continue
+                }
+                quote != NO_QUOTE -> {
+                    quoted[i] = true
+                    if (c == quote || c == '\n') quote = NO_QUOTE
+                }
+                c == '"' || c == '\'' -> {
+                    quoted[i] = true
+                    quote = c
+                }
+            }
+            i++
+        }
+        return quoted
+    }
+
+    /** A rule body split into declarations at each `;` outside quoted text and parentheses (`url(data:…;base64,…)`). */
+    private fun splitDeclarations(body: String): List<String> {
+        val quoted = quotedChars(body)
+        val out = ArrayList<String>()
+        var parens = 0
+        var start = 0
+        for (i in body.indices) {
+            if (quoted[i]) continue
+            when (body[i]) {
+                '(' -> parens++
+                ')' -> if (parens > 0) parens--
+                ';' -> if (parens == 0) {
+                    out += body.substring(start, i)
+                    start = i + 1
+                }
+            }
+        }
+        out += body.substring(start)
+        return out
+    }
     private val TIME_PATTERN = Regex("""([\d.]+)(ms|s)""")
     private val DIM_PX = Regex("""([\d.]+)\s*(px|rem|em)?""", RegexOption.IGNORE_CASE)
     private val SHADOW_COLOR = Regex("""(?:rgba?|hsla?)\([^)]*\)""", RegexOption.IGNORE_CASE)
@@ -1082,7 +1135,9 @@ object ThemeResolver {
         var segStart = 0
         var bodyStart = 0
         var selector = ""
+        val quoted = quotedChars(cleaned)
         for (i in cleaned.indices) {
+            if (quoted[i]) continue
             when (cleaned[i]) {
                 '{' -> {
                     if (depth == 0) {
@@ -1094,7 +1149,7 @@ object ThemeResolver {
                 '}' -> if (depth > 0) {
                     depth--
                     if (depth == 0) {
-                        val decls = cleaned.substring(bodyStart, i).split(';').mapNotNull { d ->
+                        val decls = splitDeclarations(cleaned.substring(bodyStart, i)).mapNotNull { d ->
                             val c = d.indexOf(':').takeIf { it > 0 } ?: return@mapNotNull null
                             val name = d.substring(0, c).trim().lowercase(Locale.ROOT)
                             val rawValue = d.substring(c + 1)
@@ -1140,7 +1195,9 @@ object ThemeResolver {
         var segStart = 0
         var bodyStart = 0
         var selector = ""
+        val quoted = quotedChars(css)
         for (i in css.indices) {
+            if (quoted[i]) continue
             when (css[i]) {
                 '{' -> {
                     if (depth == 0) {

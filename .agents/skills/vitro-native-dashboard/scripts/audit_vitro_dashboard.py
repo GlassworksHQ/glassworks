@@ -428,6 +428,43 @@ def at_rules(css: str) -> list[str]:
     return out
 
 
+def rule_preludes(css: str) -> list[str]:
+    """The text before each rule's {, as the engine's rule readers find it (ThemeResolver.cssRulesImportant).
+
+    Quoted text and escapes aren't structure: a { or ; in a string ([data-label="a;b"]) neither opens a rule nor ends
+    a selector. A prelude starts after the last {, } or ; before it (a bare declaration ahead of a rule isn't part of
+    it), where a ; inside brackets or parentheses doesn't count.
+    """
+    out = []
+    quote = ""
+    nested = 0
+    start = 0
+    i = 0
+    while i < len(css):
+        c = css[i]
+        if c == "\\":
+            i += 2
+            continue
+        if quote:
+            if c == quote or c == "\n":
+                quote = ""
+        elif c in "\"'":
+            quote = c
+        elif c in "([":
+            nested += 1
+        elif c in ")]":
+            nested = max(nested - 1, 0)
+        elif c == "{":
+            out.append(css[start:i])
+            start = i + 1
+            nested = 0
+        elif c == "}" or (c == ";" and nested == 0):
+            start = i + 1
+            nested = 0
+        i += 1
+    return out
+
+
 def mask_css(css: str) -> str:
     """The CSS without comments and Jinja: what the renderer reads rules from."""
     return JINJA.sub(" ", strip_css_comments(css))
@@ -438,9 +475,8 @@ def reaches_inside(card_type: str, css: str) -> bool:
     if card_type in ("markdown", "clock"):
         return False
     text = mask_css(css)
-    for m in re.finditer(r"([^{}]+)\{", text):
-        # A rule's selector starts after the last `;` before it: a bare declaration ahead of it isn't part of it.
-        for sel in m.group(1).rsplit(";", 1)[-1].split(","):
+    for prelude in rule_preludes(text):
+        for sel in prelude.split(","):
             t = sel.strip()
             if t and not t.startswith("@") and not OWN_CARD_SELECTOR.match(t):
                 return True

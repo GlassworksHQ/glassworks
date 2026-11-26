@@ -837,6 +837,53 @@ export function stripCssComments(css: string): string {
   return out;
 }
 
+/**
+ * Which characters of the sheet are quoted text (ThemeResolver.quotedChars): a string, its quotes included, or a
+ * backslash escape and the character after it. A brace, `;` or `,` there isn't structure (`--label: "{ ; }"`).
+ */
+function quotedChars(css: string): boolean[] {
+  const quoted = new Array<boolean>(css.length).fill(false);
+  let quote = "";
+  let i = 0;
+  while (i < css.length) {
+    const c = css[i];
+    if (c === "\\" && i + 1 < css.length) {
+      quoted[i] = quoted[i + 1] = true;
+      i += 2;
+      continue;
+    }
+    if (quote) {
+      quoted[i] = true;
+      if (c === quote || c === "\n") quote = "";
+    } else if (c === '"' || c === "'") {
+      quoted[i] = true;
+      quote = c;
+    }
+    i++;
+  }
+  return quoted;
+}
+
+/** A rule body split into declarations at each `;` outside quoted text and parentheses (ThemeResolver.splitDeclarations). */
+function splitDeclarations(body: string): string[] {
+  const quoted = quotedChars(body);
+  const out: string[] = [];
+  let parens = 0;
+  let start = 0;
+  for (let i = 0; i < body.length; i++) {
+    if (quoted[i]) continue;
+    const c = body[i];
+    if (c === "(") parens++;
+    else if (c === ")" && parens > 0) parens--;
+    else if (c === ";" && parens === 0) {
+      out.push(body.slice(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(body.slice(start));
+  return out;
+}
+
 /** Splits `s` at `sep` outside brackets, parentheses and quotes. */
 function splitTopLevel(s: string, sep: string): string[] {
   const out: string[] = [];
@@ -869,7 +916,9 @@ function cssRules(css: string): { selector: string; decls: Decl[] }[] {
   let segStart = 0;
   let bodyStart = 0;
   let selector = "";
+  const quoted = quotedChars(cleaned);
   for (let i = 0; i < cleaned.length; i++) {
+    if (quoted[i]) continue;
     const c = cleaned[i];
     if (c === "{") {
       if (depth === 0) {
@@ -881,7 +930,7 @@ function cssRules(css: string): { selector: string; decls: Decl[] }[] {
       depth--;
       if (depth === 0) {
         const decls: Decl[] = [];
-        for (const d of cleaned.slice(bodyStart, i).split(";")) {
+        for (const d of splitDeclarations(cleaned.slice(bodyStart, i))) {
           const colon = d.indexOf(":");
           if (colon <= 0) continue;
           const name = d.slice(0, colon).trim().toLowerCase();

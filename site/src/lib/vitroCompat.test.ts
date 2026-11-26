@@ -585,6 +585,10 @@ describe("auditDashboard routes cards as the engine's CompatCheckerTest does", (
     island(mushroom('ha-card { --label: "/*"; } @media (max-width: 1px) { ha-card { padding: 0 } } /* note */'), "`@media`");
     island(mushroom("ha-card { --label: '/*'; } ha-card .primary { font-size: 20px } /* note */"), "reaches inside the card");
     expect(native(mushroom("/* @media (max-width: 1px) { } */ ha-card { opacity: 0.5 }"))).toEqual([]);
+    // Native, and the rule is read (its custom property is noted): the quoted brace doesn't swallow it.
+    expect(native(mushroom('ha-card { --label: "/* { */"; opacity: 0.5 }')).join(" | ")).toContain("`--label`");
+    expect(native(mushroom('ha-card[data-label="a;b{"] { opacity: 0.5 }'))).toEqual([]);
+    island(mushroom('ha-card { --label: "{"; } ha-card .primary { font-size: 20px }'), "reaches inside the card");
     expect(stripCssComments('a { content: "/*" } /* x */ b { c: d }')).toBe('a { content: "/*" }   b { c: d }');
     expect(stripCssComments("a { content: '*/ /*' } /* never closed")).toBe("a { content: '*/ /*' }  ");
     expect(stripCssComments('a { content: "\\" /*" }')).toBe('a { content: "\\" /*" }');

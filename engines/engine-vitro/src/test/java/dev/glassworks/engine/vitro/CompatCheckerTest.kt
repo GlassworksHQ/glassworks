@@ -374,6 +374,10 @@ class CompatCheckerTest {
         assertIsland(mushroom("""ha-card { --label: '/*'; } ha-card .primary { font-size: 20px } /* note */"""), "reaches inside the card")
         // A real comment still goes, the at-rule in it included.
         assertNative(mushroom("/* @media (max-width: 1px) { } */ ha-card { opacity: 0.5 }"))
+        // Nor does a brace or a `;` in a string open a block or end a selector.
+        assertNative(mushroom("""ha-card { --label: "/* { */"; opacity: 0.5 }"""))
+        assertNative(mushroom("""ha-card[data-label="a;b{"] { opacity: 0.5 }"""))
+        assertIsland(mushroom("""ha-card { --label: "{"; } ha-card .primary { font-size: 20px }"""), "reaches inside the card")
     }
 
     @Test

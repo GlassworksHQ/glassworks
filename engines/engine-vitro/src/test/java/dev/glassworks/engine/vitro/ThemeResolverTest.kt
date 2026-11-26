@@ -852,4 +852,18 @@ class ThemeResolverTest {
         assertEquals(listOf("ha-card", "ha-card .x"), rules.map { it.first })
         assertEquals(listOf("--label" to "\"/*\""), rules.first().second)
     }
+
+    @Test
+    fun quotedBracesAndSemicolonsAreNotStructure() {
+        // The string keeps its `/* { */` (it's no comment), and its brace doesn't open a block: the rule still applies.
+        val quotedBrace = """ha-card { --label: "/* { */"; opacity: .5 }"""
+        assertEquals(0.5f, ThemeResolver.parseCardMod(quotedBrace).opacity)
+        assertEquals(listOf("--label" to "\"/* { */\"", "opacity" to ".5"), ThemeResolver.cssRules(quotedBrace).single().second)
+        // A `;` in a string, or inside parentheses, doesn't end the declaration.
+        val rules = ThemeResolver.cssRules("""ha-card { content: 'a;b}'; background: url(data:image/png;base64,AA); opacity: .5 } b { c: d }""")
+        assertEquals(listOf("ha-card", "b"), rules.map { it.first })
+        assertEquals(listOf("content" to "'a;b}'", "background" to "url(data:image/png;base64,AA)", "opacity" to ".5"), rules.first().second)
+        // An escaped quote doesn't end the string.
+        assertEquals(listOf("ha-card"), ThemeResolver.cssRules("""ha-card { content: "\" }"; opacity: .5 }""").map { it.first })
+    }
 }
