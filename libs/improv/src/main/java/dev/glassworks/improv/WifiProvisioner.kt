@@ -270,6 +270,31 @@ public class WifiProvisioner(
         connectNow(ssid, password, hidden, cb)
     }
 
+    /**
+     * Entries holding an attempt's untested credential (still running, failed, or another network came up): no save yet.
+     * Android 7 and earlier only: from Android 8 the framework saves, so the gate is never made and writes nothing.
+     */
+    private val saveGate by lazy { SaveGate.of(ctx) }
+
+    /**
+     * Saves the configured networks (Android 7 and earlier forget what addNetwork added until the app saves). Tries twice;
+     * a failure is logged and the join still counts, since the network works until the next restart.
+     */
+    @Suppress("DEPRECATION")
+    private fun saveNetworks(joined: Int?): Boolean {
+        if (!saveGate.maySave(joined)) {
+            Log.w(TAG, "not saving Wi-Fi networks: a failed attempt may have changed a saved network's password, which a restart puts back")
+            return false
+        }
+        for (attempt in 1..2) {
+            val saved = runCatching { wm.saveConfiguration() }.getOrElse { false }
+            Log.i(TAG, "saveConfiguration (try $attempt) -> $saved")
+            if (saved) return true
+        }
+        Log.w(TAG, "couldn't save the Wi-Fi network: it works now, but Android may forget it after a restart")
+        return false
+    }
+
     private fun connectNow(ssid: String, password: String, hidden: Boolean?, cb: (Outcome) -> Unit) {
         ensureLocationIfDeviceOwner()
         Log.i(TAG, "connect to the chosen network (${ssid.length} char name, ${password.length} char password); ${status()}")
@@ -284,6 +309,8 @@ public class WifiProvisioner(
         if (loc && wifiUpAtStart && prevSsid == ssid) {
             // Already there: don't touch the saved config (we couldn't restore its password).
             Log.i(TAG, "already on the chosen network; reporting success without changes")
+            // an earlier join's save may have failed: saving again keeps the network past a restart on Android 7 and earlier
+            if (Compat.mustSaveNetworks) saveNetworks(info.networkId)
             return cb(Outcome.Connected(ssid, WifiSecurityRules.ipv4(info.ipAddress), "already-connected"))
         }
         if (!loc && wifiUpAtStart) {
@@ -382,20 +409,33 @@ public class WifiProvisioner(
                     WifiSecurity.EAP -> return false
                 }
             }
-            val existing = if (loc) runCatching {
-                wm.configuredNetworks.orEmpty().firstOrNull { WifiSecurityRules.unquote(it.SSID) == ssid }
-            }.getOrNull() else null
+            // the ids saved before this attempt: whether it made the entry addNetwork returns. Only a list Android gives in
+            // full counts (from Android 10 an app that isn't the device owner gets an empty or filtered one)
+            val idsBefore = runCatching { wm.configuredNetworks?.map { it.networkId }?.toSet() }.getOrNull()
+            // Android 7 and earlier: record that a change is coming, durably, before addNetwork makes it; a change that
+            // can't be recorded isn't made, so a later save can never keep a credential nothing tested
+            if (Compat.mustSaveNetworks && !saveGate.beginChange()) {
+                finish(Outcome.Failed("couldn't record the Wi-Fi change, so nothing was changed", null))
+                return true
+            }
             netId = wm.addNetwork(conf)
             if (netId == -1) {
+                if (Compat.mustSaveNetworks) saveGate.changeRefused()
                 Log.w(TAG, "addNetwork refused (not device owner / no SYSTEM_ALERT_WINDOW?); trying a suggestion")
                 return false
             }
-            addedNew = existing == null || existing.networkId != netId
+            // from here until this network connects itself, or its entry is removed, its credential is untested: no save
+            // (this attempt's or another's) may keep it
+            if (Compat.mustSaveNetworks) saveGate.unconfirmed(netId)
+            // unknown counts as not ours: a failed attempt may leave its entry behind, but never removes one saved earlier
+            addedNew = SavedNetworks.madeHere(netId, idsBefore, Compat.listsSavedNetworks(isDeviceOwner, loc)) == true
             val enabled = wm.enableNetwork(netId, true)
             wm.reconnect()
             method = if (isDeviceOwner) "device-owner" else "addNetwork"
             Log.i(TAG, "addNetwork -> $netId (new=$addedNew), enableNetwork -> $enabled")
             if (!enabled) {
+                // don't leave our new entry behind: a later save (below API 26) would keep it for good
+                if (addedNew) removeOurs(netId)
                 finish(Outcome.Failed("enableNetwork refused", null))
                 return true
             }
@@ -438,6 +478,14 @@ public class WifiProvisioner(
                 !wifiUpAtStart // fresh panel: whatever Wi-Fi comes up was ours
             }
             if (i?.supplicantState == SupplicantState.COMPLETED && onTarget && ip != null && wifiNetworkUp()) {
+                // joined: keep it past a restart. Android 7 and earlier forget a network addNetwork added until the app
+                // saves it (a Mirror on its stock Android 6 asked for Wi-Fi again on every boot, 2026-11-25)
+                // only once the network this attempt set up is the one that came up: without location access onTarget
+                // takes any network. When another one came up, this attempt's entry is untested, so no later save may
+                // keep it until it connects itself
+                if (netId != -1 && Compat.mustSaveNetworks) {
+                    if (i.networkId == netId) saveNetworks(netId)
+                }
                 return Outcome.Connected(ssid, ip, method)
             }
             if (authErrors >= 2) return failAndRestore("wrong password (authentication failed)")
@@ -445,9 +493,18 @@ public class WifiProvisioner(
             return null
         }
 
+        /** Removes an entry this attempt made; only a removal Android confirms lets later saves go ahead. */
+        private fun removeOurs(id: Int) {
+            val removed = runCatching { wm.removeNetwork(id) }.getOrDefault(false)
+            Log.i(TAG, "removeNetwork($id) -> $removed")
+            if (removed && Compat.mustSaveNetworks) saveGate.removed(id)
+        }
+
         private fun failAndRestore(reason: String): Outcome.Failed {
             var restored: String? = null
-            if (netId != -1 && addedNew) Log.i(TAG, "removeNetwork($netId) -> ${wm.removeNetwork(netId)}")
+            // an entry addNetwork reused keeps this attempt's credential, so it stays unconfirmed: Android 7 and earlier put
+            // the saved one back at the next restart, unless something saves first
+            if (netId != -1 && addedNew) removeOurs(netId)
             if (Compat.hasNetworkSuggestions) suggestion?.let { Log.i(TAG, "removeNetworkSuggestions -> ${wm.removeNetworkSuggestions(listOf(it))}") }
             if (netId != -1) {
                 if (prevNetId != -1) {
@@ -542,4 +599,147 @@ private fun suggestionOrThrow(ssid: String, security: WifiSecurity, password: St
         WifiSecurity.OPEN, WifiSecurity.WEP, WifiSecurity.EAP -> {}
     }
     return b.build()
+}
+
+/** Which saved Wi-Fi network an attempt made, from the ids saved before it (pure, so tests cover it). */
+internal object SavedNetworks {
+    /**
+     * True when [netId] wasn't among [idsBefore], false when it was, null when that can't be known: the list wasn't
+     * readable, or Android filters it for this app ([listTrusted] false).
+     */
+    fun madeHere(netId: Int, idsBefore: Set<Int>?, listTrusted: Boolean): Boolean? =
+        if (!listTrusted || idsBefore == null) null else netId !in idsBefore
+}
+
+/**
+ * Keeps an untested credential from being saved (Android 7 and earlier). `addNetwork` updates a saved network with the
+ * same name in place, and its old password can't be read back to restore it; until a restart Android holds the change
+ * in memory only, and a restart puts the saved password back, unless `saveConfiguration`, which writes every network,
+ * runs first. So every entry an attempt adds or updates is unconfirmed from that moment, whether the attempt is still
+ * running, failed, or another network came up instead, and no save runs while any is. Joining that network confirms it;
+ * removing an entry the attempt made clears it. A network joined meanwhile lasts until the next restart, as before.
+ */
+internal class SaveGate(private val store: Store, private val bootId: () -> String?, private val elapsedMs: () -> Long) {
+
+    /** What a gate keeps: the boot it belongs to ([bootId] null when unknown, [elapsedMs] then tells), and the ids. */
+    data class Kept(val bootId: String?, val elapsedMs: Long, val ids: Set<Int>)
+
+    /** Where the unconfirmed ids outlive this provisioner and the app's process. [write] says whether it was kept. */
+    interface Store {
+        fun read(): Kept?
+        fun write(kept: Kept): Boolean
+    }
+
+    // only this boot's: a restart put every saved credential back, so an older boot's ids mean nothing now
+    // A change another process began and never named (it died between beginChange and addNetwork's answer, or its
+    // write of the name failed) can't be told apart from a new one's: it becomes ORPHAN, which only a reboot clears
+    private val unconfirmed: MutableSet<Int>
+
+    init {
+        val kept = store.read()
+        val thisBoot = kept != null && sameBoot(kept)
+        unconfirmed = (if (thisBoot) kept!!.ids else emptySet()).map { if (it == CHANGING) ORPHAN else it }.toMutableSet()
+        // an earlier boot's record is replaced at once with this boot's, so a later process in this boot, when the time
+        // since boot has passed the old record's, can't take it for its own ([SaveGateBootReceiver] reads it early)
+        if (kept != null && !thisBoot) keep()
+    }
+
+    /**
+     * Same boot: two ids from the same source ("kernel:", "firstboot:") agree. With one unknown, or ids from different
+     * sources (the kernel's was readable then and not now), the clock since boot hasn't gone back (no wall clock).
+     */
+    private fun sameBoot(k: Kept): Boolean {
+        val now = bootId()
+        val then = k.bootId
+        return if (now != null && then != null && now.substringBefore(':') == then.substringBefore(':')) now == then
+        else elapsedMs() >= k.elapsedMs
+    }
+
+    /**
+     * Records, durably, that an attempt is about to change a network, before it does: false when that can't be kept,
+     * and then the attempt mustn't change anything. Until [unconfirmed] or [changeRefused] names the outcome, every save
+     * is held, also after the app's process restarts in the same boot.
+     */
+    @Synchronized fun beginChange(): Boolean {
+        unconfirmed += CHANGING
+        if (keep()) return true
+        unconfirmed -= CHANGING
+        return false
+    }
+
+    /** addNetwork refused: nothing changed. */
+    @Synchronized fun changeRefused() { if (unconfirmed.remove(CHANGING)) keep() }
+
+    @Synchronized fun unconfirmed(netId: Int) {
+        unconfirmed -= CHANGING
+        unconfirmed += netId
+        keep()
+    }
+
+    /** The entry is gone (Android confirmed its removal): nothing of it is left to save. */
+    @Synchronized fun removed(netId: Int) { if (unconfirmed.remove(netId)) keep() }
+
+    /** Whether saving is safe now; [joined] is the network just joined, which that confirms. */
+    @Synchronized fun maySave(joined: Int?): Boolean {
+        if (joined != null && unconfirmed.remove(joined)) keep()
+        return unconfirmed.isEmpty()
+    }
+
+    private fun keep(): Boolean = runCatching { store.write(Kept(bootId(), elapsedMs(), unconfirmed.toSet())) }.getOrDefault(false)
+
+    companion object {
+        /** A change recorded before addNetwork returned its id. */
+        private const val CHANGING = Int.MIN_VALUE
+
+        /** An earlier process's unnamed change: holds every save until a reboot. */
+        private const val ORPHAN = Int.MIN_VALUE + 1
+
+        /**
+         * One gate per process, kept in the app's own preferences, so a new provisioner or a restarted app still holds.
+         * Tests clear it, since a Robolectric sandbox keeps it from one test to the next.
+         */
+        @Volatile internal var shared: SaveGate? = null
+
+        fun of(ctx: Context): SaveGate = shared ?: synchronized(this) {
+            val app = ctx.applicationContext
+            shared ?: SaveGate(PrefsStore(app), { currentBootId(app) }, SystemClock::elapsedRealtime).also { shared = it }
+        }
+
+        /** This boot's id: the kernel's, else the wall time system_server noted at boot (fixed for the boot), else unknown. */
+        private fun currentBootId(ctx: Context): String? =
+            runCatching { java.io.File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
+                ?.let { "kernel:$it" }
+                ?: (if (Compat.hasBootCount) runCatching {
+                    Settings.Global.getInt(ctx.contentResolver, Settings.Global.BOOT_COUNT)
+                }.getOrNull()?.let { "bootcount:$it" } else null)
+                ?: runCatching {
+                    @SuppressLint("PrivateApi")
+                    val sp = Class.forName("android.os.SystemProperties")
+                    sp.getMethod("get", String::class.java).invoke(null, "ro.runtime.firstboot") as String
+                }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { "firstboot:$it" }
+    }
+
+    private class PrefsStore(ctx: Context) : Store {
+        private val prefs = ctx.getSharedPreferences("glassworks_improv_save_gate", Context.MODE_PRIVATE)
+        override fun read(): Kept? {
+            if (!prefs.contains("elapsed")) return null
+            return Kept(
+                prefs.getString("boot", null), prefs.getLong("elapsed", 0),
+                prefs.getStringSet("ids", emptySet()).orEmpty().mapNotNull { it.toIntOrNull() }.toSet(),
+            )
+        }
+        override fun write(kept: Kept): Boolean = prefs.edit().putString("boot", kept.bootId).putLong("elapsed", kept.elapsedMs)
+            .putStringSet("ids", kept.ids.map { it.toString() }.toSet()).commit()
+    }
+}
+
+/**
+ * Reads [SaveGate]'s record early in every boot, so a hold an earlier boot kept is recognised as that boot's while the
+ * time since boot is still short (the fallback when no boot id can be read), and replaced with this boot's.
+ */
+internal class SaveGateBootReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: android.content.Intent) {
+        // Android 8 and later never hold anything (the framework saves networks itself): nothing to read
+        if (intent.action == android.content.Intent.ACTION_BOOT_COMPLETED && Compat.mustSaveNetworks) SaveGate.of(context)
+    }
 }
