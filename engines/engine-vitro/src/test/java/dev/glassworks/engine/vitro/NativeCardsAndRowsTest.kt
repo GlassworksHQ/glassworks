@@ -62,6 +62,11 @@ import java.util.TimeZone
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class NativeCardsAndRowsTest {
+    /** The picture loads a test starts are all back before the next test: one in flight lands in its looper (D28). */
+    private val pendingImagesBefore = dev.glassworks.engine.vitro.ui.VitroCardContext.pendingImageLoads.get()
+
+    @After fun imageLoadsSettle() = awaitImageLoads(pendingImagesBefore)
+
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
     private val store = EntityStore()
     private val calls = ArrayList<Triple<String, String, JSONObject?>>()

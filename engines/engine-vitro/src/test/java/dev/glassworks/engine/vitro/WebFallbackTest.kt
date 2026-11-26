@@ -49,6 +49,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class WebFallbackTest {
+    /** The picture loads a test starts are all back before the next test: one in flight lands in its looper (D28). */
+    private val pendingImagesBefore = dev.glassworks.engine.vitro.ui.VitroCardContext.pendingImageLoads.get()
+
     private val base = FakeHaServer.BASE
     private val settings = EngineSettings(secureHosts = listOf("192.0.2.10"), zoom = 1f, remoteDebugging = false, dashboard = "$base/wall-test/living")
     private lateinit var activity: Activity
@@ -64,6 +67,7 @@ class WebFallbackTest {
     }
 
     @After fun tearDown() {
+        awaitImageLoads(pendingImagesBefore)
         IslandFrontend.clear()
         engines.forEach { runCatching { it.islandServer.stop() } }
         opened.forEach { page ->

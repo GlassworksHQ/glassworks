@@ -27,6 +27,7 @@ import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -45,6 +46,11 @@ import java.io.ByteArrayOutputStream
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class MjpegStreamPlayerTest {
+    /** The picture loads a test starts are all back before the next test: one in flight lands in its looper (D28). */
+    private val pendingImagesBefore = dev.glassworks.engine.vitro.ui.VitroCardContext.pendingImageLoads.get()
+
+    @After fun imageLoadsSettle() = awaitImageLoads(pendingImagesBefore)
+
 
     private val base = FakeHaServer.BASE
 
