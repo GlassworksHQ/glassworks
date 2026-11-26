@@ -39,6 +39,13 @@ interface Engine {
      * shows a Legacy chip that says so, and the app never turns on remote debugging for it (#29).
      */
     val lockedDown: Boolean get() = false
+
+    /**
+     * True when the engine draws cards outside Home Assistant's origin that start from the copy of HA's `localStorage`
+     * the app keeps (Vitro's web islands, [dev.glassworks.web.HaPageStorage]). Only then does the helper extension read
+     * the page's storage and the app keep it: with any other engine, nothing is copied.
+     */
+    val keepsPageStorage: Boolean get() = false
 }
 
 /** What an engine starts with. */

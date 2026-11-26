@@ -77,11 +77,36 @@ class FactoryResetTest {
         assertTrue(kiosk.getBoolean("setup_radio_migrated", false))
     }
 
+    /** What Vitro kept from Home Assistant's pages goes too, also when Vitro is off by now. */
+    @Test fun theResetClearsWhatVitroKeptFromHomeAssistantsPages() {
+        val ha = "http://192.0.2.10:8123"
+        val storage = dev.glassworks.web.HaPageStorage.of(app)
+        assertTrue(storage.put("$ha/lovelace/0", """{"thc_snooze":"{\"h_1\":99}"}"""))
+        val island = app.getSharedPreferences("vitro_island", android.content.Context.MODE_PRIVATE)
+        assertTrue(island.edit().putInt("port", 40123).commit())
+        val frontend = java.io.File(app.cacheDir, "vitro-frontend/2026.11.0").apply { mkdirs() }
+        java.io.File(frontend, "en.json").writeText("{}")
+
+        assertTrue(S1Settings.clearSettings(prefs, app))
+
+        assertNull("the copy of HA's localStorage goes", storage.items(ha))
+        assertTrue(app.getSharedPreferences("ha_page_storage", android.content.Context.MODE_PRIVATE).all.isEmpty())
+        assertTrue("the islands get a new origin, with empty storage", island.all.isEmpty())
+        assertFalse("HA's cached frontend strings go", java.io.File(app.cacheDir, "vitro-frontend").exists())
+        assertTrue("the rest of the settings step still ran", prefs.isAutoUrl)
+        dev.glassworks.web.HaPageStorage.closed = false // closed until the process ends: the next test starts open
+    }
+
     @Test fun theSealedSecretsTheResetKeepsAreTheIdentityOnly() {
         for (k in SecretFiles.SECRETS.getValue("kiosk")) assertEquals(k, k == "api_key", KioskPrefs.keptByReset(k))
     }
 
-    private class Steps(var signedOut: Boolean = true, var cleared: Boolean = true, var browsers: Boolean? = true) {
+    private class Steps(
+        var signedOut: Boolean = true,
+        var cleared: Boolean = true,
+        var browsers: Boolean? = true,
+        val inBackground: (() -> Unit) -> Unit = { it() },
+    ) {
         val did = ArrayList<String>()
         var answer: String? = "not answered"
         val reset = FactoryReset(
@@ -90,6 +115,7 @@ class FactoryResetTest {
             signOutBrowsers = { did += "browsers"; browsers },
             restart = { did += "restart" },
             onMain = { it() },
+            inBackground = inBackground,
         )
         fun run() = reset.run { answer = it; did += "answered" }
     }
@@ -98,6 +124,28 @@ class FactoryResetTest {
         val s = Steps().apply { run() }
         assertEquals(listOf("sign out", "browsers", "clear", "answered", "restart"), s.did)
         assertNull(s.answer)
+    }
+
+    /** The settings step writes files and waits for queued page-storage writes: off the main thread, and the answer waits. */
+    @Test fun theSettingsAreClearedOffTheMainThreadAndTheAnswerWaitsForThem() {
+        val queued = ArrayList<() -> Unit>()
+        val s = Steps(inBackground = { queued += it }).apply { run() }
+        assertEquals("nothing cleared, answered or restarted on the main thread", listOf("sign out", "browsers"), s.did)
+        assertEquals("not answered", s.answer)
+        queued.single()()
+        assertEquals(listOf("sign out", "browsers", "clear", "answered", "restart"), s.did)
+        assertNull(s.answer)
+    }
+
+    @Test fun aSettingsStepThatThrowsIsASettingsStepThatFailed() {
+        val did = ArrayList<String>()
+        var answer: String? = "not answered"
+        FactoryReset(
+            signOut = { done -> done(true) }, clearSettings = { error("disk") }, signOutBrowsers = { true },
+            restart = { did += "restart" }, onMain = { it() },
+        ).run { answer = it }
+        assertEquals(FactoryReset.NOT_CLEARED, answer)
+        assertTrue("no restart", did.isEmpty())
     }
 
     @Test fun aSignInThatStaysStopsTheResetBeforeAnySettingGoes() {

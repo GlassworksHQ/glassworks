@@ -138,8 +138,8 @@ The island server only serves islands. Its proxy forwards what a card loads (`/a
 
 | Card | Compared with HA | What to know |
 |---|---|---|
-| `tile` | Yes | 14 tile features draw natively (listed under [What Vitro draws natively](#what-vitro-draws-natively)). Any other feature is left out of the tile. With `features_position: inline`, the features sit under the tile instead of beside it |
-| `entities`, `entity-filter` | Yes | Plain entity rows and the `divider`, `section`, `button`, `call-service`, `text`, `weblink`, `buttons` and `conditional` rows. A view with an `attribute` or `cast` row opens in Home Assistant's frontend; custom rows draw as plain entity rows, and the card's header and footer are left out |
+| `tile` | Yes | 14 tile features draw natively (listed under [What Vitro draws natively](#what-vitro-draws-natively)). Any other feature is left out of the tile. With `features_position: inline`, the first feature sits beside the tile's info and the rest below it, as in Home Assistant |
+| `entities`, `entity-filter` | Partly: plain rows of `sensor`, `binary_sensor`, `input_boolean` and `light` entities | Plain entity rows and the `divider`, `section`, `button`, `call-service`, `text`, `weblink`, `buttons` and `conditional` rows. A view with an `attribute` or `cast` row opens in Home Assistant's frontend; custom rows draw as plain entity rows, and the card's header and footer are left out |
 | `button`, `entity`, `glance`, `heading`, `light`, `area`, `alarm-panel` | Yes | |
 | `entity-button` | Yes | Home Assistant's old name for `button`, drawn by the same card. Without an `entity`, it shows Home Assistant's error card, as Home Assistant does |
 | `statistic`, `date`, `plant-status`, `toggle-group`, `shortcut`, `alert` | Yes | A `shortcut` named after the page or action it opens, and a `statistic` on the energy date picker, open their view in Home Assistant's frontend |
