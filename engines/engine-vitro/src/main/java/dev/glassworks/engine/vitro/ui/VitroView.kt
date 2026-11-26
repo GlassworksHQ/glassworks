@@ -663,8 +663,33 @@ class VitroView(
 
     fun openMoreInfo(entityId: String) = openMoreInfo(entityId, null)
 
+    /**
+     * Opens More Info for an entity in Home Assistant's own frontend, over the view on screen (its URL's
+     * `more-info-entity-id`), with the reason Vitro's sheet can't show it: a script with fields, whose form only HA's
+     * dialog has. Null (a view with no page): Vitro's sheet, whose Run then never starts such a script.
+     */
+    var onMoreInfoInFrontend: ((ViewConfig, String, String) -> Unit)? = null
+
     /** [trace]: what Clarity's harness follows of the sheet ([MoreInfoSheet.Trace]). */
     internal fun openMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
+        val inFrontend = onMoreInfoInFrontend
+        if (inFrontend != null && entityId.substringBefore('.') == "script") {
+            val ctx = contextFactory?.invoke(ThemeResolver.resolve(themeCatalog, darkMode, userThemeName)) ?: return
+            dev.glassworks.engine.vitro.cards.EntityRowControls.scriptHasFields(ctx, entityId) { fields ->
+                val view = dashboard?.views?.getOrNull(currentViewIndex)
+                if (fields == true && view != null) {
+                    closeMoreInfo()
+                    inFrontend(view, entityId, "More Info of a script with fields")
+                } else {
+                    showMoreInfo(entityId, trace)
+                }
+            }
+            return
+        }
+        showMoreInfo(entityId, trace)
+    }
+
+    private fun showMoreInfo(entityId: String, trace: MoreInfoSheet.Trace?) {
         closeMoreInfo()
         moreInfoEntityId = entityId
         // HA's dialogs live outside the view: a view's `theme` never reaches them, the user's theme does (#885).

@@ -235,17 +235,39 @@ internal object EntityRowControls {
     }
 
     /**
-     * Run: HA's `hasScriptFields` reads the script's service from `get_services`; with fields it opens More Info, else
-     * it calls `script.turn_on`. Without an answer (no connection), the script just runs.
+     * Run, as `hui-script-entity-row` does: a script with fields ([scriptHasFields]) opens More Info ([onFields]; for a
+     * script with fields that's HA's own dialog, with its form: [dev.glassworks.engine.vitro.ui.VitroView.openMoreInfo]),
+     * else `script.turn_on`. A script whose fields Vitro couldn't learn (no answer from HA) never runs from here without
+     * them: it goes the fields' way too.
      */
-    internal fun runScript(ctx: VitroCardContext, entityId: String) {
+    internal fun runScript(ctx: VitroCardContext, entityId: String, onFields: () -> Unit = { ctx.openMoreInfo(entityId) }) {
+        scriptHasFields(ctx, entityId) { fields ->
+            if (fields == false) ctx.callService("script", "turn_on", JSONObject().put("entity_id", entityId), null)
+            else onFields()
+        }
+    }
+
+    /** `get_services` answers by entity store (one per page), kept a minute: a script reload can add fields. */
+    private val servicesCache = java.util.WeakHashMap<dev.glassworks.engine.vitro.data.EntityStore, Pair<Long, JSONObject>>()
+    private const val SERVICES_TTL_MS = 60_000L
+
+    /**
+     * HA's `hasScriptFields`: whether `script.<object id>` declares `fields` in `get_services`, on the main thread:
+     * true or false, or null when Home Assistant didn't answer.
+     */
+    internal fun scriptHasFields(ctx: VitroCardContext, entityId: String, answer: (Boolean?) -> Unit) {
         val objectId = entityId.substringAfter('.')
+        fun read(services: JSONObject): Boolean =
+            (services.optJSONObject("script")?.optJSONObject(objectId)?.optJSONObject("fields")?.length() ?: 0) > 0
+        val cached = synchronized(servicesCache) { servicesCache[ctx.store] }
+        if (cached != null && System.currentTimeMillis() - cached.first < SERVICES_TTL_MS) {
+            answer(read(cached.second))
+            return
+        }
         ctx.callWs(JSONObject().put("type", "get_services")) { ok, result, _ ->
-            val fields = if (ok) ((result as? JSONObject)?.optJSONObject("script")?.optJSONObject(objectId)?.optJSONObject("fields")) else null
-            ctx.main.post {
-                if (fields != null && fields.length() > 0) ctx.openMoreInfo(entityId)
-                else ctx.callService("script", "turn_on", JSONObject().put("entity_id", entityId), null)
-            }
+            val services = (result as? JSONObject)?.takeIf { ok }
+            if (services != null) synchronized(servicesCache) { servicesCache[ctx.store] = System.currentTimeMillis() to services }
+            ctx.main.post { answer(services?.let(::read)) }
         }
     }
 
@@ -594,7 +616,9 @@ internal object EntityRowControls {
 
         /** The value at step [i], rounded as the slider's decimal steps would be (`0.1 + 0.2` is `0.3`). */
         private fun snap(v: Double): Double {
-            val decimals = BigDecimal(step.toString()).stripTrailingZeros().scale().coerceAtLeast(0)
+            // The step's decimals and the minimum's: `min: 0.5` with `step: 1` moves through 0.5, 1.5, 2.5.
+            fun scale(d: Double) = BigDecimal(d.toString()).stripTrailingZeros().scale().coerceAtLeast(0)
+            val decimals = maxOf(scale(step), scale(lo))
             return BigDecimal(v).setScale(decimals, java.math.RoundingMode.HALF_UP).toDouble().coerceIn(min(lo, hi), max(lo, hi))
         }
 
@@ -852,6 +876,9 @@ internal object EntityRowControls {
             else -> attr.toString()
         }
     }
+
+    /** The secondary_info values that show a relative time, refreshed every second while the row is shown. */
+    val RELATIVE_SECONDARY_INFO: Set<String> = setOf("last-changed", "last-updated", "last-triggered")
 
     /** The secondary_info values [secondaryText] draws as HA does. */
     val SECONDARY_INFO: Set<String> = setOf(

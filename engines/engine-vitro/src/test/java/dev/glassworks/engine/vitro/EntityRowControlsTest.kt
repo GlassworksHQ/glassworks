@@ -24,6 +24,7 @@ import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroCardContext
+import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -53,6 +54,8 @@ class EntityRowControlsTest {
     private val moreInfo = ArrayList<String>()
     private val ws = ArrayList<JSONObject>()
     private var services = JSONObject()
+    private var wsAnswers = true
+    private var now = NOW
 
     @After fun forget() = HaDisplay.reset()
 
@@ -61,10 +64,10 @@ class EntityRowControlsTest {
         theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
         accessToken = { FakeHaServer.TOKEN },
         callService = { d, s, data, _ -> calls += Triple(d, s, data) },
-        callWs = { msg, done -> ws += msg; done(true, services, null) },
+        callWs = { msg, done -> ws += msg; if (wsAnswers) done(true, services, null) else done(false, null, JSONObject().put("code", "disconnected")) },
         navigate = {}, openMoreInfo = { moreInfo += it },
         fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
-        now = { NOW },
+        now = { now },
     )
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
@@ -131,6 +134,22 @@ class EntityRowControlsTest {
         idle()
         assertEquals(listOf("number.set_value"), calls())
         assertEquals(-1.5, calls[0].third!!.getDouble("value"), 0.0)
+    }
+
+    @Test fun aSliderKeepsTheMinimumsDecimals() {
+        put("input_number.half", "1.5", "min" to 0.5, "max" to 3.5, "step" to 1, "mode" to "slider", "friendly_name" to "Half")
+        val c = entities("\"input_number.half\"")
+        layout(c, 500)
+        val slider = all(c).filterIsInstance<EntityRowControls.HaRowSlider>().single()
+        val inset = 8 * activity.resources.displayMetrics.density
+        touch(slider, MotionEvent.ACTION_DOWN, inset)
+        touch(slider, MotionEvent.ACTION_UP, inset)
+        idle()
+        assertEquals(0.5, calls.single().third!!.getDouble("value"), 0.0)
+        touch(slider, MotionEvent.ACTION_DOWN, inset + (slider.width - 2 * inset) * 0.68f)
+        touch(slider, MotionEvent.ACTION_UP, inset + (slider.width - 2 * inset) * 0.68f)
+        idle()
+        assertEquals(2.5, calls.last().third!!.getDouble("value"), 0.0)
     }
 
     @Test fun aSliderRowHidesItsStateOnARowOf300PxOrLess() {
@@ -241,6 +260,63 @@ class EntityRowControlsTest {
         assertEquals(1, calls.size)
     }
 
+    @Test fun aScriptWhoseFieldsAreUnknownNeverRunsFromItsRow() {
+        put("script.greet", "off", "mode" to "single", "current" to 0, "friendly_name" to "Greet")
+        wsAnswers = false
+        val c = entities("\"script.greet\"")
+        layout(c, 500)
+        button(c, "Run").performClick()
+        idle()
+        assertTrue("no turn_on without knowing its fields", calls.isEmpty())
+        assertEquals(listOf("script.greet"), moreInfo)
+    }
+
+    /** A dashboard on a VitroView with this test's context, and HA's More Info dialog handed off to [inFrontend]. */
+    private fun dashboardView(inFrontend: ((String) -> Unit)?): VitroView {
+        val vv = VitroView(activity, store, 0xFF000000.toInt())
+        vv.contextFactory = { ctx() }
+        if (inFrontend != null) vv.onMoreInfoInFrontend = { _, id, _ -> inFrontend(id) }
+        val card = JSONObject("""{"type": "entities", "entities": ["script.greet", "script.goodnight"]}""")
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject().put("views", org.json.JSONArray().put(JSONObject().put("title", "Home").put("cards", org.json.JSONArray().put(card))))), null)
+        activity.setContentView(vv)
+        idle()
+        return vv
+    }
+
+    @Test fun moreInfoForAScriptWithFieldsIsHasOwnDialog() {
+        put("script.greet", "off", "mode" to "single", "current" to 0, "friendly_name" to "Greet")
+        put("script.goodnight", "off", "mode" to "single", "current" to 0, "friendly_name" to "Goodnight")
+        services = JSONObject("""{"script": {"goodnight": {}, "greet": {"fields": {"who": {"required": true}}}}}""")
+        val handedOff = ArrayList<String>()
+        val vv = dashboardView { handedOff += it }
+        vv.openMoreInfo("script.greet")
+        idle()
+        assertEquals("HA's dialog has the fields' form", listOf("script.greet"), handedOff)
+        assertNull("Vitro's sheet doesn't open", vv.openSheet)
+        vv.openMoreInfo("script.goodnight")
+        idle()
+        assertEquals(1, handedOff.size)
+        assertTrue("a script without fields gets Vitro's sheet", vv.openSheet != null)
+    }
+
+    @Test fun theSheetsRunNeverStartsAScriptWithFields() {
+        put("script.greet", "off", "mode" to "single", "current" to 0, "friendly_name" to "Greet")
+        put("script.goodnight", "off", "mode" to "single", "current" to 0, "friendly_name" to "Goodnight")
+        services = JSONObject("""{"script": {"goodnight": {}, "greet": {"fields": {"who": {"required": true}}}}}""")
+        // No page to hand HA's dialog to: Vitro's sheet opens, and its Run must not start the script without its fields.
+        val vv = dashboardView(inFrontend = null)
+        vv.openMoreInfo("script.greet")
+        idle()
+        all(vv.openSheet!!).filterIsInstance<TextView>().first { it.text == "Run" }.performClick()
+        idle()
+        assertTrue("script.turn_on without the fields: ${calls()}", calls.isEmpty())
+        vv.openMoreInfo("script.goodnight")
+        idle()
+        all(vv.openSheet!!).filterIsInstance<TextView>().first { it.text == "Run" }.performClick()
+        idle()
+        assertEquals(listOf("script.turn_on"), calls())
+    }
+
     @Test fun aRunningScriptCancelsAndAQueuedOneCanRunAgain() {
         put("script.water", "on", "mode" to "single", "current" to 1, "friendly_name" to "Water")
         put("script.chime", "on", "mode" to "queued", "current" to 2, "max" to 10, "friendly_name" to "Chime")
@@ -335,6 +411,18 @@ class EntityRowControlsTest {
         val c = entities("{\"entity\": \"switch.kettle\", \"secondary_info\": \"entity-id\"}")
         layout(c, 500)
         assertEquals(listOf("Kettle", "switch.kettle"), texts(c))
+    }
+
+    @Test fun aRelativeSecondaryLineKeepsCountingWhileShown() {
+        store.putLocal(EntityState("automation.porch", "on", mapOf("friendly_name" to "Porch", "last_triggered" to "2026-11-12T16:07:00+00:00")))
+        val c = entities("{\"entity\": \"automation.porch\", \"secondary_info\": \"last-triggered\"}")
+        activity.setContentView(c)
+        layout(c, 500)
+        assertTrue(texts(c).toString(), texts(c).contains("1 minute ago"))
+        // No state change: only the clock moves, as on an idle automation.
+        now = NOW + 2 * 3_600_000L
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+        assertTrue(texts(c).toString(), texts(c).contains("2 hours ago"))
     }
 
     private companion object {

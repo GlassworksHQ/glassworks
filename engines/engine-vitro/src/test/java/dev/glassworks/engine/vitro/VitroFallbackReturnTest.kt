@@ -357,6 +357,7 @@ class VitroFallbackReturnTest {
         listOf(
             "https://example.com/lovelace/0", // another origin
             "$living?edit=1", // HA's edit mode
+            "$living?more-info-entity-id=script.greet", // HA's More Info dialog over a view (a script's fields)
             "$base/?auth_callback=1&code=abc", // a sign-in coming back
             "about:blank",
         ).forEach { fpHost.onLocationChange(it); idle() }

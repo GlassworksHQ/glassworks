@@ -2158,6 +2158,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }.toSet()
         }
         val rowViews = ArrayList<LinearLayout>()
+        // Rows whose secondary line is a relative time: redrawn every second while the card is shown, as HA's
+        // `hui-timestamp-display` does, so an idle entity's "1 minute ago" keeps counting.
+        val relativeLines = ArrayList<() -> Unit>()
         // The rows (entity or special) that take the 8 px gap after another row.
         val gapRows = HashSet<View>()
         val rowVisible = ArrayList<Boolean>()
@@ -2304,6 +2307,12 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                     else -> valueView.text = s?.formattedState() ?: "…"
                 }
             }
+            if (secondaryView != null && rowCfg.secondaryInfo in EntityRowControls.RELATIVE_SECONDARY_INFO) {
+                relativeLines += {
+                    val text = EntityRowControls.secondaryText(ctx.store[rowCfg.entity], rowCfg.secondaryInfo, ctx.now()).orEmpty()
+                    if (secondaryView.text.toString() != text) secondaryView.text = text
+                }
+            }
             gapRows += row
             return row
         }
@@ -2412,6 +2421,18 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             col.addView(entityRow(rowCfg), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { if (gapAbove) topMargin = ctx.px(8f) })
         }
         refreshFilter()
+        if (relativeLines.isNotEmpty()) {
+            renewing {
+                val tick = object : Runnable {
+                    override fun run() {
+                        relativeLines.forEach { it() }
+                        ctx.main.postDelayed(this, 1_000L)
+                    }
+                }
+                ctx.main.postDelayed(tick, 1_000L)
+                ({ ctx.main.removeCallbacks(tick) })
+            }
+        }
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
     }
 
