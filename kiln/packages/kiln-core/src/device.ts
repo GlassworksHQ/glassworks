@@ -192,6 +192,13 @@ export interface InPlaceCode {
     partitions: readonly string[];
     build(o: { partitionBytes: Record<string, number> }): Promise<{ writes: Record<string, Blob>; what: string }>;
   };
+  /**
+   * Read over adb, when the device lets this browser in before Kiln restarts it into fastboot: whether the Wi-Fi network
+   * the device opens itself (`channels.lan.hotspot`) won't open on it any more, because an earlier install turned it
+   * off. Then that run treats the device as one without a network of its own: the stage gets the person's network,
+   * and the receive step reaches the agent over that network or Bluetooth. Without it, Kiln counts on the hotspot.
+   */
+  ownWifiGone?(p: PanelShell): Promise<boolean>;
   /** How the `receive` step reaches the agent: its HTTP port and path on the LAN, its Bluetooth GATT service and characteristics. */
   channels: {
     lan?: {

@@ -430,9 +430,21 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
         };
       },
     },
+    // Glassworks in place means the install patched services.jar, MirrorApService.systemReady() included (stock.ts
+    // patchStockAp): stock's mirror-<serial> hotspot never opens again, so a reinstall's agent needs the person's network
+    ownWifiGone: (p) => glassworksInPlace(p),
     channels: { lan: { ...STOCK_PROBE_LAN }, ble: { ...STOCK_PROBE_BLE } },
     words: inPlaceWords(words),
   };
+}
+
+/**
+ * Whether Glassworks is installed on the running Mirror: its install comes after the services.jar write that turns
+ * stock's hotspot off, so with it there, that hotspot is gone. Anything Kiln can't read counts as no.
+ */
+export async function glassworksInPlace(p: PanelShell): Promise<boolean> {
+  const r = await p.run(`pm list packages ${GLASSWORKS.package}`).catch(() => undefined);
+  return !!r && r.code === 0 && r.out.split(/\r?\n/).some((l) => l.trim() === `package:${GLASSWORKS.package}`);
 }
 
 /**

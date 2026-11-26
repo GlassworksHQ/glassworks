@@ -131,7 +131,9 @@ export interface ImageDeps {
  * back on the same device, never with the install it is undoing.
  */
 export type ProgressMark = { at: 'written' | 'flashed' | 'staged' | 'received' | 'undo'; image?: string; secret?: string; serial?: string; digest?: string; bundle?: string;
-  wrote?: string[]; began?: string[]; restore?: { serial: string; digest: string }; readBack?: ReadBackFile[] };
+  wrote?: string[]; began?: string[]; restore?: { serial: string; digest: string }; readBack?: ReadBackFile[];
+  /** `staged`: the device's own Wi-Fi was gone (the frame's `ownWifiGone`), so its agent got the person's network. */
+  noOwnWifi?: boolean };
 const MARKS: readonly ProgressMark['at'][] = ['written', 'flashed', 'staged', 'received', 'undo'];
 export interface DeviceProgress { get(): ProgressMark | undefined; set(m: ProgressMark | undefined): void }
 
@@ -426,6 +428,7 @@ export class ImageSession {
     if (inPlace && mark?.at === 'staged' && secret && mark.serial) {
       this.secret = secret;
       this.serial = mark.serial;
+      this.noOwnWifi = !!mark.noOwnWifi;
       this.state = { ...this.state, screen: 'receive', picked: wrote.id, files: waiting(wrote), changed: true, round: 1, receive: this.receiveView('ready'), resumed: 'staged' };
       this.cursor = this.indexOf(wrote, 'receive');
       setTimeout(() => this.watchHotspot(), 0);
@@ -782,13 +785,31 @@ export class ImageSession {
       if (!mine()) { void p.close?.().catch(() => {}); if (latest()) this.set({ connecting: false }); return; }
       await checkBoard(p, this.d.frame);
       if (!mine()) { void p.close?.().catch(() => {}); if (latest()) this.set({ connecting: false }); return; }
+      const gone = await this.ownWifiGone(p);
+      if (!mine()) { void p.close?.().catch(() => {}); if (latest()) this.set({ connecting: false }); return; }
       await this.restart(p);
+      if (mine()) this.noOwnWifi = gone;
       if (latest()) this.set({ connecting: false, restarted: mine() });
     } catch (e) {
       void p?.close?.().catch(() => {}); // a refusal (not the device) or a failed restart: let go of the connection
       if (!mine()) { if (latest()) this.set({ connecting: false }); return; }
       this.set({ connecting: false, connectError: e instanceof AdbAuthTimeout ? this.d.frame.words['fastboot.notLetIn'] : (e as Error).message });
     }
+  }
+
+  /**
+   * For an in-place recipe whose device opens its own Wi-Fi: whether an earlier install turned that off (the frame's
+   * `ownWifiGone`, over adb). A reinstall then gives the agent the person's network instead.
+   */
+  private async ownWifiGone(p: PanelShell): Promise<boolean> {
+    const c = this.inPlace ? this.d.frame.imageFlow.inPlace : undefined;
+    if (!c?.channels.lan?.hotspot || !c.ownWifiGone) return false;
+    const gone = await c.ownWifiGone(p).catch(() => false);
+    if (gone) {
+      this.log(`${cap(this.d.frame.the)}'s own Wi-Fi network is off since its earlier install`);
+      this.log('', 'the setup helper joins your Wi-Fi network instead, and Kiln reaches it there or over Bluetooth');
+    }
+    return gone;
   }
 
   /**
@@ -811,6 +832,12 @@ export class ImageSession {
     if (!c) throw new Error(`${cap(this.d.frame.the)} has no in-place code for ${this.recipe.name}.`);
     return c;
   }
+
+  /**
+   * This run's device no longer opens its own Wi-Fi (the frame's `ownWifiGone`, read over adb before the restart into
+   * fastboot): its agent gets the person's network, and is reached over it or Bluetooth.
+   */
+  private noOwnWifi = false;
 
   private store(): InPlaceStore { return this.d.inPlaceStore ?? (this.storeMemo ??= memoryInPlaceStore()); }
 
@@ -835,7 +862,18 @@ export class ImageSession {
 
   /** The device's own Wi-Fi and the agent's addresses on it, when the frame declares one and the serial is known. */
   private hotspot() {
-    return this.recipe && this.inPlace ? hotspotUrls(this.d.frame.imageFlow.inPlace?.channels.lan, this.serial) : null;
+    return this.recipe && this.inPlace && !this.noOwnWifi ? hotspotUrls(this.d.frame.imageFlow.inPlace?.channels.lan, this.serial) : null;
+  }
+
+  /**
+   * The frame's in-place code as this run reaches its agent: without the device's own Wi-Fi when the frame said it's
+   * gone, so the receive step works as on a device that has none (the person's network, or Bluetooth).
+   */
+  private reach(): InPlaceCode {
+    const c = this.code();
+    if (!this.noOwnWifi || !c.channels.lan?.hotspot) return c;
+    const { hotspot: _gone, ...lan } = c.channels.lan;
+    return { ...c, channels: { ...c.channels, lan } };
   }
 
   /**
@@ -905,7 +943,8 @@ export class ImageSession {
             const assets = code.assets?.length ? await (this.d.stagedAssets?.(code.assets) ?? Promise.resolve({})) : {};
             // a device with its own Wi-Fi gets the person's network only in the final install: one that joins it might
             // not open its own, and the transfer goes over that one
-            const stageNetwork = code.channels.lan?.hotspot ? undefined : network;
+            // (unless the frame said its own Wi-Fi is gone: then the agent can only be reached over the person's)
+            const stageNetwork = code.channels.lan?.hotspot && !this.noOwnWifi ? undefined : network;
             this.made[step.makes] = await code.stage({ adbKey, userdataBytes: this.state.fastboot.userdataBytes, secret: this.secret, assets, ...(stageNetwork ? { wifi: stageNetwork } : {}) });
             work('stage', 1);
             this.log('', stageNetwork ? 'the setup agent, this browser\'s adb key, its signing secret and your network, on a fresh userdata' : 'the setup agent, this browser\'s adb key and its signing secret, on a fresh userdata');
@@ -936,7 +975,7 @@ export class ImageSession {
             // the stage's write is done: a reload from here on resumes on receive (its agent starts with any restart,
             // the stage being on userdata), never staging again
             else if (this.state.round === 1 && this.secret && this.serial && steps[i + 1]?.do === 'restart' && steps[i + 2]?.do === 'receive') {
-              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial });
+              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial, ...(this.noOwnWifi ? { noOwnWifi: true } : {}) });
             }
             break;
           }
@@ -950,7 +989,7 @@ export class ImageSession {
             this.made = Object.create(null);
             const next = steps[i + 1]?.do;
             if (next === 'receive' && this.secret && this.serial) {
-              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial });
+              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial, ...(this.noOwnWifi ? { noOwnWifi: true } : {}) });
             } else if (next === 'app-install') {
               this.restore = undefined;
               this.wrote = new Set();
@@ -1066,7 +1105,7 @@ export class ImageSession {
 
   private receiverOf(channels: readonly ('lan' | 'ble' | 'file')[]): InPlaceReceiver {
     return this.receiver ??= new InPlaceReceiver({
-      code: this.code(), store: this.store(), channels, bluetooth: this.d.bluetooth, fetchImpl: this.d.agentFetch,
+      code: this.reach(), store: this.store(), channels, bluetooth: this.d.bluetooth, fetchImpl: this.d.agentFetch,
       localNetworkPermission: this.d.localNetworkPermission, ...(this.d.bleStallMs ? { ble: { stallTimeoutMs: this.d.bleStallMs } } : {}),
       ...(this.d.lanTimeoutMs ? { lanTimeoutMs: this.d.lanTimeoutMs } : {}),
     });

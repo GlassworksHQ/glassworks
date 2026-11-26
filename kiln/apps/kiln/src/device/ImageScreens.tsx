@@ -298,8 +298,9 @@ export function ImageFastboot({ f, s }: P) {
       {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <Note tone="bad">{s.connectError}</Note>}
       <Foot busy={s.connecting}>
-        {/* Glassworks goes through the keep step, which reads Home Assistant's key and then restarts the device (PR 603) */}
-        {!s.restarted && !f.inPlace ? <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => (f.recipe.community ? void f.restartToFastboot() : f.toKeep())}>{d.words['fastboot.overUsb']}</button> : <span />}
+        {/* Glassworks goes through the keep step, which reads Home Assistant's key and then restarts the device (PR 603); an
+            in-place reinstall restarts straight away, after the frame's check of whether the device's own Wi-Fi is gone */}
+        {!s.restarted && !again ? <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => (f.recipe.community || f.inPlace ? void f.restartToFastboot() : f.toKeep())}>{d.words['fastboot.overUsb']}</button> : <span />}
         <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.connectFastboot()}>Connect</button>
       </Foot>
     </section>

@@ -161,6 +161,55 @@ describe('Glassworks on the stock software', () => {
     expect(log.indexOf('matches what Kiln wrote')).toBeLessThan(log.indexOf('Installing'));
   });
 
+  it('on a reinstall over Glassworks (stock\'s hotspot turned off), gives the helper the person\'s network and reaches it there', async () => {
+    // the frame's check runs over adb before the restart (the Mirror's: Glassworks is installed, inplace.test.ts)
+    let asked: PanelShell | undefined;
+    const r = rig({ code: { ownWifiGone: async (p) => { asked = p; return true; } } });
+    r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
+    r.image.pick(RECIPE.id);
+    r.image.choose();
+    r.image.toFastboot();
+    await r.image.restartToFastboot();
+    expect(r.image.state.restarted).toBe(true);
+    expect(asked).toBeTruthy();
+    await r.image.connectFastboot();
+    r.image.understand(true);
+    await r.image.flash();
+    expect(r.image.state).toMatchObject({ screen: 'receive', round: 1 });
+    const log = r.image.state.log.join('\n');
+    expect(log).toContain('own Wi-Fi network is off since its earlier install');
+    expect(log).toContain('the setup agent, this browser\'s adb key, its signing secret and your network, on a fresh userdata');
+    expect(log).not.toContain('HomeNet'); // the person's network stays out of the log
+    // no "join mirror-<serial>" screen: the Bluetooth way, with the local network the agent joined
+    expect(r.image.state.receive).toMatchObject({ network: null });
+    expect(r.progress.mark).toMatchObject({ at: 'staged', noOwnWifi: true });
+    await toRestorePoint(r, 'ble');
+    expect(r.image.state.receive?.channel).toBe('lan');
+  });
+
+  it('keeps the stage free of the person\'s network when the Mirror\'s own Wi-Fi is still there', async () => {
+    const r = rig({ code: { ownWifiGone: async () => false } });
+    r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
+    r.image.pick(RECIPE.id);
+    r.image.choose();
+    r.image.toFastboot();
+    await r.image.restartToFastboot();
+    await r.image.connectFastboot();
+    r.image.understand(true);
+    await r.image.flash();
+    expect(r.image.state.receive).toMatchObject({ network: `mirror-${FAKE_SERIAL}` });
+    expect(r.image.state.log.join('\n')).toContain('the setup agent, this browser\'s adb key and its signing secret, on a fresh userdata');
+    expect(r.progress.mark?.noOwnWifi).toBeUndefined();
+  });
+
+  it('a reload on receive keeps knowing the Mirror\'s own Wi-Fi is gone', async () => {
+    const progress = tab();
+    progress.set({ at: 'staged', image: RECIPE.id, secret: '00'.repeat(32), serial: FAKE_SERIAL, noOwnWifi: true });
+    const r = rig({ progress });
+    expect(r.image.state).toMatchObject({ screen: 'receive', resumed: 'staged' });
+    expect(r.image.state.receive).toMatchObject({ network: null });
+  });
+
   it('asks the person to join the Mirror\'s own Wi-Fi, sees when this computer has, and keeps their Wi-Fi out of the stage', async () => {
     const r = rig({ deps: { hotspotPollMs: 5 } });
     r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });

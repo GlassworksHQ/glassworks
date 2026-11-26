@@ -13,7 +13,7 @@ import {
   BundleRefused, DEFAULT_PROBE_APP_UID, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata, installInPlace, mirrorInPlace, restoredFiles,
 } from '../src';
 import { ADB_KEYS, macFromSerial } from '../src/image';
-import { INSTALLER_MAC_SETTING, USB_ALLOW_PERMISSION_SETTING, factoryUserdata, keepWifiOn, keptBundleFits } from '../src/inplace';
+import { INSTALLER_MAC_SETTING, USB_ALLOW_PERMISSION_SETTING, factoryUserdata, glassworksInPlace, keepWifiOn, keptBundleFits } from '../src/inplace';
 import { USB_ALLOW_PERMISSION } from '../src/stock';
 import type { PanelShell } from '@glassworks/adb';
 import { GLASSWORKS } from '../src/app';
@@ -334,6 +334,25 @@ describe('the app\'s install', () => {
     await installInPlace(m, { apk: fakeMirrorApk(), onStep: (s, d) => lines.push(s || `  ${d}`), sleep: async () => {} });
     expect(m.cmds.some((c) => c.startsWith(`settings put global ${INSTALLER_MAC_SETTING}`))).toBe(false);
     expect(lines.join('\n')).toContain('Home Assistant id: no serial reported, so the app picks its own');
+  });
+});
+
+describe('a reinstall, and stock\'s hotspot', () => {
+  // the install's services.jar empties MirrorApService.systemReady(): with Glassworks on, mirror-<serial> never opens
+  it('counts the hotspot gone once Glassworks is installed in place, and only then', async () => {
+    const code = mirrorInPlace(design.device.words);
+    expect(code.channels.lan?.hotspot).toBeTruthy();
+    expect(await code.ownWifiGone!(new FakeMirror({ kiosk: 'none', installed: 600 }))).toBe(true);
+    expect(await code.ownWifiGone!(new FakeMirror({ kiosk: 'none' }))).toBe(false); // stock (the agent's stage, say)
+  });
+
+  it('counts what it can\'t read as no', async () => {
+    const shell = (r: { out: string; code: number } | Error) => ({ run: async () => { if (r instanceof Error) throw r; return r; } }) as unknown as PanelShell;
+    expect(await glassworksInPlace(shell(new Error('closed')))).toBe(false);
+    expect(await glassworksInPlace(shell({ out: '', code: 1 }))).toBe(false);
+    // `pm list packages` matches by substring: a package whose name only starts with ours isn't ours
+    expect(await glassworksInPlace(shell({ out: `package:${GLASSWORKS.package}.other\n`, code: 0 }))).toBe(false);
+    expect(await glassworksInPlace(shell({ out: `package:${GLASSWORKS.package}\n`, code: 0 }))).toBe(true);
   });
 });
 

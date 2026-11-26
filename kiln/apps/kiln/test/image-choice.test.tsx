@@ -291,6 +291,16 @@ describe('Glass Panes', () => {
     await waitFor(() => expect(flash.state.files.every((x) => x.state === 'ok')).toBe(true));
   });
 
+  it('the stock install\'s first fastboot offers the restart over USB too (a reinstall: Kiln checks the Mirror\'s own Wi-Fi first); its second doesn\'t', async () => {
+    const flash = await show('place-fastboot');
+    const restart = vi.spyOn(flash, 'restartToFastboot').mockResolvedValue();
+    fireEvent.click(screen.getByRole('button', { name: 'Already running Glassworks or Glass Panes? Restart over USB' }));
+    expect(restart).toHaveBeenCalledTimes(1);
+    cleanup();
+    await show('place-fastboot-again');
+    expect(screen.queryByRole('button', { name: 'Already running Glassworks or Glass Panes? Restart over USB' })).toBeNull();
+  });
+
   it('fastboot opens on the steps by hand; its restart over USB restarts the image over adb, inside the click', async () => {
     const flash = await show('image-fastboot');
     expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
