@@ -3095,7 +3095,10 @@ class HeadingCardView(private val ctx: VitroCardContext, config: CardConfig) : L
         }
         val badgeConfigs = config.raw.optJSONArray("badges")
         for (i in 0 until (badgeConfigs?.length() ?: 0)) {
-            badgeConfigs?.optJSONObject(i)?.takeIf { it.optString("entity", "").contains('.') }?.let { row.addView(buildBadge(it)) }
+            // A bare entity id is an entity badge of that entity, with the defaults.
+            val badge = badgeConfigs?.optJSONObject(i)
+                ?: badgeConfigs?.opt(i)?.let { it as? String }?.let { JSONObject().put("type", "entity").put("entity", it) }
+            badge?.takeIf { it.optString("entity", "").contains('.') }?.let { row.addView(buildBadge(it)) }
         }
         if (heading.isNotEmpty() || row.childCount > 1) addView(row, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 

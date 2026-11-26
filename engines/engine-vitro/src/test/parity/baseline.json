@@ -47,13 +47,6 @@
   "region": 0.76,
   "reason": "clock-weather-card 3.1.0 isn't drawn: Vitro renders it as HA's weather-forecast card (condition, 0.4 mm, five day columns), without the big clock, the date or the per-day temperature bars, so the card is ~107 px shorter (2026-11-25, fake HA)"
  },
- "mirror/entity-light-on": {
-  "pixel": 0.022,
-  "bounds": 0.0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the entity card's value line sits about 12 px higher than HA's, as in the `entity` case (there just under the threshold); name, state, icon color and dimming match (2026-11-26, fake HA)"
- },
  "mirror/gauge-non-numeric": {
   "pixel": 0.1389,
   "bounds": 141.7,
@@ -216,13 +209,6 @@
   "missingText": 0,
   "reason": "the long name 'Hallway Ceiling Light Hallway Ceiling Ring' cut by an ellipsis in both; Vitro's text run sits 1 px higher and its cut lands 2 px earlier (s1/Mirror at 1.5x; the tablet matches) (2026-11-25, fake HA)"
  },
- "mirror/view-string-badges": {
-  "pixel": 0.005,
-  "bounds": 5.4,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the sections view's badge row and the section under it sit about 5 px higher than HA's (hui-view-header's layout, not measured yet); the badges' names, states and icons match (2026-11-26, fake HA)"
- },
  "mirror/weather-forecast": {
   "pixel": 0.0126,
   "bounds": 0,
@@ -283,13 +269,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "the 20 px date text's antialiasing at density 1.5: same text, size and box, 0.6 px off horizontally; the tablet matches (2026-11-25, fake HA)"
- },
- "s1/entity-light-on": {
-  "pixel": 0.022,
-  "bounds": 0.0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the entity card's value line sits about 12 px higher than HA's, as in the `entity` case (there just under the threshold); name, state, icon color and dimming match (2026-11-26, fake HA)"
  },
  "s1/gauge-non-numeric": {
   "pixel": 0.1389,
@@ -531,13 +510,6 @@
   "missingText": 0,
   "reason": "the long name 'Hallway Ceiling Light Hallway Ceiling Ring' cut by an ellipsis in both; Vitro's text run sits 1 px higher and its cut lands 2 px earlier (s1/Mirror at 1.5x; the tablet matches) (2026-11-25, fake HA)"
  },
- "s1/view-string-badges": {
-  "pixel": 0.009,
-  "bounds": 5.4,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the sections view's badge row and the section under it sit about 5 px higher than HA's (hui-view-header's layout, not measured yet); the badges' names, states and icons match (2026-11-26, fake HA)"
- },
  "s1/weather-forecast": {
   "pixel": 0.0126,
   "bounds": 0,
@@ -718,13 +690,6 @@
   "missingText": 3,
   "region": 0.34,
   "reason": "water heater on the thermostat card: HA labels the target 'Target' and 'Currently 48 °C' in green; Vitro shows the mode 'Eco' and '48.0 °C' in grey, and its handle and arc in grey (2026-11-25, fake HA)"
- },
- "tablet/view-string-badges": {
-  "pixel": 0.005,
-  "bounds": 5.0,
-  "font": 0,
-  "missingText": 0,
-  "reason": "the sections view's badge row and the section under it sit about 5 px higher than HA's (hui-view-header's layout, not measured yet); the badges' names, states and icons match (2026-11-26, fake HA)"
  },
  "tablet/weather-forecast": {
   "pixel": 0.0137,

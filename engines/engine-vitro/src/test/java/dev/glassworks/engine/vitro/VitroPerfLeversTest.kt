@@ -119,7 +119,9 @@ class VitroPerfLeversTest {
         put(store, "sensor.kitchen", "21.0")
         idle()
         assertTrue("21.0" in texts(card))
-        assertEquals("only the two values that changed", 2, sets[0])
+        // The two values, and the secondary line: with no last_changed to show it shows the state, as HA's
+        // state-display does (#926), so it changes with it.
+        assertEquals("only the two values and the secondary line that changed", 3, sets[0])
     }
 
     // ---- L8: a hidden cached view stops rendering, and is current the moment it shows

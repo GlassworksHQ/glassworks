@@ -348,8 +348,9 @@ internal class MoreInfoStateRow(private val ctx: VitroCardContext, private val e
         }
         picture.visibility = if (url != null) VISIBLE else GONE
         icon.visibility = if (url != null) INVISIBLE else VISIBLE
-        // state-badge: the state's color where HA colors it (an update available is orange), else the icon color.
-        icon.setIcon(MdiIcons.resolveIconName(null, s), s?.let { HaStateColor.of(ctx, it) } ?: ctx.theme.stateIconColor)
+        // state-badge: the state's color where HA colors it (an update available is orange), else the icon color. Its
+        // `--state-inactive-color: initial` keeps an inactive state (a skipped update is off) in the icon color.
+        icon.setIcon(MdiIcons.resolveIconName(null, s), s?.let { HaStateColor.of(ctx, it, inactiveDefault = false) } ?: ctx.theme.stateIconColor)
         val parts = HaDisplay.nameParts(entityId, s?.friendlyName ?: entityId)
         name.text = parts.entity ?: parts.device ?: s?.friendlyName ?: entityId
         time.text = s?.takeIf { it.lastChanged > 0.0 }?.let { HaFormat.relativeTime((it.lastChanged * 1000).toLong(), ctx.now()) }.orEmpty()
