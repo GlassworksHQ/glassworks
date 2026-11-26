@@ -1335,6 +1335,8 @@ function walkCard(card: Obj, loc: string, view: ViewAudit, holdsGenerated = -1) 
     const scan = (c: Obj) => {
       const v = verdict(c);
       if (!v.native) off.push([c, v]);
+      // An iframe's page runs in a GeckoView island, as a listed one's does.
+      else if (cardType(c) === "iframe") off.push([c, { native: false, reasons: ["its page runs in a GeckoView island (the view stays native)"], notes: [] }]);
       else for (const [, inner] of producedCards(c, true)) scan(inner);
     };
     for (const [, g] of producedCards(card, true).slice(children.length + (explicit >= 0 ? entries : 0))) scan(g);
@@ -1343,7 +1345,9 @@ function walkCard(card: Obj, loc: string, view: ViewAudit, holdsGenerated = -1) 
       const [g, gv] = first;
       view.tier3++;
       view.triggers.push({ view: view.name, path: `${loc}.generated`, type: cardType(g), reasons: gv.frontend ? gv.reasons.map((r) => `${FRONTEND} ${r}`) : gv.reasons });
-      return;
+      // The whole view goes to HA's frontend. An island for a generated card leaves the inner card and its explicit
+      // entries to check below, since one of them may still send the view there.
+      if (gv.frontend) return;
     }
   }
   for (const [i, child] of children) {

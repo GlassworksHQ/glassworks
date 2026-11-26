@@ -104,9 +104,11 @@ describe("the strict compat rule, case for case with the engine", () => {
   const routeOf = (input: unknown): [string, string | null] => {
     const r = auditDashboard(JSON.stringify(input));
     expect(r.ok, r.error).toBe(true);
-    const first = r.triggers[0]?.reasons[0];
-    if (first === undefined) return ["native", null];
-    return first.startsWith(FRONTEND) ? ["frontend", first.slice(FRONTEND.length)] : ["island", first];
+    // HA's frontend takes the whole view, whatever else in it would go to an island (WebFallback decides first).
+    const reasons = r.triggers.map((t) => t.reasons[0]);
+    const frontend = reasons.find((x) => x.startsWith(FRONTEND));
+    if (frontend !== undefined) return ["frontend", frontend.slice(FRONTEND.length)];
+    return reasons.length > 0 ? ["island", reasons[0]] : ["native", null];
   };
   const check = (c: Case, input: unknown) => {
     const [route, reason] = routeOf(input);

@@ -178,9 +178,9 @@ class _Walk:
                 sub = spec["keys"].get(k)
                 if sub is None and extra is not None:
                     sub = extra.get(k)
-                at = f"{path}.{k}" if path else k
+                at = f"{path}.{k}" if path else str(k)
                 if sub is None:
-                    self.fail(at if SAFE.match(k) else _join(path, "an option"), why=why)
+                    self.fail(at if isinstance(k, str) and SAFE.match(k) else _join(path, "an option"), why=why)
                 else:
                     self.check(v, sub, at, None)
         elif "list" in spec:
@@ -821,10 +821,17 @@ def walk_card(card: dict, loc: str, counts: dict[str, int], triggers: list[str],
             sub_triggers: list[str] = []
             walk_card(gen, f"{loc}.generated", {"tier1": 0, "tier2": 0, "tier3": 0}, sub_triggers, [])
             found += sub_triggers
-        if found:
+        frontend = next((t for t in found if "[HA FRONTEND]" in t), None)
+        if frontend:
+            # The whole view goes to HA's frontend: nothing else in the card changes that.
             counts["tier3"] += 1
-            triggers.append(next((t for t in found if "[HA FRONTEND]" in t), found[0]))
+            triggers.append(frontend)
             return
+        if found:
+            # An island for a generated card; the inner card and its explicit entries are still checked below, since
+            # one of them may send the view to HA's frontend.
+            counts["tier3"] += 1
+            triggers.append(found[0])
     if explicit >= 0 and ctype in CONTAINER_TYPES and ctype != "conditional":
         # auto-entities' inner card: only its explicit `entities:` entries are known before it runs.
         for _, i, child in children:
