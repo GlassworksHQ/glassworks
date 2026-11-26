@@ -868,8 +868,10 @@ class VitroView(
     }
 
     /**
-     * How long a view's first build waits for its first states (0: it doesn't). The engine sets it: the view's
-     * entities are subscribed as it opens, and their states usually land within a round trip. Past the wait it builds
+     * How long a view's first build waits for its first states (0: it doesn't). The engine sets it: the dashboard's
+     * entities are subscribed once per connection, the view on screen's first, so this waits only for the first view
+     * after a connection (later views find their states in the store), and its states usually land within a round
+     * trip. Past the wait it builds
      * anyway, and a card that guessed without state is built again when it lands ([rebuildWhenStatesLand]).
      */
     var holdFirstBuildForStatesMs: Long = 0
@@ -907,7 +909,8 @@ class VitroView(
      * True when the first build of view [index] waits: one of its entities isn't known yet (no state, and HA hasn't
      * said it doesn't exist). Views share entities (a dashboard's header cards), so one known entity says little: a
      * view built with most of its states missing renders, and lays out, every card again as they land. It's built
-     * once every entity is known (HA's first event for the view's subscription), or after [holdFirstBuildForStatesMs].
+     * once every entity is known (HA's first event for the subscription that asked for them), or after
+     * [holdFirstBuildForStatesMs].
      */
     private fun holdForStates(index: Int, viewCfg: ViewConfig): Boolean {
         if (holdFirstBuildForStatesMs <= 0 || index in waited) return false
@@ -958,7 +961,7 @@ class VitroView(
 
     /**
      * HA re-renders when hass updates; a Mushroom card's class and grid rows follow its entity's features, which a
-     * view's first build can come before (its entities are subscribed as it opens). When any of [ids] lands, the
+     * view's first build can come before (its states hadn't landed, or the wait ran out). When any of [ids] lands, the
      * view [index] is built again, once: now if it's on screen, else its cached tree is dropped for the next visit.
      */
     private fun rebuildWhenStatesLand(index: Int, ids: Set<String>) {

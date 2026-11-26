@@ -387,11 +387,11 @@ class WebIslandCardView(
                     }
                     true
                 }
-                // Read at runtime, beyond what the config names: the view's subscription takes it in.
+                // Read at runtime, beyond what the config names: the entity subscription takes it in.
                 if (added && !followsAllEntities) ctx.watchEntity(id)
             }
             "watchAll" -> {
-                // Every change reaches the card now, and the view's subscription takes in every entity, so the
+                // Every change reaches the card now, and its view follows every entity while it shows, so the
                 // states it walks are all of HA's, as in HA's frontend.
                 walksAllStates = true
                 ctx.watchAllEntities()

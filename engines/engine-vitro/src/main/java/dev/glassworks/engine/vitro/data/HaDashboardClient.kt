@@ -60,9 +60,10 @@ data class ForecastDay(
  * Native Home Assistant WebSocket data plane for Vitro.
  *
  * Keeps one long-lived connection over [HaSocket] (`WsHaSocket`), authenticates with the panel's
- * Home Assistant token, fetches Lovelace config + resources + themes, and subscribes only to the
- * entities needed by the active view (`subscribe_entities`). Pure JVM so it is unit-testable with a
- * scripted fake socket.
+ * Home Assistant token, fetches Lovelace config + resources + themes, and follows the entities the page
+ * asks for ([followEntities], `subscribe_entities`): every entity the shown dashboard references, once per
+ * connection, as HA's frontend subscribes once at startup. Pure JVM so it is unit-testable with a scripted
+ * fake socket.
  */
 class HaDashboardClient(
     private val haBase: String,
@@ -142,11 +143,20 @@ class HaDashboardClient(
     /** Held while an entity event is applied to [store] and by [close]: no write lands after close() returns. */
     private val storeWriteLock = Any()
 
-    /** The entity subscription allowed to write to the store (replaced on every resubscribe). */
+    /**
+     * The entity subscriptions allowed to write to the store: every part of one [EntitySubs] shares it, and a
+     * replacement ([replaceEntitySubs]) makes a new one.
+     */
     @Volatile private var entityOwner: Any? = null
 
-    /** Guards the whole replacement of the entity subscription (startup and view changes race otherwise). */
+    /** Guards every change to the entity subscriptions (startup, view changes and config changes race otherwise). */
     private val entitySubLock = Any()
+
+    /**
+     * The `subscribe_entities` live on connection [gen]: their [ids] on the wire, and the entity ids they [cover]
+     * together (empty: every entity). Replaced as a whole under [entitySubLock]; a lost connection's no longer counts.
+     */
+    private class EntitySubs(val gen: Int, val ids: List<Int>, val cover: Set<String>)
 
     /**
      * Every post-auth write goes through this one daemon thread: cards call [callService], [fetchHistory] and the
@@ -159,13 +169,18 @@ class HaDashboardClient(
 
     /** True between `auth_ok` and the end of the connection; nothing but `auth` may be written before it. */
     @Volatile private var authenticated = false
-    @Volatile private var entitySubId: Int? = null
+    @Volatile private var entitySubs: EntitySubs? = null
+
+    /** The entities the page follows (empty: every entity), asked for again on every connection. */
     @Volatile private var activeEntityFilter: Set<String> = emptySet()
 
+    /** Of [activeEntityFilter], the ones the view on screen needs: a new subscription asks for them first. */
+    @Volatile private var priorityEntities: Set<String> = emptySet()
+
     /**
-     * True once a view has said which entities it needs. Until then nothing is subscribed: an empty
+     * True once the page has said which entities it follows. Until then nothing is subscribed: an empty
      * [activeEntityFilter] means "every entity" (auto-entities), and on a large Home Assistant that first snapshot can
-     * outgrow the socket's message limit before the view's scoped one is asked for. Kept across reconnects.
+     * outgrow the socket's message limit before the dashboard's scoped one is asked for. Kept across reconnects.
      */
     @Volatile private var scopeSelected = false
     @Volatile private var readerThread: Thread? = null
@@ -363,13 +378,50 @@ class HaDashboardClient(
         held.clear()
     }
 
-    /** Switches the entity subscription to [entityIds] for the active view. */
-    fun subscribeViewEntities(entityIds: Set<String>) {
-        if (scopeSelected && entityIds == activeEntityFilter && entitySubId != null) return
-        activeEntityFilter = entityIds
-        scopeSelected = true
-        if (socket == null) return
-        resubscribeEntities()
+    /** Switches the entity subscription to [entityIds] alone, for one view ([followEntities], not additive). */
+    fun subscribeViewEntities(entityIds: Set<String>) = followEntities(entityIds)
+
+    /**
+     * Follows [entityIds] (empty: every entity) from now on, on this connection and the next ones.
+     *
+     * [first] are the ones the view on screen needs: a new subscription asks for them on their own first, so their
+     * snapshot (and the view's first build, which waits for it) doesn't wait for the rest. The rest follow in a
+     * second `subscribe_entities` right after; each entity is asked for once.
+     *
+     * [additive]: what this connection already follows stays subscribed, and only ids it doesn't follow yet are asked
+     * for, in one more `subscribe_entities` (a dashboard config change, an entity an island reads at runtime). Ids no
+     * longer wanted stay subscribed until the next connection, unless they outnumber the wanted ones it follows (another
+     * dashboard): then the subscription is replaced. Not additive, anything but exactly [entityIds] is replaced (one
+     * view's scope). A wish to follow every entity, or to stop, always replaces.
+     */
+    fun followEntities(entityIds: Set<String>, first: Set<String> = emptySet(), additive: Boolean = false) {
+        synchronized(entitySubLock) {
+            activeEntityFilter = entityIds
+            priorityEntities = first
+            scopeSelected = true
+            if (socket == null) return
+            val live = entitySubs?.takeIf { it.gen == connectionGen.get() }
+            if (live == null) return replaceEntitySubs()
+            val cover = live.cover
+            when {
+                // Every entity is followed already.
+                cover.isEmpty() && entityIds.isEmpty() -> Unit
+                // From every entity to some, or the other way: one new subscription.
+                cover.isEmpty() || entityIds.isEmpty() -> replaceEntitySubs()
+                !additive -> if (cover != entityIds) replaceEntitySubs()
+                else -> {
+                    val added = entityIds.filterTo(LinkedHashSet()) { it !in cover }
+                    val stale = cover.count { it !in entityIds }
+                    when {
+                        stale > cover.size - stale -> replaceEntitySubs()
+                        added.isNotEmpty() -> {
+                            val id = subscribeEntityPart(added, entityOwner)
+                            entitySubs = if (id > 0) EntitySubs(live.gen, live.ids + id, cover + added) else null
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -967,7 +1019,7 @@ class HaDashboardClient(
                 connectionGen.incrementAndGet()
                 authenticated = false
                 socket = null
-                entitySubId = null
+                entitySubs = null
                 orphaned = pending.keys.toList()
                 subscriptions.clear()
             }
@@ -1323,14 +1375,19 @@ class HaDashboardClient(
         listener.onUserTheme(name?.trim()?.takeIf { it.isNotEmpty() }, dark)
     }
 
-    private fun resubscribeEntities() = synchronized(entitySubLock) {
-        entitySubId?.takeIf { it > 0 }?.let { unsubscribe(it) }
-        val msg = JSONObject().put("type", "subscribe_entities")
+    /** A new connection: everything the page follows, asked for again ([replaceEntitySubs]). */
+    private fun resubscribeEntities() = synchronized(entitySubLock) { replaceEntitySubs() }
+
+    /**
+     * Replaces the entity subscriptions with new ones for [activeEntityFilter]: the view's own entities
+     * ([priorityEntities]) first when they are fewer than the whole, then the rest. Under [entitySubLock].
+     */
+    private fun replaceEntitySubs() {
+        val gen = connectionGen.get()
+        entitySubs?.takeIf { it.gen == gen }?.ids?.forEach { unsubscribe(it) }
+        entitySubs = null
         val filter = activeEntityFilter
-        if (filter.isNotEmpty()) {
-            msg.put("entity_ids", JSONArray(filter.toList()))
-        }
-        // This subscription owns the store's entity writes from now on; a retired one's events (one the reader
+        // These subscriptions own the store's entity writes from now on; a retired one's events (one the reader
         // already picked up when it was replaced) are dropped, even before subscribe() returns. Switched without the
         // write lock: this runs on the UI thread when the view changes, and the reader can hold that lock for the
         // whole first snapshot (hundreds of ms on a panel). An old event mid-commit finishes its write, and its
@@ -1338,19 +1395,37 @@ class HaDashboardClient(
         val owner = Any()
         entityOwner = owner
         store.resetSnapshot(owner)
-        // The first event is the subscription's snapshot: an entity of [filter] missing from it is gone (deleted while
-        // the panel was offline) and leaves the store. Later events are diffs.
+        val head = if (filter.isEmpty()) emptySet() else priorityEntities.filterTo(LinkedHashSet()) { it in filter }
+        val parts = if (head.isEmpty() || head.size == filter.size) listOf(filter) else listOf(head, filter.filterTo(LinkedHashSet()) { it !in head })
+        val ids = ArrayList<Int>(parts.size)
+        for (part in parts) {
+            val id = subscribeEntityPart(part, owner)
+            // Not sent: the connection is going, and the next one asks for everything again.
+            if (id <= 0) return
+            ids += id
+        }
+        entitySubs = EntitySubs(gen, ids, filter)
+    }
+
+    /**
+     * One `subscribe_entities` for [filter] (empty: every entity), writing to the store while [owner] owns it. Its
+     * first event is its snapshot: an entity of [filter] missing from it is gone (deleted while the panel was offline)
+     * and leaves the store. Later events are diffs. The wire id, or -1 when it wasn't sent.
+     */
+    private fun subscribeEntityPart(filter: Set<String>, owner: Any?): Int {
+        val msg = JSONObject().put("type", "subscribe_entities")
+        if (filter.isNotEmpty()) msg.put("entity_ids", JSONArray(filter.toList()))
         val first = AtomicBoolean(true)
-        entitySubId = subscribe(msg) { ev -> synchronized(storeWriteLock) {
+        return subscribe(msg) { ev -> synchronized(storeWriteLock) {
             // Checked under the lock close() takes: a closed client never writes to the (shared) store again.
             if (closed.get() || entityOwner !== owner) return@subscribe
             val isFirst = first.getAndSet(false)
             store.applyCompressedEvent(ev, snapshotScope = if (isFirst) filter else null)
             if (isFirst) {
-                store.markSnapshot(filter.toSet(), owner)
-                loadDisplayFor(displayIds())
+                store.markSnapshot(filter, owner)
+                loadDisplayFor(filter.ifEmpty { store.all().keys })
             }
-        } }.takeIf { it > 0 }
+        } }
     }
 
     private fun handleIncoming(msg: JSONObject) {

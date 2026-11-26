@@ -318,8 +318,8 @@ class EntityStore {
     }
 
     /**
-     * The entity ids the current `subscribe_entities` asked for (empty means every entity), once its first event
-     * has arrived; null before that. An id it covers that has no state then doesn't exist in HA.
+     * The entity ids the current entity subscriptions asked for (empty means every entity), once their first events
+     * have arrived; null before the first. An id it covers that has no state then doesn't exist in HA.
      */
     private val snapshot = AtomicReference(Snapshot(null, null))
 
@@ -344,10 +344,23 @@ class EntityStore {
     /**
      * The first event of [owner]'s subscription for [filter] has been applied: tells the missing ids' listeners.
      * False, and nothing changes, when another subscription has been asked for since ([resetSnapshot]).
+     *
+     * One owner may answer in several parts (the dashboard's entities in more than one `subscribe_entities`: the view
+     * on screen first, the rest after it, and ids a config change adds): what HA has answered for is their union.
      */
     fun markSnapshot(filter: Set<String>, owner: Any? = null): Boolean {
-        val current = snapshot.get()
-        if (current.owner !== owner || !snapshot.compareAndSet(current, Snapshot(owner, filter))) return false
+        var current: Snapshot
+        do {
+            current = snapshot.get()
+            if (current.owner !== owner) return false
+            val known = current.filter
+            val answered = when {
+                known == null -> filter
+                // Empty is every entity: nothing widens it, and it covers any part.
+                known.isEmpty() || filter.isEmpty() -> emptySet()
+                else -> known + filter
+            }
+        } while (!snapshot.compareAndSet(current, Snapshot(owner, answered)))
         for ((id, list) in listeners) {
             if (states[id] == null && (filter.isEmpty() || id in filter)) list.forEach { notify(it, null) }
         }

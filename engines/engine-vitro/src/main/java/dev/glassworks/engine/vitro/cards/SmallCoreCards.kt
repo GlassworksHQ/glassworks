@@ -887,7 +887,7 @@ class PlantStatusCardView(ctx: VitroCardContext, private val config: CardConfig)
 
     /**
      * Follows every sensor the plant names now (one it swaps in included), keeping the handles it has; a sensor it
-     * no longer names is dropped. The view's subscription names only the plant (its config does), so each sensor joins
+     * no longer names is dropped. The entity subscription names only the plant (its config does), so each sensor joins
      * it too ([VitroCardContext.watchEntity]), as HA's card reads them from `hass.states`.
      */
     private fun followSensors(s: EntityState) {

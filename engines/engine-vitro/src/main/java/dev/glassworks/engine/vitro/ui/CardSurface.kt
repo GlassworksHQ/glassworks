@@ -128,7 +128,7 @@ class VitroCardContext(
     /** The dashboard's own URL (HA's page `location`), which relative links resolve against; null when unknown. */
     val pageUrl: () -> String? = { null },
     /**
-     * A web island looked up [entityId] at runtime: the view's subscription takes it in, so its changes reach the
+     * A web island looked up [entityId] at runtime: the entity subscription takes it in, so its changes reach the
      * island. Any thread. The default (tests, no engine) does nothing.
      */
     val watchEntity: (entityId: String) -> Unit = {},

@@ -965,7 +965,10 @@ object CardRouter {
         }
     }
 
-    /** Every `entity_id` referenced anywhere in [view], for view-scoped `subscribe_entities`. */
+    /**
+     * Every `entity_id` referenced anywhere in [view]: the view's own, which its first build waits for, and with every
+     * other view's the dashboard's `subscribe_entities` (VitroEngine's dashboardEntities).
+     */
     fun referencedEntities(view: ViewConfig): Set<String> {
         val out = LinkedHashSet<String>()
         fun scanJson(v: Any?) {
@@ -989,8 +992,8 @@ object CardRouter {
             c.entities().forEach { it.referencedEntities(out) }
             c.visibility.forEach { it.referencedEntities(out) }
             VisibilityCondition.parseList(c.raw.optJSONArray("conditions")).forEach { it.referencedEntities(out) }
-            // Deep-scan custom cards (e.g. room arrays, sleep/outside/camera objects) so view-scoped
-            // subscribe_entities automatically captures every entity without knowing each card's schema.
+            // Deep-scan custom cards (e.g. room arrays, sleep/outside/camera objects) so the entity
+            // subscription captures every entity without knowing each card's schema.
             if (c.type.startsWith("custom:")) scanJson(c.raw)
             // weather-card reads `sun.sun` for its night icons and the sunrise and sunset, whatever its config says.
             if (c.type == "custom:weather-card") out += "sun.sun"
