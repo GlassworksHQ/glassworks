@@ -34,6 +34,8 @@ While an update is running, the **Update status** diagnostic sensor shows whethe
 
 > [!NOTE]
 > **Upgrading an Aqara S1 Plus from v0.4.0 or older:** Versions up to `0.4.0` had an Android 10 signature-check bug that caused in-app Home Assistant updates to fail with *"the APK is not signed"*. Perform one manual update by plugging the panel into USB, opening [Kiln](https://kiln.glassworks.dev/aqara-s1-plus/set-up) (**Finish setting up**), or running `adb install -r` with the latest APK. Starting with `0.4.1`, all future updates work directly from Home Assistant.
+>
+> **Panels on v0.4.4 showing no root helper or an "unknown apps" dialog:** S1 Plus panels installed with Kiln right before `0.9.0` received the newer Glassworks boot software alongside the `0.4.4` app, which only recognizes the older service names. Update once over USB with Kiln's [Finish setting up](https://kiln.glassworks.dev/aqara-s1-plus/set-up) or `adb install -r s1-kiosk-<version>.apk` (the 32-bit APK, not `arm64-v8a`)—your settings stay intact, no boot reflash is needed, and future updates install silently from Home Assistant.
 
 ## Frame updates (boot software and system images)
 

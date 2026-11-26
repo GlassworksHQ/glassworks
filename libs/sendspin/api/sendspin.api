@@ -49,6 +49,7 @@ public final class dev/glassworks/sendspin/SendspinPlayer {
 	public final fun restartSession ()V
 	public final fun setDucked (Z)V
 	public final fun setMuted (Z)V
+	public final fun setOutputGain (F)V
 	public final fun setVolume (I)V
 	public final fun start ()V
 	public final fun statusText ()Ljava/lang/String;

@@ -592,6 +592,18 @@ export interface DeviceOwnerPatch {
   setBackupServiceActivePc: number;
 }
 
+/** lululemon's onboarding hotspot service in stock `services.jar` (system_server), and what its `systemReady()` registers. */
+const MIRROR_AP_SERVICE = 'Lcom/android/server/MirrorApService;';
+const MIRROR_AP_START_ACTION = 'com.mirror.framework.ACTION_START_HOST_APD';
+
+/** What the stock-hotspot patch emptied: `MirrorApService.systemReady()V`. */
+export interface StockApPatch {
+  /** File offset of `systemReady()`'s code_item in `classes.dex`. */
+  codeOff: number;
+  /** Its `insns_size` in 16-bit code units, unchanged: one `return-void`, then `nop`s. */
+  insnsSize: number;
+}
+
 export interface PatchedServicesJar {
   patched: Uint8Array;
   fingerprint: string;
@@ -602,6 +614,8 @@ export interface PatchedServicesJar {
   patchedCodeUnits: number;
   /** Present only when `enableDeviceOwner` was applied. */
   deviceOwner?: DeviceOwnerPatch;
+  /** Present only when `disableStockAp` was applied. */
+  stockAp?: StockApPatch;
 }
 
 export interface PatchStockServicesJarOptions {
@@ -612,6 +626,16 @@ export interface PatchStockServicesJarOptions {
    * The Node surgical-ADB tool passes `false` explicitly to keep its USB-ADB-only behavior.
    */
   enableDeviceOwner?: boolean;
+  /**
+   * Also empty `MirrorApService.systemReady()` (one `return-void`), so stock never starts its onboarding
+   * hotspot (`mirror-<serial>` on `wlan0_ap`, 192.168.43.1, which system_server has the `mapd` daemon
+   * start a minute after a boot with no network, and again whenever the network drops). Default `true`:
+   * Glassworks has its own setup hotspot, and stock's would block it. With this on, a `services.jar`
+   * without that method fails the patch: it is not the stock software this was checked against (stock
+   * 1.24.0 always has it). The Node surgical-ADB tool passes `false` explicitly to keep its USB-ADB-only
+   * behavior. Why and how: frames/lululemon-mirror/research/stock-softap.md.
+   */
+  disableStockAp?: boolean;
   /** MD5 fingerprint to refuse (defaults to `GLASS_PANES_KEY_FINGERPRINT`). */
   forbiddenFingerprint?: string;
 }
@@ -634,7 +658,9 @@ function stockKeyFingerprint(adbKey: string, forbiddenFingerprint = GLASS_PANES_
  *      a. `DevicePolicyManagerService.<init>` forces `mHasFeature = true` (stock lacks the
  *         `android.software.device_admin` system feature), and
  *      b. `DevicePolicyManagerService.setDeviceOwner` NOPs the `IBackupManager.setBackupServiceActive`
- *         call that would NPE because stock has no backup service.
+ *         call that would NPE because stock has no backup service; and
+ *  - (when `disableStockAp`) empty `MirrorApService.systemReady()`, so lululemon's onboarding hotspot
+ *    never starts (`patchStockAp`).
  *
  * Keeps the EXACT original JAR byte length (so a surgical sparse write never touches ext4 inode
  * metadata) and round-trips `classes.dex` through the repack before returning.
@@ -645,6 +671,7 @@ export async function patchStockServicesJar(
   options: PatchStockServicesJarOptions = {},
 ): Promise<PatchedServicesJar> {
   const enableDeviceOwner = options.enableDeviceOwner ?? true;
+  const disableStockAp = options.disableStockAp ?? true;
   const fp = stockKeyFingerprint(adbKey, options.forbiddenFingerprint);
 
   const { list } = parseZipEntries(jar);
@@ -752,6 +779,12 @@ export async function patchStockServicesJar(
     deviceOwner = patchDeviceOwner(dex, dv, lookup, strings);
   }
 
+  // Step 4b (optional): stock's onboarding hotspot, located dynamically the same way.
+  let stockAp: StockApPatch | undefined;
+  if (disableStockAp) {
+    stockAp = patchStockAp(dex, dv, lookup, strings);
+  }
+
   // Recompute DEX SHA-1 (over bytes 32..end) and Adler-32 (over bytes 12..end), both pure TS.
   dex.set(sha1Bytes(dex.subarray(32)), 12);
   dv.setUint32(8, adler32(dex.subarray(12)), true);
@@ -777,7 +810,68 @@ export async function patchStockServicesJar(
     startConfirmationCodeOff: codeOff,
     patchedCodeUnits: units.length,
     ...(deviceOwner ? { deviceOwner } : {}),
+    ...(stockAp ? { stockAp } : {}),
   };
+}
+
+/**
+ * Empties `MirrorApService.systemReady()V` in place on `dex` (SHA-1/Adler recomputed by the caller):
+ * its insns become one `return-void` and `nop`s to the same `insns_size`, with registers, ins and outs
+ * kept and `debug_info_off` zeroed. On stock 1.24.0 `systemReady()` is what starts the service: it
+ * starts its state machine, registers its four receivers (Wi-Fi state, connectivity, tether state,
+ * `ACTION_START_HOST_APD`) and starts the thread that talks to the `mapd` daemon. Only SystemServer
+ * calls it, inside a try/catch. Without it nothing asks `mapd` for the hotspot. Every check refuses
+ * rather than guesses: a method that isn't the one we read (no code, other ins, tries, or a body that
+ * doesn't load `ACTION_START_HOST_APD`) fails the patch. The body isn't compared instruction by
+ * instruction, so one that passes is emptied in full.
+ */
+function patchStockAp(
+  dex: Uint8Array,
+  dv: DataView,
+  lookup: DexMethodLookup,
+  strings: readonly string[],
+): StockApPatch {
+  const what = 'stock hotspot patch';
+  let codeOff: number;
+  try {
+    codeOff = lookup.findCodeItem(MIRROR_AP_SERVICE, lookup.findMethod(MIRROR_AP_SERVICE, 'systemReady', '()V'));
+  } catch (e) {
+    throw new Error(`${what}: services.jar has no ${MIRROR_AP_SERVICE}.systemReady()V, so it isn't the stock software this `
+      + `patch was checked against (${(e as Error).message}). Pass disableStockAp: false to leave it out.`);
+  }
+  if (codeOff === 0 || codeOff + 16 > dex.length) {
+    throw new Error(`${what}: invalid code_item offset 0x${codeOff.toString(16)} for MirrorApService.systemReady`);
+  }
+  const regs = dv.getUint16(codeOff + 0, true);
+  const ins = dv.getUint16(codeOff + 2, true);
+  const tries = dv.getUint16(codeOff + 6, true);
+  const insnsSize = dv.getUint32(codeOff + 12, true);
+  if (ins !== 1) throw new Error(`${what}: expected MirrorApService.systemReady ins_size=1 (this), got ${ins}`);
+  if (regs < 1) throw new Error(`${what}: unexpected MirrorApService.systemReady registers_size=${regs}`);
+  if (tries !== 0) throw new Error(`${what}: expected MirrorApService.systemReady tries_size=0, got ${tries}`);
+  if (insnsSize < 1 || codeOff + 16 + insnsSize * 2 > dex.length) {
+    throw new Error(`${what}: MirrorApService.systemReady insns_size=${insnsSize} is out of range`);
+  }
+
+  // It must be the body we read: one that registers the ACTION_START_HOST_APD receiver.
+  const actionIdx = strings.indexOf(MIRROR_AP_START_ACTION);
+  if (actionIdx < 0) throw new Error(`${what}: "${MIRROR_AP_START_ACTION}" string not in classes.dex`);
+  const insnsOff = codeOff + 16;
+  let registersAction = false;
+  for (const insn of walkInsns(dex, codeOff)) {
+    const sIdx = insn.op === 0x1a ? dv.getUint16(insnsOff + (insn.pc + 1) * 2, true)
+      : insn.op === 0x1b ? dv.getUint32(insnsOff + (insn.pc + 1) * 2, true)
+      : -1;
+    if (sIdx === actionIdx) { registersAction = true; break; }
+  }
+  if (!registersAction) {
+    throw new Error(`${what}: MirrorApService.systemReady does not load "${MIRROR_AP_START_ACTION}" (already patched, or not stock)`);
+  }
+
+  // Zero debug_info_off (its line and local tables describe the old body), then return-void + nops.
+  dv.setUint32(codeOff + 8, 0, true);
+  for (let i = 0; i < insnsSize; i++) dv.setUint16(insnsOff + i * 2, i === 0 ? 0x000e : 0x0000, true);
+  return { codeOff, insnsSize };
 }
 
 /**
@@ -854,6 +948,59 @@ function patchDeviceOwner(
   }
 
   return { hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc };
+}
+
+// ---------------------------------------------------------------------------
+// Boot animation in place: a zip padded to the stock file's exact length
+// ---------------------------------------------------------------------------
+
+/**
+ * Size of stock 1.24.0's `/system/media/bootanimation.zip` (its ext4 `i_size`, read 2026-11-24 from
+ * the stock system image): Glassworks' `branding/lululemon-mirror/bootanimation-compact.zip` is built
+ * within it so it can take the stock file's blocks in place.
+ */
+export const STOCK_BOOTANIMATION_BYTES = 22901;
+
+const EOCD_SIGNATURE = 0x06054b50;
+const EOCD_BYTES = 22;
+const MAX_ZIP_COMMENT = 0xffff;
+
+/**
+ * Pads a zip to exactly `targetLength` bytes by giving it a zip comment of zeros: the
+ * End-Of-Central-Directory record's comment length (its last two bytes) grows by the difference and
+ * the zeros follow it. Nothing else moves, so every entry, the central directory and its offset stay
+ * as they were, and the zip still reads the same in Android's `ZipFileRO` and `unzip`.
+ *
+ * `zip` must end in an EOCD with no comment (as Python's `zipfile` writes one). Throws if it doesn't,
+ * if it is already longer than `targetLength`, or if the gap is more than a zip comment holds
+ * (65,535 bytes). Returns a new array; `zip` is not changed.
+ */
+export function padZipToExactLength(zip: Uint8Array, targetLength: number): Uint8Array {
+  if (!Number.isSafeInteger(targetLength) || targetLength < 0) {
+    throw new Error(`padZipToExactLength: target length ${targetLength} is not a whole number of bytes`);
+  }
+  if (zip.length > targetLength) {
+    throw new Error(`padZipToExactLength: the zip is ${zip.length} B, longer than the ${targetLength}-byte target`);
+  }
+  const pad = targetLength - zip.length;
+  if (pad > MAX_ZIP_COMMENT) {
+    throw new Error(`padZipToExactLength: ${pad} B of padding is more than a zip comment holds (${MAX_ZIP_COMMENT} B)`);
+  }
+  const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const at = zip.length - EOCD_BYTES;
+  if (at < 0 || dv.getUint32(at, true) !== EOCD_SIGNATURE || dv.getUint16(at + 20, true) !== 0) {
+    // Say which: a comment already there, or no end record at all.
+    for (let i = at - 1; i >= Math.max(0, at - MAX_ZIP_COMMENT); i--) {
+      if (dv.getUint32(i, true) === EOCD_SIGNATURE && i + EOCD_BYTES + dv.getUint16(i + 20, true) === zip.length) {
+        throw new Error(`padZipToExactLength: the zip already has a ${dv.getUint16(i + 20, true)}-byte comment`);
+      }
+    }
+    throw new Error('padZipToExactLength: no End-Of-Central-Directory record with an empty comment at the end of the zip');
+  }
+  const out = new Uint8Array(targetLength); // zero-filled: the padding is zeros
+  out.set(zip, 0);
+  new DataView(out.buffer).setUint16(at + 20, pad, true);
+  return out;
 }
 
 // ---------------------------------------------------------------------------

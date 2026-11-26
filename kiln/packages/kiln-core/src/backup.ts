@@ -66,6 +66,39 @@ export async function namedBackupZip(parts: readonly NamedPart[], o: { dir?: str
   ]);
 }
 
+/**
+ * Reads a zip made by namedBackupZip (STORED only) back into its files by name, checking each against its SHA256SUMS.
+ * Throws on a compressed zip, a file SHA256SUMS doesn't list, or one that doesn't match.
+ */
+export async function readNamedBackupZip(zip: Blob): Promise<{ dir?: string; files: NamedPart[] }> {
+  const buf = new Uint8Array(await zip.arrayBuffer());
+  const v = new DataView(buf.buffer);
+  const found = new Map<string, Uint8Array>();
+  let dir: string | undefined;
+  for (let o = 0; o + 30 <= buf.length && v.getUint32(o, true) === 0x04034b50; ) {
+    if (v.getUint16(o + 8, true) !== 0) throw new Error('This isn\'t a restore point Kiln made (a compressed zip).');
+    const size = v.getUint32(o + 18, true), nlen = v.getUint16(o + 26, true), xlen = v.getUint16(o + 28, true);
+    const name = new TextDecoder().decode(buf.subarray(o + 30, o + 30 + nlen));
+    const parts = name.split('/');
+    if (parts.length > 2) throw new Error(`This isn't a restore point Kiln made (${name}).`);
+    if (parts.length === 2) dir = parts[0];
+    const base = parts.at(-1)!;
+    if (base) found.set(base, buf.slice(o + 30 + nlen + xlen, o + 30 + nlen + xlen + size));
+    o += 30 + nlen + xlen + size;
+  }
+  const sums = found.get('SHA256SUMS');
+  if (!sums) throw new Error('This zip has no SHA256SUMS, so it isn\'t a restore point Kiln made.');
+  found.delete('SHA256SUMS');
+  const listed = new Map(new TextDecoder().decode(sums).trim().split('\n').map((l) => { const [sha, n] = l.split(/\s+/); return [n ?? '', sha ?? ''] as const; }));
+  for (const [n, data] of found) {
+    const want = listed.get(n);
+    if (!want) throw new Error(`${n} isn't in the restore point's SHA256SUMS.`);
+    if (toHex(await crypto.subtle.digest('SHA-256', data as Uint8Array<ArrayBuffer>)) !== want) throw new Error(`${n} doesn't match its SHA256SUMS: the restore point is damaged.`);
+  }
+  for (const n of listed.keys()) if (!found.has(n)) throw new Error(`The restore point is missing ${n}.`);
+  return { ...(dir ? { dir } : {}), files: [...found].map(([filename, data]) => ({ filename, data })) };
+}
+
 /** Parses a backup zip made by backupZip (STORED only) back into files, checking SHA256SUMS. */
 export async function readBackupZip(zip: Blob): Promise<{ id: string; files: Map<string, Uint8Array> }> {
   const buf = new Uint8Array(await zip.arrayBuffer());

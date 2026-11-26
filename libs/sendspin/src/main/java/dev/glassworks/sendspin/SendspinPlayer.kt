@@ -240,6 +240,7 @@ public class SendspinPlayer internal constructor(
      */
     private val outputLock = Any()
     @Volatile private var ducked = false
+    @Volatile private var outputGain = 1f
     private val wake = Object()
     /** The connection's state. */
     @Volatile public var status: Status = Status(Phase.CLOSED); private set
@@ -445,9 +446,17 @@ public class SendspinPlayer internal constructor(
         applyGain()
     }
 
+    /**
+     * A gain over the player's own volume, 0 to 1: the host's master volume, for a device whose volume Android keeps
+     * fixed. The server isn't told: the player's volume stays as it set it. Safe from any thread.
+     */
+    public fun setOutputGain(gain: Float) {
+        outputGain = gain.coerceIn(0f, 1f)
+        applyGain()
+    }
+
     private fun applyGain() {
-        val g = if (ducked || store.muted) 0f else PlaybackScheduler.amplitude(store.volume)
-        current?.sink?.setGain(g)
+        current?.sink?.setGain(gain(store.volume, store.muted, ducked, outputGain))
     }
 
     // ------------------------------------------------------------------ threads
@@ -685,3 +694,7 @@ public class SendspinPlayer internal constructor(
         private val EMPTY = TimeFilter.Snapshot(0.0, 0.0, 0, false, 0, Double.POSITIVE_INFINITY)
     }
 }
+
+/** The output's gain: the player's volume on the spec's curve, under the host's [outputGain]; 0 while muted or ducked. */
+internal fun gain(volume: Int, muted: Boolean, ducked: Boolean, outputGain: Float): Float =
+    if (ducked || muted) 0f else PlaybackScheduler.amplitude(volume) * outputGain.coerceIn(0f, 1f)

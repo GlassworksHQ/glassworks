@@ -90,17 +90,18 @@ function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'change
 }
 
 describe('the choice', () => {
-  it('opens on Glassworks alone, first and picked, with no badge; the community images are one quiet click away', async () => {
+  it('opens on Glassworks\' own installs, Glassworks first and picked, with no badge; the community images are one quiet click away', async () => {
     await show('image-choose');
     expect(screen.getByRole('heading').textContent).toBe('Choose what to install on the Mirror');
-    expect(radios()).toEqual(['Glassworks']);
+    expect(radios()).toEqual(['Glassworks', 'Glassworks on the stock software']);
+    expect(screen.getByRole('radio', { name: 'Glassworks on the stock software' }).querySelector('.pill')).toBeNull();
     expect(screen.getByRole('radio', { name: 'Glassworks' }).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('radio', { name: 'Glassworks' }).querySelector('.pill')).toBeNull();
     expect(rail()).toEqual(['Mirror', 'Choose', 'Download', 'Fastboot', 'Install', 'Set up', 'Done']);
     const more = screen.getByRole('button', { name: 'Show community images (1)' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(more);
-    expect(radios()).toEqual(['Glassworks', 'Glass Panes']);
+    expect(radios()).toEqual(['Glassworks', 'Glassworks on the stock software', 'Glass Panes']);
     expect(screen.getByRole('radio', { name: 'Glassworks' }).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('radio', { name: 'Glass Panes' }).textContent).toMatch(/Community image.*Its project, on GitHub/);
   });
@@ -109,7 +110,7 @@ describe('the choice', () => {
     await show('image-choose-panes');
     expect(embers()).toEqual(['Continue with Glass Panes']);
     fireEvent.click(screen.getByRole('button', { name: 'Hide community images' }));
-    expect(radios()).toEqual(['Glassworks']);
+    expect(radios()).toEqual(['Glassworks', 'Glassworks on the stock software']);
     expect(embers()).toEqual(['Continue with Glassworks']);
   });
 
@@ -294,7 +295,7 @@ describe('Glassworks\' Done', () => {
     // the page leaves Done for the install's first screen
     cleanup();
     render(<ImageFlow image={flash} app={app} />);
-    expect(radios()).toEqual(['Glassworks', 'Glass Panes']);
+    expect(radios()).toEqual(['Glassworks', 'Glassworks on the stock software', 'Glass Panes']);
     expect(embers()).toEqual(['Continue with Glass Panes']);
   });
 });

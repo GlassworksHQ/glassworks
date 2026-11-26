@@ -12,6 +12,13 @@ import { s1Overlay } from '../src/overlay';
 
 const GOLDEN = process.env.S1_WEB_GOLDEN ?? join(homedir(), 'src/aqara-panel-backups/web-golden');
 const HAVE_GOLDEN = existsSync(join(GOLDEN, 'out/SHA256SUMS'));
+/** The overlay files s1Overlay takes at this revision: a set made before a rename (#641) lacks some of them. */
+const OVERLAY = ['glassworks.rc', 'glassworks_loader.sh', 'glassworks_verify', 'glassworks_bundle.pub', 'glassworks_agent.sh',
+  'otbr-agent', 'ot-ctl', 'glassworks_firstboot.sh', 'glassworks_netwatch.sh', 'glassworks_update.sh', 'glassworks_bootanimation.zip'];
+const MISSING = HAVE_GOLDEN
+  ? [...OVERLAY.map((f) => `fixtures/overlay/${f}`), 'fixtures/Magisk-v31.1.apk', 'fixtures/test_adbkey.pub']
+    .filter((f) => !existsSync(join(GOLDEN, f)))
+  : [];
 
 const enc = new TextEncoder();
 const g = (p: string) => new Uint8Array(readFileSync(join(GOLDEN, p)));
@@ -74,7 +81,12 @@ describe('s1Overlay (unit)', () => {
   });
 });
 
-describe.skipIf(!HAVE_GOLDEN)('golden: patchBoot with s1Overlay == patch-boot-magisk.sh', () => {
+it.runIf(MISSING.length > 0)('S1 goldens are for another revision: the golden tests are skipped', () => {
+  process.stderr.write(`[s1 overlay] golden tests SKIPPED: ${GOLDEN} is a golden set for another revision (it lacks ` +
+    `${MISSING.join(', ')}): make a set for this revision with gen.sh (copy one from an older set) and point S1_WEB_GOLDEN at it\n`);
+});
+
+describe.skipIf(!HAVE_GOLDEN || MISSING.length > 0)('golden: patchBoot with s1Overlay == patch-boot-magisk.sh', () => {
   const ov = (f: string) => g(`fixtures/overlay/${f}`);
   const overlay = (opts: { key?: boolean; anim?: boolean } = {}): OverlayFile[] => s1Overlay({
     rc: ov('glassworks.rc'), loaderSh: ov('glassworks_loader.sh'), verify: ov('glassworks_verify'), bundlePub: ov('glassworks_bundle.pub'),

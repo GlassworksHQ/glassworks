@@ -141,6 +141,7 @@ export function withAppStreams(p: PanelShell, o: { online: boolean; wifiFails?: 
       return r;
     },
     push: (path, data, mode) => p.push(path, data, mode),
+    ...(p.pull ? { pull: (path: string, x?: { signal?: AbortSignal; maxBytes?: number }) => p.pull!(path, x) } : {}),
     openStream: async (svc) => (svc === SETUP_SOCKET ? setupStream(net, o.radio ?? true, o.panes) : svc === IMPROV_SOCKET ? improvStream(!!o.wifiFails, net) : p.openStream!(svc)),
   };
 }

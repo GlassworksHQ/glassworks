@@ -60,10 +60,11 @@ describe('the S1 boot branding outputs', () => {
     expect(manifest.target).toEqual({
       name: frame.name, width: frame.display.width, height: frame.display.height,
       android_api: frame.boot.androidApi, splash: frame.boot.splash, zip_budget: frame.boot.zipBudget, rotate: frame.boot.rotate ?? null,
+      compact_budget: frame.boot.compactBudget ?? null,
     });
   });
   it('were built from the committed generator', () => {
-    for (const f of ['generate.py', 'stack.py', 'formats.py', 'target.py']) {
+    for (const f of ['generate.py', 'stack.py', 'formats.py', 'target.py', 'compact.py']) {
       const p = `branding/boot/${f}`;
       expect(sha(join(REPO, p)), `${p} changed without a rebuild: run generate.py --frame aqara-s1-plus --out branding/glass-tile and commit what it writes`).toBe(manifest.inputs[p]);
     }

@@ -40,15 +40,21 @@ export type { PatchedServicesJar };
 
 /**
  * Patches a stock `services.jar` for the Node USB-ADB tool. The shared core defaults to also applying
- * the Device Owner fixes (Stock-in-place silent updates); this tool keeps its USB-ADB-only behavior,
- * so it opts OUT by default and a caller can opt back in with `{ enableDeviceOwner: true }`.
+ * the Device Owner fixes (Stock-in-place silent updates) and to emptying `MirrorApService.systemReady()`
+ * (no stock onboarding hotspot). This tool is a reversible probe that only changes who USB debugging
+ * lets in, so it opts OUT of both by default; a caller can opt back in with `{ enableDeviceOwner: true }`
+ * or `{ disableStockAp: true }`.
  */
 export function patchStockServicesJar(
   jar: Uint8Array,
   adbKey: string,
-  options: { enableDeviceOwner?: boolean } = {},
+  options: { enableDeviceOwner?: boolean; disableStockAp?: boolean } = {},
 ): Promise<PatchedServicesJar> {
-  return patchStockServicesJarCore(jar, adbKey, { ...options, enableDeviceOwner: options.enableDeviceOwner ?? false });
+  return patchStockServicesJarCore(jar, adbKey, {
+    ...options,
+    enableDeviceOwner: options.enableDeviceOwner ?? false,
+    disableStockAp: options.disableStockAp ?? false,
+  });
 }
 
 export const STOCK_POST_BOOT_PATH = '/system/etc/init.qcom.post_boot.sh';

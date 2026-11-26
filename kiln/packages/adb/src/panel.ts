@@ -17,6 +17,11 @@ export interface PanelShell {
   push(path: string, data: Uint8Array, mode?: number): Promise<void>;
   /** A raw stream to a service on the panel (e.g. 'localabstract:…'), if the transport has one. */
   openStream?(service: string): Promise<ByteStream>;
+  /**
+   * A file's bytes over adb's sync service (`adb pull`), if the transport has it: no shell tool needed (Android 6 has
+   * no `sha256sum`). `signal` stops the read; `maxBytes` cuts it off there.
+   */
+  pull?(path: string, o?: { signal?: AbortSignal; maxBytes?: number }): Promise<Uint8Array>;
   /** Restarts the device into its bootloader (adb's `reboot:bootloader` service, as `adb reboot bootloader`), if the transport can. */
   rebootToBootloader?(): Promise<void>;
   /** Lets go of the connection, so the next connect to the same device starts clean. */
@@ -137,6 +142,35 @@ export class Panel implements PanelShell {
       });
     } finally {
       await sync.dispose();
+    }
+  }
+
+  async pull(path: string, o: { signal?: AbortSignal; maxBytes?: number } = {}): Promise<Uint8Array> {
+    const { signal, maxBytes = Infinity } = o;
+    signal?.throwIfAborted();
+    const sync = await this.adb.sync();
+    const reader = sync.read(path).getReader();
+    const stop = () => { void reader.cancel(signal?.reason).catch(() => {}); };
+    signal?.addEventListener('abort', stop, { once: true });
+    try {
+      const parts: Uint8Array[] = [];
+      let n = 0;
+      for (;;) {
+        signal?.throwIfAborted();
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value);
+        n += value.byteLength;
+        if (n > maxBytes) { stop(); break; }
+      }
+      signal?.throwIfAborted();
+      const out = new Uint8Array(n);
+      let at = 0;
+      for (const x of parts) { out.set(x, at); at += x.byteLength; }
+      return out;
+    } finally {
+      signal?.removeEventListener('abort', stop);
+      await sync.dispose().catch(() => {});
     }
   }
 

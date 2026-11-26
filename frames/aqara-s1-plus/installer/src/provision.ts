@@ -179,6 +179,9 @@ async function afterInstall(p: PanelShell, r: Steps, opts: ProvisionOptions, pha
   sw: SwitchOutcome | undefined, sleep: (ms: number) => Promise<void>): Promise<Provisioned> {
   phase({ step: 'home' });
   await grantPermissions(r, S1_KIOSK);
+  // PackageInstaller fallback on Android 10 (without the root update service): Aqara's ROM ships no Android Settings
+  // app to grant "Install unknown apps" from Android's refusal dialog (#908).
+  await r.try(`appops set ${PKG} REQUEST_INSTALL_PACKAGES allow`);
 
   r.step('Make the kiosk the HOME app');
   await r.run(`cmd package set-home-activity ${ACT}`);

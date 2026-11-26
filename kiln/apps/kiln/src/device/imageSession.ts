@@ -11,9 +11,13 @@ import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glasswork
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
 import { askAdb, nothingPicked } from './adbAsk';
 import {
-  ProxyError, WrongImage, adbKeyStep, cap, imageFromLink, pickInList, plan, sourceFile, systemKeyStep, wifiStep,
-  type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type PlannedStep, type PrepareStep,
+  ProxyError, WrongImage, adbKeyStep, cap, checkInPlace, imageFromLink, parseSparseWrites, pickInList, plan, readNamedBackupZip, sha256Hex, sourceFile, systemKeyStep, wifiStep,
+  type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type InPlaceCode, type NamedPart, type ReadBackFile,
+  type PlannedStep, type PrepareStep,
 } from '@glassworks/kiln-core';
+import type { BluetoothLike } from './channels';
+import { InPlaceReceiver, fallbackWords, fromHexString, memoryInPlaceStore, newSecret, restorePointZip, toHexString, type InPlaceStore, type Received } from './inPlace';
+import type { ReceiveChannel, ReceiveProgress, ReceiveStage } from './InPlaceScreens';
 
 
 export type { ImageMaker };
@@ -88,10 +92,45 @@ export interface ImageDeps {
    * None: a reload forgets.
    */
   progress?: DeviceProgress;
+  /**
+   * An in-place recipe's storage (the frame's `storage.inPlaceDb`): its bundles and restore points, kept across visits.
+   * None: kept in memory for this page load only (demos and tests).
+   */
+  inPlaceStore?: InPlaceStore;
+  /** Web Bluetooth for the `receive` step (navigator.bluetooth by default; a simulated agent's in demos and tests). */
+  bluetooth?: BluetoothLike;
+  /** fetch for the agent's HTTP server on the local network (the page's by default). */
+  agentFetch?: typeof fetch;
+  /** The browser's local network permission, read before a LAN transfer. */
+  localNetworkPermission?: () => Promise<PermissionState | null>;
+  /** The staged assets an in-place stage needs (its `inPlace.assets`), each checked by its SHA-256. */
+  stagedAssets?(names: readonly string[]): Promise<Record<string, Uint8Array>>;
+  /** A new per-run secret for the stage (crypto.getRandomValues by default). */
+  secret?(): Uint8Array;
+  /** Bluetooth's stall watchdog for the receive step (tests shorten it). */
+  bleStallMs?: number;
+  /** The local network transfer's time limit (tests shorten it). */
+  lanTimeoutMs?: number;
 }
 
-/** A device install's mark across page loads (ImageDeps `progress`, AppDeps `progress`). `image`: the recipe it wrote. */
-export type ProgressMark = { at: 'written' | 'flashed'; image?: string };
+/**
+ * A device install's mark across page loads (ImageDeps `progress`, AppDeps `progress`). `image`: the recipe it wrote. An
+ * in-place recipe's: `staged`, the device restarted into its setup agent (with the run's `secret`, kept in this tab only
+ * until the bundle is in, and the device's `serial`); `received`, the bundle is in this browser (`serial`, `digest`),
+ * and `wrote`, the files of its second fastboot session already written, so a reload doesn't write them again; `bundle`,
+ * the SHA-256 of the whole bundle those writes were built from, so a resume builds the rest from the same blocks;
+ * `began`, the writes started (finished or not), so a lost bundle after one of them offers the way back. `staged` is set
+ * once the stage's write is done, before its restart. `flashed` keeps the `serial` and the bundle's `digest`, so the app
+ * installs on the device that was written and its way back finds this run's restore point, and `readBack`, the files
+ * the writes changed (the frame's build said), which Kiln reads back over adb before the app's install, after a reload
+ * too. `undo`: its way back has
+ * started writing (`serial`, the device it writes; `digest`, the restore image's SHA-256; `restore`, where this browser
+ * keeps that restore point; `wrote`, the partitions written so far), so a reload or a retry goes on with the same way
+ * back on the same device, never with the install it is undoing.
+ */
+export type ProgressMark = { at: 'written' | 'flashed' | 'staged' | 'received' | 'undo'; image?: string; secret?: string; serial?: string; digest?: string; bundle?: string;
+  wrote?: string[]; began?: string[]; restore?: { serial: string; digest: string }; readBack?: ReadBackFile[] };
+const MARKS: readonly ProgressMark['at'][] = ['written', 'flashed', 'staged', 'received', 'undo'];
 export interface DeviceProgress { get(): ProgressMark | undefined; set(m: ProgressMark | undefined): void }
 
 /** A mark in the tab's sessionStorage under `key`; a browser that blocks it forgets, as a reload without storage does. */
@@ -100,7 +139,7 @@ export function sessionProgress(key: string): DeviceProgress {
     get: () => {
       try {
         const v = JSON.parse(sessionStorage.getItem(key) ?? 'null') as ProgressMark | null;
-        return v && (v.at === 'written' || v.at === 'flashed') ? v : undefined;
+        return v && MARKS.includes(v.at) ? v : undefined;
       } catch { return undefined; }
     },
     set: (m) => { try { if (m) sessionStorage.setItem(key, JSON.stringify(m)); else sessionStorage.removeItem(key); } catch { /* storage off */ } },
@@ -109,8 +148,38 @@ export function sessionProgress(key: string): DeviceProgress {
 
 /** `image`: Glassworks' download and settings; `download`: a community image's. */
 /** `done`: a community image's end (Glassworks' is the standard flow's Done). */
-export type ImageScreen = 'choose' | 'image' | 'download' | 'keep' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'error';
-export type WorkStep = PrepareStep | 'system-key' | 'adb-key' | 'wifi' | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot' | 'hand-back' | 'wifi-on';
+/** An in-place recipe's: `receive`, the bundle from the device's agent; `restore-point`, kept before any system write; `undo`, its way back. */
+export type ImageScreen = 'choose' | 'image' | 'download' | 'keep' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'error' | 'receive' | 'restore-point' | 'undo';
+export type WorkStep = PrepareStep | 'system-key' | 'adb-key' | 'wifi' | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot' | 'hand-back' | 'wifi-on'
+  | 'stage' | 'in-place' | 'app-install';
+
+/** The receive step's screen (InPlaceScreens ReceiveScreen). */
+export interface ReceiveView {
+  stage: ReceiveStage;
+  channel: ReceiveChannel | null;
+  progress: ReceiveProgress | null;
+  /** The agent's own page, where the bundle can be downloaded by hand. */
+  pageUrl: string | null;
+  /** Why Kiln moved to another channel, said calmly. */
+  fallback: string | null;
+  error: string | null;
+  bluetooth: boolean;
+}
+
+/** The restore point's screen (InPlaceScreens RestorePointScreen). */
+export interface RestoreView { status: 'saving' | 'verifying' | 'ready' | 'error'; digest: string | null; downloaded: boolean; error: string | null; filename: string }
+
+/** The way back from an in-place install (installer.json `wayBack.how` restore-blocks). */
+export interface UndoView {
+  at: 'start' | 'fastboot' | 'working' | 'done' | 'error';
+  /** Where the restore point comes from: this browser, or a zip the person picked. None yet: neither. */
+  source?: 'browser' | 'file';
+  fileName?: string;
+  /** Kiln restarted the device into fastboot over adb. */
+  restarted?: boolean;
+  error?: string;
+  x?: number;
+}
 /**
  * Home Assistant's ESPHome key across a reflash (issue 580): read from the running app before the flash, given back at the
  * first start. The key itself never goes in the state or the log, only its 4-hex fingerprint; the session holds it in
@@ -176,12 +245,46 @@ export interface ImageState {
   flashFailed?: boolean;
   /** the error came at a community image's wifi-on, after it was installed: offer Connect again, not a reinstall */
   wifiOnFailed?: boolean;
+  /** An in-place recipe's fastboot session: 1 for the stage, 2 for the install after the bundle is in. */
+  round?: 1 | 2;
+  receive?: ReceiveView;
+  restorePoint?: RestoreView;
+  undo?: UndoView;
+  /**
+   * An in-place install stopped because this browser no longer has its bundle: `restart` while nothing of its second
+   * session is written (Try again starts the install over), `restore` once something is (the way back, on the restore point).
+   */
+  bundleLost?: 'restart' | 'restore';
+  /**
+   * An in-place install's read back after its restart found a file that isn't what Kiln wrote: the system didn't take
+   * the change. Nothing was installed; the way back is the one way on.
+   */
+  notTaken?: boolean;
   error?: string;
   log: string[];
 }
 
 /** The person went on to fastboot by hand while the keep step's read ran. */
 class Skipped extends Error {}
+/** An in-place install's read back after its restart: a file isn't what Kiln wrote. */
+class NotTaken extends Error {}
+
+/** How long one file's read back over adb may take before Kiln counts it unreadable (a 2.4 MB file takes about a second). */
+const READ_BACK_MS = 60_000;
+
+/** `p.pull(path)` with a deadline: a device that stops answering is an error after `ms`, not a wait forever. */
+async function pullWithin(p: PanelShell, path: string, size: number | undefined, ms: number): Promise<Uint8Array> {
+  const c = new AbortController();
+  const stalled = new Promise<never>((_, reject) => c.signal.addEventListener('abort', () => reject(c.signal.reason), { once: true }));
+  const t = setTimeout(() => c.abort(new Error(`no answer in ${Math.round(ms / 1000)} s`)), ms);
+  try {
+    return await Promise.race([p.pull!(path, { signal: c.signal, ...(size !== undefined ? { maxBytes: size } : {}) }), stalled]);
+  } finally {
+    clearTimeout(t);
+  }
+}
+/** An in-place install's bundle that this browser no longer has (or no longer the same one): it can't be built from again. */
+class BundleLost extends Error {}
 
 /**
  * One adb command with a stall watchdog: a device that stops answering ends in an error after `ms`, not a wait forever
@@ -234,6 +337,33 @@ export class ImageSession {
   private running?: PanelShell;
   /** The keep step's read in progress: skipKeep bumps `gen`, and the read then lets go of `p` and changes nothing */
   private read: { gen: number; p?: PanelShell; got?: { key: string; fingerprint: string } } = { gen: 0 };
+  /** An in-place recipe's run: where it pauses for the person (an index into writes()), and what it holds meanwhile. */
+  private cursor?: number;
+  /** The stage's secret: in this tab only, until the bundle is in. Never in the state, the log or an error */
+  private secret?: Uint8Array;
+  /** The device's fastboot serial: the bundle, the second session and the app's install must be the same device's. Never in the log */
+  private serial?: string;
+  /** `sha256`: the whole bundle's, checked again when a resume reads it back out of storage. */
+  private bundle?: { bytes?: Uint8Array; digest: string; sha256?: string; extents?: readonly { physical: number; length: number }[] };
+  private restore?: { files: NamedPart[]; partition: string; sparse: string };
+  /** An in-place run's second-session files written so far (the `received` mark's `wrote`): a resume skips them. */
+  private wrote = new Set<string>();
+  /** The planned step that stopped with an error: Try again runs it again, not the one after it. */
+  private stoppedAt?: number;
+  /** The receive attempt running now: Cancel, or a newer attempt, aborts it, and nothing it finishes counts after that. */
+  private receiving?: AbortController;
+  private receiver?: InPlaceReceiver;
+  private storeMemo?: InPlaceStore;
+  /** The way back's restore point: the restore image, its partition and manifest. */
+  private undoFiles?: { files: NamedPart[]; sparse: NamedPart; manifest?: Record<string, unknown> };
+  /** The way back's writes done so far, on the device with this serial, for the restore image with this SHA-256 (also in the `undo` mark). */
+  private undoWrote?: { serial: string; digest: string; parts: string[] };
+  /** Where this browser keeps the way back's restore point (its store key), once it is one this browser kept. */
+  private undoKey?: { serial: string; digest: string };
+  /** An in-place run's second-session writes started so far, finished or not (the `received` mark's `began`). */
+  private began = new Set<string>();
+  /** The files an in-place run's writes changed, as its build said: read back over adb before the app's install (the `flashed` mark's `readBack`). */
+  private readBack?: ReadBackFile[];
 
   /** The frame this session installs. */
   get frame() { return this.d.frame; }
@@ -250,8 +380,38 @@ export class ImageSession {
     // didn't finish starts again from the image, saying an earlier try changed the device
     const mark = d.progress?.get();
     const wrote = mark && this.recipes.find((r) => r.id === mark.image);
-    if (mark?.at === 'flashed' && wrote) this.state = { ...this.state, screen: 'adb', picked: wrote.id, open: wrote.community, files: waiting(wrote), changed: true };
-    else if (mark) this.state = { ...this.state, changed: true };
+    // an in-place recipe resumes where it paused: on receive (its agent runs already), on its second fastboot (the bundle
+    // is in this browser), or on its app's install
+    const inPlace = wrote?.mode === 'in-place';
+    const secret = inPlace && mark?.at === 'staged' && mark.secret ? fromHexString(mark.secret) : undefined;
+    if (inPlace && mark?.at === 'staged' && secret && mark.serial) {
+      this.secret = secret;
+      this.serial = mark.serial;
+      this.state = { ...this.state, screen: 'receive', picked: wrote.id, files: waiting(wrote), changed: true, round: 1, receive: this.receiveView('ready') };
+      this.cursor = this.indexOf(wrote, 'receive');
+    } else if (inPlace && mark?.at === 'received' && mark.serial && mark.digest) {
+      this.serial = mark.serial;
+      this.bundle = { digest: mark.digest, ...(mark.bundle ? { sha256: mark.bundle } : {}) };
+      this.wrote = new Set(Array.isArray(mark.wrote) ? mark.wrote.filter((x): x is string => typeof x === 'string') : []);
+      this.began = new Set([...this.wrote, ...(Array.isArray(mark.began) ? mark.began.filter((x): x is string => typeof x === 'string') : [])]);
+      this.state = { ...this.state, screen: 'fastboot', picked: wrote.id, files: waiting(wrote), changed: true, round: 2 };
+      this.cursor = this.indexOf(wrote, 'fastboot');
+    } else if (mark?.at === 'flashed' && wrote) {
+      this.state = { ...this.state, screen: 'adb', picked: wrote.id, open: wrote.community, files: waiting(wrote), changed: true, ...(inPlace ? { round: 2 as const } : {}) };
+      if (inPlace) {
+        this.cursor = this.indexOf(wrote, 'app-install');
+        if (mark.serial) this.serial = mark.serial;
+        if (mark.digest) this.bundle = { digest: mark.digest }; // only to find this run's restore point for its way back
+        if (Array.isArray(mark.readBack)) this.readBack = mark.readBack.filter((x): x is ReadBackFile => typeof x?.path === 'string' && typeof x?.sha256 === 'string');
+      }
+    } else if (inPlace && mark?.at === 'undo') {
+      // the way back had started writing: it opens again, on the restore point this browser kept; what it wrote already
+      // isn't written again (undoFlash), and the install it was undoing never resumes
+      this.state = { ...this.state, screen: 'undo', picked: wrote.id, files: waiting(wrote), changed: true, undo: { at: 'start' } };
+      // that way back's own restore point, never another one this browser kept (another device's, say); gone, the
+      // person picks its download
+      if (mark.restore) void this.loadRestore(mark.restore);
+    } else if (mark) this.state = { ...this.state, changed: true };
   }
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
@@ -405,6 +565,7 @@ export class ImageSession {
     const left = s.files.find((f) => f.state !== 'ok');
     if (left) return `Download ${left.name} first.`;
     if (this.recipe.community) return this.recipe.steps.some((x) => x.do === 'wifi') ? this.wifiBlocked() : undefined;
+    if (this.inPlace) { const w = this.wifiBlocked(); if (w) return w; }
     if (!this.d.apk()) return this.d.apkBlocked?.() ?? 'Pick the Glassworks APK file first.';
     return undefined;
   }
@@ -429,8 +590,9 @@ export class ImageSession {
   /** Continue: fastboot, or the keep step first in a browser that has flashed a device before (it alone gets in over adb). */
   toFastboot() {
     if (this.blocked()) return;
-    if (!this.recipe.community && !this.state.key && this.d.flashedHere?.get()) this.toKeep();
-    else this.set({ screen: 'fastboot', connectError: undefined, restarted: false });
+    this.stoppedAt = undefined; // a run from its first screen: nothing of an earlier stop carries on
+    if (!this.recipe.community && !this.inPlace && !this.state.key && this.d.flashedHere?.get()) this.toKeep();
+    else this.set({ screen: 'fastboot', connectError: undefined, restarted: false, ...(this.inPlace ? { round: 1 as const } : {}) });
   }
 
   /** The step before the flash, for a device that runs Glassworks (issue 580). A key read earlier stays until a new one is read. */
@@ -593,6 +755,605 @@ export class ImageSession {
     this.set({ screen: 'fastboot', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false, restarted: true });
   }
 
+  // ---- an in-place recipe (images.ts mode in-place: stage, receive, in-place, app-install) ----
+
+  /** The picked recipe changes the stock software in place. */
+  get inPlace(): boolean { return this.recipe.mode === 'in-place'; }
+
+  /** The frame's in-place code: a recipe in-place mode on a frame without it is a frame bug. */
+  private code(): InPlaceCode {
+    const c = this.d.frame.imageFlow.inPlace;
+    if (!c) throw new Error(`${cap(this.d.frame.the)} has no in-place code for ${this.recipe.name}.`);
+    return c;
+  }
+
+  private store(): InPlaceStore { return this.d.inPlaceStore ?? (this.storeMemo ??= memoryInPlaceStore()); }
+
+  /**
+   * The `n`th (from 0) planned step of `kind` in `r`'s writes (plan() after the warning): the first session's fastboot
+   * comes before the warning, so the second session's is the first one here.
+   */
+  private indexOf(r: ImageRecipe, kind: PlannedStep['do'], n = 0): number {
+    const all = plan(r);
+    const steps = all.slice(all.findIndex((x) => x.do === 'confirm') + 1);
+    let seen = -1;
+    return steps.findIndex((x) => x.do === kind && ++seen === n);
+  }
+
+  private receiveView(stage: ReceiveStage, patch: Partial<ReceiveView> = {}): ReceiveView {
+    return { stage, channel: null, progress: null, pageUrl: this.state?.receive?.pageUrl ?? null, fallback: null, error: null, bluetooth: this.state?.receive?.bluetooth ?? true, ...patch };
+  }
+
+  /**
+   * Runs an in-place recipe's planned steps from `from` (an index into writes()), until one waits on the person: the
+   * restart into the agent (receive), the second fastboot, the restore point, and the app's install over adb. Each
+   * pause keeps its place (`cursor`); its screen's button carries on from the next step.
+   */
+  private async runFrom(from: number): Promise<void> {
+    const r = this.recipe;
+    const steps = this.writes();
+    const work = (step: WorkStep, x: number) => this.set({ work: { step, x } });
+    const network = this.state.wifi.ssid ? { ssid: this.state.wifi.ssid, password: this.state.wifi.password } : undefined;
+    let i = from;
+    this.stoppedAt = undefined;
+    try {
+      for (; i < steps.length; i++) {
+        const step = steps[i]!;
+        const fb = this.fb;
+        switch (step.do) {
+          case 'backup':
+            this.log(`Backup: Kiln keeps a restore point of every block it changes in the system, before it changes any. App data starts fresh.`);
+            break;
+          case 'stage': {
+            if (!fb || !this.state.fastboot) throw new Error(`${cap(this.d.frame.the)} isn't connected in fastboot mode.`);
+            const adbKey = this.d.adbKey();
+            if (!adbKey) throw new Error('Kiln has no adb key for this browser yet. Reload the page and try again.');
+            const code = this.code();
+            this.set({ screen: 'working', round: 1 });
+            work('stage', 0);
+            this.log('Preparing the setup agent');
+            // a new run: a new secret, and a new receiver (what an earlier run's agent said is that run's, not this one's)
+            this.receiving?.abort();
+            this.receiving = undefined;
+            this.receiver = undefined;
+            this.restore = undefined;
+            this.wrote = new Set();
+            this.began = new Set();
+            this.secret = (this.d.secret ?? newSecret)();
+            const assets = code.assets?.length ? await (this.d.stagedAssets?.(code.assets) ?? Promise.resolve({})) : {};
+            this.made[step.makes] = await code.stage({ adbKey, userdataBytes: this.state.fastboot.userdataBytes, secret: this.secret, assets, ...(network ? { wifi: network } : {}) });
+            work('stage', 1);
+            this.log('', network ? 'the setup agent, this browser\'s adb key, a new secret for this run and your network, on a fresh userdata' : 'the setup agent, this browser\'s adb key and a new secret for this run, on a fresh userdata');
+            this.d.progress?.set({ at: 'written', image: r.id });
+            break;
+          }
+          case 'flash': {
+            if (!fb) throw new Error(`${cap(this.d.frame.the)} isn't connected in fastboot mode.`);
+            // the second session's writes are checkpointed one by one: after a reload, one already written isn't written again
+            const checkpointed = !!this.restore;
+            if (checkpointed && this.wrote.has(step.file)) {
+              this.log(`Flashing ${step.partition}`);
+              this.log('', 'already written before this page reloaded, so not written again');
+              break;
+            }
+            const blob = this.made[step.file];
+            if (!blob) throw new Error(`Kiln has no ${step.file} to write. Nothing more was written.`);
+            const id = `flash-${step.partition}` as WorkStep;
+            this.log(`Flashing ${step.partition}${step.partition === this.restore?.partition ? ' (only the blocks the restore point covers)' : ''}`);
+            this.set({ flashFailed: true, screen: 'working' });
+            work(id, 0);
+            // started, before the first byte: a write that stops partway may have changed the device already
+            if (checkpointed) { this.began.add(step.file); this.markReceived(); }
+            await fb.flashBlob(step.partition, blob, (x) => work(id, x));
+            this.log('', `${step.partition}: ${(blob.size / 2 ** 20).toFixed(1)} MiB written`);
+            if (checkpointed) { this.wrote.add(step.file); this.markReceived(); }
+            // the stage's write is done: a reload from here on resumes on receive (its agent starts with any restart,
+            // the stage being on userdata), never staging again
+            else if (this.state.round === 1 && this.secret && this.serial && steps[i + 1]?.do === 'restart' && steps[i + 2]?.do === 'receive') {
+              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial });
+            }
+            break;
+          }
+          case 'restart': {
+            if (!fb) throw new Error(`${cap(this.d.frame.the)} isn't connected in fastboot mode.`);
+            this.set({ flashFailed: false });
+            work('restart', 1);
+            this.log(`Restarting ${this.d.frame.the}`);
+            await fb.reboot();
+            this.fb = undefined;
+            this.made = Object.create(null);
+            const next = steps[i + 1]?.do;
+            if (next === 'receive' && this.secret && this.serial) {
+              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial });
+            } else if (next === 'app-install') {
+              this.restore = undefined;
+              this.wrote = new Set();
+              this.began = new Set();
+              this.d.flashedHere?.set(); // this browser's key is in what it wrote: the keep step can read it next time
+              this.d.progress?.set({ at: 'flashed', image: r.id, ...(this.serial ? { serial: this.serial } : {}), ...(this.bundle ? { digest: this.bundle.digest } : {}),
+                ...(this.readBack ? { readBack: this.readBack } : {}) });
+            }
+            break;
+          }
+          case 'receive':
+            this.cursor = i;
+            this.set({ screen: 'receive', work: undefined, receive: this.receiveView('waiting-boot', { bluetooth: await this.receiverOf(step.channels).bluetoothAvailable().catch(() => false) }) });
+            return;
+          case 'fastboot':
+            this.cursor = i;
+            this.set({ screen: 'fastboot', round: 2, work: undefined, fastboot: undefined, restarted: false, connectError: undefined });
+            return;
+          case 'in-place': {
+            if (!fb || !this.serial) throw new Error(`${cap(this.d.frame.the)} isn't connected in fastboot mode.`);
+            const adbKey = this.d.adbKey();
+            if (!adbKey) throw new Error('Kiln has no adb key for this browser yet. Reload the page and try again.');
+            this.set({ screen: 'working', round: 2 });
+            work('in-place', 0);
+            const bundle = await this.bundleBytes();
+            this.log('Building the changes from the bundle');
+            const flashes = steps.slice(i + 1).filter((x): x is Extract<PlannedStep, { do: 'flash' }> => x.do === 'flash');
+            const partitionBytes: Record<string, number> = {};
+            for (const x of flashes) partitionBytes[x.partition] ??= await fb.partitionSize(x.partition);
+            const built = await this.code().build(bundle.bytes, { adbKey, userdataBytes: this.state.fastboot?.userdataBytes ?? partitionBytes.userdata ?? 0, partitionBytes, serial: this.serial, ...(network ? { wifi: network } : {}) });
+            for (const m of step.makes) if (!built.writes[m]) throw new Error(`the frame's build made no ${m}`);
+            this.readBack = built.readBack?.map((x) => ({ path: x.path, sha256: x.sha256.toLowerCase(), ...(x.size !== undefined ? { size: x.size } : {}) })) ?? [];
+            // Kiln's own check before any byte is written: the surgical write (the first one after the restore point) changes
+            // only the blocks the bundle names, and the restore puts back exactly those
+            const surgical = flashes.find((x) => step.makes.includes(x.file))!;
+            const write = await blobBytes(built.writes[surgical.file]!);
+            const restore = await blobBytes(built.restore);
+            checkInPlace({ write, restore, extents: bundle.extents, partitionBytes: partitionBytes[surgical.partition]! });
+            const touched = parseSparseWrites(write).ranges.reduce((n, x) => n + (x.end - x.start), 0);
+            this.log('', `checked: the write changes ${touched} bytes of ${surgical.partition}, all inside the bundle's file, and the restore puts back exactly those`);
+            this.made = Object.assign(Object.create(null) as Record<string, Blob>, built.writes);
+            const enc = new TextEncoder();
+            const sparse = `${step.restore}.sparse`;
+            // the restore point names the device it is for (the SHA-256 of its fastboot serial, never the serial): the way
+            // back writes it nowhere else
+            const deviceIdHash = await sha256Hex(enc.encode(this.serial.trim()));
+            if (built.manifest?.deviceIdHash !== undefined && built.manifest.deviceIdHash !== deviceIdHash) throw new Error('The frame\'s restore point names another device than this one. Nothing more was written.');
+            const manifest = { ...built.manifest, deviceIdHash };
+            this.restore = {
+              partition: surgical.partition,
+              sparse,
+              files: [
+                { filename: sparse, data: restore },
+                { filename: 'manifest.json', data: enc.encode(`${JSON.stringify(manifest, null, 2)}\n`) },
+                ...Object.entries(built.files ?? {}).map(([filename, data]) => ({ filename, data })),
+              ],
+            };
+            work('in-place', 1);
+            break;
+          }
+          case 'restore-point':
+            this.cursor = i;
+            this.set({ screen: 'restore-point', work: undefined, restorePoint: { status: 'saving', digest: null, downloaded: false, error: null, filename: `${this.restore?.sparse ?? `${step.restore}.sparse`}` } });
+            void this.saveRestorePoint();
+            return;
+          case 'app-install':
+            this.cursor = i;
+            this.set({ screen: 'adb', work: undefined });
+            return;
+          case 'way-back':
+            break;
+          default:
+            throw new Error(`Kiln can't run "${step.do}" in an in-place install.`);
+        }
+      }
+    } catch (e) {
+      this.cursor = i;
+      this.stoppedAt = i;
+      this.log('Stopped', (e as Error).message);
+      // a bundle this browser no longer has can't be built from again: Try again starts the install over while nothing of
+      // the second session is written yet, and once something is, the way back opens on the restore point kept before it
+      const lost = e instanceof BundleLost ? (this.wrote.size || this.began.size ? 'restore' as const : 'restart' as const) : undefined;
+      const why = lost === 'restart' ? `${(e as Error).message} Try again starts the install over from its first screen.` : (e as Error).message;
+      this.set({ screen: 'error', error: why, bundleLost: lost, ...(this.state.work ? {} : { work: { step: steps[i]?.do === 'in-place' ? 'in-place' : 'stage', x: 0 } }) });
+    }
+  }
+
+  /** The `received` mark, with the second session's writes started and finished so far. */
+  private markReceived() {
+    if (!this.serial || !this.bundle) return;
+    this.d.progress?.set({ at: 'received', image: this.recipe.id, serial: this.serial, digest: this.bundle.digest,
+      ...(this.bundle.sha256 ? { bundle: this.bundle.sha256 } : {}), wrote: [...this.wrote], began: [...this.began] });
+  }
+
+  /** The bundle, from memory or this browser's storage (a reload after it came). */
+  private async bundleBytes(): Promise<{ bytes: Uint8Array; extents: readonly { physical: number; length: number }[] }> {
+    const b = this.bundle;
+    if (!b || !this.serial) throw new BundleLost('Kiln has no bundle for this device.');
+    if (b.bytes && b.extents) return { bytes: b.bytes, extents: b.extents };
+    const bytes = await this.store().getBundle(this.serial, b.digest);
+    if (!bytes) throw new BundleLost('This browser no longer has the bundle it received.');
+    // the whole bundle, not only its file's digest: a later copy of the same file at other blocks (kept under the same
+    // name) must not build the rest of a run whose first writes went to these
+    if (b.sha256 && await sha256Hex(bytes) !== b.sha256) throw new BundleLost('The bundle this browser kept isn\'t the one this install wrote from.');
+    // checked again as it comes out of storage: the secret is gone, so as a kept copy
+    const r = await this.code().readBundle(bytes, { secret: new Uint8Array(32), serial: this.serial, kept: true });
+    if (r.digest !== b.digest) throw new BundleLost('The bundle this browser kept doesn\'t match the one it received.');
+    this.bundle = { bytes, digest: r.digest, sha256: b.sha256, extents: r.extents };
+    return { bytes, extents: r.extents };
+  }
+
+  private receiverOf(channels: readonly ('lan' | 'ble' | 'file')[]): InPlaceReceiver {
+    return this.receiver ??= new InPlaceReceiver({
+      code: this.code(), store: this.store(), channels, bluetooth: this.d.bluetooth, fetchImpl: this.d.agentFetch,
+      localNetworkPermission: this.d.localNetworkPermission, ...(this.d.bleStallMs ? { ble: { stallTimeoutMs: this.d.bleStallMs } } : {}),
+      ...(this.d.lanTimeoutMs ? { lanTimeoutMs: this.d.lanTimeoutMs } : {}),
+    });
+  }
+
+  private receiveStep(): Extract<PlannedStep, { do: 'receive' }> {
+    return this.writes().find((x): x is Extract<PlannedStep, { do: 'receive' }> => x.do === 'receive')!;
+  }
+
+  private progressOf(p: { receivedBytes: number; totalBytes: number; bytesPerSecond: number; etaSeconds: number | null; resendPass?: number }): ReceiveProgress {
+    return { receivedBytes: p.receivedBytes, totalBytes: p.totalBytes, bytesPerSecond: p.bytesPerSecond, etaSeconds: p.etaSeconds, ...(p.resendPass ? { resendPass: p.resendPass } : {}) };
+  }
+
+  /**
+   * The receive step's button, inside the click (the browser's Bluetooth chooser): the agent's description over
+   * Bluetooth, then the bundle from this browser's copy, the local network, or Bluetooth, checked before it is kept.
+   */
+  async receive(): Promise<void> {
+    if (this.state.screen !== 'receive' || this.state.receive?.stage === 'connecting' || this.state.receive?.stage === 'transferring') return;
+    const secret = this.secret, serial = this.serial;
+    if (!secret || !serial) { this.set({ receive: this.receiveView('error', { error: 'This tab no longer has the setup agent\'s secret. Start the install again from its first screen.' }) }); return; }
+    const step = this.receiveStep();
+    const rec = this.receiverOf(step.channels);
+    const { signal } = this.newReceive();
+    const live = () => !signal.aborted;
+    this.set({ receive: this.receiveView('connecting') });
+    let fellBack: string | null = null;
+    let lanDenied = false;
+    try {
+      const got = await rec.receive({
+        secret, serial, signal,
+        onMeta: (_m, pageUrl) => { if (live()) this.set({ receive: { ...this.state.receive!, pageUrl } }); },
+        onChannel: (c) => { if (live()) this.set({ receive: { ...this.state.receive!, stage: c === 'cache' ? 'cache-hit' : 'transferring', channel: c, fallback: fellBack } }); },
+        onProgress: (p) => { if (live()) this.set({ receive: { ...this.state.receive!, progress: this.progressOf(p) } }); },
+        onFallback: (e) => { if (!live()) return; lanDenied = e.reason === 'lna-denied'; fellBack = fallbackWords(e); this.log('', fellBack); this.set({ receive: { ...this.state.receive!, fallback: fellBack } }); },
+        onVerifying: () => { if (live()) this.set({ receive: { ...this.state.receive!, stage: 'verifying' } }); },
+      });
+      if (!this.endReceive(signal)) return; // cancelled, or another attempt took over: what this one brought doesn't count
+      await this.received(got);
+    } catch (e) {
+      if (!this.endReceive(signal)) return;
+      const why = (e as Error).message;
+      this.log('', `receive: ${why}`);
+      this.set({ receive: this.receiveView(lanDenied ? 'lna-denied' : 'error', { error: why, channel: this.state.receive?.channel ?? null }) });
+    }
+  }
+
+  /** A new receive attempt: any earlier one is aborted first, so only this one's outcome counts. */
+  private newReceive(): AbortController {
+    this.receiving?.abort();
+    this.receiving = new AbortController();
+    return this.receiving;
+  }
+
+  /** Whether the attempt with `signal` is still the one that counts (and lets go of it): false once cancelled or replaced. */
+  private endReceive(signal: AbortSignal): boolean {
+    if (signal.aborted || this.receiving?.signal !== signal) return false;
+    this.receiving = undefined;
+    return true;
+  }
+
+  /** A bundle file the person downloaded from the agent's own page. */
+  async receiveFile(file: Blob): Promise<void> {
+    if (this.state.screen !== 'receive') return;
+    const secret = this.secret, serial = this.serial;
+    if (!secret || !serial) { this.set({ receive: this.receiveView('error', { error: 'This tab no longer has the setup agent\'s secret. Start the install again from its first screen.' }) }); return; }
+    const rec = this.receiverOf(this.receiveStep().channels);
+    // a transfer still running over the network or Bluetooth stops: the file takes its place
+    const { signal } = this.newReceive();
+    const live = () => !signal.aborted;
+    this.set({ receive: this.receiveView('transferring', { channel: 'file' }) });
+    try {
+      const got = await rec.receiveFile(file, {
+        secret, serial, signal,
+        onProgress: (p) => { if (live()) this.set({ receive: { ...this.state.receive!, progress: this.progressOf(p) } }); },
+        onVerifying: () => { if (live()) this.set({ receive: { ...this.state.receive!, stage: 'verifying' } }); },
+      });
+      if (!this.endReceive(signal)) return;
+      await this.received(got);
+    } catch (e) {
+      if (!this.endReceive(signal)) return;
+      this.set({ receive: this.receiveView('error', { error: (e as Error).message, channel: 'file' }) });
+    }
+  }
+
+  /** The receive screen's file step, when there's no Bluetooth (or the person asks for it). */
+  receiveByHand() { if (this.state.screen === 'receive') this.set({ receive: this.receiveView('file-fallback') }); }
+
+  /** The receive screen's Try again: back to connecting. */
+  receiveAgain() { if (this.state.screen === 'receive') this.set({ receive: this.receiveView('ready') }); }
+
+  /** Cancel on the receive screen: stops a transfer in flight; the agent keeps running, so Connect starts it again. */
+  async cancelReceive(): Promise<void> {
+    // the attempt stops counting first, so nothing it finishes while the link winds down moves the install on
+    this.receiving?.abort();
+    this.receiving = undefined;
+    this.set({ receive: this.receiveView('ready') });
+    await this.receiver?.cancel();
+  }
+
+  private async received(got: Received): Promise<void> {
+    // the secret has done its job: the tab lets go of it, and the mark keeps only where the bundle is
+    this.secret = undefined;
+    this.wrote = new Set();
+    this.began = new Set();
+    const sha256 = await sha256Hex(got.bytes);
+    this.bundle = { bytes: got.bytes, digest: got.digest, sha256, extents: got.extents };
+    this.log('Bundle received');
+    this.log('', `over ${got.channel === 'cache' ? 'this browser\'s saved copy' : got.channel === 'lan' ? 'the local network' : got.channel === 'ble' ? 'Bluetooth' : 'a file'}, checked: its SHA-256, the device's serial and this run's signature`);
+    for (const line of got.info) this.log('', line);
+    this.d.progress?.set({ at: 'received', image: this.recipe.id, serial: this.serial, digest: got.digest, bundle: sha256 });
+    await this.runFrom((this.cursor ?? this.indexOf(this.recipe, 'receive')) + 1);
+  }
+
+  /** Saves the restore point in this browser and reads it back: Continue opens only once every byte checks out. */
+  private async saveRestorePoint(): Promise<void> {
+    const rp = this.restore, serial = this.serial, digest = this.bundle?.digest;
+    const fail = (why: string) => this.set({ restorePoint: { ...this.state.restorePoint!, status: 'error', error: why } });
+    if (!rp || !serial || !digest) { fail('Kiln has nothing to keep yet. Connect fastboot again.'); return; }
+    try {
+      const persisted = await this.store().persist();
+      this.log('Saving the restore point');
+      this.log('', persisted ? 'this browser keeps it until you clear this site\'s data' : 'this browser may clear it when space runs low: download a copy too');
+      await this.store().putRestore(serial, digest, rp.files);
+      this.set({ restorePoint: { ...this.state.restorePoint!, status: 'verifying' } });
+      const back = await this.store().getRestore(serial, digest);
+      for (const f of rp.files) {
+        const got = back?.find((x) => x.filename === f.filename);
+        if (!got || await sha256Hex(got.data) !== await sha256Hex(f.data)) throw new Error(`${f.filename} didn't read back as it was saved`);
+      }
+      const sum = await sha256Hex(rp.files[0]!.data);
+      this.log('', `${rp.sparse}: saved and read back, SHA-256 ${sum}`);
+      this.set({ restorePoint: { ...this.state.restorePoint!, status: 'ready', digest: sum, error: null } });
+    } catch (e) {
+      this.log('', `restore point: ${(e as Error).message}`);
+      fail((e as Error).message);
+    }
+  }
+
+  /** The restore point screen's Try again. */
+  retryRestorePoint() { if (this.state.screen === 'restore-point') { this.set({ restorePoint: { ...this.state.restorePoint!, status: 'saving', error: null } }); void this.saveRestorePoint(); } }
+
+  /** The restore point as a zip, for the person to keep: its files and a SHA256SUMS. */
+  async restoreZip(): Promise<{ blob: Blob; name: string }> {
+    const files = this.restore?.files ?? (this.serial && this.bundle ? await this.store().getRestore(this.serial, this.bundle.digest) : undefined);
+    if (!files) throw new Error('Kiln has no restore point to download yet.');
+    const zip = await restorePointZip(this.recipe.id, files);
+    if (this.state.restorePoint) this.set({ restorePoint: { ...this.state.restorePoint, downloaded: true } });
+    return zip;
+  }
+
+  /** Continue on the restore point: the writes, once it is saved and checked. */
+  async continueInstall(): Promise<void> {
+    if (this.state.screen !== 'restore-point' || this.state.restorePoint?.status !== 'ready' || this.cursor === undefined) return;
+    this.set({ screen: 'working' });
+    await this.runFrom(this.cursor + 1);
+  }
+
+  // ---- the way back from an in-place install: the restore point, written over the blocks it covers ----
+
+  /** The way back's partition: the one the restore point is before (the recipe's), `system` when there's no recipe. */
+  private restorePartition(): string {
+    const steps = this.writes();
+    const at = steps.findIndex((x) => x.do === 'restore-point');
+    const next = steps.slice(at + 1).find((x): x is Extract<PlannedStep, { do: 'flash' }> => x.do === 'flash');
+    return next?.partition ?? 'system';
+  }
+
+  /** `key`: where this browser keeps it (none for a zip the person picked, until the way back saves it). */
+  private takeRestore(files: NamedPart[], key?: { serial: string; digest: string }): UndoView['source'] {
+    const sparse = files.find((f) => f.filename.endsWith('.sparse'));
+    if (!sparse) throw new Error('This restore point has no restore image (.sparse).');
+    const m = files.find((f) => f.filename === 'manifest.json');
+    let manifest: Record<string, unknown> | undefined;
+    if (m) { try { manifest = JSON.parse(new TextDecoder().decode(m.data)) as Record<string, unknown>; } catch { throw new Error('The restore point\'s manifest.json isn\'t JSON.'); } }
+    parseSparseWrites(sparse.data); // a whole sparse image, before anything else
+    this.undoFiles = { files, sparse, ...(manifest ? { manifest } : {}) };
+    this.undoKey = key;
+    return 'browser';
+  }
+
+  /** Whether this session is writing to the device, reaching it, or taking its bundle right now: the way back waits until it has stopped. */
+  private busy(): boolean {
+    return this.state.screen === 'working' || !!this.state.connecting || !!this.receiving || this.state.undo?.at === 'working';
+  }
+
+  /**
+   * Opens the way back: the restore point this browser kept, if any. Nothing is written yet. Not while an install is
+   * writing (an undo link opened meanwhile, say): that install keeps its screens, and Done or its error offers the way back.
+   */
+  async startUndo(): Promise<void> {
+    if (this.busy()) return;
+    const in_ = this.recipes.find((r) => r.mode === 'in-place');
+    // the in-place install's own files (none), not the image picked before: an install after the way back asks for no system.img
+    if (in_ && in_.id !== this.state.picked) { void this.forget(); this.set({ picked: in_.id, files: waiting(in_) }); }
+    this.undoFiles = undefined;
+    this.undoKey = undefined;
+    this.set({ screen: 'undo', undo: { at: 'start' }, error: undefined, bundleLost: undefined, notTaken: undefined });
+    await this.loadKeptRestore();
+  }
+
+  /** The restore point this browser kept last, for the way back's first screen. */
+  private async loadKeptRestore(): Promise<void> {
+    try {
+      const kept = await this.store().latestRestore();
+      if (kept) { this.takeRestore(kept.files, { serial: kept.serial, digest: kept.digest }); this.set({ undo: { at: 'start', source: 'browser' } }); }
+    } catch (e) {
+      this.set({ undo: { at: 'start', error: (e as Error).message } });
+    }
+  }
+
+  /** One restore point this browser kept (by its key), for the way back's first screen; none there, its zip is picked. */
+  private async loadRestore(key: { serial: string; digest: string }): Promise<boolean> {
+    try {
+      const files = await this.store().getRestore(key.serial, key.digest);
+      if (!files) return false;
+      this.takeRestore(files, key);
+      this.set({ undo: { at: 'start', source: 'browser' } });
+      return true;
+    } catch (e) {
+      this.set({ undo: { at: 'start', error: (e as Error).message } });
+      return false;
+    }
+  }
+
+  /**
+   * The way back from a stop in the second fastboot session (a write that failed, a restart that didn't happen): this
+   * run's restore point, saved and checked already, written from fastboot, where the device still is.
+   */
+  async restoreAfterError(): Promise<void> {
+    if (this.state.screen !== 'error' || !this.inPlace) return;
+    const rp = this.restore;
+    if (rp && this.state.restorePoint?.status === 'ready') {
+      try {
+        this.takeRestore(rp.files, this.serial && this.bundle ? { serial: this.serial, digest: this.bundle.digest } : undefined);
+        this.set({ screen: 'undo', undo: { at: 'fastboot', source: 'browser', restarted: false }, error: undefined, connectError: undefined, bundleLost: undefined, notTaken: undefined });
+      } catch (e) {
+        this.set({ screen: 'undo', undo: { at: 'start', error: (e as Error).message } });
+      }
+      return;
+    }
+    // the run's restore point is no longer in memory (the device restarted and the app's install stopped, after a
+    // reload too, or a reload lost the bundle after a write): the way back opens on this run's copy in this browser
+    // (its serial and bundle), never another restore point kept here; gone, the person picks the zip they downloaded
+    const step = this.state.work?.step;
+    if (this.state.restorePoint?.status !== 'ready' && this.state.bundleLost !== 'restore' && !(this.state.round === 2 && step === 'app-install')) return;
+    const inFastboot = step !== 'app-install' && step !== 'first-boot' && step !== 'hand-back';
+    this.undoFiles = undefined;
+    this.undoKey = undefined;
+    this.set({ screen: 'undo', undo: { at: 'start' }, error: undefined, connectError: undefined, bundleLost: undefined, notTaken: undefined });
+    const found = this.serial && this.bundle ? await this.loadRestore({ serial: this.serial, digest: this.bundle.digest }) : false;
+    // still in fastboot (a stop before the restart): no restart over adb to ask for
+    if (found && inFastboot) this.set({ undo: { ...this.state.undo!, at: 'fastboot', restarted: false } });
+  }
+
+  /** A restore point zip the person picked (the copy they downloaded), checked against its SHA256SUMS. */
+  async pickRestoreZip(file: File | Blob, name = (file as File).name ?? 'restore point'): Promise<void> {
+    try {
+      const { files } = await readNamedBackupZip(file);
+      this.takeRestore(files); // kept by the way back before its first write
+      this.set({ undo: { at: 'start', source: 'file', fileName: name } });
+    } catch (e) {
+      this.set({ undo: { ...(this.state.undo ?? { at: 'start' }), error: (e as Error).message } });
+    }
+  }
+
+  /** Inside the click: over adb, the frame's undo of the app's install (best effort), then the restart into fastboot. */
+  async undoRestart(): Promise<void> {
+    if (this.state.connecting) return;
+    const req = this.d.requestAdb({ authMs: this.d.frame.timings.authMs });
+    this.set({ connecting: true, connectError: undefined });
+    let p: PanelShell | undefined;
+    try {
+      p = await req;
+      await checkBoard(p, this.d.frame);
+      // the frame's undo over adb runs only on the device this restore point was made on: its serial, hashed, against
+      // the restore point's. Another device is refused outright; one Kiln can't tell gets nothing changed over adb
+      const want = this.undoFiles?.manifest?.deviceIdHash;
+      const serial = (await bounded(p, this.d.frame).run('getprop ro.serialno').catch(() => ({ out: '' }))).out.trim();
+      const same = typeof want === 'string' && !!serial && await sha256Hex(new TextEncoder().encode(serial)) === want.toLowerCase();
+      if (typeof want === 'string' && serial && !same) throw new Error('This restore point was made on another device. Connect that one. Nothing was changed.');
+      const before = this.d.frame.imageFlow.inPlace?.beforeRestore;
+      if (before && same) await before(bounded(p, this.d.frame), { onStep: this.log }).catch((e: Error) => this.log('', `undoing the app's changes: ${e.message}`));
+      else if (before) this.log('', 'Kiln couldn\'t tell over adb that this is the device the restore point was made on, so it changed nothing over adb');
+      await this.restart(p);
+      this.set({ connecting: false, undo: { ...this.state.undo!, at: 'fastboot', restarted: true, error: undefined } });
+    } catch (e) {
+      void p?.close?.().catch(() => {});
+      this.set({ connecting: false, connectError: e instanceof AdbAuthTimeout ? this.d.frame.words['fastboot.notLetIn'] : (e as Error).message });
+    }
+  }
+
+  /** Fastboot by hand on the way back (the button inside the case). */
+  undoByHand() { if (this.state.undo) this.set({ undo: { ...this.state.undo, at: 'fastboot', restarted: false }, connectError: undefined }); }
+
+  /**
+   * Inside the click: the device's fastboot, its partition and serial checked against the restore point's manifest, then
+   * the restore image written over the blocks it covers, and a restart.
+   */
+  async undoFlash(): Promise<void> {
+    const u = this.undoFiles;
+    if (!u || this.state.connecting) return;
+    const req = this.d.requestFastboot();
+    this.set({ connecting: true, connectError: undefined });
+    let fb: FastbootLike;
+    try { fb = await req; } catch (e) { this.set({ connecting: false, connectError: (e as Error).message }); return; }
+    const partition = this.restorePartition();
+    try {
+      const bytes = await fb.partitionSize(partition);
+      const sparse = parseSparseWrites(u.sparse.data);
+      if (sparse.totalBytes !== bytes) throw new Error(`This restore point is for a ${partition} partition of ${sparse.totalBytes} bytes; this device's is ${bytes}. Nothing was written.`);
+      // a restore point is for one device: one that doesn't say which (or that fastboot can't name) isn't written
+      const want = u.manifest?.deviceIdHash;
+      if (typeof want !== 'string' || !/^[0-9a-f]{64}$/i.test(want)) throw new Error('This restore point doesn\'t say which device it was made on, so Kiln won\'t write it. Nothing was written.');
+      const serial = (await fb.getvar('serialno').catch(() => '')).trim();
+      if (!serial || await sha256Hex(new TextEncoder().encode(serial)) !== want.toLowerCase()) throw new Error('This restore point was made on another device. Nothing was written.');
+      if (sparse.filled.length) throw new Error('This restore point fills blocks instead of restoring them, so Kiln won\'t write it. Nothing was written.');
+      // what the install changed outside those blocks (the frame's way back: a fresh userdata, say), built before any write
+      const wayBack = this.d.frame.imageFlow.inPlace?.wayBack;
+      let after: { writes: Record<string, Blob>; what: string } | undefined;
+      if (wayBack) {
+        const partitionBytes: Record<string, number> = {};
+        for (const x of wayBack.partitions) partitionBytes[x] = await fb.partitionSize(x);
+        after = await wayBack.build({ partitionBytes });
+        for (const x of wayBack.partitions) if (!after.writes[x]) throw new Error(`The way back made no ${x} to write. Nothing was written.`);
+      }
+      // the way back's checkpoint, before its first write: a reload opens the way back again (never the install it undoes),
+      // and a retry with this restore point on this device (checked above) writes only what isn't written yet
+      // a retry reuses what was written only on the same device with the same restore point: two devices with the same
+      // stock blocks have the same restore image, so the digest alone doesn't say whose writes they were
+      const digest = await sha256Hex(u.sparse.data);
+      const mark = this.d.progress?.get();
+      const done = new Set(this.undoWrote?.digest === digest && this.undoWrote.serial === serial ? this.undoWrote.parts
+        : mark?.at === 'undo' && mark.digest === digest && mark.serial === serial && Array.isArray(mark.wrote) ? mark.wrote : []);
+      // a zip the person picked is kept in this browser first, so a reload goes on with this restore point, not another
+      if (!this.undoKey) {
+        const key = { serial, digest: `restore-${digest}` };
+        await this.store().putRestore(key.serial, key.digest, u.files);
+        this.undoKey = key;
+      }
+      const restore = this.undoKey;
+      const checkpoint = () => {
+        this.undoWrote = { serial, digest, parts: [...done] };
+        this.d.progress?.set({ at: 'undo', image: this.recipe.id, serial, digest, restore, wrote: [...done] });
+      };
+      checkpoint();
+      this.set({ connecting: false, undo: { ...this.state.undo!, at: 'working', x: 0 } });
+      const parts = 1 + (wayBack?.partitions.length ?? 0);
+      const write = async (what: string, n: number, blob: () => Blob, first: () => void) => {
+        if (done.has(what)) { this.log(`Writing ${what}`); this.log('', 'already written by an earlier try, so not written again'); return; }
+        first();
+        await fb.flashBlob(what, blob(), (x) => this.set({ undo: { ...this.state.undo!, x: (n + x) / parts } }));
+        done.add(what);
+        checkpoint();
+      };
+      await write(partition, 0, () => new Blob([u.sparse.data as Uint8Array<ArrayBuffer>]), () => {
+        this.log(`Writing the restore point to ${partition}`);
+        this.log('', `${u.sparse.filename}: ${sparse.ranges.reduce((n, x) => n + (x.end - x.start), 0)} bytes, only the blocks the install changed`);
+      });
+      if (wayBack && after) {
+        let n = 1;
+        for (const x of wayBack.partitions) await write(x, n++, () => after.writes[x]!, () => this.log(`Writing ${x}`));
+        this.log('', after.what);
+      }
+      this.log(`Restarting ${this.d.frame.the}`);
+      await fb.reboot();
+      this.d.progress?.set(undefined);
+      this.undoWrote = undefined;
+      this.set({ undo: { ...this.state.undo!, at: 'done', x: 1 } });
+    } catch (e) {
+      this.log('Stopped', (e as Error).message);
+      this.set({ connecting: false, undo: { ...this.state.undo!, at: this.state.undo?.at === 'working' ? 'error' : 'fastboot', error: (e as Error).message } });
+    }
+  }
+
   private async restart(p: PanelShell) {
     if (!p.rebootToBootloader) throw new Error(`this connection can't restart ${this.d.frame.the}: put it in fastboot by hand`);
     this.log(`Restarting ${this.d.frame.the} into fastboot`);
@@ -622,6 +1383,26 @@ export class ImageSession {
       }
       for (const c of fastboot.checks) this.log('', `${c.ok ? 'ok ' : 'NO '} ${c.what}: ${c.found}`);
       fastboot.info.forEach((i) => this.log('', i));
+      if (this.inPlace && fastboot.ok) {
+        // the bundle and both sessions must be one device's: its serial, from its fastboot (kept in this tab, never logged)
+        const serial = (await fb.getvar('serialno').catch(() => '')).trim();
+        if (sel !== this.selected) return;
+        if (!serial) { this.set({ connecting: false, connectError: `Kiln couldn't read ${this.d.frame.the}'s serial number over fastboot, so it can't tell its bundle from another device's. Nothing was written.` }); return; }
+        // the second session goes on from its fastboot pause; a step that stopped with an error (in either session) runs
+        // again itself, on the same device: a write that failed partway is written again, not skipped
+        const stopped = this.stoppedAt;
+        if (this.state.round === 2 || stopped !== undefined) {
+          if (this.serial && serial !== this.serial) {
+            this.set({ connecting: false, connectError: `This is another device than the one Kiln started the install on. Connect that one. Nothing was written.` });
+            return;
+          }
+          this.serial = serial;
+          this.set({ connecting: false, fastboot, screen: 'working', error: undefined });
+          void this.runFrom(stopped ?? (this.cursor ?? this.indexOf(this.recipe, 'fastboot')) + 1);
+          return;
+        }
+        this.serial = serial;
+      }
       this.set({ connecting: false, fastboot, screen: fastboot.ok ? 'confirm' : 'fastboot' });
     } catch (e) {
       if (sel !== this.selected) return;
@@ -643,6 +1424,7 @@ export class ImageSession {
     const s = this.state;
     const fb = this.fb;
     if (!fb || !s.fastboot?.ok || !s.understood || s.screen === 'working') return;
+    if (this.inPlace) return this.runFrom(0);
     const r = this.recipe;
     const steps = this.writes();
     const work = (step: WorkStep, x: number) => this.set({ work: { step, x } });
@@ -794,7 +1576,7 @@ export class ImageSession {
     const stale = this.panel;
     this.panel = undefined;
     void stale?.close?.().catch(() => {});
-    this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false, work: undefined, flashFailed: false, firstBoot: undefined });
+    this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false, work: undefined, flashFailed: false, firstBoot: undefined, notTaken: undefined });
   }
 
   /**
@@ -829,6 +1611,18 @@ export class ImageSession {
       return;
     }
     const p = asked.panel;
+    // an in-place install's app goes on the device whose system it wrote: another one that trusts this browser is turned
+    // away before anything is installed, and the step stays here to connect the right one
+    if (this.inPlace && this.serial) {
+      const serial = (await bounded(p, this.d.frame).run('getprop ro.serialno').catch(() => ({ out: '' }))).out.trim();
+      if (serial !== this.serial) {
+        void p.close?.().catch(() => {});
+        this.set({ connecting: false, adbWaiting: false, connectError: serial
+          ? `This is another device than the one Kiln wrote. Connect that one. Nothing was installed.`
+          : `Kiln couldn't read ${this.d.frame.the}'s serial number over adb, so it can't tell it's the one it wrote. Nothing was installed. Connect again.` });
+        return;
+      }
+    }
     this.panel = p;
     this.set({ connecting: false, adbWaiting: false, screen: 'working', work: { step: 'first-boot', x: 0 } });
     try {
@@ -842,8 +1636,17 @@ export class ImageSession {
         if (step.startsWith('Home Assistant API key')) this.set({ work: { step: 'hand-back', x: 0 } });
         this.log(step, detail);
       };
-      // Home Assistant and the Wi-Fi are set-up's, next, over this same connection
-      const fb = await this.d.frame.imageFlow.firstBoot(p, { onStep, sleep, ...(this.apiKey ? { apiKey: this.apiKey } : {}) });
+      // Home Assistant and the Wi-Fi are set-up's, next, over this same connection. An in-place recipe's app-install
+      // installs the app itself (its image carries none)
+      let fb: FirstStart;
+      if (this.inPlace) {
+        const apk = this.d.apk();
+        if (!apk) throw new Error(this.d.apkBlocked?.() ?? 'Kiln has no Glassworks APK to install. Pick it again, then Connect.');
+        this.set({ work: { step: 'app-install', x: 0 } });
+        await this.checkReadBack(p);
+        this.log(`Installing ${this.d.frame.app.name}`);
+        fb = await this.code().appInstall(p, { apk, onStep, sleep });
+      } else fb = await this.d.frame.imageFlow.firstBoot(p, { onStep, sleep, ...(this.apiKey ? { apiKey: this.apiKey } : {}) });
       const key: KeyStep | undefined = k?.state === 'held' && fb.apiKey !== undefined
         ? { state: fb.apiKey ? 'handed' : 'refused', fingerprint: k.fingerprint } : k;
       if (fb.apiKey !== undefined) this.apiKey = undefined; // given back or refused: the tab lets go of it
@@ -854,7 +1657,44 @@ export class ImageSession {
       this.d.handOver?.(p);
     } catch (e) {
       this.log('Stopped', (e as Error).message);
-      this.set({ screen: 'error', error: (e as Error).message });
+      this.set({ screen: 'error', error: (e as Error).message, ...(e instanceof NotTaken ? { notTaken: true } : {}) });
+    }
+  }
+
+  /**
+   * An in-place install's writes, read back where Kiln can: fastboot can't read them back on every device, so once the
+   * device has started into them and lets this browser in, each file the frame's build named (`readBack`) comes back
+   * over adb's sync and is hashed here. A file that isn't what Kiln wrote stops the install before the app goes on
+   * (NotTaken), with the way back. A file Kiln can't read is said plainly and the install goes on: the write was checked
+   * before it was sent and the device started on it, so a read that fails is no sign the write did, and the way back
+   * stays there either way.
+   */
+  private async checkReadBack(p: PanelShell): Promise<void> {
+    const the = this.d.frame.the;
+    const files = this.readBack;
+    if (!files) {
+      this.log(`Not read back: what Kiln wrote`);
+      this.log('', `this page has no record of which files the install changed, so Kiln can't read them back from ${the}. It goes on with the app.`);
+      return;
+    }
+    if (!files.length) return;
+    this.log(`Reading back what Kiln wrote, now that ${the} has started`);
+    for (const f of files) {
+      const name = f.path.slice(f.path.lastIndexOf('/') + 1) || f.path;
+      let bytes: Uint8Array;
+      try {
+        if (!p.pull) throw new Error('this connection can\'t read files');
+        bytes = await pullWithin(p, f.path, f.size, READ_BACK_MS);
+      } catch (e) {
+        this.log(`Not read back: ${name}`);
+        this.log('', `Kiln couldn't read ${f.path} back from ${the} (${(e as Error).message}), so this write is unchecked. Kiln goes on with the app; if ${the} doesn't start it, the way back puts the original system back.`);
+        continue;
+      }
+      const got = await sha256Hex(bytes);
+      if (got !== f.sha256.toLowerCase()) {
+        throw new NotTaken(`${name} on ${the} isn't what Kiln wrote (SHA-256 ${got.slice(0, 12)}…, expected ${f.sha256.slice(0, 12)}…). Nothing was installed.`);
+      }
+      this.log('', `${name} on ${the} matches what Kiln wrote`);
     }
   }
 
@@ -916,7 +1756,12 @@ export class ImageSession {
    */
   tryAgainLands(): 'adb' | 'fastboot' | 'image' {
     const step = this.state.work?.step;
-    if (step === 'first-boot' || step === 'hand-back') return 'adb';
+    if (step === 'first-boot' || step === 'hand-back' || step === 'app-install') return 'adb';
+    // the bundle is gone from this browser: nothing can be built from it again, so the install starts over from its first screen
+    if (this.inPlace && this.state.bundleLost) return 'image';
+    // an in-place recipe: a stop in either fastboot session (its restart too) reconnects that session, where the step
+    // that stopped runs again; its stage, bundle and finished writes stay
+    if (this.inPlace && step) return 'fastboot';
     return step && step !== 'restart' && step !== 'wifi-on' && this.state.files.every((x) => x.state === 'ok') ? 'fastboot' : 'image';
   }
 
@@ -930,7 +1775,8 @@ export class ImageSession {
 
   /** From an error: back to the image's first screen, keeping what checked out (a fetched image builds again). */
   retry() {
-    this.set({ wifiOnFailed: false, screen: this.recipe.community ? 'download' : 'image', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false });
+    this.stoppedAt = undefined;
+    this.set({ bundleLost: undefined, notTaken: undefined, wifiOnFailed: false, screen: this.recipe.community ? 'download' : 'image', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false });
   }
 
   /**
@@ -952,6 +1798,17 @@ export class ImageSession {
       this.set({ fixing: false });
     }
   }
+}
+
+/** A Blob's bytes: its own arrayBuffer, or through FileReader (jsdom's Blob, in the tests, has none). */
+function blobBytes(b: Blob): Promise<Uint8Array> {
+  if (typeof b.arrayBuffer === 'function') return b.arrayBuffer().then((x) => new Uint8Array(x));
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(new Uint8Array(r.result as ArrayBuffer));
+    r.onerror = () => reject(r.error ?? new Error('Kiln couldn\'t read an image it built'));
+    r.readAsArrayBuffer(b);
+  });
 }
 
 /** A small Blob's text, through FileReader (in every browser, and in jsdom for the tests). */

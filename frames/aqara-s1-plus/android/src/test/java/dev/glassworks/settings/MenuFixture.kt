@@ -24,6 +24,21 @@ import dev.glassworks.radio.RadioDefinition
  * (#63 D6: the rail's Panes group and "Panes ›").
  */
 object MenuFixture {
+    /** A master volume on a made-up 15-step stream, at [index], for the Sound page. */
+    fun volume(index: Int = 9, muted: Boolean = false) = dev.glassworks.audio.MasterVolume(
+        object : dev.glassworks.audio.MediaStream {
+            override val max = 15
+            override var index = index
+            override val fixed = false
+        },
+        object : dev.glassworks.audio.VolumeStore {
+            override var level = -1f
+            override var muted = muted
+            override var raised = false
+            override fun takeOldVolume(): Float? = null
+        },
+    ) { _, _ -> }
+
     /** The S1: its own ranged presence sensor, a light sensor and touch. */
     val S1_HARDWARE = ScreenHardware(ScreenHardware.Presence.Sensor(ranged = true), light = true, touch = true)
 
@@ -57,6 +72,8 @@ object MenuFixture {
         panelIp: () -> String? = { null },
         /** What the device has for the Screen page; the S1's by default. */
         hardware: ScreenHardware = S1_HARDWARE,
+        /** The master volume, for the Sound page; none leaves the page out. */
+        volume: dev.glassworks.audio.MasterVolume? = null,
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
@@ -67,6 +84,7 @@ object MenuFixture {
             screenBlueprints = blueprints(CoreSettings.SCREEN),
             account = { account },
             panelIp = panelIp,
+            volume = volume,
         )
         val sections = paneSections(panes, blueprints, running)
         return KioskSettingsOverlay.Model(withHaLink(settingsOrder(core.sections(), sections), link), version, sections.map { it.id }.toSet())
