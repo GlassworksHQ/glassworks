@@ -23,6 +23,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.accessibility.AccessibilityNodeInfo
@@ -279,6 +280,8 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         val tap = ActionConfig.parse(config.raw.optJSONObject("tap_action"), "toggle")
         if (eid != null) {
             dial.onToggle = { ctx.performAction(tap, eid) }
+            // The same button's hold: `hold_action`, more-info unless configured.
+            dial.bindHoldAction(ctx, ActionConfig.parse(config.raw.optJSONObject("hold_action"), "more-info"), eid)
             dial.onBrightness = { pct -> setBrightness(eid, pct) }
             observe(eid, ::render)
         } else {
@@ -351,6 +354,9 @@ internal class BrightnessDialView(
      */
     private var sentFraction: Float? = null
     private var touchMode = TOUCH_NONE
+    /** Whether the press on the light button became a hold ([performLongClick]), so its release isn't also a tap. */
+    private var held = false
+    private val holdCheck = Runnable { if (touchMode == TOUCH_TOGGLE) held = performLongClick() }
 
     var onToggle: (() -> Unit)? = null
     var onBrightness: ((Int) -> Unit)? = null
@@ -425,6 +431,9 @@ internal class BrightnessDialView(
                 }
                 if (touchMode == TOUCH_NONE) return false
                 parent?.requestDisallowInterceptTouchEvent(true)
+                held = false
+                // The light button's hold, timed as Android times a long press (its listener runs hold_action).
+                if (touchMode == TOUCH_TOGGLE) postDelayed(holdCheck, ViewConfiguration.getLongPressTimeout().toLong())
                 if (touchMode == TOUCH_DRAG) {
                     dragFraction = fractionAt(event.x, event.y)
                     invalidate()
@@ -434,8 +443,11 @@ internal class BrightnessDialView(
             MotionEvent.ACTION_MOVE -> if (touchMode == TOUCH_DRAG) {
                 dragFraction = fractionAt(event.x, event.y)
                 invalidate()
+            } else if (touchMode == TOUCH_TOGGLE && d > r * 0.6f) {
+                removeCallbacks(holdCheck)
             }
             MotionEvent.ACTION_UP -> {
+                removeCallbacks(holdCheck)
                 when (touchMode) {
                     TOUCH_DRAG -> dragFraction?.let {
                         val pct = (it * 100f).roundToInt()
@@ -446,7 +458,7 @@ internal class BrightnessDialView(
                         VitroAccess.valueChanged(this)
                     }
                     // One path for a tap, a keyboard and TalkBack: performClick toggles.
-                    TOUCH_TOGGLE -> if (d <= r * 0.6f) performClick()
+                    TOUCH_TOGGLE -> if (!held && d <= r * 0.6f) performClick()
                 }
                 dragFraction = null
                 touchMode = TOUCH_NONE
@@ -454,6 +466,7 @@ internal class BrightnessDialView(
                 invalidate()
             }
             MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(holdCheck)
                 dragFraction = null
                 touchMode = TOUCH_NONE
                 invalidate()

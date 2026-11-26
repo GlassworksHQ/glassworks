@@ -200,6 +200,33 @@ class ActionDefaultsAndNamesTest {
     }
 
     @Test
+    fun theLightCardsCenterButtonHoldsToMoreInfoAndTheReleaseDoesntToggle() {
+        val card = LightCardView(ctx(), card("""{"type": "light", "entity": "light.porch"}"""))
+        // On screen, as on a panel: a detached view holds its delayed callbacks (the hold's timer) until it attaches.
+        activity.setContentView(card)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        val dial = all(card).filterIsInstance<BrightnessDialView>().single()
+        assertTrue("the dial is laid out", dial.width > 0 && dial.height > 0)
+        // A press on the light button, the middle of the dial (wherever the activity's layout put it).
+        fun touch(action: Int) = android.view.MotionEvent.obtain(
+            0L, android.os.SystemClock.uptimeMillis(), action, dial.width / 2f, dial.height / 2f, 0,
+        ).also { dial.onTouchEvent(it); it.recycle() }
+        touch(android.view.MotionEvent.ACTION_DOWN)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout().toLong() + 50, java.util.concurrent.TimeUnit.MILLISECONDS,
+        )
+        touch(android.view.MotionEvent.ACTION_UP)
+        assertEquals(listOf("light.porch"), moreInfo)
+        assertTrue(calls.toString(), calls.isEmpty())
+        // A short press is still a tap: it toggles.
+        clear()
+        touch(android.view.MotionEvent.ACTION_DOWN)
+        touch(android.view.MotionEvent.ACTION_UP)
+        assertEquals(listOf("light.toggle light.porch"), calls)
+        assertTrue(moreInfo.isEmpty())
+    }
+
+    @Test
     fun aButtonRowOnALockOpensMoreInfo() {
         val entities = EntitiesCardView(ctx(), card("""{"type": "entities", "entities": [
             {"type": "button", "entity": "lock.front_door", "name": "Door"}]}"""))
