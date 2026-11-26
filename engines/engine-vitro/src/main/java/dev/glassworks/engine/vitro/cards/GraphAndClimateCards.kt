@@ -39,6 +39,8 @@ import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.HaErrorSeverity
+import dev.glassworks.engine.vitro.ui.errorCardContent
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
@@ -407,7 +409,8 @@ private class SparklineCanvasView(
  * 250 px wide) over the name on a 28 px line. The gauge is a half ring of radius 40 and stroke 12 in a 100 x 55 box:
  * the track in `--primary-background-color`, the value arc in the severity color (`--info-color` without one), or,
  * with `needle: true`, the severity levels as arcs under a needle. The value is fitted into 55% of the gauge's width
- * and 40% of its height, its box ending 10% above the bottom.
+ * and 40% of its height, its box ending 10% above the bottom. In place of the card, HA's `hui-warning` when the
+ * entity is missing, unavailable, or its value isn't a number (`isNaN`: unknown, a word, a missing attribute).
  */
 class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
     private val raw = config.raw
@@ -432,6 +435,8 @@ class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
     }
+    private var warning: View? = null
+    private var warningTitle: String? = null
 
     init {
         // `ha-card { padding: var(--ha-space-3); justify-content: center }`.
@@ -457,18 +462,53 @@ class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         } else {
             Int.MAX_VALUE
         }
+        // The warning covers the card's border too (its margins undo the card's padding): hui-error-card has none.
+        (warning?.layoutParams as? MarginLayoutParams)?.let { lp ->
+            if (lp.leftMargin != -paddingLeft || lp.topMargin != -paddingTop || lp.rightMargin != -paddingRight || lp.bottomMargin != -paddingBottom) {
+                lp.setMargins(-paddingLeft, -paddingTop, -paddingRight, -paddingBottom)
+            }
+        }
         super.measureCard(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    /**
+     * HA's `hui-warning` in place of the gauge, titled [title] for an administrator (the icon alone for anyone
+     * else), or the gauge again for null. The card shrinks to it, and it takes no action.
+     */
+    private fun showWarning(title: String?) {
+        if (title == warningTitle) return
+        warningTitle = title
+        warning?.let { removeView(it) }
+        warning = null
+        col.visibility = if (title == null) VISIBLE else GONE
+        isClickable = title == null && config.entity != null
+        isLongClickable = isClickable
+        if (title == null) return
+        val w = errorCardContent(ctx, HaErrorSeverity.WARNING, title, over = ctx.theme.cardBackgroundColor)
+        addView(w, LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { setMargins(-paddingLeft, -paddingTop, -paddingRight, -paddingBottom) })
+        warning = w
     }
 
     private fun render(s: EntityState?) {
         nameView.text = config.name(s) ?: s?.displayName ?: config.entity
         val attribute = raw.optString("attribute", "").ifEmpty { null }
+        val eid = config.entity.orEmpty()
         val rawValue = if (attribute != null) s?.attributes?.get(attribute) else s?.state
-        val value = (rawValue as? Number)?.toDouble() ?: rawValue?.toString()?.toDoubleOrNull()
-        if (s == null || value == null) {
-            dial.update(minVal, s?.formattedState() ?: "–", info, null)
-            return
+        // HA's isNaN(value): a missing attribute is undefined, so NaN too.
+        val value = when {
+            s == null -> null
+            attribute != null && !s.attributes.containsKey(attribute) -> null
+            else -> jsNumberOf(rawValue)
         }
+        // hui-gauge-card's warnings, in its order.
+        showWarning(when {
+            s == null -> HaText.ui("ui.card.common.entity_not_found")
+            s.state == "unavailable" -> HaText.ui("ui.panel.lovelace.warning.entity_unavailable", "entity" to eid)
+            value != null -> null
+            attribute != null -> HaText.ui("ui.panel.lovelace.warning.attribute_not_numeric", "entity" to eid, "attribute" to attribute)
+            else -> HaText.ui("ui.panel.lovelace.warning.entity_non_numeric", "entity" to eid)
+        })
+        if (s == null || value == null || warningTitle != null) return
         val customUnit = raw.optString("unit", "").ifEmpty { null }
         val text = when {
             // A custom unit can't keep a locale's position: the number, then the unit (HA's ha-gauge `label`).
@@ -478,6 +518,15 @@ class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         }
         val segmentLabel = if (needle) segmentLabel(value) else null
         dial.update(value, segmentLabel ?: text, if (needle) info else severityOf(value), segmentLabel)
+    }
+
+    /** JavaScript's `Number(v)` as `isNaN` reads it: null for NaN (a word, unknown, an object), 0 for null. */
+    private fun jsNumberOf(v: Any?): Double? = when (v) {
+        null -> 0.0
+        is Number -> v.toDouble().takeIf { !it.isNaN() }
+        is Boolean -> if (v) 1.0 else 0.0
+        is String -> HaFormat.jsNumber(v)?.takeIf { !it.isNaN() }
+        else -> null
     }
 
     private fun numberText(v: Any?): String {
@@ -710,10 +759,13 @@ private class GaugeCanvasView(
             canvas.drawPath(needlePath, needleLine)
             canvas.restore()
         }
-        // The value: HA measures it at 16 px and scales that box into 55% x 40% of the gauge, its bottom at 90%.
+        // The value: HA measures it at 16 px and scales that box into 55% x 40% of the gauge, its bottom at 90%. The
+        // box (getBBox) holds the space ha-gauge's template leaves on each side of the value (its line breaks, and
+        // the " ${label}" after it, collapse to one space each), so the glyphs fill less than the 55%.
         val h = height.toFloat()
         textPaint.textSize = 16f * dp
-        val w16 = textPaint.measureText(text)
+        if (text.isBlank()) return
+        val w16 = textPaint.measureText(" $text ")
         if (w16 <= 0f) return
         val h16 = BOX_EM * 16f * dp
         val k = minOf(0.55f * gw / w16, 0.4f * h / h16)
@@ -736,14 +788,19 @@ private const val HEAT_COLOR = 0xFFFF6F22.toInt()
 private const val COOL_COLOR = 0xFF2196F3.toInt()
 private const val OFF_COLOR = 0xFF757575.toInt()
 
-/** Native HA `thermostat` (`hui-thermostat-card`) + `custom:mushroom-climate-card`: a 270° dial and a mode bar. */
-class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
+/**
+ * Native HA `thermostat` (`hui-thermostat-card`), and through [HumidifierCardView] `humidifier`
+ * (`hui-humidifier-card`, laid out the same): a 270° dial, and a mode bar for Mushroom's climate card.
+ */
+open class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
+    /** A humidifier's card: HA's humidity control in the dial, humidifier.set_humidity. */
+    private val humid = config.entity?.startsWith("humidifier.") == true
     private val titleView = label(ctx, 16f, ctx.theme.primaryTextColor).apply {
         gravity = Gravity.CENTER
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
     }
-    private val dial = ThermostatDialView(ctx, temperatureUnit(ctx))
+    private val dial = ThermostatDialView(ctx, if (humid) "%" else temperatureUnit(ctx))
     private val modeBar = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -759,11 +816,54 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
     private var currentMode: String? = null
     private var steppers: View? = null
     private var stepButtons: Pair<View, View>? = null
+    private var hasTarget = false
+
+    /** The dial's size class at the card's last width: HA shows the − and + only at the large size. */
+    private var dialSize = DialSize.LG
+
+    private fun showSteppers() {
+        val v = if (hasTarget && dialSize == DialSize.LG) VISIBLE else GONE
+        if (steppers?.visibility != v) steppers?.visibility = v
+    }
+
+    private val dialFrame = FrameLayout(ctx.context)
+    private var showModes = false
+
+    /**
+     * hui-thermostat-card's `.container` (flex: 1, at least as tall as it is wide, as wide as what it holds) holding the
+     * state control (8 px of padding, a 320 px dial at most, as wide as the container's height, shrunk to the card's
+     * width): with no fixed height (a masonry column) the container is a square around the control, the dial 16 px
+     * narrower than the card up to 320 px; with one (a sections grid's rows) it's what the title leaves and the dial
+     * as tall as it, overflowing its padding.
+     */
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            val w = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+            val fixed = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
+            val bar = if (showModes) ctx.px(66f) else 0
+            val containerH = if (fixed) {
+                (MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom - ctx.px(48f) - bar).coerceAtLeast(0)
+            } else {
+                minOf(w, ctx.px(336f))
+            }
+            val dialPx = minOf(ctx.px(320f), w - ctx.px(16f), if (fixed) containerH else w).coerceAtLeast(0)
+            (dialFrame.layoutParams as? LinearLayout.LayoutParams)?.let { if (it.height != containerH) it.height = containerH }
+            (dial.layoutParams as? LayoutParams)?.let { if (it.height != dialPx) it.height = dialPx }
+            // `.buttons` sit 10 px above the dial's bottom, the dial centered in the container.
+            (steppers?.layoutParams as? LayoutParams)?.let { lp ->
+                val m = ctx.px(10f) + (containerH - dialPx) / 2
+                if (lp.bottomMargin != m) lp.bottomMargin = m
+            }
+            dialSize = DialSize.of(dialPx / ctx.dp)
+            showSteppers()
+        }
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
+    }
 
     init {
         // hui-thermostat-card: a 48 px title row over the 262 px dial; the mode bar only when its feature is set
         // (Mushroom's climate card: when `hvac_modes` is).
-        val showModes = if (config.type == "thermostat") {
+        showModes = if (config.type == "thermostat") {
             config.raw.optJSONArray("features")?.let { a -> (0 until a.length()).any { a.optJSONObject(it)?.optString("type") == "climate-hvac-modes" } } == true
         } else {
             config.raw.has("hvac_modes")
@@ -791,33 +891,39 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
         col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
 
         // Dial, with the outlined − and + in the opening at its bottom.
-        val dialFrame = FrameLayout(ctx.context)
-        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(262f)))
+        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(262f), Gravity.CENTER_VERTICAL))
         val steppers = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        fun stepBtn(symbol: String, sign: Int) = label(ctx, 22f, ctx.theme.primaryTextColor).apply {
-            text = symbol
-            gravity = Gravity.CENTER
+        // ha-outlined-icon-button: 48 px, a 1 px outline and a 24 px icon in the secondary text color.
+        fun stepBtn(icon: String, sign: Int) = FrameLayout(ctx.context).apply {
             contentDescription = stepperLabel(sign, null)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.TRANSPARENT)
-                setStroke(ctx.px(1f).coerceAtLeast(1), withAlpha(ctx.theme.secondaryTextColor, 0.5f))
+                setStroke(ctx.px(1f).coerceAtLeast(1), ctx.theme.secondaryTextColor)
             }
+            addView(MdiIconView(ctx.context).apply { setIcon(icon, ctx.theme.secondaryTextColor) },
+                LayoutParams(ctx.px(24f), ctx.px(24f), Gravity.CENTER))
             isClickable = true
             applyHaRipple(this, 999f, ctx.theme.dark)
             setOnClickListener { dial.nudge(sign) }
         }
-        val btn = ctx.px(42f)
-        val minus = stepBtn("−", -1)
-        val plus = stepBtn("+", 1)
+        val btn = ctx.px(48f)
+        val minus = stepBtn("mdi:minus", -1)
+        val plus = stepBtn("mdi:plus", 1)
         stepButtons = minus to plus
-        steppers.addView(minus, LinearLayout.LayoutParams(btn, btn).apply { marginEnd = ctx.px(16f) })
+        // `.buttons`: 24 px apart, 10 px above the dial's bottom.
+        steppers.addView(minus, LinearLayout.LayoutParams(btn, btn).apply { marginEnd = ctx.px(24f) })
         steppers.addView(plus, LinearLayout.LayoutParams(btn, btn))
-        dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
-        col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(262f)))
+        dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            bottomMargin = ctx.px(10f)
+        })
+        // The container spans the card's width: the column's 12 px padding doesn't hold it.
+        col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(262f)).apply {
+            leftMargin = -ctx.px(12f); rightMargin = -ctx.px(12f)
+        })
 
         if (showModes) col.addView(modeBar, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(46f)).apply { topMargin = ctx.px(8f) })
         this.steppers = steppers
@@ -827,7 +933,18 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             bindHoldAction(holdFor(config.raw, eid), eid)
             // A water heater sets its tank through its own domain's service, and has no heat/cool range.
             val waterHeater = eid.startsWith("water_heater.")
+            dial.waterHeater = waterHeater
+            dial.humidifier = humid
             dial.onCommit = commit@{ target ->
+                if (humid) {
+                    // ha-state-control-humidifier-humidity: humidifier.set_humidity with the target, a whole number
+                    // when it is one.
+                    val s = ctx.store[eid] ?: return@commit
+                    val value: Number = if (target % 1.0 == 0.0) target.toInt() else target
+                    ctx.callOptimistic(s.copy(attributes = s.attributes + ("humidity" to value)), "humidifier", "set_humidity",
+                        JSONObject().put("entity_id", eid).put("humidity", value))
+                    return@commit
+                }
                 val domain = if (waterHeater) "water_heater" else "climate"
                 val s = ctx.store[eid]
                 // Only while the store still holds a single target: not after HA moved to a range (its state, not the
@@ -846,6 +963,10 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
             dial.onSelect = { styleSteppers() }
             observe(eid) { s ->
                 titleView.text = config.name(s) ?: s?.displayName ?: eid
+                if (humid) {
+                    bindHumidifier(s)
+                    return@observe
+                }
                 val attrs = s?.attributes.orEmpty()
                 val mode = s?.state ?: "off"
                 val action = attrs["hvac_action"] as? String
@@ -862,9 +983,12 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                     stateLabel = s?.let { HaDisplay.stateLabel(it) } ?: mode.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) },
                     low = targets.low,
                     high = targets.high,
+                    hvacModes = (attrs["hvac_modes"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty(),
                 )
-                // HA shows the steppers only while there's a target (or a range) to step.
-                this.steppers?.visibility = if (targets.value != null || targets.isRange) VISIBLE else GONE
+                // HA shows the steppers only while there's a target (or a range) to step, and only at the dial's
+                // large size.
+                hasTarget = s?.state != "unavailable" && (targets.value != null || targets.isRange)
+                showSteppers()
                 styleSteppers()
                 val list = (attrs["hvac_modes"] as? List<*>)?.mapNotNull { it?.toString() }?.takeIf { it.isNotEmpty() }
                     ?: listOf("off", "heat", "cool")
@@ -874,14 +998,42 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
     }
 
     /**
+     * HA's humidity control: `min_humidity`..`max_humidity` (0..100), `target_humidity_step` (1), the target while the
+     * humidifier is available, `current_humidity`, and a dehumidifier's slider filling to the end.
+     */
+    private fun bindHumidifier(s: EntityState?) {
+        val attrs = s?.attributes.orEmpty()
+        val state = s?.state ?: "unavailable"
+        fun num(key: String) = (attrs[key] as? Number)?.toDouble()
+        val target = num("humidity")?.takeIf { state != "unavailable" }
+        dial.dehumidifier = attrs["device_class"] == "dehumidifier"
+        dial.bind(
+            min = num("min_humidity") ?: 0.0,
+            max = num("max_humidity") ?: 100.0,
+            step = num("target_humidity_step")?.takeIf { it > 0 } ?: 1.0,
+            current = num("current_humidity"),
+            target = target,
+            mode = state,
+            action = attrs["action"] as? String,
+            stateLabel = s?.formattedState().orEmpty(),
+        )
+        hasTarget = target != null
+        showSteppers()
+        stepButtons?.let { (minus, plus) ->
+            minus.contentDescription = "Lower target humidity"
+            plus.contentDescription = "Raise target humidity"
+        }
+    }
+
+    /**
      * HA's − and + for the target, or for the selected end of a range: named after it ("Increase lower target
      * temperature") and outlined in its color (heat for the low end, cool for the high one) while the thermostat is on.
      */
     private fun styleSteppers() {
+        if (humid) return
         val (minus, plus) = stepButtons ?: return
         val handle = dial.selected.takeIf { dial.isRange }
-        val outline = handle?.let { dial.handleColor(it) }?.takeIf { it != ctx.theme.secondaryTextColor }
-            ?: withAlpha(ctx.theme.secondaryTextColor, 0.5f)
+        val outline = handle?.let { dial.handleColor(it) } ?: ctx.theme.secondaryTextColor
         for ((view, sign) in listOf(minus to -1, plus to 1)) {
             view.contentDescription = stepperLabel(sign, handle)
             (view.background as? GradientDrawable)?.setStroke(ctx.px(1f).coerceAtLeast(1), outline)

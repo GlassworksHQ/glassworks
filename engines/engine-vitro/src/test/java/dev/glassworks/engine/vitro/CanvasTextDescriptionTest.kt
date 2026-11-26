@@ -9,7 +9,6 @@ import android.app.Application
 import android.view.View
 import android.view.ViewGroup
 import dev.glassworks.engine.vitro.cards.GaugeCardView
-import dev.glassworks.engine.vitro.cards.HumidityDialView
 import dev.glassworks.engine.vitro.cards.LightCardView
 import dev.glassworks.engine.vitro.cards.ThermostatDialView
 import dev.glassworks.engine.vitro.data.EntityState
@@ -57,11 +56,15 @@ class CanvasTextDescriptionTest {
 
     @Test
     fun theHumidityDialDescribesWhatItDraws() {
-        val dial = HumidityDialView(context())
-        dial.bind(30.0, 80.0, current = 41.0, target = 50.0, on = true, status = "Humidifying")
-        assertEquals("Humidifying, 50%, Currently 41%", dial.contentDescription.toString())
+        // HA's humidity control: the action, the target in whole percents, the current humidity.
+        val dial = ThermostatDialView(context(), "%").apply { humidifier = true }
+        dial.bind(30.0, 80.0, 1.0, current = 41.0, target = 50.0, mode = "on", action = "humidifying", stateLabel = "On")
+        assertEquals("Humidifying, 50%, 41%", dial.contentDescription.toString())
         dial.nudge(1)
-        assertEquals("Humidifying, 51%, Currently 41%", dial.contentDescription.toString())
+        assertEquals("Humidifying, 51%, 41%", dial.contentDescription.toString())
+        // Off: HA's label is the state while there's a target.
+        dial.bind(30.0, 80.0, 1.0, current = 52.0, target = 45.0, mode = "off", action = "off", stateLabel = "Off")
+        assertEquals("Off, 45%, 52%", dial.contentDescription.toString())
     }
 
     @Test
@@ -83,8 +86,8 @@ class CanvasTextDescriptionTest {
         fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
         val described = { all(card).filter { it !is ViewGroup && !it.contentDescription.isNullOrBlank() }.map { it.contentDescription.toString() } }
         assertEquals(true, "Brightness 50%" in described())
-        // HA's brightness line shows the percentage while on.
-        assertEquals(true, all(card).filterIsInstance<android.widget.TextView>().any { it.text.toString() == "50%" && it.visibility == View.VISIBLE })
+        // HA's brightness line is hidden (opacity 0) but while a drag shows it: no "50%" under the dial.
+        assertEquals(false, all(card).filterIsInstance<android.widget.TextView>().any { it.text.toString().contains("%") && it.visibility == View.VISIBLE })
         store.putLocal(EntityState("light.desk", "off", mapOf("supported_color_modes" to listOf("brightness"), "friendly_name" to "Desk")))
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         assertEquals(true, "Off" in described())

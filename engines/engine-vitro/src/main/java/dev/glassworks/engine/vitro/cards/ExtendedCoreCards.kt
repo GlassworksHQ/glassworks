@@ -4,7 +4,6 @@
 
 package dev.glassworks.engine.vitro.cards
 
-import dev.glassworks.engine.vitro.ui.NumberText
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
@@ -32,7 +31,6 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.HaIntl
 import dev.glassworks.engine.vitro.data.HaText
@@ -41,6 +39,7 @@ import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDisplay
+import dev.glassworks.engine.vitro.data.LightColor
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.AreaCardConfig
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -231,16 +230,16 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Native HA `light` card (`hui-light-card`): full width; a 200 px `ha-control-circular-slider` (brightness) around a
- * 120 px light button with the entity's icon (no dial for an on/off light), the ⋮ more-info button top right, and
- * under them the brightness (kept in place when hidden) and the name, 16.8 px, pulled up 56 px over the controls.
+ * Native HA `light` card (`hui-light-card`): full width; a 200 px `ha-control-circular-slider` (brightness, in the
+ * primary color) around a 120 px light button with the entity's icon (no dial for a light that doesn't dim), the ⋮
+ * more-info button top right, and under them a line that is hidden but while a drag shows the brightness, or the state
+ * while unavailable or unknown, and the name, 16.8 px, pulled up 56 px over the controls. The light button runs
+ * `tap_action` (toggle by default) and `hold_action` (more-info); the name has none.
  */
 class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
-    // Both lines sit on HA's 1.6 line height (26.9 px).
+    // Both lines sit on HA's 1.6 line height (26.9 px). HA's name is a plain text node: a long one wraps.
     private val nameView = extLabel(ctx, 16.8f, ctx.theme.primaryTextColor).apply {
         gravity = Gravity.CENTER
-        maxLines = 1
-        ellipsize = TextUtils.TruncateAt.END
         minHeight = ctx.px(26.9f)
     }
     private val brightnessView = extLabel(ctx, 16.8f, ctx.theme.primaryTextColor).apply {
@@ -248,6 +247,8 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         minHeight = ctx.px(26.9f)
     }
     private val dial = BrightnessDialView(ctx.context, ctx.theme.activeColor("light"), ctx.theme.disabledTextColor, ctx.theme.stateIconColor, ctx.theme.primaryColor)
+    private val hideBrightness = Runnable { if (showsBrightness) brightnessView.visibility = INVISIBLE }
+    private var showsBrightness = false
 
     init {
         val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
@@ -285,32 +286,53 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
             // The same button's hold: `hold_action`, more-info unless configured.
             dial.bindHoldAction(ctx, ActionConfig.parse(config.raw.optJSONObject("hold_action"), "more-info"), eid)
             dial.onBrightness = { pct -> setBrightness(eid, pct) }
+            dial.onDragging = ::showDragBrightness
             observe(eid, ::render)
         } else {
             render(null)
         }
     }
 
+    /** HA's slider runs 1–100 and sends `brightness_pct`: a drag to its start dims the light, it never turns it off. */
     private fun setBrightness(eid: String, pct: Int) {
-        val cur = ctx.store[eid]
-        if (pct <= 0) {
-            ctx.callOptimistic(cur?.copy(state = "off"), "light", "turn_off", JSONObject().put("entity_id", eid))
-            return
+        val value = pct.coerceIn(1, 100)
+        val bri = (value * 255.0 / 100).roundToInt().coerceIn(1, 255)
+        ctx.callOptimistic(
+            ctx.store[eid]?.let { it.copy(state = "on", attributes = it.attributes + ("brightness" to bri)) },
+            "light", "turn_on", JSONObject().put("entity_id", eid).put("brightness_pct", value),
+        )
+    }
+
+    /** HA's `.brightness` line: "<value> %" while a drag is under way, gone half a second after it ends. */
+    private fun showDragBrightness(pct: Int?) {
+        if (!showsBrightness) return
+        removeCallbacks(hideBrightness)
+        if (pct != null) {
+            brightnessView.text = "${pct.coerceIn(1, 100)} %"
+            brightnessView.visibility = VISIBLE
+        } else {
+            postDelayed(hideBrightness, 500)
         }
-        val bri = (pct * 255 / 100).coerceIn(1, 255)
-        ctx.callOptimistic(cur?.let { it.copy(state = "on", attributes = it.attributes + ("brightness" to bri)) }, "light", "turn_on", JSONObject().put("entity_id", eid).put("brightness", bri))
     }
 
     private fun render(s: EntityState?) {
-        nameView.text = config.name(s) ?: s?.displayName ?: config.entity.orEmpty()
+        val name = config.name(s) ?: s?.displayName ?: config.entity.orEmpty()
+        if (nameView.text.toString() != name) {
+            nameView.text = name
+            // Every line of a wrapped name on HA's 1.6 line height.
+            lineBox(ctx, nameView, 16.8f, 1.6f)
+        }
         val on = s?.state == "on"
+        val unavailable = s?.state == "unavailable"
         val pct = s?.brightnessPct
-        // HA's brightness line: the percentage while on, hidden (its place kept) otherwise.
-        brightnessView.text = if (on && pct != null) "$pct%" else ""
-        brightnessView.visibility = if (on && pct != null) VISIBLE else INVISIBLE
-        val modes = (s?.attributes?.get("supported_color_modes") as? List<*>)?.map { it.toString() }
-        val dims = modes == null || modes.any { it != "onoff" }
-        dial.update(on, if (on && pct != null) pct / 100f else 0f, MdiIcons.resolveIconName(config.icon, s), s?.lightTintColor(), dims)
+        // HA's line above the name: the state while unavailable or unknown, else the brightness, hidden (its place
+        // kept) but while a drag shows it.
+        showsBrightness = s != null && !s.isUnavailable
+        removeCallbacks(hideBrightness)
+        brightnessView.text = if (showsBrightness) "" else s?.formattedState() ?: ""
+        brightnessView.visibility = if (showsBrightness) INVISIBLE else VISIBLE
+        val dims = s != null && lightSupportsBrightness(s)
+        dial.update(on, if (on && pct != null) pct / 100f else 0f, MdiIcons.resolveIconName(config.icon, s), lightButtonColor(s), dims, enabled = !unavailable)
         dial.contentDescription = when {
             s == null || s.isUnavailable -> s?.formattedState() ?: "–"
             !on -> s.formattedState()
@@ -318,14 +340,49 @@ class LightCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
             else -> s.formattedState()
         }
     }
+
+    /**
+     * HA's light button color: `rgb_color` while on, else `--state-light-active-color`, through `stateColorBrightness`
+     * (dimmer with the brightness); the state icon color while off; HA's disabled button color while unavailable.
+     */
+    private fun lightButtonColor(s: EntityState?): Int = when {
+        s?.state == "unavailable" -> disabledButtonColor(ctx.theme)
+        s?.state == "on" -> stateColorBrightness(s, rgbColor(s) ?: ctx.theme.activeColor("light"))
+        else -> ctx.theme.stateIconColor
+    }
+
+    companion object {
+        private val BRIGHTNESS_MODES = setOf("hs", "xy", "rgb", "rgbw", "rgbww", "color_temp", "brightness", "white")
+
+        /** HA's `lightSupportsBrightness`: a supported color mode that dims. No modes: no dial. */
+        fun lightSupportsBrightness(s: EntityState): Boolean =
+            (s.attributes["supported_color_modes"] as? List<*>)?.any { it?.toString() in BRIGHTNESS_MODES } == true
+
+        /** `rgb_color` as HA's light card reads it, if the light reports one. */
+        fun rgbColor(s: EntityState): Int? {
+            val c = (s.attributes["rgb_color"] as? List<*>)?.take(3)?.map { (it as? Number)?.toInt() } ?: return null
+            return if (c.size == 3 && c.all { it != null }) LightColor.pack(c[0]!!, c[1]!!, c[2]!!) else null
+        }
+
+        /**
+         * A disabled `ha-icon-button`: `--ha-color-on-disabled-quiet` (neutral-40 dark, neutral-80 light) at half
+         * opacity, as HA's unavailable light button draws (measured: #3d3d3d on the dark card).
+         */
+        fun disabledButtonColor(theme: dev.glassworks.engine.vitro.theme.ResolvedTheme): Int {
+            val c = ThemeResolver.parseColor(theme.vars["ha-color-on-disabled-quiet"])
+                ?: if (theme.dark) 0xFF5E5E5E.toInt() else 0xFFCCCCCC.toInt()
+            return CardSurface.withAlpha(c, 0.5f)
+        }
+    }
 }
 
 /**
  * HA's `ha-control-circular-slider` for a light (320-unit geometry): a 270° track (radius 145, stroke 24) in the
- * disabled color, the brightness arc in the light's color, a white handle (radius 9) in a 3-unit ring of the
- * primary color; the light button's icon (118 px of 200) centered, in the light's color when on, else the
- * state-icon color. Without [dims] (an on/off light) only the icon. Drag the ring to set brightness, tap the icon
- * to toggle.
+ * disabled color, the brightness arc in the primary color (`--control-circular-slider-color`), a white handle
+ * (radius 9) in a 3-unit ring of the primary color; the light button's icon (118 px of 200) centered, in the color
+ * the card gives. Without [dims] (a light that doesn't dim) only the icon. Disabled (unavailable), the track alone,
+ * and neither a drag nor a tap does anything. Drag the ring to set brightness, tap the icon to toggle, hold it for
+ * the hold action.
  */
 internal class BrightnessDialView(
     context: Context,
@@ -348,6 +405,7 @@ internal class BrightnessDialView(
     private var fraction = 0f
     private var tint: Int? = null
     private var dims = true
+    private var enabled = true
     private var dragFraction: Float? = null
 
     /**
@@ -363,12 +421,25 @@ internal class BrightnessDialView(
     var onToggle: (() -> Unit)? = null
     var onBrightness: ((Int) -> Unit)? = null
 
-    fun update(isOn: Boolean, frac: Float, iconName: String, lightColor: Int? = null, dimmable: Boolean = true) {
+    /** The brightness under a drag, in percent, as it moves; null when it ends. */
+    var onDragging: ((Int?) -> Unit)? = null
+
+    /**
+     * [iconColor] is the light button's color; without one, the active color while on (or dragged up), else the
+     * state icon color.
+     */
+    fun update(isOn: Boolean, frac: Float, iconName: String, iconColor: Int? = null, dimmable: Boolean = true, enabled: Boolean = true) {
         on = isOn
         fraction = frac.coerceIn(0f, 1f)
         basePath = MdiIcons.pathFor(iconName)
-        tint = lightColor
+        tint = iconColor
         dims = dimmable
+        if (!enabled && dragFraction != null) {
+            dragFraction = null
+            onDragging?.invoke(null)
+        }
+        this.enabled = enabled
+        isEnabled = enabled
         sentFraction = null
         if (dragFraction == null) invalidate()
     }
@@ -381,16 +452,18 @@ internal class BrightnessDialView(
         val cx = width / 2f
         val cy = height / 2f
         val u = size / 320f
-        val color = tint ?: activeColor
         if (dims) {
             val r = radius
             oval.set(cx - r, cy - r, cx + r, cy + r)
             arcPaint.strokeWidth = 24f * u
             arcPaint.color = trackColor
             canvas.drawArc(oval, START_ANGLE, SWEEP, false, arcPaint)
+        }
+        if (dims && enabled) {
+            val r = radius
             val shown = dragFraction ?: sentFraction ?: if (on) fraction else 0f
             if (shown > 0f) {
-                arcPaint.color = color
+                arcPaint.color = handleRingColor
                 canvas.drawArc(oval, START_ANGLE, SWEEP * shown, false, arcPaint)
             }
             val a = Math.toRadians((START_ANGLE + SWEEP * shown).toDouble())
@@ -409,7 +482,7 @@ internal class BrightnessDialView(
         iconMatrix.postTranslate(cx - 12f * scale, cy - 12f * scale)
         iconPath.set(basePath)
         iconPath.transform(iconMatrix)
-        fillPaint.color = if (lit) color else offIconColor
+        fillPaint.color = tint ?: if (lit) activeColor else offIconColor
         canvas.drawPath(iconPath, fillPaint)
     }
 
@@ -427,6 +500,7 @@ internal class BrightnessDialView(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 touchMode = when {
+                    !enabled -> TOUCH_NONE
                     d <= r * 0.55f -> TOUCH_TOGGLE
                     dims && d <= r * 1.35f && d >= r * 0.6f -> TOUCH_DRAG
                     else -> TOUCH_NONE
@@ -438,18 +512,21 @@ internal class BrightnessDialView(
                 if (touchMode == TOUCH_TOGGLE) postDelayed(holdCheck, ViewConfiguration.getLongPressTimeout().toLong())
                 if (touchMode == TOUCH_DRAG) {
                     dragFraction = fractionAt(event.x, event.y)
+                    onDragging?.invoke(dragPercent())
                     invalidate()
                 }
                 return true
             }
             MotionEvent.ACTION_MOVE -> if (touchMode == TOUCH_DRAG) {
                 dragFraction = fractionAt(event.x, event.y)
+                onDragging?.invoke(dragPercent())
                 invalidate()
             } else if (touchMode == TOUCH_TOGGLE && d > r * 0.6f) {
                 removeCallbacks(holdCheck)
             }
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(holdCheck)
+                if (touchMode == TOUCH_DRAG) onDragging?.invoke(null)
                 when (touchMode) {
                     TOUCH_DRAG -> dragFraction?.let {
                         val pct = (it * 100f).roundToInt()
@@ -469,6 +546,7 @@ internal class BrightnessDialView(
             }
             MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(holdCheck)
+                if (touchMode == TOUCH_DRAG) onDragging?.invoke(null)
                 dragFraction = null
                 touchMode = TOUCH_NONE
                 invalidate()
@@ -477,6 +555,8 @@ internal class BrightnessDialView(
         return true
     }
 
+    private fun dragPercent(): Int? = dragFraction?.let { (it * 100f).roundToInt() }
+
     init {
         isClickable = true
         isFocusable = true
@@ -484,7 +564,8 @@ internal class BrightnessDialView(
 
     override fun performClick(): Boolean {
         super.performClick()
-        onToggle?.invoke()
+        // HA's light button is disabled while the light is unavailable.
+        if (enabled) onToggle?.invoke()
         return true
     }
 
@@ -517,14 +598,14 @@ internal class BrightnessDialView(
 
     override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
         super.onInitializeAccessibilityNodeInfo(info)
-        if (dims) access.onInitialize(info) else info.className = A11yRole.BUTTON.className
+        if (dims && enabled) access.onInitialize(info) else info.className = A11yRole.BUTTON.className
     }
 
     override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean =
-        (if (dims) access.perform(action, arguments) else null) ?: super.performAccessibilityAction(action, arguments)
+        (if (dims && enabled) access.perform(action, arguments) else null) ?: super.performAccessibilityAction(action, arguments)
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
-        (dims && access.keyDown(keyCode)) || super.onKeyDown(keyCode, event)
+        (dims && enabled && access.keyDown(keyCode)) || super.onKeyDown(keyCode, event)
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
         access.keyUp(event) || super.onKeyUp(keyCode, event)
@@ -1599,26 +1680,6 @@ class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     }
 }
 
-private fun extSpPx(ctx: VitroCardContext, sp: Float): Float =
-    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, ctx.context.resources.displayMetrics)
-
-/** The header both dial cards share: the name centered, a `⋮` More-Info button pinned to the end. */
-private fun dialHeader(ctx: VitroCardContext, title: TextView, onMore: () -> Unit): FrameLayout {
-    val header = FrameLayout(ctx.context)
-    header.addView(title, FrameLayout.LayoutParams(MATCH_PARENT, ctx.px(36f)).apply {
-        leftMargin = ctx.px(40f); rightMargin = ctx.px(40f)
-    })
-    val dots = FrameLayout(ctx.context).apply {
-        isClickable = true
-        contentDescription = HaText.ui("ui.panel.lovelace.editor.action-editor.actions.more-info")
-        addView(MdiIconView(ctx.context).apply { setIcon("mdi:dots-vertical", ctx.theme.primaryTextColor) },
-            FrameLayout.LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
-        setOnClickListener { onMore() }
-    }
-    header.addView(dots, FrameLayout.LayoutParams(ctx.px(36f), ctx.px(36f), Gravity.END or Gravity.CENTER_VERTICAL))
-    return header
-}
-
 // ---------------------------------------------------------------------------------------------
 // picture-elements
 // ---------------------------------------------------------------------------------------------
@@ -1947,374 +2008,11 @@ internal class FloorplanLayout(context: Context) : FrameLayout(context) {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Native HA `humidifier` card (`hui-humidifier-card`): the thermostat's 270° dial for the target humidity, `−` / `+`
- * in its opening, and a bar with the power button and the mode picker below.
+ * Native HA `humidifier` card (`hui-humidifier-card`): laid out as the thermostat card (a title row, the 262 px dial
+ * with `−` / `+` in its opening, the ⋮ for more-info), with HA's humidity control in the dial
+ * ([ThermostatDialView.humidifier]). HA draws a bar under it only for `features`, which fall back to HA's frontend.
  */
-class HumidifierCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
-    private val titleView = extLabel(ctx, 16f, ctx.theme.primaryTextColor).apply {
-        gravity = Gravity.CENTER
-        maxLines = 1
-        ellipsize = TextUtils.TruncateAt.END
-    }
-    private val dial = HumidityDialView(ctx)
-    private val powerIcon = MdiIconView(ctx.context)
-    private val powerCell = FrameLayout(ctx.context)
-    private val modePill = extLabel(ctx, 13f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
-        gravity = Gravity.CENTER
-        maxLines = 1
-        ellipsize = TextUtils.TruncateAt.END
-        setPadding(ctx.px(12f), 0, ctx.px(12f), 0)
-    }
-
-    init {
-        val col = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(ctx.px(12f), ctx.px(8f), ctx.px(12f), ctx.px(12f))
-        }
-        val eid = config.entity
-        col.addView(dialHeader(ctx, titleView) { eid?.let { ctx.performAction(ActionConfig("more-info"), it) } },
-            LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(36f)))
-
-        val dialFrame = FrameLayout(ctx.context)
-        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(220f)))
-        val steppers = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        fun stepBtn(symbol: String, sign: Int) = extLabel(ctx, 22f, ctx.theme.primaryTextColor).apply {
-            text = symbol
-            gravity = Gravity.CENTER
-            contentDescription = if (sign > 0) "Raise target humidity" else "Lower target humidity"
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.TRANSPARENT)
-                setStroke(ctx.px(1f).coerceAtLeast(1), CardSurface.withAlpha(ctx.theme.secondaryTextColor, 0.5f))
-            }
-            isClickable = true
-            setOnClickListener { dial.nudge(sign) }
-        }
-        val btn = ctx.px(42f)
-        steppers.addView(stepBtn("−", -1), LinearLayout.LayoutParams(btn, btn).apply { marginEnd = ctx.px(16f) })
-        steppers.addView(stepBtn("+", 1), LinearLayout.LayoutParams(btn, btn))
-        dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
-        col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(220f)))
-
-        val bar = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            val inset = ctx.px(4f)
-            setPadding(inset, inset, inset, inset)
-            background = pillBackground(if (ctx.theme.dark) BAR_DARK else BAR_LIGHT, 12f * ctx.dp)
-        }
-        powerCell.apply {
-            isClickable = true
-            contentDescription = HaText.ui("ui.card.media_player.power")
-            addView(powerIcon, LayoutParams(ctx.px(22f), ctx.px(22f), Gravity.CENTER))
-        }
-        bar.addView(powerCell, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f))
-        bar.addView(modePill, LinearLayout.LayoutParams(0, MATCH_PARENT, 1f).apply { marginStart = ctx.px(4f) })
-        col.addView(bar, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(46f)).apply { topMargin = ctx.px(8f) })
-        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-
-        if (eid != null) {
-            bindHoldAction(ActionConfig.parse(config.raw.optJSONObject("hold_action"), "more-info"), eid)
-            dial.onCommit = { target ->
-                ctx.callService("humidifier", "set_humidity", JSONObject().put("entity_id", eid).put("humidity", target), null)
-            }
-            powerCell.setOnClickListener { ctx.callService("humidifier", "toggle", JSONObject().put("entity_id", eid), null) }
-            modePill.isClickable = true
-            modePill.setOnClickListener { showModes(it, eid) }
-            observe(eid, ::render)
-        } else {
-            render(null)
-        }
-    }
-
-    private fun render(s: EntityState?) {
-        titleView.text = config.name(s) ?: s?.friendlyName ?: config.entity.orEmpty()
-        val attrs = s?.attributes.orEmpty()
-        val on = s?.state == "on"
-        dial.bind(
-            min = (attrs["min_humidity"] as? Number)?.toDouble() ?: 0.0,
-            max = (attrs["max_humidity"] as? Number)?.toDouble() ?: 100.0,
-            current = (attrs["current_humidity"] as? Number)?.toDouble(),
-            target = (attrs["humidity"] as? Number)?.toDouble(),
-            on = on,
-            status = statusLabel(s),
-        )
-        powerCell.background = if (on) pillBackground(HUMID_COLOR, 10f * ctx.dp) else null
-        powerIcon.setIcon("mdi:power", if (on) Color.WHITE else ctx.theme.primaryTextColor)
-        val modes = availableModes(s)
-        modePill.visibility = if (modes.isEmpty()) GONE else VISIBLE
-        modePill.text = (attrs["mode"] as? String)?.let(::modeLabel) ?: HaText.ui("ui.card.climate.mode")
-    }
-
-    private fun showModes(anchor: View, eid: String) {
-        val modes = availableModes(ctx.store[eid])
-        if (modes.isEmpty()) return
-        val menu = PopupMenu(ctx.context, anchor)
-        modes.forEachIndexed { i, m -> menu.menu.add(0, i, i, modeLabel(m)) }
-        menu.setOnMenuItemClickListener { item ->
-            ctx.callService("humidifier", "set_mode", JSONObject().put("entity_id", eid).put("mode", modes[item.itemId]), null)
-            true
-        }
-        menu.show()
-    }
-
-    companion object {
-        /** HA's humidifier accent. */
-        const val HUMID_COLOR = 0xFF03A9F4.toInt()
-        private const val BAR_LIGHT = 0xFFF4F4F4.toInt()
-        private const val BAR_DARK = 0xFF2A2A2A.toInt()
-
-        /** The line above the big number: what the humidifier is doing, else On / Off. */
-        fun statusLabel(s: EntityState?): String = when {
-            s == null -> "–"
-            s.isUnavailable -> s.formattedState()
-            // HA's humidity control: the action as HA names it while it runs, else the state.
-            s.state == "off" -> s.formattedState()
-            else -> (s.attributes["action"] as? String)?.takeIf { it != "off" }
-                ?.let { HaDisplay.attributeLabel(s, "action", it) ?: it.replaceFirstChar { c -> c.titlecase(Locale.ROOT) } }
-                ?: s.formattedState()
-        }
-
-        fun availableModes(s: EntityState?): List<String> =
-            (s?.attributes?.get("available_modes") as? List<*>)?.mapNotNull { it?.toString() }.orEmpty()
-
-        fun modeLabel(mode: String): String = mode.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
-
-        /** A target humidity snapped to whole [step]s inside `min..max`. */
-        fun snapHumidity(v: Double, min: Double, max: Double, step: Double = 1.0): Int {
-            val snapped = min + Math.round((v - min) / step) * step
-            return snapped.coerceIn(min, max).roundToInt()
-        }
-    }
-}
-
-/** The humidifier's 270° dial: track, the target arc in [HumidifierCardView.HUMID_COLOR], a current-humidity dot. */
-internal class HumidityDialView(private val ctx: VitroCardContext) : View(ctx.context) {
-    private val dp = ctx.dp
-    private val strokeW = 14f * dp
-    private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = strokeW
-        strokeCap = Paint.Cap.ROUND
-    }
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private fun textPaint(sp: Float, weight: Int, color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = extSpPx(ctx, sp)
-        typeface = VitroFonts.typeface(ctx.context, weight, sp)
-        textAlign = Paint.Align.CENTER
-        this.color = color
-    }
-    private val statusPaint = textPaint(14f, Inter.MEDIUM, ctx.theme.secondaryTextColor)
-    private val bigPaint = textPaint(44f, Inter.REGULAR, ctx.theme.primaryTextColor)
-    private val subPaint = textPaint(13f, Inter.REGULAR, ctx.theme.secondaryTextColor)
-    private val oval = RectF()
-
-    private var min = 0.0
-    private var max = 100.0
-    private var current: Double? = null
-    private var target: Double? = null
-    private var on = false
-    private var status = ""
-    private var dragTarget: Double? = null
-
-    var onCommit: (Int) -> Unit = {}
-
-    init {
-        isFocusable = true
-    }
-
-    /**
-     * TalkBack and keys: HA's `role="slider"` for the target humidity, in whole percents. A key edit is sent when its
-     * key comes up, as a drag is when it's let go; TalkBack's steps are sent at once. Nothing while there's no target.
-     */
-    private val access = AdjustableAccess(
-        min = { kotlin.math.ceil(min).toInt() }, max = { kotlin.math.floor(max).toInt() }, step = { 1 },
-        value = { (dragTarget ?: target ?: min).roundToInt() },
-        preview = { v ->
-            dragTarget = v.toDouble()
-            describe()
-            invalidate()
-            VitroAccess.valueChanged(this)
-        },
-        commit = { v ->
-            target = v.toDouble()
-            dragTarget = null
-            describe()
-            invalidate()
-            onCommit(v)
-        },
-        // A cancelled key or focus gone mid-edit: back to HA's target, nothing sent.
-        restore = {
-            dragTarget = null
-            describe()
-            invalidate()
-        },
-    )
-
-    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
-        super.onInitializeAccessibilityNodeInfo(info)
-        if (target != null) access.onInitialize(info)
-    }
-
-    override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean =
-        (if (target != null) access.perform(action, arguments) else null) ?: super.performAccessibilityAction(action, arguments)
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
-        (target != null && access.keyDown(keyCode)) || super.onKeyDown(keyCode, event)
-
-    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
-        access.keyUp(event) || super.onKeyUp(keyCode, event)
-
-    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
-        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
-        if (!gainFocus) access.cancel()
-    }
-
-    fun bind(min: Double, max: Double, current: Double?, target: Double?, on: Boolean, status: String) {
-        this.min = min
-        this.max = if (max > min) max else min + 1.0
-        this.current = current
-        this.target = target
-        this.on = on
-        this.status = status
-        // No target any more (turned off, say): an edit under way has nothing to set, so it's dropped, not sent.
-        if (target == null) {
-            access.cancel()
-            dragTarget = null
-        }
-        describe()
-        if (dragTarget == null) invalidate()
-    }
-
-    fun nudge(sign: Int) {
-        val t = target ?: return
-        val next = HumidifierCardView.snapHumidity(t + sign, min, max)
-        if (next.toDouble() == t) return
-        target = next.toDouble()
-        describe()
-        invalidate()
-        onCommit(next)
-        VitroAccess.valueChanged(this)
-    }
-
-    private val radius: Float get() = (minOf(width, height) / 2f - strokeW).coerceAtLeast(8f * dp)
-
-    private fun fracOf(v: Double): Float = ((v - min) / (max - min)).toFloat().coerceIn(0f, 1f)
-
-    // Reused by onDraw: one point on the ring and the texts, rebuilt only when their value changes.
-    private val pt = FloatArray(2)
-    private val shownMemo = NumberText()
-    private val currentMemo = NumberText()
-    private fun shownText(shown: Double?) = if (shown != null) shownMemo.of(shown) { "${it.roundToInt()}%" } else "–"
-    private fun currentText(c: Double) = currentMemo.of(c) { "Currently ${it.roundToInt()}%" }
-
-    /**
-     * The texts the dial draws, in order, as its content description (the status, the target, the current humidity):
-     * what HA's page has as text, so TalkBack reads them and the parity harness finds them.
-     */
-    private fun describe() {
-        val text = listOfNotNull(status.takeIf { it.isNotEmpty() }, shownText(dragTarget ?: target), current?.let(::currentText))
-            .joinToString(", ")
-        if (contentDescription?.toString() != text) contentDescription = text
-    }
-
-    /** The point at [frac] of the ring of radius [r], into [pt]. */
-    private fun pointAt(frac: Float, r: Float) {
-        val a = Math.toRadians((START_ANGLE + SWEEP * frac).toDouble())
-        pt[0] = width / 2f + r * cos(a).toFloat()
-        pt[1] = height / 2f + r * sin(a).toFloat()
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        val cx = width / 2f
-        val cy = height / 2f
-        val r = radius
-        oval.set(cx - r, cy - r, cx + r, cy + r)
-        arcPaint.color = ctx.theme.dividerColor
-        canvas.drawArc(oval, START_ANGLE, SWEEP, false, arcPaint)
-        val accent = if (on) HumidifierCardView.HUMID_COLOR else CardSurface.withAlpha(ctx.theme.secondaryTextColor, 0.6f)
-        val shown = dragTarget ?: target
-        if (shown != null) {
-            val f = fracOf(shown)
-            arcPaint.color = accent
-            if (f > 0f) canvas.drawArc(oval, START_ANGLE, SWEEP * f, false, arcPaint)
-        }
-        current?.let { c ->
-            pointAt(fracOf(c), r)
-            val x = pt[0]
-            val y = pt[1]
-            fill.color = ctx.theme.cardBackgroundColor
-            canvas.drawCircle(x, y, strokeW * 0.3f, fill)
-            fill.color = ctx.theme.primaryTextColor
-            canvas.drawCircle(x, y, strokeW * 0.18f, fill)
-        }
-        if (shown != null) {
-            pointAt(fracOf(shown), r)
-            fill.color = Color.WHITE
-            canvas.drawCircle(pt[0], pt[1], strokeW * 0.42f, fill)
-        }
-        canvas.drawText(status, cx, cy - 30f * dp, statusPaint)
-        canvas.drawText(shownText(shown), cx, cy + 14f * dp, bigPaint)
-        val c = current
-        if (c != null) canvas.drawText(currentText(c), cx, cy + 36f * dp, subPaint)
-    }
-
-    private fun valueAt(x: Float, y: Float): Double {
-        val deg = Math.toDegrees(atan2((y - height / 2f).toDouble(), (x - width / 2f).toDouble())).toFloat()
-        val rel = ((deg - START_ANGLE) % 360f + 360f) % 360f
-        val clamped = if (rel > SWEEP) (if (rel > SWEEP + (360f - SWEEP) / 2f) 0f else SWEEP) else rel
-        return min + (max - min) * (clamped / SWEEP)
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        val d = hypot(event.x - width / 2f, event.y - height / 2f)
-        val r = radius
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                if (target == null || d < r * 0.65f || d > r * 1.35f) return false
-                parent?.requestDisallowInterceptTouchEvent(true)
-                dragTarget = HumidifierCardView.snapHumidity(valueAt(event.x, event.y), min, max).toDouble()
-                invalidate()
-            }
-            MotionEvent.ACTION_MOVE -> if (dragTarget != null) {
-                dragTarget = HumidifierCardView.snapHumidity(valueAt(event.x, event.y), min, max).toDouble()
-                invalidate()
-            }
-            MotionEvent.ACTION_UP -> {
-                dragTarget?.let { t ->
-                    target = t
-                    performClick()
-                    onCommit(t.roundToInt())
-                    // TalkBack reads the target the drag left, as it does a SeekBar's.
-                    VitroAccess.valueChanged(this)
-                }
-                dragTarget = null
-                parent?.requestDisallowInterceptTouchEvent(false)
-                invalidate()
-            }
-            MotionEvent.ACTION_CANCEL -> {
-                dragTarget = null
-                invalidate()
-            }
-        }
-        describe()
-        return true
-    }
-
-    override fun performClick(): Boolean {
-        super.performClick()
-        return true
-    }
-
-    companion object {
-        private const val START_ANGLE = 135f
-        private const val SWEEP = 270f
-    }
-}
+class HumidifierCardView(ctx: VitroCardContext, config: CardConfig) : ThermostatCardView(ctx, config)
 
 // ---------------------------------------------------------------------------------------------
 // logbook
