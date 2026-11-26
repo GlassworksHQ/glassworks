@@ -33,10 +33,6 @@ line of each version is what Home Assistant shows on the update card. A change o
   connecting because the Mirror dropped the Bluetooth connection before it could report back. It now stays
   connected and reports the join, so the setup finishes. In the legacy build.
 - **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
-- **A Wi-Fi network you give Glassworks stays saved after a restart on Android 6 and 7.** The legacy build joined
-  the network from Kiln or your phone, but Android forgot it at the next restart, so a lululemon Mirror on its stock
-  system asked you to send Wi-Fi from a phone every time it started. It now keeps the network, as Android 8 and newer
-  always did.
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
   you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in
@@ -58,8 +54,9 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
   every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
   secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
-  is refused, and the panel's log says so, unless your dashboard explicitly shares a permission with that frame (an
-  `allow` attribute). Permissions an older version saved for other sites are forgotten when the app starts.
+  is refused, and the panel's log says so. An `allow` attribute on the frame doesn't change that: a site framed in
+  your dashboard needs to be one of the secure hosts too. Permissions an older version saved for other sites, including
+  framed ones, are forgotten when the app starts.
 - **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
   your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
   (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so once Home Assistant has

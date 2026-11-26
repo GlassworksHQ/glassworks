@@ -123,9 +123,10 @@ export const simInPlace: InPlaceSim = {
     // no app, no Device Owner, nothing hidden, as after a factory reset
     const fresh = () => Object.assign(new FakeMirror({ kiosk: 'none', serialno: FAKE_SERIAL }), {
       rebootToBootloader: async () => { installed = false; },
-      // `ls <path>`, as toybox answers it: the way back asks when a file won't read, to tell a file that's gone
+      // `ls '<path>'`, as toybox answers it: the way back asks when a file won't read, to tell a file that's gone
       async run(this: FakeMirror, cmd: string) {
-        const ls = /^ls (\S+)$/.exec(cmd);
+        // Kiln quotes the path (one shell argument): `ls '<path>'`
+        const ls = /^ls '([^']*)'$/.exec(cmd);
         if (ls) return ls[1] === STOCK_SERVICES_JAR_PATH && jar ? { out: `${ls[1]}\n`, code: 0 } : { out: `ls: ${ls[1]}: No such file or directory\n`, code: 1 };
         return FakeMirror.prototype.run.call(this, cmd);
       },

@@ -342,6 +342,10 @@ describe('the restore point\'s files, for the way back\'s check', () => {
   it('throws on a manifest that doesn\'t describe them', () => {
     expect(() => restoredFiles({})).toThrow('The restore point\'s manifest doesn\'t describe services.jar.');
     expect(() => restoredFiles({ servicesJar: { ...jar, origFile: undefined } })).toThrow(/describe services\.jar/);
+    // the paths are the Mirror's own: a manifest can't point Kiln's adb at anything else, or slip shell syntax in
+    expect(() => restoredFiles({ servicesJar: { ...jar, path: '/nope; reboot' } })).toThrow('The restore point\'s manifest puts services.jar somewhere other than /system/framework/services.jar.');
+    expect(() => restoredFiles({ servicesJar: jar, bootAnimation: { ...jar, path: '/system/framework/services.jar', origFile: 'b' } }))
+      .toThrow('The restore point\'s manifest puts the boot animation somewhere other than /system/media/bootanimation.zip.');
     expect(() => restoredFiles({ servicesJar: { ...jar, extents: [{ logical: 0 }] } })).toThrow(/describe services\.jar/);
     expect(() => restoredFiles({ servicesJar: jar, bootAnimation: { size: 1 } })).toThrow('The restore point\'s manifest doesn\'t describe the boot animation.');
   });

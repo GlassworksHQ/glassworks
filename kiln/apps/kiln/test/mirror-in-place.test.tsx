@@ -780,6 +780,30 @@ describe('the way back checks everything it can before it writes', () => {
     expect(r.image.state.undo?.refused).toBe('The restore point\'s manifest doesn\'t describe services.jar. Nothing was written.');
   });
 
+  it('a manifest that names another path is refused before anything reaches the device\'s shell', async () => {
+    const r = await installed();
+    await editKept(r, (files) => files.map((f) => {
+      if (f.filename !== 'manifest.json') return f;
+      const m = JSON.parse(new TextDecoder().decode(f.data)) as { servicesJar: Record<string, unknown> };
+      m.servicesJar.path = '/nope; reboot';
+      return { ...f, data: new TextEncoder().encode(JSON.stringify(m)) };
+    }));
+    const ran: string[] = [];
+    const pulled: string[] = [];
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress, deps: { requestAdb: async () => {
+      const a = await withJar(r, async () => { throw new Error('No such file or directory'); }, (c) => { ran.push(c); return undefined; })();
+      const pull = a.pull;
+      return Object.assign(a, { pull: async (path: string, ...rest: unknown[]) => { pulled.push(path); return (pull as (...x: unknown[]) => Promise<Uint8Array>)(path, ...rest); } });
+    } } });
+    await b.image.startUndo();
+    await b.image.undoRestart();
+    expect(b.image.state.undo?.refused).toBe('The restore point\'s manifest puts services.jar somewhere other than /system/framework/services.jar. Nothing was written.');
+    expect(b.image.state.undo?.restarted).toBeUndefined();
+    expect(ran.filter((c) => c.includes('nope') || c.includes('reboot'))).toEqual([]);
+    expect(pulled).toEqual([]);
+    expect(b.flashed).toEqual([]);
+  });
+
   it('a restore point from before the record still goes, checked against the original file it keeps', async () => {
     const r = await installed();
     await editKept(r, (files) => files.map((f) => {

@@ -399,6 +399,31 @@ describe('patchStockServicesJar', () => {
     expect(kept.stockAp).toBeUndefined();
     expect(Buffer.from(kept.patched).equals(Buffer.from(apOn.patched))).toBe(true);
   }, 60_000);
+
+  it.skipIf(!HAS_D8)('reinstalling over a jar patched without Device Owner (the surgical adb tool\'s) adds both fixes, byte for byte as a fresh patch', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const b = fakeAdbKey(0x5d);
+    const fresh = await patchStockServicesJar(jar, b);
+    expect(fresh.deviceOwner).toBeDefined();
+    const none = { enableDeviceOwner: false, disableStockAp: false, appApprovesUsbDebugging: false, adbSetsClock: false };
+    for (const key of [fakeAdbKey(0x5e), b]) { // another computer's install, then this computer's own
+      const surgical = await patchStockServicesJar(jar, key, none);
+      expect(surgical.deviceOwner).toBeUndefined();
+      const re = await patchStockServicesJar(surgical.patched, b);
+      expect(re.repatched).toEqual({ from: surgical.fingerprint });
+      expect(re.deviceOwner).toEqual(fresh.deviceOwner);
+      expect(Buffer.from(re.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    }
+    // a jar that has them keeps them, with nothing to write
+    const again = await patchStockServicesJar(fresh.patched, b);
+    expect(again.deviceOwner).toEqual(fresh.deviceOwner);
+    expect(Buffer.from(again.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    // asked to leave Device Owner off, a reinstall doesn't add it
+    const surgical = await patchStockServicesJar(jar, b, none);
+    const kept = await patchStockServicesJar(surgical.patched, b, none);
+    expect(kept.deviceOwner).toBeUndefined();
+    expect(Buffer.from(kept.patched).equals(Buffer.from(surgical.patched))).toBe(true);
+  }, 60_000);
 });
 
 // ---------------------------------------------------------------------------

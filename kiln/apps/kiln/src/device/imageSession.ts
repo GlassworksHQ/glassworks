@@ -8,7 +8,7 @@
 // release has it. A device that runs Glassworks already can go through `keep` first (issue 580): Kiln reads Home
 // Assistant's ESPHome key from the running app over adb and gives it back at the first start.
 import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glassworks/adb';
-import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
+import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, q, readApiKey } from '@glassworks/app-adb';
 import { askAdb, nothingPicked } from './adbAsk';
 import {
   ProxyError, RestoreRefused, WrongImage, adbKeyStep, cap, checkInPlace, checkRestorePoint, defaultImage, deviceFileState, imageFromLink, parseSparseWrites, pickInList, plan, readNamedBackupZip, recordRestoreFiles, sha256Hex, sourceFile, systemKeyStep, wifiStep,
@@ -1585,7 +1585,8 @@ export class ImageSession {
         if (!p.pull) throw new Error('this connection can\'t read files');
         got = await pullWithin(p, f.path, Math.max(f.size, f.written?.size ?? 0), READ_BACK_MS);
       } catch (e) {
-        const gone = await bounded(p, this.d.frame).run(`ls ${f.path}`).then((r) => /no such file/i.test(r.out)).catch(() => false);
+        // the path comes from the restore point's manifest: one quoted argument, never shell syntax
+        const gone = await bounded(p, this.d.frame).run(`ls ${q(f.path)}`).then((r) => /no such file/i.test(r.out)).catch(() => false);
         if (gone) throw new RestoreRefused(`${name} is no longer on ${the}, so this restore point doesn't fit its system anymore. Nothing was changed.`);
         this.log('', `not checked: ${name} (Kiln couldn't read it: ${(e as Error).message})`);
         all = false;

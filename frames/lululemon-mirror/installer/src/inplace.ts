@@ -416,13 +416,18 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
  * the restore image and the Mirror against them before the way back writes anything (kiln-core restore.ts).
  */
 export function restoredFiles(manifest: Record<string, unknown>): RestoredFile[] {
+  // the paths are the Mirror's own two files, never what the manifest says: a restore point is a file anyone can hand
+  // Kiln, and its path reaches the device (adb sync and shell)
+  const paths: Record<string, string> = { servicesJar: STOCK_SERVICES_JAR_PATH, bootAnimation: STOCK_BOOT_ANIMATION_PATH };
   const one = (key: string, required: boolean): RestoredFile | undefined => {
     const x = manifest[key] as Record<string, unknown> | undefined;
     if (x === undefined && !required) return undefined;
     const extents = x?.extents;
-    const ok = !!x && typeof x.path === 'string' && typeof x.size === 'number' && typeof x.originalSha256 === 'string' && typeof x.origFile === 'string'
+    const what = key === 'servicesJar' ? 'services.jar' : 'the boot animation';
+    if (x && typeof x.path === 'string' && x.path !== paths[key]) throw new Error(`The restore point's manifest puts ${what} somewhere other than ${paths[key]}.`);
+    const ok = !!x && x.path === paths[key] && typeof x.size === 'number' && typeof x.originalSha256 === 'string' && typeof x.origFile === 'string'
       && Array.isArray(extents) && extents.every((e) => typeof e?.logical === 'number' && typeof e?.physical === 'number' && typeof e?.length === 'number');
-    if (!ok) throw new Error(`The restore point's manifest doesn't describe ${key === 'servicesJar' ? 'services.jar' : 'the boot animation'}.`);
+    if (!ok) throw new Error(`The restore point's manifest doesn't describe ${what}.`);
     return {
       path: x.path as string,
       file: x.origFile as string,

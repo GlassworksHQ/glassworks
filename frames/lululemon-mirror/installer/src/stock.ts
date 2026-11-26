@@ -797,7 +797,7 @@ export async function patchStockServicesJar(
 
   // An earlier install already changed this jar: trust this key instead of that one, and check the rest is in place.
   const earlier = patchedKeyFingerprint(origDex);
-  if (earlier) return repatch(jar, origDex, earlier, fp, paddedFp, disableStockAp, appApprovesUsbDebugging, adbSetsClock);
+  if (earlier) return repatch(jar, origDex, earlier, fp, paddedFp, { enableDeviceOwner, disableStockAp, appApprovesUsbDebugging, adbSetsClock });
 
   // Step 1: swap the single-use 71-byte log string inside startConfirmation with our padded MD5.
   // replaceDexString re-sorts string_ids, renumbers every reference, and validates the whole DEX.
@@ -938,9 +938,13 @@ export async function patchStockServicesJar(
  * string is swapped for this key's (same length; replaceDexString renumbers every reference), and nothing else is
  * written. Before that, every part of the patch is checked to be there: `startConfirmation` loads that string first
  * (the code this patch writes), and with `disableStockAp`, `MirrorApService.systemReady()` is one `return-void`.
- * Anything else is a jar Kiln doesn't know, and is refused.
+ * A fix the options ask for that an earlier patch left out (Device Owner, the hotspot, USB debugging, the clock) is
+ * added with the same bytes a fresh patch writes. Anything else is a jar Kiln doesn't know, and is refused.
  */
-async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp: string, paddedFp: string, disableStockAp: boolean, appApprovesUsbDebugging: boolean, adbSetsClock: boolean): Promise<PatchedServicesJar> {
+async function repatch(
+  jar: Uint8Array, origDex: Uint8Array, earlier: string, fp: string, paddedFp: string,
+  { enableDeviceOwner, disableStockAp, appApprovesUsbDebugging, adbSetsClock }: { enableDeviceOwner: boolean; disableStockAp: boolean; appApprovesUsbDebugging: boolean; adbSetsClock: boolean },
+): Promise<PatchedServicesJar> {
   const what = 'services.jar already carries Glassworks\' changes, but';
   const prefix = 'unable to start ';
   const oldPadded = prefix + earlier + ' '.repeat(START_CONFIRMATION_LOG_STRING.length - prefix.length - earlier.length);
@@ -956,6 +960,16 @@ async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp
   const loads = op === 0x001a ? dv.getUint16(codeOff + 18, true) === fpStrIdx
     : op === 0x001b ? (dv.getUint16(codeOff + 18, true) | (dv.getUint16(codeOff + 20, true) << 16)) === fpStrIdx : false;
   if (!loads) throw new Error(`${what} its startConfirmation isn't the code Kiln writes. Kiln doesn't know this jar`);
+  // A jar patched without Device Owner (tools/mirror's surgical adb): add both fixes now (the same bytes a fresh patch
+  // writes). One that has both: keep them. Only one of the two is a jar Kiln didn't make.
+  let deviceOwner: DeviceOwnerPatch | undefined;
+  let addedDeviceOwner = false;
+  if (enableDeviceOwner) {
+    const at = findDeviceOwner(dex, dv, lookup, strings);
+    if (at.patch) deviceOwner = at.patch;
+    else if (at.stock) { deviceOwner = patchDeviceOwner(dex, dv, lookup, strings); addedDeviceOwner = true; }
+    else throw new Error(`${what} only one of its two Device Owner changes is there. Kiln doesn't know this jar`);
+  }
   // An install that left stock's hotspot on (disableStockAp: false): turn it off now, with patchStockAp's own checks
   // (the same bytes a fresh patch writes). One that has it off: keep it.
   let stockAp: StockApPatch | undefined;
@@ -984,7 +998,7 @@ async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp
   }
   let out = jar;
   let padBytes = 0;
-  if (earlier !== fp || addedUsbAllow || addedStockAp || addedClock) {
+  if (earlier !== fp || addedDeviceOwner || addedUsbAllow || addedStockAp || addedClock) {
     dex.set(sha1Bytes(dex.subarray(32)), 12);
     dv.setUint32(8, adler32(dex.subarray(12)), true);
     ({ out, padBytes } = await replaceJarDexExactSize(jar, dex));
@@ -1000,6 +1014,7 @@ async function repatch(jar: Uint8Array, origDex: Uint8Array, earlier: string, fp
     padBytes,
     startConfirmationCodeOff: codeOff,
     patchedCodeUnits: 0,
+    ...(deviceOwner ? { deviceOwner } : {}),
     ...(stockAp ? { stockAp } : {}),
     ...(usbAllow ? { usbAllow } : {}),
     ...(timeZone ? { timeZone } : {}),
@@ -1142,7 +1157,30 @@ function patchDeviceOwner(
   lookup: DexMethodLookup,
   strings: readonly string[],
 ): DeviceOwnerPatch {
-  // (a) mHasFeature = true
+  const at = findDeviceOwner(dex, dv, lookup, strings);
+  if (!at.stock) throw new Error('Device Owner patch: DevicePolicyManagerService is already patched, or not stock');
+  const { ctorInsns, sdoInsns, hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc } = at.stock;
+  // (a) const/4 vA, #1  ==  (1 << 12) | (vA << 8) | 0x12
+  dv.setUint16(ctorInsns + hasFeatureMoveResultPc * 2, (1 << 12) | (hasFeatureReg << 8) | 0x12, true);
+  // (b) nop × 3 over the invoke-interface
+  for (let k = 0; k < 3; k++) dv.setUint16(sdoInsns + (setBackupServiceActivePc + k) * 2, 0x0000, true);
+  return { hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc };
+}
+
+/**
+ * The two Device Owner sites in `DevicePolicyManagerService`, read without changing anything: `stock` when both are
+ * as stock has them (where patchDeviceOwner writes), `patch` when both carry its bytes, neither when only one does.
+ *   (a) the instruction after `pm.hasSystemFeature("android.software.device_admin")` in `<init>`: stock's
+ *       `move-result vA`, or the patch's `const/4 vA, #1`, followed by the `iput-boolean` into mHasFeature;
+ *   (b) `setDeviceOwner`'s `invoke-interface IBackupManager.setBackupServiceActive(IZ)V`: there on stock; NOP'd by the
+ *       patch, which leaves no such call and a run of three `nop`s.
+ */
+function findDeviceOwner(
+  dex: Uint8Array,
+  dv: DataView,
+  lookup: DexMethodLookup,
+  strings: readonly string[],
+): { stock?: DeviceOwnerPatch & { ctorInsns: number; sdoInsns: number }; patch?: DeviceOwnerPatch } {
   const daIdx = strings.indexOf(DEVICE_ADMIN_FEATURE);
   if (daIdx < 0) throw new Error(`Device Owner patch: "${DEVICE_ADMIN_FEATURE}" string not in classes.dex`);
   const mHasSystemFeature = lookup.findMethod('Landroid/content/pm/PackageManager;', 'hasSystemFeature', '(Ljava/lang/String;)Z');
@@ -1169,38 +1207,43 @@ function patchDeviceOwner(
     if (ins.op === 0x6e && dv.getUint16(ctorInsns + (ins.pc + 1) * 2, true) === mHasSystemFeature) { invAt = i; break; }
   }
   if (invAt < 0) throw new Error('Device Owner patch: PackageManager.hasSystemFeature invoke not found after the device_admin const-string');
-  // move-result must immediately follow the invoke whose value it takes (Dalvik verifier rule),
-  // and the stored boolean lands in mHasFeature via iput-boolean.
+  // On stock, move-result immediately follows the invoke whose value it takes (Dalvik verifier rule); the patch turns
+  // it into const/4 vA, #1. Either way the boolean lands in mHasFeature via iput-boolean.
   const mr = ctor[invAt + 1];
-  if (!mr || mr.op !== 0x0a) throw new Error('Device Owner patch: expected move-result after hasSystemFeature');
   const iput = ctor[invAt + 2];
-  if (!iput || iput.op !== 0x5c) throw new Error('Device Owner patch: expected iput-boolean (mHasFeature) after move-result');
-  const hasFeatureReg = (mr.unit >>> 8) & 0xff;
+  if (!iput || iput.op !== 0x5c) throw new Error('Device Owner patch: expected iput-boolean (mHasFeature) after hasSystemFeature');
+  const hasFeaturePatched = !!mr && mr.op === 0x12 && (mr.unit >>> 12) === 1;
+  if (!mr || (mr.op !== 0x0a && !hasFeaturePatched)) throw new Error('Device Owner patch: expected move-result after hasSystemFeature');
+  const hasFeatureReg = (mr.unit >>> 8) & (hasFeaturePatched ? 0xf : 0xff);
   const hasFeatureMoveResultPc = mr.pc;
   if (hasFeatureReg > 15) throw new Error(`Device Owner patch: move-result register v${hasFeatureReg} exceeds const/4 4-bit encoding`);
-  // const/4 vA, #1  ==  (1 << 12) | (vA << 8) | 0x12
-  dv.setUint16(ctorInsns + hasFeatureMoveResultPc * 2, (1 << 12) | (hasFeatureReg << 8) | 0x12, true);
 
-  // (b) NOP IBackupManager.setBackupServiceActive(IZ)V inside setDeviceOwner
   const mSetBackup = lookup.findMethod('Landroid/app/backup/IBackupManager;', 'setBackupServiceActive', '(IZ)V');
   const sdoIdx = lookup.findMethod(DPMS, 'setDeviceOwner', '(Ljava/lang/String;Ljava/lang/String;)Z');
   const sdoOff = lookup.findCodeItem(DPMS, sdoIdx);
   const sdoInsns = sdoOff + 16;
-
   let setBackupServiceActivePc = -1;
+  let nopRun = 0;
+  let nopsAt = -1;
   for (const insn of walkInsns(dex, sdoOff)) {
-    if (insn.op !== 0x72) continue; // invoke-interface
+    if (insn.op === 0x00 && insn.unit === 0x0000) { if (++nopRun === 3 && nopsAt < 0) nopsAt = insn.pc - 2; continue; }
+    nopRun = 0;
+    if (insn.op !== 0x72 || setBackupServiceActivePc >= 0) continue; // invoke-interface
     if (dv.getUint16(sdoInsns + (insn.pc + 1) * 2, true) !== mSetBackup) continue;
     if (insn.width !== 3) throw new Error(`Device Owner patch: setBackupServiceActive invoke is ${insn.width} units, expected 3`);
-    for (let k = 0; k < 3; k++) dv.setUint16(sdoInsns + (insn.pc + k) * 2, 0x0000, true); // nop × 3
     setBackupServiceActivePc = insn.pc;
-    break;
-  }
-  if (setBackupServiceActivePc < 0) {
-    throw new Error('Device Owner patch: invoke-interface IBackupManager.setBackupServiceActive not found in setDeviceOwner');
   }
 
-  return { hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc };
+  if (!hasFeaturePatched && setBackupServiceActivePc >= 0) {
+    return { stock: { ctorInsns, sdoInsns, hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc } };
+  }
+  if (hasFeaturePatched && setBackupServiceActivePc < 0 && nopsAt >= 0) {
+    return { patch: { hasFeatureMoveResultPc, hasFeatureReg, setBackupServiceActivePc: nopsAt } };
+  }
+  if (!hasFeaturePatched && setBackupServiceActivePc < 0) {
+    throw new Error('Device Owner patch: invoke-interface IBackupManager.setBackupServiceActive not found in setDeviceOwner');
+  }
+  return {};
 }
 
 // ---------------------------------------------------------------------------
