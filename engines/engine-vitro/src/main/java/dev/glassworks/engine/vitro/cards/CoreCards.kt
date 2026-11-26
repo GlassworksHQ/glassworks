@@ -245,6 +245,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     }
     private var pictureUrl: String? = null
 
+    /** The zones this tile follows for its badge ([followZones]); declared before the first draw, in the constructor. */
+    private val followedZones = HashSet<String>()
+
     /**
      * The tile's state line when it changes on its own (a relative time, a timer counting down), for [TimestampText] to
      * draw again each second while on screen; null when it doesn't (or the state is hidden).
@@ -1547,9 +1550,6 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             else -> unavailableBadge.visibility = GONE
         }
     }
-
-    /** The zones this tile follows for its badge ([followZones]). */
-    private val followedZones = HashSet<String>()
 
     /**
      * A person's or device tracker's badge reads its zone's state (`getZone`): the tile follows the zones it may be
