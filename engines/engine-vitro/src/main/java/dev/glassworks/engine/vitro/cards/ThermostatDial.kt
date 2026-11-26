@@ -1285,7 +1285,7 @@ internal class ThermostatDialView(
         if (t < max) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)
         if (t > min) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD)
         // The humidity control is AdjustableAccess's slider, as it was before it moved here: a value can be set.
-        if (humidifier && Platform.hasSetProgressAction) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS)
+        if (humidifier) VitroAccess.offerSetProgress(info)
     }
 
     override fun performAccessibilityAction(action: Int, arguments: Bundle?): Boolean {
