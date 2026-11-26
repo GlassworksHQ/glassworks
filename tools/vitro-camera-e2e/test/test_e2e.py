@@ -7,6 +7,7 @@ device, no ffmpeg, no aiortc.
 import http.client
 import json
 import os
+import socket
 import sys
 import tempfile
 import threading
@@ -84,6 +85,19 @@ class Home(unittest.TestCase):
         self.assertEqual(len({v["path"]: v for v in home.lovelace(home.DASHBOARD)["views"]}["hls"]["cards"]), 1)
         self.assertIsNone(home.http_get("/somewhere/else", {}))
 
+    def test_a_drop_refuses_websockets_for_its_seconds(self):
+        try:
+            self.assertFalse(home.ws_refused())
+            status, body, _ = home.http_get("/vitro-camera-e2e/drop", {"seconds": ["0.3"]})
+            self.assertEqual((status, json.loads(body)["seconds"]), (200, 0.3))
+            self.assertTrue(home.ws_refused())
+            time.sleep(0.4)
+            self.assertFalse(home.ws_refused())
+            self.assertEqual(home.http_get("/vitro-camera-e2e/drop", {"seconds": ["soon"]})[0], 400)
+            self.assertEqual(home.http_get("/vitro-camera-e2e/drop", {"seconds": ["600"]})[0], 400)
+        finally:
+            home.DOWN_UNTIL = 0.0
+
 
 class Served(unittest.TestCase):
     """The home as fakeha serves it: its dashboard, its removal route and the MJPEG camera's stream."""
@@ -121,6 +135,62 @@ class Served(unittest.TestCase):
         conn.close()
         cams = json.loads(self.get("/clarity/cameras")[1])
         self.assertIn("webrtc_available", cams)
+
+
+    def websocket(self):
+        """A websocket to the fake, signed in: its socket, or the HTTP status that refused it."""
+        sock = socket.create_connection(("127.0.0.1", self.port), timeout=10)
+        sock.sendall(b"GET /api/websocket HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\n"
+                     b"Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                     b"Sec-WebSocket-Version: 13\r\n\r\n")
+        head = b""
+        while b"\r\n\r\n" not in head:
+            chunk = sock.recv(1)
+            if not chunk:
+                break
+            head += chunk
+        status = int(head.split(b" ", 2)[1])
+        if status != 101:
+            sock.close()
+            return status
+        self.assertIn(b"auth_required", self.ws_message(sock))
+        msg = json.dumps({"type": "auth", "access_token": "e2e"}).encode()
+        mask = b"\x01\x02\x03\x04"
+        sock.sendall(bytes([0x81, 0x80 | len(msg)]) + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(msg)))
+        self.assertIn(b"auth_ok", self.ws_message(sock))
+        return sock
+
+    @staticmethod
+    def ws_message(sock):
+        h = sock.recv(2)
+        n = h[1] & 0x7F
+        if n == 126:
+            n = int.from_bytes(sock.recv(2), "big")
+        data = b""
+        while len(data) < n:
+            data += sock.recv(n - len(data))
+        return data
+
+    def test_a_drop_cuts_the_websockets_and_refuses_new_ones_until_ha_is_back(self):
+        sock = self.websocket()
+        try:
+            for _ in range(50):         # the fake counts the connection once it has said auth_ok
+                if fakeha.Handler.hub.conns:
+                    break
+                time.sleep(0.02)
+            cut = json.loads(self.get("/vitro-camera-e2e/drop?seconds=0.5")[1])["cut"]
+            self.assertEqual(cut, 1)
+            self.assertEqual(sock.recv(16), b"", "the open websocket was cut")
+            self.assertEqual(self.websocket(), 503)
+            # HTTP stays up: stills and the MJPEG stream still answer.
+            self.assertEqual(self.get("/vitro-camera-e2e/restore")[0], 200)
+            time.sleep(0.6)
+            again = self.websocket()
+            self.assertNotEqual(again, 503)
+            again.close()
+        finally:
+            sock.close()
+            home.DOWN_UNTIL = 0.0
 
 
 class Screen(unittest.TestCase):

@@ -127,6 +127,19 @@ class VitroWebRtcTest {
     }
 
     @Test
+    fun `Vitro's own no-connection codes are the library's NOT_CONNECTED, so the stream waits for HA`() {
+        val channel = HostChannel(host)
+        val codes = ArrayList<String>()
+        for (code in listOf("disconnected", "send_failed", "home_assistant_error")) {
+            channel.call(JSONObject().put("type", "camera/webrtc/get_client_config"), { throw AssertionError() }, { codes += it.code })
+            calls.last().second(false, null, JSONObject().put("code", code).put("message", "Not connected"))
+        }
+        channel.call(JSONObject().put("type", "camera/webrtc/get_client_config"), { throw AssertionError() }, { codes += it.code })
+        calls.last().second(false, null, null) // the engine had no client
+        assertEquals(listOf(HaError.NOT_CONNECTED, HaError.NOT_CONNECTED, "home_assistant_error", HaError.NOT_CONNECTED), codes)
+    }
+
+    @Test
     fun `a stream reports the player's failure once, on the main thread, and nothing after close`() {
         VitroWebRtc.register()
         val stream = CameraStreamFactories.provider(CameraStreamKind.WEB_RTC)!!(host).create("camera.front_door", CameraStreamKind.WEB_RTC)!!
