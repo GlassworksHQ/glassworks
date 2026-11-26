@@ -56,8 +56,10 @@ class CameraHubTest {
     /** Each hub's thread ends with its test, so none touches Robolectric's camera (its callbacks are static) in the next. */
     @After fun release() {
         hubs.forEach { it.release() }
-        hubs.forEach { it.looper.thread.join(5_000) }
+        // A hub thread still running here would keep its availability callback registered into the next test.
+        val stuck = hubs.map { it.looper.thread }.onEach { it.join(5_000) }.filter { it.isAlive }
         ShadowMediaCodecList.reset()
+        check(stuck.isEmpty()) { "${stuck.size} hub thread(s) didn't end within 5 s of release()" }
     }
 
     private val logs = java.util.Collections.synchronizedList(mutableListOf<String>())
