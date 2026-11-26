@@ -952,6 +952,99 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
+    // ------------------------------------------------------------ visible floor (the Mirror: brightness 0 is the backlight off)
+
+    private val systemBrightnessUri = AndroidSettings.System.getUriFor(AndroidSettings.System.SCREEN_BRIGHTNESS)
+
+    /** Android's brightness setting (0..255), and the change its slider sends. */
+    private fun systemBrightness(v: Int) {
+        AndroidSettings.System.putInt(context.contentResolver, AndroidSettings.System.SCREEN_BRIGHTNESS, v)
+        context.contentResolver.notifyChange(systemBrightnessUri, null)
+        advance(10)
+    }
+
+    @Test fun awakeBrightnessKeepsABacklightOffFrameVisible() {
+        val floor = ScreenPolicy.VISIBLE_FLOOR
+        assertEquals("a manual value below the floor", floor, ScreenPolicy.awakeBrightness(0.01f, null, floor), 0f)
+        assertEquals("auto brightness at 0", floor, ScreenPolicy.awakeBrightness(0f, 0.8f, floor), 0f)
+        assertEquals("a value above it is kept", 0.6f, ScreenPolicy.awakeBrightness(0.6f, 0f, floor), 0f)
+        assertEquals("the system value at 0", floor, ScreenPolicy.awakeBrightness(-1f, 0f, floor), 0f)
+        assertEquals("a visible system value stays the system's", -1f, ScreenPolicy.awakeBrightness(-1f, 200 / 255f, floor), 0f)
+        assertEquals("an unreadable system value stays the system's", -1f, ScreenPolicy.awakeBrightness(-1f, null, floor), 0f)
+        assertEquals("no floor elsewhere", 0f, ScreenPolicy.awakeBrightness(0f, 0f, null), 0f)
+        assertEquals("no floor elsewhere", -1f, ScreenPolicy.awakeBrightness(-1f, 0f, null), 0f)
+    }
+
+    /** The Mirror came up awake and dark: following a system brightness of 0, which is its backlight off. */
+    @Test fun backlightOffFollowingASystemBrightnessOfZeroStaysVisibleAndWakesVisible() {
+        AndroidSettings.System.putInt(context.contentResolver, AndroidSettings.System.SCREEN_BRIGHTNESS, 0)
+        val screen = policy(settings = Settings(autoBrightness = false, manualBrightness = 0f), sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        val brightness = mutableListOf<Float>()
+        screen.onBrightness = { brightness += it }
+        assertEquals("awake at the floor, not at 0", listOf(ScreenPolicy.VISIBLE_FLOOR), brightness)
+        assertEquals("still following the system value", -1f, screen.brightness, 0f)
+
+        screen.sleep("home assistant")
+        screen.wake("home assistant")
+        assertEquals("the blackout is 0, the wake visible", listOf(ScreenPolicy.VISIBLE_FLOOR, 0f, ScreenPolicy.VISIBLE_FLOOR), brightness)
+        screen.stop()
+    }
+
+    /** onBrightness attached before start(): the first value came without the system's, so start sends the floor. */
+    @Test fun backlightOffAHookAttachedBeforeStartGetsTheFloorAtStart() {
+        AndroidSettings.System.putInt(context.contentResolver, AndroidSettings.System.SCREEN_BRIGHTNESS, 0)
+        val screen = policy(settings = Settings(autoBrightness = false, manualBrightness = 0f), sleepMode = SleepMode.BACKLIGHT_OFF)
+        val brightness = mutableListOf<Float>()
+        screen.onBrightness = { brightness += it }
+        screen.start(context)
+        assertEquals("the floor once the system value is known", ScreenPolicy.VISIBLE_FLOOR, brightness.last(), 0f)
+        screen.stop()
+    }
+
+    @Test fun backlightOffTheSystemValueIsFollowedAgainOnceItIsVisible() {
+        AndroidSettings.System.putInt(context.contentResolver, AndroidSettings.System.SCREEN_BRIGHTNESS, 200)
+        val screen = policy(settings = Settings(autoBrightness = false, manualBrightness = -1f), sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        val brightness = mutableListOf<Float>()
+        screen.onBrightness = { brightness += it }
+        assertEquals("a visible system value: no override", listOf(-1f), brightness)
+
+        systemBrightness(0)
+        assertEquals("slid to 0: the floor", listOf(-1f, ScreenPolicy.VISIBLE_FLOOR), brightness)
+        systemBrightness(0)
+        assertEquals("said once", listOf(-1f, ScreenPolicy.VISIBLE_FLOOR), brightness)
+        systemBrightness(120)
+        assertEquals("back to the system's own", listOf(-1f, ScreenPolicy.VISIBLE_FLOOR, -1f), brightness)
+
+        screen.sleep("home assistant")
+        systemBrightness(0)
+        assertEquals("a blackout stays at 0", listOf(-1f, ScreenPolicy.VISIBLE_FLOOR, -1f, 0f), brightness)
+        screen.stop()
+    }
+
+    @Test fun backlightOffAManualValueBelowTheFloorIsLifted() {
+        val screen = policy(settings = Settings(autoBrightness = false, manualBrightness = 0.6f), sleepMode = SleepMode.BACKLIGHT_OFF)
+        screen.start(context)
+        val brightness = mutableListOf<Float>()
+        screen.onBrightness = { brightness += it }
+        screen.setManualBrightness(0.01f)
+        assertEquals(listOf(0.6f, ScreenPolicy.VISIBLE_FLOOR), brightness)
+        screen.stop()
+    }
+
+    /** Every other frame keeps its system value and manual values as they were. */
+    @Test fun lockFramesHaveNoFloor() {
+        AndroidSettings.System.putInt(context.contentResolver, AndroidSettings.System.SCREEN_BRIGHTNESS, 0)
+        val screen = policy(settings = Settings(autoBrightness = false, manualBrightness = -1f))
+        screen.start(context)
+        val brightness = mutableListOf<Float>()
+        screen.onBrightness = { brightness += it }
+        screen.setManualBrightness(0.01f)
+        assertEquals(listOf(-1f, 0.01f), brightness)
+        screen.stop()
+    }
+
     /** The default: every frame but the Mirror turns Android's display off, as before. */
     @Test fun lockSleepStillLocksAndNeverBlacksOut() {
         activeAdmin()
