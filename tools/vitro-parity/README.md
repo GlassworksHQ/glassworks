@@ -5,7 +5,7 @@ The harness checks how closely Vitro draws each card compared with Home Assistan
 - **Home Assistant:** HA's real frontend, the build Clarity pins, served by a fake Home Assistant that answers from the case's own made-up fixture (see [Where Home Assistant comes from](#where-home-assistant-comes-from)), in headless Chromium at the panel's CSS size and density, with card-mod loaded before the dashboard (as `frontend: extra_module_url` does) and the kiosk's header hidden. A panel with a touch screen (`"input": "touch"` in `frames.json`: the S1 and the tablet) gets a touch screen in Chromium too, so HA's page has the coarse pointer it has on the panel; the Mirror has none.
 - **Vitro:** `VitroView` under Robolectric's native graphics, at the same size and density, fed the entity states HA's page held when it drew the reference, HA's themes, the templates HA rendered, and the history and statistics HA's graphs got.
 
-It then compares each card: a perceptual pixel diff, the card's bounds, and every text HA drew (found in Vitro's views or not, and at what font size). It writes a report with HA, Vitro and the diff side by side, and fails when a card drifts past its threshold.
+It then compares each card: a perceptual pixel diff, the worst small region's color, the card's bounds, and every text HA drew (found in Vitro's views or not, and at what font size). It writes a report with HA, Vitro and the diff side by side, and fails when a card drifts past its threshold.
 
 ## Commands
 
@@ -23,7 +23,7 @@ tools/vitro-parity/run.sh --local --refresh  # the real dashboards, from a local
 
 Options: `--frames s1,tablet`, `--cases tile-light,clock`, `--out <dir>`, and `--update-baseline`, which rewrites `baseline.json` with the drift found now. The Gradle properties behind them are `-PvitroParityFrames`, `-PvitroParityCases`, `-PvitroParityOut`, `-PvitroParityUpdateBaseline=true`, `-PvitroParityLocal=<dir>` and `-PvitroParityCollect=true`.
 
-The capture tool's helpers (options, asset paths, scrubbing) have their own tests, which need nothing but Node: `npm test --prefix tools/vitro-parity`. The fake HA's parity home and the corpus's fixtures have theirs in Python: `python3 -m unittest discover -s tools/vitro-parity/test`.
+The capture tool's helpers (options, asset paths, scrubbing, which cards are slots) have their own tests, which need nothing but Node: `npm test --prefix tools/vitro-parity`. The fake HA's parity home, the corpus's fixtures and the state matrix have theirs in Python: `python3 -m unittest discover -s tools/vitro-parity/test`.
 
 The report is `engines/engine-vitro/build/reports/vitro-parity/index.html`, with `report.md` and `report.json` next to it for scripts and issues.
 
@@ -32,6 +32,7 @@ The report is `engines/engine-vitro/build/reports/vitro-parity/index.html`, with
 The committed corpus never depends on anyone's real Home Assistant. `capture.mjs` starts Clarity's fake HA (`tools/perf/fakeha.py`) on 127.0.0.1 with this folder's home module, `fakehome.py`, and drives it case by case:
 
 - **HA's frontend** is the pinned build Clarity serves (`tools/perf/hafrontend.py`, the `home-assistant-frontend` wheel, checked by SHA-256 and cached in `~/.cache/glassworks-perf`). It ships its own Roboto (`/static/fonts/roboto/`), which the fake serves as HA does and every captured page gets as a font from its first script.
+- **Inter** is pinned the same way, for themes that name it (the Vitro Glass theme does): every captured page gets the variable Inter 4.001 that Vitro draws with, the file the app bundles (`core/src/main/res/font/inter.ttf`), checked by SHA-256 before it's used. Without it, the page would take whatever Inter the capture host has installed, and a static Inter collection draws every weight under 400 as Inter Thin.
 - **Each case's fixture** (the `fixture` block of `corpus/<case>.json`) is everything HA would know: entity states, the entity, device and area registries, users, history, statistics, to-do items, logbook entries, forecasts and calendar events. Before each case the capture hands it to the fake, and the page loads afresh.
 - **The shared inputs** come from `home.json`: the fixed instant every page and Vitro's clock show, the config (time zone, units), the themes and the signed-in user.
 - **HA core's words and icons** for states ("Heat/Cool", "Armed away") come from `hacore-2026.11.0.json`, which `hacore.py` cuts from the `homeassistant` wheel of the same release (pinned by SHA-256). Run it again for a newer HA.
@@ -71,7 +72,7 @@ Times are relative to `home.json`'s "now", so a capture is the same on any day: 
 
 1. Real HA only (a local corpus): `capture.mjs prepare` saves the corpus to one dashboard, `vitro-harness` (admin only, hidden from the sidebar), as one sections view per card. It's the only thing the harness writes to Home Assistant: it never changes an entity or another dashboard. Each save is marked (`glassworks_vitro_harness` in the config), and a `vitro-harness` dashboard the tool didn't make (not hidden and admin-only, or a config without the marker) stops the run instead of being overwritten. One exception: a config saved by an older version of the tool, before the marker, is still taken as the tool's own when it's titled `Vitro harness` and every view path is a corpus case ID. Such a config is replaced.
 2. A collect run of the Robolectric test lists the templates Vitro asks Home Assistant to render for each case (Markdown content, Mushroom fields, card-mod sheets). They differ from the frontend's own, so they're rendered separately.
-3. `capture.mjs capture` opens each case on each panel, waits until two screenshots in a row are identical, then crops the card plus 8 CSS px around it. It records the card's bounds, the text runs and their fonts, and the states of the entities the card reads, taken from the page's own `subscribe_entities` stream, so they're exactly what HA drew. It also records the templates Vitro asked for, rendered right then. The images HA drew in the card (an `<img>`, an SVG image or a CSS background inside the card, read from the rendered page) go into `assets/` when HA loaded them from its own `/local/` or `/static/`, so nothing is guessed from configs or Markdown. For the committed corpus, only `/static` is allowed. If Vitro later asks the fixture server for an image the capture didn't save, that case fails as a missing input instead of counting as drift. Along with the states, it saves the display data Vitro reads live from HA for those entities, so Vitro formats values the way HA does (display precision, icons, state labels, device names). That data is the entity registry's display entries, their devices' names, the areas the case's area cards name (name, icon, picture, temperature and humidity sensors), and the icons and English state labels of their domains and integrations. It's cut down to what Vitro reads, and HA's device ids are replaced by `device-1`, `device-2` and so on. Every page gets HA's own Roboto (its `/static` files, kept in memory) before HA's code runs, as a panel has Roboto as a system font: HA's font face asks for `local("Roboto")` first, and on a capture host without it HA's charts would measure their axis labels in the fallback font while the web font loads. The page's clock is frozen at `home.json`'s instant (a real HA's: the most recent 10:08 in its time zone), and Vitro's clock, its relative times, media progress and graph windows read that same instant (`VitroCardContext.now`). Graphs get the same treatment: the capture records every `history/*` and `recorder/*` call the card's page makes (and the REST history mini-graph-card reads), with what came back (the reference's `ws`), and Vitro's cards get those answers for the same calls at the same instant. A call of Vitro's that matches none of HA's, field for field (its times included), fails the case: Vitro asked for other data than HA drew.
+3. `capture.mjs capture` opens each case on each panel, waits until two screenshots in a row are identical, then crops the card plus 8 CSS px around it (a view case keeps the whole page). A view's card slots are its top-level cards: a Sections view's grid cells, and in any other view each card that sits in the view and in no other card (`lib/slots.mjs`). A stack is one slot and its rows aren't slots of their own, as Vitro counts them, so the two sides' cards pair up in order. It records the card's bounds, the text runs and their fonts, and the states of the entities the card reads, taken from the page's own `subscribe_entities` stream, so they're exactly what HA drew. It also records the templates Vitro asked for, rendered right then. The images HA drew in the card (an `<img>`, an SVG image or a CSS background inside the card, read from the rendered page) go into `assets/` when HA loaded them from its own `/local/` or `/static/`, so nothing is guessed from configs or Markdown. For the committed corpus, only `/static` is allowed. If Vitro later asks the fixture server for an image the capture didn't save, that case fails as a missing input instead of counting as drift. Along with the states, it saves the display data Vitro reads live from HA for those entities, so Vitro formats values the way HA does (display precision, icons, state labels, device names). That data is the entity registry's display entries, their devices' names, the areas the case's area cards name (name, icon, picture, temperature and humidity sensors), and the icons and English state labels of their domains and integrations. It's cut down to what Vitro reads, and HA's device ids are replaced by `device-1`, `device-2` and so on. Every page gets HA's own Roboto (its `/static` files, kept in memory) and the app's Inter before HA's code runs, as a panel has Roboto as a system font: HA's font face asks for `local("Roboto")` first, and on a capture host without it HA's charts would measure their axis labels in the fallback font while the web font loads. The page's clock is frozen at `home.json`'s instant (a real HA's: the most recent 10:08 in its time zone), and Vitro's clock, its relative times, media progress and graph windows read that same instant (`VitroCardContext.now`). Graphs get the same treatment: the capture records every `history/*` and `recorder/*` call the card's page makes (and the REST history mini-graph-card reads), with what came back (the reference's `ws`), and Vitro's cards get those answers for the same calls at the same instant. A call of Vitro's that matches none of HA's, field for field (its times included), fails the case: Vitro asked for other data than HA drew.
    The capture writes nothing until every selected case has succeeded. Then the references, their images and `refs/shared.json` (HA's version, config and themes) are written together. A refresh of only some cases (`--cases`, `--frames`) stops if HA's shared inputs changed since the last full refresh: the references it leaves alone were drawn with the old ones.
 4. The comparison run writes the report.
 
@@ -82,15 +83,45 @@ A local corpus's real HA comes from `~/.t3/glassworks-m1/vitro-parity/ha.json` (
 | Path | What |
 |---|---|
 | `engines/engine-vitro/src/test/parity/frames.json` | The panels: S1 960×480 CSS at 1.5, Pixel Tablet 1280×800 at 2, Mirror 720×1280 at 1.5, and whether each has a touch screen |
-| `…/corpus/<case>.json` | One card per file: `card`, and optionally `title`, `frames`, `dark` (default true), `theme` (a view theme), `span` (section columns), `threshold`, `masks` (CSS px regions relative to the card, each with a `why`; a negative `x` counts from the card's right edge), `more_info` (an entity whose More Info dialog opens over the card's view: the dialog is what's compared, see below), `resources` (Lovelace resources of type `css` from `fixtures/`, see below), `expect` (`{entity_id: state}`: a refresh writes no reference for the case while an entity is in another state, so a case about a light that is on never quietly becomes one about a light that is off), and `fixture` (what the fake HA serves for it, above). A view layout's case has `view_config` (a whole view: a sidebar view, a masonry view, a layout-card view) instead of `card`: it's saved as it is, and compared card by card and as a page |
+| `…/corpus/<case>.json` | One card per file: `card`, and optionally `title`, `frames`, `dark` (default true), `theme` (a view theme), `span` (section columns), `threshold`, `masks` (CSS px regions relative to the card, each with a `why`; a negative `x` counts from the card's right edge), `more_info` (an entity whose More Info dialog opens over the card's view: the dialog is what's compared, see below), `resources` (Lovelace resources of type `css` from `fixtures/`, see below), `expect` (`{entity_id: state}`: a refresh writes no reference for the case while an entity is in another state, so a case about a light that is on never quietly becomes one about a light that is off), and `fixture` (what the fake HA serves for it, above). A view layout's case has `view_config` (a whole view: a sidebar view, a masonry view, a layout-card view) instead of `card`: it's saved as it is, and compared card by card and as a page. `route` says where Vitro's compat rule sends the case's card on a panel whose Lovelace resources include every community card's script (see [The route key](#the-route-key)), and `generated` marks a case `matrix.py` writes |
 | `…/refs/<frame>/<case>.png` and `.json` | Home Assistant's render and what came with it |
 | `…/refs/shared.json` | HA's version, the config fields Vitro reads, and the themes |
 | `…/home.json` | The fake HA's shared inputs: the fixed instant, the config, the themes and the signed-in user |
 | `…/assets/` | Images the fixture server hands Vitro, standing in for HA's `/static` |
 | `…/fixtures/` | A case's own pictures (`images/`), stylesheets and fonts, at `/local/vitro-harness-fixtures/` on HA's origin. The capture answers those requests in the browser and adds each sheet to HA's page the way HA loads a `type: css` resource, so nothing is added to Home Assistant. Vitro gets the same files from the fixture server |
 | `…/baseline.json` | Known drift per `frame/case`, with a `reason` |
+| `…/open.json` | Known mismatches per `frame/case`, each with the `owner` of its fix and a `reason` (see [Open bugs](#open-bugs-openjson)) |
 
 A local corpus (`--local [dir]`, default `~/.t3/glassworks-m1/vitro-parity/harness-local`) has the same layout. Its cases name a real dashboard view instead of a card, `{"dashboard": "s1-home-vitro", "view": "home", "frames": ["s1"]}`, and compare the whole view: every card slot in order, plus the full page.
+
+### The state matrix and whole dashboards
+
+Hand-written cases show the state someone was fixing, so `matrix.py` generates the rest of the corpus: every card Vitro draws natively, crossed with the entity states its HA or Mushroom source reads (on and off, unavailable, unknown, brightness, color, color temperature, position, percentage, unit, `entity_picture`, a long name), and never with states the card ignores. It writes two kinds of case, each marked `"generated": "tools/vitro-parity/matrix.py"`:
+
+| Cases | What | Frames |
+|---|---|---|
+| `m-<card>-<state>` | One card in one entity state, or one group of states for the multi-entity cards (`entities`, `glance`, `toggle-group`) and every Mushroom chip type | The S1 only: states draw the same on every frame, and the S1 is the smallest landscape frame, where a cut or a misplaced control shows first |
+| `d-<name>` | A whole view: a sections home, a masonry home, a dense Mushroom view, and Bubble Card buttons and separators in a masonry and a sections view | Every frame, because layout bugs show up between cards |
+
+```sh
+python3 tools/vitro-parity/matrix.py           # write the generated cases (and delete the ones it no longer makes)
+python3 tools/vitro-parity/matrix.py --check   # exit 1 when the committed cases differ from what it makes
+python3 tools/vitro-parity/matrix.py --list    # print the case ids
+```
+
+After a change to `matrix.py`, run it, then capture the new or changed cases' references (`run.sh --refresh --cases <ids>`). `test/test_matrix.py` checks that the committed cases are what the generator makes and that each has its references. It never overwrites a hand-written case with a generated case's name. When it retires a case, it names it: remove its `open.json` and `baseline.json` entries (and its refs) before refreshing the rest.
+
+### The route key
+
+Since the strict compat rule, a card Vitro draws claims only the options it draws exactly as HA does, and anything else falls back. A case's `route` says where that rule sends the case's card, as a panel would with every community card's script a Lovelace resource:
+
+| `route` | Means | What the harness compares |
+|---|---|---|
+| `native` (the default) | Vitro draws the card | Vitro's card with HA's |
+| `island` | A custom card that goes to its island on such a panel | The committed corpus loads no community scripts as resources, so Vitro's native card is still compared, and its differences usually sit in `baseline.json` |
+| `frontend` | Its view opens in HA's frontend | Nothing: HA draws it on the panel too. The case reports a match with a note saying why |
+
+The harness works out the route itself before it renders a case. A case whose route differs from what it says fails, because that's a change in what Vitro claims to draw. An `open.json` entry on a `frontend` case fails too, since nothing would ever check the bug it names.
 
 ### More Info cases
 
@@ -143,6 +174,7 @@ It asks headless Chromium's `Intl` (the browser the references are captured with
 | Check | Default | What it measures |
 |---|---|---|
 | Pixels | 2% | Share of the crop that differs, at one sample per CSS px (both images box-filtered first, which irons out font antialiasing), with pixelmatch's YIQ color distance at 0.1. A pixel that matches a neighbour within 1 CSS px counts as a shift, not a difference |
+| Region | 0.10 | The worst small region: the color distance (pixelmatch's YIQ, 0 to 1) between HA's and Vitro's mean color over a 16 CSS px square, with Vitro's square allowed to sit up to 2 px away, sampled every 4 px. A share of the whole crop can't see a small element in the wrong color (a 24 px icon green where HA's is white is 1% of a chips card), while a mean over a square ignores anti-aliasing and sub-pixel text but not a color. Squares that touch a mask are left out, and the diff image outlines the worst one in magenta |
 | Bounds | 2 CSS px | The largest offset of any edge of the card's slot |
 | Font | 1 CSS px | The largest font size difference among the texts found |
 | Texts | 0 missing | HA texts not found in any of Vitro's TextViews. Text Vitro draws straight on a canvas (gauges, the thermostat dial) shows up here as missing. HA text that is visually hidden (a 1×1 or clipped screen-reader label, `.visually-hidden`, `.sr-only`) isn't counted |
@@ -151,17 +183,21 @@ A refresh from the fake HA is deterministic: the same fixtures, frontend and car
 
 > **An update records whatever drifts now, regressions included.** `--update-baseline` rewrites the entry of every case it measures: a real regression becomes "known drift", and the next run stops reporting it. Before you commit `baseline.json`, read its diff: every entry that got worse must be a change you mean to accept, not a Vitro bug. Keep the entry of a case with an open regression as it is (run the update with `--cases` for the others).
 
-A case over its threshold is a **known drift** if `baseline.json` lists it and it hasn't got worse, with 2% pixels, 1 px bounds and 0.5 px font of slack. Otherwise it's a **regression** and the test fails. A listed case that comes back within its threshold gets a note to drop it from the baseline. The parity audit works through the baseline until each case either matches or carries a reason.
+The report (`index.html`, `report.md`) lists every case with its status, frame, pixels, region Δ, bounds Δ, font Δ, the texts found, and why it failed or what it's known for.
+
+A case over its threshold is a **known drift** if `baseline.json` lists it and it hasn't got worse, with 2% pixels, 0.02 region, 1 px bounds and 0.5 px font of slack. A different number of cards than the entry records is worse too. Otherwise it's a **regression** and the test fails. A listed case that comes back within its threshold gets a note to drop it from the baseline. The parity audit works through the baseline until each case either matches or carries a reason.
 
 ### Open bugs: `open.json`
 
-The baseline is for drift that's accepted, such as sub-pixel text. A case Vitro draws wrong, whose fix someone owns, goes in the corpus's `open.json` instead, keyed `frame/case` with its `owner` (the PR that fixes it, or `#799` for one filed on the exp/vitro list with no fixer yet) and a `reason` that says what's wrong:
+The baseline is for drift Vitro can't remove because it comes from the two text engines, such as text metrics and anti-aliasing. A case Vitro draws wrong goes in the corpus's `open.json` instead, even before anyone fixes it, keyed `frame/case` with its `owner` (the PR that fixes it, or `#799` for one filed on the exp/vitro list with no fixer yet) and a `reason` that says what's wrong:
 
 - **Over its threshold, listed in `open.json`:** the run reports it as **open**, not as a regression, and doesn't fail on it.
 - **Back within its threshold, still listed:** the run **fails** with "matches HA now: drop it from open.json". The fix's PR removes the entry, and from then on the case guards the fix.
 - **Listed in both files**, or listed for a frame or case the corpus doesn't run: the run fails. An open bug is never drift, and `--update-baseline` never records an open case.
 
-When `matrix.py` retires a generated case, it names it: remove its `open.json` and `baseline.json` entries (and its refs) before refreshing the rest.
+Some older baseline entries describe cards whose look Vitro doesn't match yet (bar-card, clock-weather-card and the other cards the compat rule sends to an island). Their reasons say so; such an entry moves to `open.json` when someone takes its fix.
+
+An `open.json` entry for a frame or case the corpus doesn't run (a typo, a retired case) fails the run too, whatever frames and cases it selects.
 
 ## Privacy
 

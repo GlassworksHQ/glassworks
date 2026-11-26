@@ -90,12 +90,17 @@ For each transport, the test opens a view of the test's dashboard that holds one
    the screen, so a still or the poster image fails. That area must show the test pattern's colors, so a black
    or blank surface fails too.
 4. **Paused when hidden.** The test presses HOME. The stream must go inactive (`setActive(false)`) or close, and
-   draw nothing. On the server, MJPEG frames must stop and no HLS fetch may come for 3 s. When the app comes
-   back, the stream must deliver a first frame again and keep moving.
+   draw nothing. A WebRTC stream must close, not just pause, so it keeps no session, threads or surface while
+   hidden; Vitro opens a new one when the view shows again. On the server, MJPEG frames must stop and no HLS fetch
+   may come for 3 s. When the app comes back, the stream must deliver a first frame again and keep moving.
+4b. **Back after Home Assistant restarts** (WebRTC only). The fake cuts every websocket and WebRTC session and
+   refuses websockets for 20 s, longer than the stream's three reconnects. The camera must stop drawing, and
+   within 30 s of HA coming back it must play over WebRTC again, not fall back to MJPEG.
 5. **Closed when removed.** The card is taken out of the dashboard and the fake sends HA's `lovelace_updated`.
    The stream must close, and the probe must count no open stream left. The fake must have no WebRTC session or
    MJPEG connection left for the camera, and no HLS fetch for 3 s. Every thread the stream started in the app
-   must be gone, apart from Vitro's shared image pool (`vitro-img`).
+   must be gone, apart from Vitro's shared image pool (`vitro-img`). After a WebRTC stream, the test waits for
+   libwebrtc's shared parts, which stay 30 s after the last player, to go too.
 
 Each run writes `results-api<N>.json` with the timings and every measurement, plus a screenshot of each
 camera playing and after its card went. When a run fails, it also saves the failing screen and logcat.
