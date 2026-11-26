@@ -436,7 +436,9 @@ test('a url action and a tapped link leave through Vitro, never in the island\'s
   assert.equal(link('https://example.com/handled', true), false, 'a link the card handled itself');
   assert.equal(link('mailto:someone@example.com'), false, 'not a web page');
   await settle();
-  assert.deepEqual(page.sent('navigate').map((m) => m.path), ['https://example.com/events/1', 'https://example.com/news', '/lovelace/1?x=1']);
+  // The url action runs as a native card's (the `action` message, island-budget's path); the links navigate.
+  assert.deepEqual(page.sent('action').map((m) => m.action.url_path), ['https://example.com/events/1']);
+  assert.deepEqual(page.sent('navigate').map((m) => m.path), ['https://example.com/news', '/lovelace/1?x=1']);
 });
 
 test('formatEntityState writes a duration as HA does, at the entity\'s display precision', async () => {
