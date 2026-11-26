@@ -79,7 +79,7 @@ private fun label(ctx: VitroCardContext, sp: Float, color: Int, weight: Int = In
  * `history-graph` cards are drawn as HA draws them: [EntityCardView] with [GraphFooterView], and
  * [HistoryGraphCardView].
  */
-class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
+class SensorGraphCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
     private val titleView = label(ctx, 14f, ctx.theme.secondaryTextColor, Inter.MEDIUM)
     private val valueView = label(ctx, 24f, ctx.theme.primaryTextColor, Inter.LIGHT)
     private val chart = SparklineCanvasView(ctx.context, ctx.theme.primaryColor, ctx.theme.accentColor, ctx.theme.secondaryTextColor, ctx.now)
@@ -134,7 +134,9 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
 
         if (primaryId != null) {
             observe(primaryId) { s ->
-                titleView.text = config.name(null) ?: config.title ?: s?.friendlyName ?: primaryId
+                // Resolved for the entity the graph names and its state: an entity on no registry entry is its
+                // friendly name, as in HA.
+                titleView.text = config.nameFor(primaryId, s) ?: config.title ?: s?.friendlyName ?: primaryId
                 valueView.text = s?.formattedState() ?: "…"
                 icon.setIcon(MdiIcons.resolveIconName(config.icon, s), ctx.theme.primaryColor)
             }
@@ -246,7 +248,9 @@ class SensorGraphCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfa
             }, LinearLayout.LayoutParams(ctx.px(8f), ctx.px(8f)).apply { marginEnd = ctx.px(6f) })
             val name = label(ctx, 12f, ctx.theme.secondaryTextColor).apply { maxLines = 1 }
             item.addView(name)
-            observe(id) { s -> name.text = s?.friendlyName ?: id }
+            // mini-graph-card's computeName: the series' own `name`, else its friendly name, else its id.
+            val row = config.entities().firstOrNull { it.isEntity && it.entity == id }
+            observe(id) { s -> name.text = row?.nameFor(s) ?: s?.friendlyName ?: id }
             legend.addView(item)
         }
     }

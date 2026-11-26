@@ -19,6 +19,7 @@ import dev.glassworks.engine.vitro.cards.GlanceCardView
 import dev.glassworks.engine.vitro.cards.LightCardView
 import dev.glassworks.engine.vitro.cards.PictureCardView
 import dev.glassworks.engine.vitro.cards.PictureElementsCardView
+import dev.glassworks.engine.vitro.cards.SensorGraphCardView
 import dev.glassworks.engine.vitro.cards.TileCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -68,6 +69,7 @@ class ActionDefaultsAndNamesTest {
         put("group.downstairs", "on", "Downstairs")
         put("light.porch", "off", "Porch light")
         put("sensor.unregistered", "4", "Rain gauge")
+        put("sensor.outdoor", "12", "Terrace temperature")
         HaDisplay.applyAreas(JSONArray("""[{"area_id": "porch", "name": "Porch", "floor_id": "ground"}]"""))
         HaDisplay.applyFloors(JSONArray("""[{"floor_id": "ground", "name": "Ground floor", "level": 0}]"""))
         HaDisplay.applyDevices(JSONArray("""[
@@ -257,5 +259,20 @@ class ActionDefaultsAndNamesTest {
         val badge = card("""{"type": "entity", "entity": "light.porch", "name": {"type": "entity"}, "show_state": false}""")
         assertEquals("Light", VitroView.badgeText(badge, store["light.porch"]))
         for (v in listOf(entities, glance)) assertFalse(texts(v).toString(), texts(v).any { "\"type\"" in it })
+    }
+
+    @Test
+    fun miniGraphResolvesItsNameForItsEntityAndNamesLegendSeries() {
+        // An entity on no registry entry: `{type: entity}` is its friendly name, not its object id or nothing.
+        val graph = SensorGraphCardView(ctx(), card("""{"type": "custom:mini-graph-card", "entity": "sensor.outdoor",
+            "name": {"type": "entity"}}"""))
+        assertTrue(texts(graph).toString(), "Terrace temperature" in texts(graph))
+        assertFalse(texts(graph).toString(), "outdoor" in texts(graph))
+        // The primary entity taken from `entities`, and each series' own `name` in the legend.
+        val series = SensorGraphCardView(ctx(), card("""{"type": "custom:mini-graph-card", "name": {"type": "entity"},
+            "entities": [{"entity": "sensor.outdoor"}, {"entity": "sensor.unregistered", "name": "Rain"}]}"""))
+        assertTrue(texts(series).toString(), "Terrace temperature" in texts(series))
+        assertTrue(texts(series).toString(), "Rain" in texts(series))
+        assertFalse(texts(series).toString(), "Rain gauge" in texts(series))
     }
 }
