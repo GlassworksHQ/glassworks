@@ -291,6 +291,118 @@ class HaWebRtcStreamTest {
     }
 
     @Test
+    fun `while HA's connection is down a played stream keeps trying, and goes at once when it's back`() {
+        val s = stream(HaWebRtcStream.Options(maxReconnects = 3, reconnectDelayMs = 1_000))
+        val (peer, _) = connect(s)
+        peer.events.onFrame(1280, 720)
+        // HA restarts: its camera peer goes, then every request fails for want of a connection.
+        peer.events.onConnectionState(PeerState.FAILED)
+        clock.runAll()
+        val down = HaError(HaError.NOT_CONNECTED, "Not connected")
+        var waited = 1_000L
+        repeat(8) {
+            clock.advance(waited)
+            channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).last().onError(down)
+            clock.runAll()
+            waited = minOf(waited * 2, 32_000)
+        }
+        // Far past maxReconnects, and still trying: those failures were the connection's, not the camera's.
+        assertTrue(log.none { it.startsWith("error") })
+        assertEquals("reconnecting 9 start_failed", log.last())
+        assertEquals("backed off to the cap", 9, channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).size)
+        clock.advance(31_999)
+        assertEquals(9, channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).size)
+
+        // HA is back: the stream connects now, not at the end of its wait.
+        s.connectionRestored()
+        clock.runAll()
+        assertEquals(10, channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).size)
+        val (peer2, _) = connect(session = "01JS2")
+        peer2.events.onFrame(1280, 720)
+        clock.runAll()
+        assertEquals("frame", log.last())
+        // The timer it cancelled doesn't make another connection.
+        clock.advance(600_000)
+        assertEquals(10, channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).size)
+        assertFalse(peer2.closed)
+    }
+
+    @Test
+    fun `an offer refused for want of a connection doesn't count either`() {
+        val s = stream(HaWebRtcStream.Options(maxReconnects = 1, reconnectDelayMs = 100))
+        val (peer, _) = connect(s)
+        peer.events.onFrame(640, 480)
+        peer.events.onConnectionState(PeerState.FAILED)
+        clock.runAll()
+        channel.refuseSubscribe = HaError(HaError.NOT_CONNECTED, "")
+        repeat(4) {
+            clock.advance(10_000)
+            channel.answerConfig()
+            clock.runAll()
+            peers.last.offer()
+            clock.runAll()
+        }
+        assertTrue(log.none { it.startsWith("error") })
+        // A real failure still counts: with the one reconnect used by ICE, HA refusing the offer ends it.
+        channel.refuseSubscribe = null
+        clock.advance(10_000)
+        channel.answerConfig()
+        clock.runAll()
+        peers.last.offer()
+        clock.runAll()
+        channel.subs.last().error("webrtc_offer_failed", "Camera offline")
+        clock.runAll()
+        assertEquals("error start_failed", log.last())
+    }
+
+    @Test
+    fun `a stream that never played still fails at once without a connection`() {
+        val s = stream()
+        s.start()
+        clock.runAll()
+        channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).last().onError(HaError(HaError.NOT_CONNECTED, ""))
+        clock.runAll()
+        assertEquals("error start_failed", log.last())
+        // Over: a restored connection doesn't bring it back (its owner makes a new one).
+        s.connectionRestored()
+        clock.runAll()
+        assertEquals(1, channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).size)
+    }
+
+    @Test
+    fun `a restored connection restarts a connection being set up, and leaves a playing one alone`() {
+        val s = stream(HaWebRtcStream.Options(reconnectDelayMs = 1_000))
+        val (peer, sub) = connect(s)
+        peer.events.onFrame(640, 480)
+        clock.runAll()
+        s.connectionRestored()
+        clock.runAll()
+        assertFalse(peer.closed)
+        assertFalse(sub.cancelled)
+        assertEquals(1, channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).size)
+
+        // Reconnecting, its offer out on the connection that then dropped: no answer will come on it.
+        peer.events.onConnectionState(PeerState.FAILED)
+        clock.advance(1_000)
+        channel.answerConfig()
+        clock.runAll()
+        peers.last.offer()
+        clock.runAll()
+        val stale = channel.subs.last()
+        s.connectionRestored()
+        clock.runAll()
+        assertTrue(stale.cancelled)
+        assertTrue(peers.last.closed)
+        assertEquals(3, channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).size)
+
+        // Paused: nothing to restore (resuming connects).
+        s.setActive(false)
+        s.connectionRestored()
+        clock.runAll()
+        assertEquals(3, channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).size)
+    }
+
+    @Test
     fun `a frame resets the reconnect count`() {
         val s = stream(HaWebRtcStream.Options(maxReconnects = 1, reconnectDelayMs = 100))
         var (peer, _) = connect(s)

@@ -737,11 +737,91 @@ const TPL = "__vitro_tpl__";
 const JINJA_BLOCK = /\{%[\s\S]*?%\}|\{#[\s\S]*?#\}/g;
 const JINJA_EXPR = /\{\{[\s\S]*?\}\}/g;
 const JINJA_ANY = /\{%[\s\S]*?%\}|\{\{[\s\S]*?\}\}|\{#[\s\S]*?#\}/g;
-const CSS_COMMENT = /\/\*[\s\S]*?\*\//g;
 const HARMLESS_AT_RULES = new Set(["keyframes", "-webkit-keyframes", "charset"]);
 const OFFSETS = ["top", "right", "bottom", "left"];
 const PLACEMENT = new Set(["position", "width", "transform", ...OFFSETS]);
 const UNSET = new Set(["auto", "unset", "initial"]);
+
+/**
+ * The sheet with each comment replaced by a space, as the browser reads it (ThemeResolver.stripCssComments): a
+ * slash-star inside a quoted string doesn't open one, so it can't hide the rules after it. A string ends at its closing
+ * quote or at a newline, a backslash and the character after it are copied as they are, and a comment that is never
+ * closed runs to the end.
+ */
+export function stripCssComments(css: string): string {
+  if (!css.includes("/*")) return css;
+  let out = "";
+  let quote = "";
+  let i = 0;
+  while (i < css.length) {
+    const c = css[i];
+    if (c === "\\" && i + 1 < css.length) {
+      out += c + css[i + 1];
+      i += 2;
+      continue;
+    }
+    if (quote) {
+      if (c === quote || c === "\n") quote = "";
+    } else if (c === '"' || c === "'") {
+      quote = c;
+    } else if (c === "/" && css[i + 1] === "*") {
+      const end = css.indexOf("*/", i + 2);
+      out += " ";
+      i = end < 0 ? css.length : end + 2;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+/**
+ * Which characters of the sheet are quoted text (ThemeResolver.quotedChars): a string, its quotes included, or a
+ * backslash escape and the character after it. A brace, `;` or `,` there isn't structure (`--label: "{ ; }"`).
+ */
+function quotedChars(css: string): boolean[] {
+  const quoted = new Array<boolean>(css.length).fill(false);
+  let quote = "";
+  let i = 0;
+  while (i < css.length) {
+    const c = css[i];
+    if (c === "\\" && i + 1 < css.length) {
+      quoted[i] = quoted[i + 1] = true;
+      i += 2;
+      continue;
+    }
+    if (quote) {
+      quoted[i] = true;
+      if (c === quote || c === "\n") quote = "";
+    } else if (c === '"' || c === "'") {
+      quoted[i] = true;
+      quote = c;
+    }
+    i++;
+  }
+  return quoted;
+}
+
+/** A rule body split into declarations at each `;` outside quoted text and parentheses (ThemeResolver.splitDeclarations). */
+function splitDeclarations(body: string): string[] {
+  const quoted = quotedChars(body);
+  const out: string[] = [];
+  let parens = 0;
+  let start = 0;
+  for (let i = 0; i < body.length; i++) {
+    if (quoted[i]) continue;
+    const c = body[i];
+    if (c === "(") parens++;
+    else if (c === ")" && parens > 0) parens--;
+    else if (c === ";" && parens === 0) {
+      out.push(body.slice(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(body.slice(start));
+  return out;
+}
 
 /** Splits `s` at `sep` outside brackets, parentheses and quotes. */
 function splitTopLevel(s: string, sep: string): string[] {
@@ -769,13 +849,15 @@ type Decl = { name: string; value: string; important: boolean };
 
 /** The sheet's rules as the browser reads them (ThemeResolver.cssRulesImportant): at-rules and bare declarations left out. */
 function cssRules(css: string): { selector: string; decls: Decl[] }[] {
-  const cleaned = css.replace(CSS_COMMENT, " ").replace(JINJA_ANY, " ");
+  const cleaned = stripCssComments(css).replace(JINJA_ANY, " ");
   const out: { selector: string; decls: Decl[] }[] = [];
   let depth = 0;
   let segStart = 0;
   let bodyStart = 0;
   let selector = "";
+  const quoted = quotedChars(cleaned);
   for (let i = 0; i < cleaned.length; i++) {
+    if (quoted[i]) continue;
     const c = cleaned[i];
     if (c === "{") {
       if (depth === 0) {
@@ -787,7 +869,7 @@ function cssRules(css: string): { selector: string; decls: Decl[] }[] {
       depth--;
       if (depth === 0) {
         const decls: Decl[] = [];
-        for (const d of cleaned.slice(bodyStart, i).split(";")) {
+        for (const d of splitDeclarations(cleaned.slice(bodyStart, i))) {
           const colon = d.indexOf(":");
           if (colon <= 0) continue;
           const name = d.slice(0, colon).trim().toLowerCase();
@@ -803,18 +885,32 @@ function cssRules(css: string): { selector: string; decls: Decl[] }[] {
   return out;
 }
 
-/** The names of at-rules at the top level of a sheet (`@media`, `@keyframes`, ...). */
-function topLevelAtRules(css: string): string[] {
+/**
+ * The names of at-rules at the top level of a sheet (`@media`, `@keyframes`, ...), as CardCompat.topLevelAtRules finds
+ * them: an `@` counts only where a rule can start (the start of the sheet, or after a `}` or `;`, whitespace aside) and
+ * outside quoted strings and parentheses, so `url(/local/a@home.png)` or `[data-label="@media"]` isn't one.
+ */
+export function topLevelAtRules(css: string): string[] {
   const out: string[] = [];
   let depth = 0;
+  let parens = 0;
+  let quote = "";
+  let ruleStart = true;
   for (let i = 0; i < css.length; i++) {
     const c = css[i];
-    if (c === "{") depth++;
+    if (c === "\\") i++;
+    else if (quote) {
+      if (c === quote || c === "\n") quote = "";
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === "(") parens++;
+    else if (c === ")" && parens > 0) parens--;
+    else if (c === "{") depth++;
     else if (c === "}" && depth > 0) depth--;
-    else if (c === "@" && depth === 0) {
+    else if (c === "@" && depth === 0 && parens === 0 && ruleStart) {
       const m = css.slice(i).match(/^@([a-zA-Z-]+)/);
       if (m) out.push(m[1].toLowerCase());
     }
+    if (!/\s/.test(c)) ruleStart = !quote && (c === "{" || c === "}" || c === ";");
   }
   return out;
 }
@@ -960,7 +1056,7 @@ function classifySelector(sel: string, sheet: Sheet): Sel {
 
 function checkSheet(type: string, key: string, rawCss: string, sheet: Sheet, reasons: Set<string>, propertyReasons: Set<string>, notes: Set<string>) {
   // Template blocks go; expressions become a placeholder so the shape around them still parses.
-  const css = rawCss.replace(CSS_COMMENT, " ").replace(JINJA_BLOCK, " ").replace(JINJA_EXPR, TPL);
+  const css = stripCssComments(rawCss).replace(JINJA_BLOCK, " ").replace(JINJA_EXPR, TPL);
   for (const at of topLevelAtRules(css)) {
     if (!HARMLESS_AT_RULES.has(at)) reasons.add(`card_mod \`@${at}\` rules aren't evaluated natively`);
   }

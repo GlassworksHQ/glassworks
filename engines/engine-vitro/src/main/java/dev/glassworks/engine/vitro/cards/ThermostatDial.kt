@@ -30,6 +30,7 @@ import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.KeyedText
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.NumberText
+import dev.glassworks.engine.vitro.ui.VitroAccess
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroFonts
 import dev.glassworks.ui.Inter
@@ -430,6 +431,7 @@ internal class ThermostatDialView(
         describe()
         invalidate()
         onCommit(next)
+        VitroAccess.valueChanged(this)
     }
 
     /** Picks the end of a range the − and + buttons move. */
@@ -845,6 +847,8 @@ internal class ThermostatDialView(
                 invalidate()
                 // HA reports a range now (the mode changed mid-drag): nothing is sent, its range shows.
                 if (boundTarget == null) dropEdit() else target?.let(onCommit)
+                // TalkBack reads the target the drag left, as it does a SeekBar's.
+                VitroAccess.valueChanged(this)
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -942,6 +946,8 @@ internal class ThermostatDialView(
                 parent?.requestDisallowInterceptTouchEvent(false)
                 dragging = false
                 commitRange(handle, valueAt(event.x, event.y))
+                // TalkBack reads the end the drag left, as it does a SeekBar's.
+                sendVirtualEvent(nodeOf(handle), AccessibilityEvent.TYPE_VIEW_SELECTED)
                 return true
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -997,7 +1003,11 @@ internal class ThermostatDialView(
             // At an end (or against the other thumb) a new press moves focus on, as SeekBar's does; the held key of an
             // edit under way stays with it.
             if ((if (handle == ClimateHandle.LOW) low else high) == from) {
-                return if (keyPending && keyCode == keyCodePending) true else super.onKeyDown(keyCode, event)
+                if (!keyPending || keyCode != keyCodePending) return super.onKeyDown(keyCode, event)
+                // A repeat of the held key still asks for more: the release bounds that against the other end HA
+                // reports by then, which may have moved out of the way.
+                keyProposal = proposal
+                return true
             }
             keyPending = true
             keyHandle = handle
@@ -1005,6 +1015,7 @@ internal class ThermostatDialView(
             // What the key asked for, before the shown peer clipped it: the release bounds it against the latest one.
             keyProposal = proposal
             invalidate()
+            sendVirtualEvent(nodeOf(handle), AccessibilityEvent.TYPE_VIEW_SELECTED)
             return true
         }
         val t = target ?: return super.onKeyDown(keyCode, event)
@@ -1014,6 +1025,7 @@ internal class ThermostatDialView(
         keyPending = true
         keyCodePending = keyCode
         invalidate()
+        VitroAccess.valueChanged(this)
         return true
     }
 

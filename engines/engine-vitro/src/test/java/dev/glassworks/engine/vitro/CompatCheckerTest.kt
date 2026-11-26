@@ -379,6 +379,37 @@ class CompatCheckerTest {
     }
 
     @Test
+    fun aQuotedCommentOpenerDoesNotHideTheRulesAfterIt() {
+        fun mushroom(css: String) = """{"type": "custom:mushroom-template-card", "primary": "x", "card_mod": {"style": ${style(css)}}}"""
+        // The browser reads `"/*"` as a string, so the `@media` after it applies; read as a comment up to the real one,
+        // it hid the at-rule and the card stayed native.
+        assertIsland(mushroom("""ha-card { --label: "/*"; } @media (max-width: 1px) { ha-card { padding: 0 } } /* note */"""), "`@media`")
+        assertIsland(mushroom("""ha-card { --label: '/*'; } ha-card .primary { font-size: 20px } /* note */"""), "reaches inside the card")
+        // A real comment still goes, the at-rule in it included.
+        assertNative(mushroom("/* @media (max-width: 1px) { } */ ha-card { opacity: 0.5 }"))
+        // Nor does a brace or a `;` in a string open a block or end a selector.
+        assertNative(mushroom("""ha-card { --label: "/* { */"; opacity: 0.5 }"""))
+        assertNative(mushroom("""ha-card[data-label="a;b{"] { opacity: 0.5 }"""))
+        assertIsland(mushroom("""ha-card { --label: "{"; } ha-card .primary { font-size: 20px }"""), "reaches inside the card")
+    }
+
+    @Test
+    fun anAtSignCountsOnlyWhereARuleCanStart() {
+        fun mushroom(css: String) = """{"type": "custom:mushroom-template-card", "primary": "x", "card_mod": {"style": ${style(css)}}}"""
+        // In a quoted attribute value (#834's quirk, which the site's checker mirrored) or inside parentheses, an `@`
+        // isn't an at-rule.
+        assertNative(mushroom("""ha-card[data-label="@media"] { opacity: 0.5 }"""))
+        assertNative(mushroom("""ha-card[data-label='@supports'] { opacity: 0.5 }"""))
+        // A bare declaration at the top (card-mod's `<style>` drops it) with an address in `url()`.
+        assertNative(mushroom("--art: url(/local/a@home.png); ha-card { opacity: 0.5 }"))
+        // At the start of the sheet, or after a rule or a `;`, it is.
+        assertIsland(mushroom("@media (max-width: 1px) { ha-card { padding: 0 } }"), "`@media`")
+        assertIsland(mushroom("ha-card { opacity: 0.5 }\n  @supports (display: grid) { ha-card { padding: 0 } }"), "`@supports`")
+        assertIsland(mushroom("@charset \"utf-8\"; @layer base { ha-card { padding: 0 } }"), "`@layer`")
+        assertNative(mushroom("@charset \"utf-8\"; ha-card { opacity: 0.5 }"))
+    }
+
+    @Test
     fun cssVitroCannotDrawFallsBack() {
         fun tileWith(css: String) = """{"type": "tile", "entity": "light.a", "card_mod": {"style": ${style(css)}}}"""
         assertIsland(tileWith("ha-card { background: url('/local/wood.jpg') center / cover }"), "background images")

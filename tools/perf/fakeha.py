@@ -850,6 +850,10 @@ class Handler(BaseHTTPRequestHandler):
         key = self.headers.get("Sec-WebSocket-Key")
         if not key:
             return self.send_bytes(400, b"", "text/plain")
+        # A home may hold websockets off for a while: HA restarting (tools/vitro-camera-e2e/home.py's drop).
+        refused = getattr(D, "ws_refused", None)
+        if refused and refused():
+            return self.send_bytes(503, b"", "text/plain")
         self.send_response(101)
         self.send_header("Upgrade", "websocket")
         self.send_header("Connection", "Upgrade")

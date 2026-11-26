@@ -839,4 +839,44 @@ class ThemeResolverTest {
         assertEquals(ThemeResolver.INITIAL_FONT_FAMILY, ThemeResolver.parseCardMod("ha-card { font-family: initial; }").fontFamily)
         assertEquals("Pacifico, cursive", ThemeResolver.parseCardMod("ha-card { font-family: Pacifico, cursive; color: red }").fontFamily)
     }
+
+    @Test
+    fun aQuotedCommentOpenerIsTextNotAComment() {
+        // As the browser reads it: the string holds a slash-star, and the rule after it still applies.
+        assertEquals("""a { content: "/*" }   b { c: d }""", ThemeResolver.stripCssComments("""a { content: "/*" } /* x */ b { c: d }"""))
+        assertEquals("a { content: '*/ /*' }  ", ThemeResolver.stripCssComments("a { content: '*/ /*' } /* never closed"))
+        // An escaped quote doesn't end the string; a newline does.
+        assertEquals("""a { content: "\" /*" }""", ThemeResolver.stripCssComments("""a { content: "\" /*" }"""))
+        assertEquals("a { content: \"x\n   b { c: d }", ThemeResolver.stripCssComments("a { content: \"x\n /**/ b { c: d }"))
+        val rules = ThemeResolver.cssRules("""ha-card { --label: "/*" } ha-card .x { color: red } /* note */""")
+        assertEquals(listOf("ha-card", "ha-card .x"), rules.map { it.first })
+        assertEquals(listOf("--label" to "\"/*\""), rules.first().second)
+    }
+
+    @Test
+    fun quotedBracesAndSemicolonsAreNotStructure() {
+        // The string keeps its `/* { */` (it's no comment), and its brace doesn't open a block: the rule still applies.
+        val quotedBrace = """ha-card { --label: "/* { */"; opacity: .5 }"""
+        assertEquals(0.5f, ThemeResolver.parseCardMod(quotedBrace).opacity)
+        assertEquals(listOf("--label" to "\"/* { */\"", "opacity" to ".5"), ThemeResolver.cssRules(quotedBrace).single().second)
+        // A `;` in a string, or inside parentheses, doesn't end the declaration.
+        val rules = ThemeResolver.cssRules("""ha-card { content: 'a;b}'; background: url(data:image/png;base64,AA); opacity: .5 } b { c: d }""")
+        assertEquals(listOf("ha-card", "b"), rules.map { it.first })
+        assertEquals(listOf("content" to "'a;b}'", "background" to "url(data:image/png;base64,AA)", "opacity" to ".5"), rules.first().second)
+        // An escaped quote doesn't end the string.
+        assertEquals(listOf("ha-card"), ThemeResolver.cssRules("""ha-card { content: "\" }"; opacity: .5 }""").map { it.first })
+    }
+
+    @Test
+    fun aQuotedDeclarationIsTextNotAnotherDeclaration() {
+        // The real `opacity` comes first; the string holds a fake one, which the browser reads as text.
+        assertEquals(0.5f, ThemeResolver.parseCardMod("""ha-card { opacity: .5; --label: "x; opacity: 0.1" }""").opacity)
+        assertEquals(0.5f, ThemeResolver.parseCardMod("""ha-card { opacity: .5; content: 'a; opacity: 0.1; b' }""").opacity)
+        // Nor does a quoted custom property define one.
+        assertNull(ThemeResolver.parseCardMod("""ha-card { --label: "a; --fill: red"; background: var(--fill) }""").backgroundColor)
+        // Duplicates keep the cascade: the last one wins, an `!important` one before it beats it.
+        assertEquals(0.5f, ThemeResolver.parseCardMod("ha-card { opacity: .3; opacity: .5 }").opacity)
+        assertEquals(0.2f, ThemeResolver.parseCardMod("ha-card { opacity: .2 !important; opacity: .5 }").opacity)
+        assertEquals(0.4f, ThemeResolver.parseCardMod("ha-card { opacity: .2 } :host { opacity: .4 }").opacity)
+    }
 }
