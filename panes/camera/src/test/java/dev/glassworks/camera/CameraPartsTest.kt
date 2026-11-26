@@ -60,6 +60,60 @@ class CameraPartsTest {
         assertEquals(180, stillRotation(90, 90, front = true))
     }
 
+    // ------------------------------------------------------------ blank frames (the Mirror's green stills, 2026-11-25)
+
+    /** A 1280x720 YUV_420_888 image as the Mirror's camera gives it: Y, U and V rows 1280 apart, chroma interleaved. */
+    private class Yuv(val w: Int = 1280, val h: Int = 720, val stride: Int = 1280, yAt: (x: Int, row: Int) -> Int, uvAt: (x: Int, row: Int) -> Int) {
+        val y: ByteBuffer = ByteBuffer.allocate(stride * h)
+        // One buffer for both chroma planes, as Android gives NV21: U at 0, V at 1, pixel stride 2.
+        private val uv = ByteBuffer.allocate(stride * h / 2)
+        val u: ByteBuffer get() = uv.duplicate()
+        val v: ByteBuffer get() = (uv.duplicate().position(1) as ByteBuffer).slice()
+        init {
+            // Through the stride, padding too: what lies past the width is the caller's to fill.
+            for (row in 0 until h) for (x in 0 until stride) y.put(row * stride + x, yAt(x, row).toByte())
+            for (row in 0 until h / 2) for (x in 0 until stride) uv.put(row * stride + x, uvAt(x, row).toByte())
+        }
+        fun blank() = blankYuv(w, h, y, stride, u, v, stride, 2)
+    }
+
+    @Test fun anAllZeroFrameIsBlank() {
+        assertTrue(Yuv(yAt = { _, _ -> 0 }, uvAt = { _, _ -> 0 }).blank())
+    }
+
+    /** What Home Assistant showed: solid green with a dark noisy strip. The strip's rows don't save the frame. */
+    @Test fun aZeroFrameWithANoisyStripIsBlank() {
+        val noise = java.util.Random(1)
+        val strip = 345..360 // more rows than the spike's, across one of the sampled rows
+        assertTrue(Yuv(yAt = { _, r -> if (r in strip) noise.nextInt(8) else 0 }, uvAt = { _, r -> if (r * 2 in strip) noise.nextInt(4) else 0 }).blank())
+    }
+
+    /** The spike's dark room: Y around 4 with noise, chroma near 128. Dark is not blank. */
+    @Test fun aDarkRoomIsNotBlank() {
+        val noise = java.util.Random(2)
+        assertFalse(Yuv(yAt = { _, _ -> 2 + noise.nextInt(5) }, uvAt = { _, _ -> 126 + noise.nextInt(5) }).blank())
+    }
+
+    /** A covered lens on a full-range camera can read Y 0, but its chroma is grey (128), not zero. */
+    @Test fun blackWithGreyChromaIsNotBlank() {
+        assertFalse(Yuv(yAt = { _, _ -> 0 }, uvAt = { _, _ -> 128 }).blank())
+    }
+
+    /** Zero chroma alone (a green-tinted picture) isn't blank either: the picture has luma. */
+    @Test fun aPictureWithZeroChromaIsNotBlank() {
+        assertFalse(Yuv(yAt = { x, _ -> x % 256 }, uvAt = { _, _ -> 0 }).blank())
+    }
+
+    /** Rows padded past the width: the padding is never read, so junk there doesn't matter. */
+    @Test fun paddingIsNotRead() {
+        assertTrue(Yuv(w = 1280, stride = 1344, yAt = { x, _ -> if (x >= 1280) 0x55 else 0 }, uvAt = { x, _ -> if (x >= 1280) 0x55 else 0 }).blank())
+    }
+
+    @Test fun aShortBufferIsNotBlankAndDoesNotThrow() {
+        val empty = ByteBuffer.allocate(4)
+        assertFalse(blankYuv(1280, 720, empty, 1280, empty, empty, 1280, 2))
+    }
+
     @Test fun theOnvifMacIsStableLocallyAdministeredAndNotThePanels() {
         val panel = "02:00:00:00:00:01"
         val mac = onvifMac(panel)
