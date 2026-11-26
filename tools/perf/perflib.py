@@ -108,8 +108,10 @@ def parse_sf_latency(text):
 REQUESTED_LAYER_RE = re.compile(r"^RequestedLayerState\{(.*?)(?: (?:parentId|relativeParentId|z|layerStack)=-?\d+| !handle)*\}$")
 # The view's hash in front of a SurfaceView's name (Android 17).
 VIEW_HASH_RE = re.compile(r"^[0-9a-f]+ (?=SurfaceView)")
-# A window's layer may carry its hash in front too (untested on a window: by SurfaceView's naming on Android 17).
-WINDOW_HASH_RE = re.compile(r"^[0-9a-f]+ (?=[\w.]+/)")
+# What can come before a window layer's `<pkg>/<activity>`: the window's hash (its container, Android 17), or `VRI-`,
+# the ViewRootImpl's BLAST layer, which holds the window's frames on Android 15 and later (the Pixel Tablet's
+# Android 17, 2026-11-26: `--latency` gave 63 frames on `VRI-<pkg>/<activity>#n` and none on the container).
+WINDOW_PREFIX_RE = re.compile(r"^(?:[0-9a-f]+ |VRI-)(?=[\w.]+/)")
 
 
 def sf_layer_name(line):
@@ -138,10 +140,11 @@ def window_layers(listing, package):
     """The app's own window layers in `dumpsys SurfaceFlinger --list`: what Vitro draws into (native views, no
     SurfaceView). `<pkg>/<activity>#0` on Android 10 (the S1, 2026-11-24's probe), `<pkg>/<activity>` on Android 6,
     `<pkg>/<activity>(BLAST)#n` beside its parent on Android 12 and later (the BLAST one holds the frames; sf() takes
-    the layer with the newest frame), with the view's hash in front and wrapped on 15 and later (sf_layer_name).
-    Never a SurfaceView (a web island's GeckoView), nor a `Background for` layer."""
+    the layer with the newest frame), wrapped on 15 and later (sf_layer_name), where the frames are on
+    `VRI-<pkg>/<activity>#n` and its container carries the window's hash in front (`<hash> <pkg>/<activity>#n`).
+    Never a SurfaceView (a web island's GeckoView), nor a `Background for` or splash screen layer."""
     listed = [sf_layer_name(l) for l in listing.splitlines()]
-    return [l for l in listed if WINDOW_HASH_RE.sub("", l).startswith(f"{package}/")]
+    return [l for l in listed if WINDOW_PREFIX_RE.sub("", l).startswith(f"{package}/")]
 
 
 def app_layers(listing, package, engine="web"):

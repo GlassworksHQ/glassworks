@@ -645,6 +645,24 @@ class SurfaceFlingerNames(unittest.TestCase):
             self.assertIsNotNone(r.get("latency"), (t, r.get("updates_error")))
             self.assertIs(r["sf_valid"], True, t)               # scrolling from frames on screen, not rAF only
 
+    def test_vitro_on_android_15_and_later_reads_its_vri_layer(self):
+        # The Pixel Tablet's Android 17 (2026-11-26): Vitro's frames are on `VRI-<pkg>/<activity>#n`, not on the window's
+        # container `<hash> <pkg>/<activity>#n`. The runner took only the container, and the grade came out E (open,
+        # restart and live updates not measured on every page).
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SF_WRAPPED="1", FAKE_VITRO="true", GW_PERF_ENGINE="vitro")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertTrue(c["presents_mono_ms"])
+        with open(os.path.join(tmp, "state", "commands.log")) as f:
+            latency = {c for c in f.read().splitlines() if "--latency" in c}
+        self.assertTrue(any("--latency 'VRI-sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#158'" in c for c in latency), latency)
+        self.assertFalse(any("SurfaceView" in c for c in latency), latency)    # never GeckoView's, on Vitro
+        run = self.build(tmp)["graded"]["reference"]["per_run"][0]
+        self.assertIsNone(run["start_error"])
+        for t, r in run["tiers"].items():
+            self.assertIsNotNone(r.get("load_ms"), (t, r.get("load_error")))
+            self.assertIs(r["sf_valid"], True, t)
+
     def test_a_listing_it_cant_read_is_said_once(self):
         tmp = tempfile.mkdtemp()
         p, c = refstart(tmp, FAKE_SF_UNNAMED="1")

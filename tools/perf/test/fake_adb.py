@@ -39,6 +39,9 @@ SF_HISTORY = int(os.environ.get("FAKE_SF_HISTORY") or 127)
 # FAKE_SF_WRAPPED's SurfaceView: the view's hash, and the BLAST layer's whole name, the only one --latency takes.
 SF_HASH, SF_ACT = "f5fea55", f"{PKG}/{PKG}.MainActivity"
 SF_BLAST = f"{SF_HASH} SurfaceView[{SF_ACT}](BLAST)#163"
+# And the window's: its container (the window's hash in front, no buffers) and the ViewRootImpl's BLAST layer, which
+# holds the window's frames, Vitro's (the Pixel Tablet's Android 17, 2026-11-26).
+SF_WIN_HASH, SF_VRI = "ac7b2d9", f"VRI-{SF_ACT}#158"
 # The fake Android 6's wall clock: its monotonic clock plus this (logcat -v usec prints it).
 WALL_SHIFT = 1_795_000_000.0
 PIDS = {PKG: 4242, PKG + ":gpu_disable_art_image_": 4300, PKG + ":sandboxed_tab_disable_art_image_24": 4301, "otbr-agent": 900}
@@ -331,7 +334,8 @@ def shell(cmd):
                 f"RequestedLayerState{{Background for {SF_HASH} SurfaceView[{SF_ACT}]#164 parentId=162 relativeParentId=158 z=-2147483648}}\n"
                 f"RequestedLayerState{{{SF_BLAST} parentId=162}}\n"
                 f"RequestedLayerState{{ActivityRecord{{104391098 u0 {SF_ACT} t10}}#147 parentId=146}}\n"
-                f"RequestedLayerState{{VRI-{SF_ACT}#158 parentId=155}}\n"
+                f"RequestedLayerState{{{SF_WIN_HASH} {SF_ACT}#155 parentId=147}}\n"
+                f"RequestedLayerState{{{SF_VRI} parentId=155}}\n"
                 f"RequestedLayerState{{{SF_HASH} SurfaceView[{SF_ACT}]#162 parentId=161 relativeParentId=158 z=-2}}\n")
     if cmd.startswith("dumpsys SurfaceFlinger --list") and os.environ.get("FAKE_SF_UNNAMED"):
         # A naming this runner can't read: the app's window is listed, its SurfaceView isn't.
@@ -344,9 +348,9 @@ def shell(cmd):
         return f"Display Root#0\nSurfaceView - {PKG}/{PKG}.MainActivity#0\nBackground for -SurfaceView - {PKG}/{PKG}.MainActivity#0\n"
     if cmd.startswith("dumpsys SurfaceFlinger --latency") and os.environ.get("FAKE_SF_WRAPPED"):
         name = re.search(r"--latency '(.*)'", cmd).group(1)
-        if name == f"{SF_HASH} SurfaceView[{SF_ACT}]#162":
-            return f"{PERIOD_NS}\n0\t0\t0\n"          # the parent: no buffers of its own
-        if name != SF_BLAST:
+        if name in (f"{SF_HASH} SurfaceView[{SF_ACT}]#162", f"{SF_WIN_HASH} {SF_ACT}#155"):
+            return f"{PERIOD_NS}\n0\t0\t0\n"          # a parent: no buffers of its own
+        if name != (SF_VRI if vitro() else SF_BLAST):
             return f"{PERIOD_NS}\n"                   # any other form of the name: the period alone
     if cmd.startswith("dumpsys SurfaceFlinger --latency"):
         t, frames = int(now() * 1e9), []

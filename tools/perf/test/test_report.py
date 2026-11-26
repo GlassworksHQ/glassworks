@@ -225,6 +225,44 @@ class SurfaceViewLayers(unittest.TestCase):
         self.assertEqual(P.surfaceview_layers(api37, pkg), [f"f5fea55 SurfaceView[{act}](BLAST)#163", f"f5fea55 SurfaceView[{act}]#162"])
         self.assertEqual(P.layer_number(f"f5fea55 SurfaceView[{act}](BLAST)#163"), 163)
 
+    def test_vitro_window_on_android_15_and_later_is_its_vri_layer(self):
+        # Vitro draws into the app's own window. On the Pixel Tablet's Android 17 (2026-11-26) the frames are on the
+        # ViewRootImpl's BLAST layer, `VRI-<pkg>/<activity>#n` (WindowManager logs `setClientSurface
+        # Surface(name=VRI-…)`); the window's container, `<hash> <pkg>/<activity>#n`, has none. Before the fix the
+        # runner took only the container: open, live updates and restart were "not measured" on every page.
+        pkg = "dev.glassworks.generic_android"
+        act = f"{pkg}/dev.glassworks.generic.Launcher"
+        api37 = (
+            "RequestedLayerState{Display 0 name=\"Built-in Screen\"#41}\n"
+            f"RequestedLayerState{{ActivityRecord{{104391098 u0 {act} t10}}#6405 parentId=146}}\n"
+            f"RequestedLayerState{{ac7b2d9 {act}#6407 parentId=6405}}\n"
+            f"RequestedLayerState{{VRI-{act}#6408 parentId=6407}}\n"
+            f"RequestedLayerState{{VRI-Splash Screen {pkg}#6402 parentId=6401}}\n"
+            f"RequestedLayerState{{Background for f5fea55 SurfaceView[{act}]#6412 parentId=6410 z=-2147483648}}\n"
+            f"RequestedLayerState{{f5fea55 SurfaceView[{act}](BLAST)#6411 parentId=6410}}\n"
+            f"RequestedLayerState{{f5fea55 SurfaceView[{act}]#6410 parentId=6408 z=-2}}\n"
+            f"RequestedLayerState{{VRI-{pkg}.legacy/dev.glassworks.MainActivity#77 parentId=76}}\n"
+            "RequestedLayerState{VRI-com.android.settings/com.android.settings.SubSettings#6355 parentId=6354}\n"
+            "RequestedLayerState{VRI-NotificationShade#88 parentId=87}\n")
+        self.assertEqual(P.window_layers(api37, pkg), [f"ac7b2d9 {act}#6407", f"VRI-{act}#6408"])
+        self.assertEqual(P.app_layers(api37, pkg, "vitro"), [f"ac7b2d9 {act}#6407", f"VRI-{act}#6408"])
+        # The runner reads the newest layer first (sf_relist): the VRI layer, a child created after its container.
+        self.assertEqual(max(P.window_layers(api37, pkg), key=P.layer_number), f"VRI-{act}#6408")
+        # The web engine's frames stay GeckoView's SurfaceView on the same listing: nothing in the window.
+        self.assertEqual(P.app_layers(api37, pkg, "web"), [f"f5fea55 SurfaceView[{act}](BLAST)#6411", f"f5fea55 SurfaceView[{act}]#6410"])
+
+    def test_vitro_window_on_older_androids_is_unchanged(self):
+        # The S1 (Android 10, 2026-11-24's probe): the window's one layer, never its SurfaceView.
+        s1 = ("Display Root#0\nSurfaceView - sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0\n"
+              "sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0\nBackground for -SurfaceView - sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0\n")
+        self.assertEqual(P.window_layers(s1, "sh.edm.s1kiosk"), ["sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0"])
+        self.assertEqual(P.app_layers(s1, "sh.edm.s1kiosk", "web"), ["SurfaceView - sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0"])
+        # Android 12–14: the window and its BLAST child, both in the app's name.
+        a12 = "p.q/p.q.A#5\np.q/p.q.A(BLAST)#6\nSurfaceView[p.q/p.q.A]#7\n"
+        self.assertEqual(P.window_layers(a12, "p.q"), ["p.q/p.q.A#5", "p.q/p.q.A(BLAST)#6"])
+        # Android 6: the bare window name.
+        self.assertEqual(P.window_layers("DimLayer\nSurfaceView\np.q/p.q.A\nStatusBar\n", "p.q"), ["p.q/p.q.A"])
+
     def test_layer_names(self):
         self.assertEqual(P.sf_layer_name("RequestedLayerState{SurfaceView[a/b](BLAST)#169 parentId=168}"), "SurfaceView[a/b](BLAST)#169")
         self.assertEqual(P.sf_layer_name("RequestedLayerState{Task=187#582}"), "Task=187#582")
