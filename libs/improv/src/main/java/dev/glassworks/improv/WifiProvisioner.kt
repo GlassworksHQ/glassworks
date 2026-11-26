@@ -271,12 +271,15 @@ public class WifiProvisioner(
     }
 
     /**
+     * Entries holding an attempt's untested credential (still running, failed, or another network came up): no save yet.
+     * Android 7 and earlier only: from Android 8 the framework saves, so the gate is never made and writes nothing.
+     */
+    private val saveGate by lazy { SaveGate.of(ctx) }
+
+    /**
      * Saves the configured networks (Android 7 and earlier forget what addNetwork added until the app saves). Tries twice;
      * a failure is logged and the join still counts, since the network works until the next restart.
      */
-    /** Entries holding an attempt's untested credential (still running, failed, or another network came up): no save yet. */
-    private val saveGate = SaveGate.of(ctx)
-
     @Suppress("DEPRECATION")
     private fun saveNetworks(joined: Int?): Boolean {
         if (!saveGate.maySave(joined)) {
@@ -423,7 +426,7 @@ public class WifiProvisioner(
             }
             // from here until this network connects itself, or its entry is removed, its credential is untested: no save
             // (this attempt's or another's) may keep it
-            saveGate.unconfirmed(netId)
+            if (Compat.mustSaveNetworks) saveGate.unconfirmed(netId)
             // unknown counts as not ours: a failed attempt may leave its entry behind, but never removes one saved earlier
             addedNew = SavedNetworks.madeHere(netId, idsBefore, Compat.listsSavedNetworks(isDeviceOwner, loc)) == true
             val enabled = wm.enableNetwork(netId, true)
@@ -494,7 +497,7 @@ public class WifiProvisioner(
         private fun removeOurs(id: Int) {
             val removed = runCatching { wm.removeNetwork(id) }.getOrDefault(false)
             Log.i(TAG, "removeNetwork($id) -> $removed")
-            if (removed) saveGate.removed(id)
+            if (removed && Compat.mustSaveNetworks) saveGate.removed(id)
         }
 
         private fun failAndRestore(reason: String): Outcome.Failed {
@@ -691,8 +694,11 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
         /** An earlier process's unnamed change: holds every save until a reboot. */
         private const val ORPHAN = Int.MIN_VALUE + 1
 
-        /** One gate per process, kept in the app's own preferences, so a new provisioner or a restarted app still holds. */
-        @Volatile private var shared: SaveGate? = null
+        /**
+         * One gate per process, kept in the app's own preferences, so a new provisioner or a restarted app still holds.
+         * Tests clear it, since a Robolectric sandbox keeps it from one test to the next.
+         */
+        @Volatile internal var shared: SaveGate? = null
 
         fun of(ctx: Context): SaveGate = shared ?: synchronized(this) {
             val app = ctx.applicationContext
@@ -733,6 +739,7 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
  */
 internal class SaveGateBootReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: android.content.Intent) {
-        if (intent.action == android.content.Intent.ACTION_BOOT_COMPLETED) SaveGate.of(context)
+        // Android 8 and later never hold anything (the framework saves networks itself): nothing to read
+        if (intent.action == android.content.Intent.ACTION_BOOT_COMPLETED && Compat.mustSaveNetworks) SaveGate.of(context)
     }
 }
