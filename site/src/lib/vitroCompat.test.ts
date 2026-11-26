@@ -123,6 +123,15 @@ describe("auditDashboard and custom:button-card", () => {
     expect(audit([{ type: "custom:button-card", name: "[[[[x]]]]" }]).totals.tier3).toBe(0);
   });
 
+  it("sends a timer's countdown to an island, as the engine does", () => {
+    const timer = audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: true }]);
+    expect(timer.totals.tier3).toBe(1);
+    expect(timer.triggers[0].reasons.join()).toMatch(/timer/);
+    expect(audit([{ type: "custom:button-card", entity: "timer.laundry" }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: true, state_display: "Running" }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "custom:button-card", entity: "light.timer", show_state: true }]).totals.tier3).toBe(0);
+  });
+
   it("merges the dashboard's button_card_templates before it checks", () => {
     const templates = { button_card_templates: { base: { styles: { card: [{ filter: "blur(2px)" }] } }, ok: { color_type: "card" } } };
     expect(audit([{ type: "custom:button-card", template: "ok" }], templates).totals.tier3).toBe(0);

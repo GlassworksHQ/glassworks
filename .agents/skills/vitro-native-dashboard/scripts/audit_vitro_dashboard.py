@@ -250,6 +250,12 @@ def button_card_reason(card: dict, templates: dict) -> str | None:
             return f"{key} confirmation exemptions"
     if isinstance(cfg.get("confirmation"), dict) and "exemptions" in cfg["confirmation"]:
         return "confirmation exemptions"
+    # button-card counts a timer down every second, which the engine doesn't draw (unless state_display replaces it).
+    entity = cfg.get("entity")
+    state_display = cfg.get("state_display")
+    if isinstance(entity, str) and entity.split(".")[0] == "timer" and cfg.get("show_state") \
+            and not (isinstance(state_display, str) and state_display):
+        return "show_state on a timer (its countdown)"
     layout = cfg.get("layout")
     if layout is not None and (not isinstance(layout, str) or layout not in BUTTON_CARD_LAYOUTS):
         return "a layout it doesn't draw natively"

@@ -86,6 +86,8 @@ import dev.glassworks.engine.vitro.cards.WeatherCardView
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.cards.IslandCard
+import dev.glassworks.engine.vitro.cards.cssText
+import dev.glassworks.engine.vitro.cards.lineBox
 import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HistoryPoint
@@ -1286,9 +1288,16 @@ class VitroView(
             view.type == "sidebar" -> buildSidebarLayout(view.cards, ctx, widthDp)
             // layout-card as the view's own layout: the same layouts as the card, with the view's `layout:`.
             layoutCard != null -> LayoutCardView(ctx, layoutViewCard(view), { child ->
-                wrapVisibility(child, buildCard(child, ctx, false), ctx).also { v ->
-                    // Clarity sees each card by its index in the view's config (a layout-break builds nothing).
-                    clarity?.cardBuilt(buildingIndex, view.cards.indexOfFirst { it === child }, child, v)
+                // A pinned card (card-mod `position: fixed`) goes to the overlay. Its host stays in the layout as an
+                // empty slot, as in HA: a grid cell, or a place (and its card size) in the column placement.
+                // A hidden card's slot goes with it.
+                if (pinIfFixed(child, ctx)) {
+                    wrapVisibility(child, LayoutCardView.PinnedSlot(context), ctx)
+                } else {
+                    wrapVisibility(child, buildCard(child, ctx, false), ctx).also { v ->
+                        // Clarity sees each card by its index in the view's config (a layout-break builds nothing).
+                        clarity?.cardBuilt(buildingIndex, view.cards.indexOfFirst { it === child }, child, v)
+                    }
                 }
             }, widthDp)
             else -> buildMasonryLayout(view.cards, ctx, widthDp)
@@ -1688,6 +1697,59 @@ class VitroView(
         }
     }
 
+    /**
+     * HA's stack host (`hui-stack-card`, the vertical and horizontal stacks' and the grid's): its `h1.card-header`
+     * title when the config has one, over its `#root` (`flex: 1`, so a stretched stack's cards take the rest of its
+     * height). [pad] applies the card's card-mod padding to the outermost view.
+     */
+    private fun stackHost(card: CardConfig, ctx: VitroCardContext, pad: (View) -> Unit, root: View): View {
+        val title = card.title?.takeIf { it.isNotEmpty() } ?: return root.also(pad)
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            pad(this)
+            addView(stackTitle(ctx, title), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            addView(root, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
+        }
+    }
+
+    /**
+     * The stacks' `h1.card-header`: `--ha-card-header-font-size` (24 px) in the normal weight, `line-height:
+     * var(--ha-line-height-condensed)` (1.2), `letter-spacing: -0.012em`, `padding: 24px 16px 16px`, in
+     * `--ha-card-header-color` (the primary text color), aligned by `--ha-stack-title-text-align` (start). It wraps.
+     */
+    private fun stackTitle(ctx: VitroCardContext, title: String): TextView {
+        val vars = ctx.theme.vars + inheritedCardVars
+        fun v(name: String) = vars[name]?.let { ThemeResolver.resolveValue(it, vars, 0).trim() }?.takeIf { it.isNotEmpty() }
+        val size = v("ha-card-header-font-size")?.let { ThemeResolver.parseDimensionDp(it, 24f) } ?: 24f
+        val color = v("ha-card-header-color")?.let(ThemeResolver::parseColor) ?: ctx.theme.primaryTextColor
+        return cssText(ctx, size, color).apply {
+            text = title
+            letterSpacing = -0.012f
+            textAlignment = when (v("ha-stack-title-text-align")?.lowercase()) {
+                "center" -> View.TEXT_ALIGNMENT_CENTER
+                "end" -> View.TEXT_ALIGNMENT_VIEW_END
+                "right" -> if (layoutDirection == LAYOUT_DIRECTION_RTL) View.TEXT_ALIGNMENT_VIEW_START else View.TEXT_ALIGNMENT_VIEW_END
+                "left" -> if (layoutDirection == LAYOUT_DIRECTION_RTL) View.TEXT_ALIGNMENT_VIEW_END else View.TEXT_ALIGNMENT_VIEW_START
+                else -> View.TEXT_ALIGNMENT_VIEW_START
+            }
+            lineBox(ctx, this, size, 1.2f)
+            setPadding(ctx.px(16f), ctx.px(24f), ctx.px(16f), ctx.px(16f))
+        }
+    }
+
+    /**
+     * CSS `gap` between a stack's shown cards: LinearLayout's middle dividers skip GONE children, so a hidden card
+     * leaves no gap behind, as a `[hidden]` flex item leaves none in HA.
+     */
+    private fun LinearLayout.gapBetweenShown(gap: Int, vertical: Boolean) {
+        if (gap <= 0) return
+        dividerDrawable = android.graphics.drawable.GradientDrawable().apply {
+            setColor(android.graphics.Color.TRANSPARENT)
+            if (vertical) setSize(0, gap) else setSize(gap, 0)
+        }
+        showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+    }
+
     /** HA's error card for [card], or an empty view if even that can't be made (a theme it can't read). */
     private fun errorCard(card: CardConfig, ctx: VitroCardContext): View =
         try {
@@ -1722,9 +1784,9 @@ class VitroView(
         val verticalGap = cardGap(ctx, "vertical-stack-card-gap", "stack-card-gap")
         val horizontalGap = cardGap(ctx, "horizontal-stack-card-gap", "stack-card-gap")
         val gridGap = cardGap(ctx, "grid-card-gap")
-        fun LinearLayout.applyStackPadding() {
+        fun applyStackPadding(v: View) {
             stackMod.paddingInsets?.let { p ->
-                setPadding(ctx.px(p.left), ctx.px(p.top), ctx.px(p.right), ctx.px(p.bottom))
+                v.setPadding(ctx.px(p.left), ctx.px(p.top), ctx.px(p.right), ctx.px(p.bottom))
             }
         }
         // Anything outside Vitro's supported set goes to an island on purpose (CardCompat), decided once per card.
@@ -1732,42 +1794,27 @@ class VitroView(
             WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
         } else when (card.type) {
             // Layout containers
-            "vertical-stack" -> LinearLayout(context).apply {
+            "vertical-stack" -> stackHost(card, ctx, ::applyStackPadding, LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                applyStackPadding()
-                card.childCards.forEachIndexed { idx, child ->
-                    addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                        if (idx > 0) topMargin = verticalGap
-                    })
+                gapBetweenShown(verticalGap, vertical = true)
+                card.childCards.forEach { child ->
+                    addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                 }
-            }
-            "horizontal-stack" -> LinearLayout(context).apply {
+            })
+            "horizontal-stack" -> stackHost(card, ctx, ::applyStackPadding, LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
-                applyStackPadding()
+                gapBetweenShown(horizontalGap, vertical = false)
                 val childH = if (card.childCards.size >= 2) MATCH_PARENT else WRAP_CONTENT
-                card.childCards.forEachIndexed { idx, child ->
-                    addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(0, childH, 1f).apply {
-                        if (idx > 0) marginStart = horizontalGap
-                    })
+                card.childCards.forEach { child ->
+                    addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(0, childH, 1f))
                 }
-            }
-            "grid" -> LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                applyStackPadding()
-                val cols = card.gridColumns()
-                card.childCards.chunked(cols).forEachIndexed { rIdx, chunk ->
-                    val r = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-                    val childH = if (chunk.size >= 2) MATCH_PARENT else WRAP_CONTENT
-                    chunk.forEachIndexed { cIdx, child ->
-                        r.addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), LinearLayout.LayoutParams(0, childH, 1f).apply {
-                            if (cIdx > 0) marginStart = gridGap
-                        })
-                    }
-                    addView(r, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                        if (rIdx > 0) topMargin = gridGap
-                    })
+            })
+            // HA's `square` is on unless the config turns it off (`square !== false`).
+            "grid" -> stackHost(card, ctx, ::applyStackPadding, GridCardLayout(context, card.gridColumns(), gridGap, square = card.raw.opt("square") != false).apply {
+                card.childCards.forEach { child ->
+                    addView(wrapVisibility(child, buildCard(child, ctx, false), ctx), android.view.ViewGroup.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                 }
-            }
+            })
             "conditional" -> {
                 val child = card.childCards.firstOrNull()
                 // The conditional card stands in for its card, in the grid as anywhere else.

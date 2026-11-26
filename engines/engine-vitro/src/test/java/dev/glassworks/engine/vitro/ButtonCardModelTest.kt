@@ -177,6 +177,21 @@ class ButtonCardModelTest {
     }
 
     @Test
+    fun aTimerCountdownGoesToAnIsland() {
+        // button-card counts a timer down every second (its time remaining, "(Paused)" while paused), which the native
+        // card doesn't draw: with `show_state` on a timer the island draws it.
+        val timer = card("""{"type": "custom:button-card", "entity": "timer.laundry", "show_state": true}""").compat
+        assertEquals(CardRoute.ISLAND, timer.route)
+        assertTrue(timer.reasons.single(), "timer" in timer.reasons.single())
+        // No state shown, a state_display of its own, or another domain: native as before.
+        for (json in listOf(
+            """{"type": "custom:button-card", "entity": "timer.laundry"}""",
+            """{"type": "custom:button-card", "entity": "timer.laundry", "show_state": true, "state_display": "Running"}""",
+            """{"type": "custom:button-card", "entity": "light.timer", "show_state": true}""",
+        )) assertEquals(json, CardRoute.NATIVE, card(json).compat.route)
+    }
+
+    @Test
     fun diagnosticsNameOptionsNeverValues() {
         // A signed address hidden by a CSS escape (`u\72l(` is `url(`) and a bare address in `layout` both go to an
         // island, and neither the address nor its signature reaches a reason (logcat, the HUD).
