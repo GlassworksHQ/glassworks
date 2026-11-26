@@ -19,6 +19,8 @@ const STRINGS = {
   'component.light.entity_component._.state.on': 'On',
   'component.binary_sensor.entity_component.door.state.on': 'Open',
   'state.default.unavailable': 'Unavailable',
+  'ui.test.quoted': "Use '{name}' for {name}",
+  'ui.test.pound': "{n, plural, other {# of '#' items, #}}",
 };
 
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
@@ -214,6 +216,9 @@ test('localize is HA\'s strings, with placeholders, plurals and selects, and "" 
   assert.equal(localize('component.weather.entity_component._.state.partlycloudy'), '', 'a miss is empty, so the card falls back');
   assert.equal(localize('component.weather.entity_component._.state.partlycloudy') || 'Partly cloudy', 'Partly cloudy');
   assert.equal(localize(''), '');
+  // ICU's quotes: a quoted brace or # is text.
+  assert.equal(localize('ui.test.quoted', { name: 'Ada' }), 'Use {name} for Ada');
+  assert.equal(localize('ui.test.pound', { n: 3 }), '3 of # items, 3');
 });
 
 test('formatEntityState takes HA\'s translated state labels', async () => {
@@ -320,6 +325,64 @@ test('connection events and hass.connected follow the panel\'s connection', asyn
   assert.deepEqual(heard, [['disconnected'], ['ready', true], ['disconnected']]);
 });
 
+test('a reconnect check that says no fails a subscription that never started, and an older check counts for nothing', async () => {
+  const page = await openPage({ card: plainCard });
+  let answers = [];
+  // Never acked: the connection drops before HA answered.
+  const pending = page.hass().connection.subscribeMessage(() => {}, { type: 'scheduler' }, { preCheck: () => true });
+  await settle();
+  page.ws().push({ type: 'conn', connected: false });
+  page.ws().push({ type: 'conn', connected: true });
+  await settle();
+  // Not refused: still waiting for HA.
+  let settled = false;
+  pending.then(() => { settled = true; }, () => { settled = true; });
+  await settle();
+  assert.equal(settled, false);
+
+  // A slow check from one reconnect that answers no after a newer reconnect said yes: nothing changes.
+  const page2 = await openPage({ card: plainCard });
+  let first = true;
+  const ok2 = page2.hass().connection.subscribeMessage(() => {}, { type: 'scheduler' }, {
+    preCheck: () => (first ? (first = false, true) : new Promise((r) => answers.push(r))),
+  });
+  await settle();
+  const sid2 = page2.sent('subscribe').at(-1).sid;
+  page2.ws().push({ type: 'subAck', sid: sid2 });
+  await ok2;
+  answers = [];
+  page2.ws().push({ type: 'conn', connected: false });
+  page2.ws().push({ type: 'conn', connected: true });
+  page2.ws().push({ type: 'conn', connected: false });
+  page2.ws().push({ type: 'conn', connected: true });
+  await settle();
+  assert.equal(answers.length, 2);
+  answers[1](true);
+  answers[0](false);
+  await settle();
+  assert.deepEqual(page2.sent('unsubscribe'), [], 'the older no counts for nothing');
+
+  // Never acked, and this reconnect's check says no: the card's promise fails.
+  const page3 = await openPage({ card: plainCard });
+  let allow = true;
+  const p3 = page3.hass().connection.subscribeMessage(() => {}, { type: 'scheduler' }, { preCheck: () => allow });
+  await settle();
+  const sid3 = page3.sent('subscribe').at(-1).sid;
+  page3.ws().push({ type: 'conn', connected: false });
+  allow = false;
+  page3.ws().push({ type: 'conn', connected: true });
+  await assert.rejects(p3, /Pre-check failed/);
+  assert.deepEqual(page3.sent('unsubscribe'), [{ type: 'unsubscribe', sid: sid3 }]);
+});
+
+test('formatEntityState asks for the registries once, for the integration\'s label', async () => {
+  const page = await openPage({ card: plainCard });
+  const before = page.sent('registries').length;
+  page.hass().formatEntityState({ entity_id: 'light.lounge', state: 'on', attributes: {} });
+  page.hass().formatEntityState({ entity_id: 'light.lounge', state: 'on', attributes: {} });
+  assert.equal(page.sent('registries').length - before, 1);
+});
+
 test('a subscription whose preCheck says no after a reconnect ends, as HA\'s client does', async () => {
   const page = await openPage({ card: plainCard });
   let allowed = true;
@@ -339,10 +402,15 @@ test('hass.services is read when a card reads it, and again when HA registers a 
   const page = await openPage({ card: plainCard });
   assert.equal(Object.keys(page.hass().services).length, 0, 'nothing until HA answers');
   await settle();
+  const subs = page.sent('subscribe');
+  assert.deepEqual(subs.map((m) => m.msg.event_type).sort(), ['service_registered', 'service_removed']);
+  assert.equal(page.sent('callWs').filter((m) => m.msg.type === 'get_services').length, 0, 'the listeners go first');
+  // One listener accepted, one refused: the list is read anyway.
+  page.ws().push({ type: 'subAck', sid: subs[0].sid });
+  page.ws().push({ type: 'subError', sid: subs[1].sid, error: { code: 'unauthorized' } });
+  await settle();
   const ask = page.sent('callWs').find((m) => m.msg.type === 'get_services');
   assert.ok(ask, 'get_services');
-  const subs = page.sent('subscribe').map((m) => m.msg.event_type);
-  assert.deepEqual(subs.sort(), ['service_registered', 'service_removed']);
   page.ws().push({ type: 'wsReply', id: ask.id, ok: true, result: { light: { turn_on: {} } } });
   await settle();
   assert.deepEqual(Object.keys(page.card().hass.services), ['light']);
@@ -359,6 +427,8 @@ test('refreshAccessToken resolves with the token the panel holds now', async () 
   page.ws().push({ type: 'auth', token: 'renewed', user: null });
   await pending;
   assert.equal(page.card().hass.auth.accessToken, 'renewed');
+  assert.equal(auth.accessToken, 'renewed', 'the Auth the card held reads it too');
+  assert.equal(auth.data.access_token, 'renewed');
 });
 
 // ---- A stand-in for scheduler-card, and the safety net ----
@@ -387,6 +457,8 @@ test('a card that loads backend strings, subscribes and reads services on every 
   const page = await openPage({ card });
   const ask = page.sent('callWs').find((m) => m.msg.type === 'frontend/get_translations');
   page.ws().push({ type: 'wsReply', id: ask.id, ok: true, result: { resources: {} } });
+  for (const m of page.sent('subscribe')) if (m.msg.type === 'subscribe_events') page.ws().push({ type: 'subAck', sid: m.sid });
+  await settle();
   const services = page.sent('callWs').find((m) => m.msg.type === 'get_services');
   page.ws().push({ type: 'wsReply', id: services.id, ok: true, result: { switch: {}, light: {} } });
   await tick(1700);

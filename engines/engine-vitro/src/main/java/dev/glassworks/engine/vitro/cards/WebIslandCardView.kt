@@ -131,6 +131,17 @@ class WebIslandCardView(
     private val seedLock = Any()
 
     /**
+     * Each open bridge's subscriptions, by the page's id for them, and what each bridge was told of the connection
+     * last (`conn`). Under [seedLock]. Declared before `init` too: a page handed over runs already, and its bridge can
+     * speak as soon as the slot answers to this card.
+     */
+    private val pageSubs = HashMap<(JSONObject) -> Unit, HashMap<Int, PageSub>>()
+    private val sentConnected = HashMap<(JSONObject) -> Unit, Boolean>()
+
+    /** The connection watcher's handle: on for as long as the island is this card's, a move in the layout included. */
+    @Volatile private var connectionWatch: (() -> Unit)? = null
+
+    /**
      * Whether the card picks its entities at runtime (`auto-entities` filters, `button-card` JS templates, a card
      * that names none up front): such a card follows every entity in the store, not only the ones it read.
      */
@@ -180,7 +191,7 @@ class WebIslandCardView(
                         send(authMessage(currentToken(), currentUser()))
                         // Where the connection is now: a page kept across a hand-over may still think it's down.
                         val up = ctx.haConnected()
-                        sentConnected = up
+                        sentConnected[send] = up
                         send(connMessage(up))
                         seedInitialStates(send)
                         registries?.let { send(registriesMessage(it)) }
@@ -197,6 +208,7 @@ class WebIslandCardView(
                     // subscriptions end on HA's side too (the page asks for them again on its next socket).
                     val ended = synchronized(seedLock) {
                         senders -= send
+                        sentConnected -= send
                         pageSubs.remove(send)?.values?.toList().orEmpty()
                     }
                     ended.forEach { it.cancel() }
@@ -248,8 +260,9 @@ class WebIslandCardView(
                 // reconnect that changed no state sends no patch.
                 renewing { ctx.watchToken { synchronized(seedLock) { sendTokenIfChanged() } } }
                 // The connection to HA went down or is back: the page's `hass.connection` hears of it, and its
-                // subscriptions start again on the new connection (HA dropped them with the old one).
-                renewing { ctx.watchConnection { up -> synchronized(seedLock) { connectionChanged(up) } } }
+                // subscriptions start again on the new connection (HA dropped them with the old one). On while the
+                // card is detached too (a move in the layout): a drop then is never missed, and live ones stay live.
+                connectionWatch = ctx.watchConnection { up -> synchronized(seedLock) { connectionChanged(up) } }
             } else {
                 server.unregisterSlot(id)
                 slotId = null
@@ -551,9 +564,6 @@ class WebIslandCardView(
         if (wasDetached && !islandGone) synchronized(seedLock) {
             sendTokenIfChanged()
             senders.forEach { seedInitialStates(it) }
-            // The connection watcher was off too: the page hears where the connection is, and its subscriptions
-            // start again (one HA dropped meanwhile would never deliver again).
-            connectionChanged(ctx.haConnected(), restartAll = true)
         }
     }
 
@@ -594,8 +604,6 @@ class WebIslandCardView(
         }
     }
 
-    /** Each open bridge's subscriptions, by the page's id for them. Under [seedLock]. */
-    private val pageSubs = HashMap<(JSONObject) -> Unit, HashMap<Int, PageSub>>()
 
     /**
      * Starts [sub] on HA's connection. Its events go to its page as `subEvent`; the page hears `subAck` once HA
@@ -648,10 +656,9 @@ class WebIslandCardView(
     /**
      * The connection to HA is [up] or down: the pages hear of it (`conn`). Back up, the subscriptions HA dropped with
      * the old connection start on the new one: every one that waits, and those that resubscribe; the others end, as
-     * in HA's own client. [restartAll]: every resubscribing one starts again, live ones included (the watcher was off,
-     * so a drop may have gone unseen). Under [seedLock].
+     * in HA's own client. Each bridge that wasn't told this yet hears it. Under [seedLock].
      */
-    private fun connectionChanged(up: Boolean, restartAll: Boolean = false) {
+    private fun connectionChanged(up: Boolean) {
         val ended = ArrayList<PageSub>()
         for (subs in pageSubs.values) {
             for (sub in subs.values.toList()) {
@@ -661,8 +668,7 @@ class WebIslandCardView(
                     sub.handle = null
                     continue
                 }
-                // A live one stays, unless it may have been dropped unseen ([restartAll]) and can start again.
-                if (sub.handle != null && (!restartAll || !sub.resubscribe)) continue
+                if (sub.handle != null) continue
                 if (!sub.acked || sub.resubscribe) {
                     sub.handle?.let { old -> sub.handle = null; runCatching { old() } }
                     startSub(sub)
@@ -674,19 +680,21 @@ class WebIslandCardView(
             }
         }
         ended.forEach { s -> s.handle?.let { runCatching { it() } }; s.handle = null }
-        if (up != sentConnected) {
-            sentConnected = up
-            val msg = connMessage(up)
-            senders.forEach { it(msg) }
+        val msg = connMessage(up)
+        for (send in senders) {
+            if (sentConnected[send] == up) continue
+            sentConnected[send] = up
+            send(msg)
         }
     }
 
-    /** What the pages were told of the connection last (`conn`), under [seedLock]; null before any page connected. */
-    private var sentConnected: Boolean? = null
 
     /** Ends every page subscription of this island (it leaves its card): HA keeps none for a page nobody serves. */
     private fun endPageSubs() {
+        connectionWatch?.invoke()
+        connectionWatch = null
         val all = synchronized(seedLock) {
+            sentConnected.clear()
             pageSubs.values.flatMap { it.values }.also { pageSubs.clear() }
         }
         all.forEach { it.cancel() }
@@ -1537,6 +1545,12 @@ function currentStates() {
 const registries = { entities: {}, devices: {}, areas: {}, floors: {} };
 let registriesAsked = false;
 
+function askRegistries() {
+  if (registriesAsked) return;
+  registriesAsked = true;
+  sendBridge({ type: 'registries' });
+}
+
 function vitroTitle(s) {
   const t = String(s == null ? '' : s).replace(/_/g, ' ');
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
@@ -1566,13 +1580,36 @@ function vitroPluralCategory(n, ordinal) {
   }
 }
 // The end of the {…} block that opens at [start], or -1.
+// ICU's quoting: an apostrophe before { } # or | starts literal text up to the next lone apostrophe ('' inside is
+// one apostrophe). The index of that closing apostrophe, or -1 when [i] starts no quote.
+function vitroQuoteEnd(p, i) {
+  if (p[i] !== "'" || !'{}#|'.includes(p[i + 1] || '')) return -1;
+  for (let j = i + 1; j < p.length; j++) {
+    if (p[j] !== "'") continue;
+    if (p[j + 1] === "'") { j++; continue; }
+    return j;
+  }
+  return p.length;
+}
 function vitroBlockEnd(p, start) {
   let depth = 0;
   for (let j = start; j < p.length; j++) {
+    const q = vitroQuoteEnd(p, j);
+    if (q >= 0) { j = q; continue; }
     if (p[j] === '{') depth++;
     else if (p[j] === '}' && --depth === 0) return j;
   }
   return -1;
+}
+// A plural branch's # (the number), but not a quoted one.
+function vitroPound(branch, n) {
+  let out = '';
+  for (let j = 0; j < branch.length; j++) {
+    const q = vitroQuoteEnd(branch, j);
+    if (q >= 0) { out += branch.slice(j, q + 1); j = q; continue; }
+    out += branch[j] === '#' ? n : branch[j];
+  }
+  return out;
 }
 // A plural or select block's options ("offset:1 =0 {…} one {…} other {…}").
 function vitroMessageOptions(s) {
@@ -1611,7 +1648,7 @@ function vitroMessageArg(body, values) {
     let branch = map['=' + n];
     if (branch === undefined) branch = map[vitroPluralCategory(n - offset, kind === 'selectordinal')];
     if (branch === undefined) branch = map.other;
-    return branch === undefined ? '' : vitroFormatMessage(branch.replace(/#/g, vitroNumber(n - offset)), values);
+    return branch === undefined ? '' : vitroFormatMessage(vitroPound(branch, vitroNumber(n - offset)), values);
   }
   if (kind === 'select') {
     const { map } = vitroMessageOptions(opts);
@@ -1629,6 +1666,8 @@ function vitroFormatMessage(pattern, values) {
   while (i < pattern.length) {
     const c = pattern[i];
     if (c === "'" && pattern[i + 1] === "'") { out += "'"; i += 2; continue; }
+    const q = vitroQuoteEnd(pattern, i);
+    if (q >= 0) { out += pattern.slice(i + 1, q).replace(/''/g, "'"); i = q + 1; continue; }
     if (c !== '{') { out += c; i++; continue; }
     const end = vitroBlockEnd(pattern, i);
     if (end < 0) { out += pattern.slice(i); break; }
@@ -1648,7 +1687,7 @@ function vitroLocalize(key, ...args) {
   const values = {};
   if (args.length === 1 && args[0] && typeof args[0] === 'object') Object.assign(values, args[0]);
   else for (let i = 0; i + 1 < args.length; i += 2) values[args[i]] = args[i + 1];
-  if (raw.indexOf('{') < 0 && raw.indexOf("''") < 0) return raw;
+  if (raw.indexOf('{') < 0 && raw.indexOf("'") < 0) return raw;
   try { return vitroFormatMessage(raw, values); } catch (e) { return raw; }
 }
 // A new function whenever the strings change, as HA's is: a card that compares localize sees the change.
@@ -1691,6 +1730,9 @@ function vitroStateLabel(stateObj, state) {
   const id = stateObj && stateObj.entity_id ? String(stateObj.entity_id) : '';
   const domain = id.split('.')[0];
   if (!domain) return '';
+  // The integration's label needs the entity registry: asked for once (HA's frontend always has it), the domain's
+  // label serving until it's here.
+  askRegistries();
   const entry = registries.entities[id];
   const dc = stateObj.attributes ? stateObj.attributes.device_class : undefined;
   return (entry && entry.platform && entry.translation_key
@@ -1761,6 +1803,8 @@ async function vitroCallApi(method, path, parameters, headers) {
 // subscriptions go over the bridge to the panel's one connection. A subscription the panel starts on HA's connection
 // is followed by its id (sid); the bridge sends its events, and the page asks for each again on a new bridge.
 let haConnected = true;
+// Counts the connection's changes: a reconnect's preCheck answers for that reconnect only.
+let connGeneration = 0;
 const connListeners = new Map();
 const pageSubs = new Map();
 let nextSid = 1;
@@ -1877,10 +1921,11 @@ function loadServices() {
 function askServices() {
   if (servicesAsked) return;
   servicesAsked = true;
-  loadServices();
+  // The listeners first, then the list: a service registered in between is in one or the other. A listener HA
+  // refuses still leaves the list read once.
   const later = () => { clearTimeout(servicesTimer); servicesTimer = setTimeout(loadServices, 500); };
-  vitroConnection.subscribeEvents(later, 'service_registered').catch(() => {});
-  vitroConnection.subscribeEvents(later, 'service_removed').catch(() => {});
+  const listen = (type) => vitroConnection.subscribeEvents(later, type).catch(() => {});
+  Promise.all([listen('service_registered'), listen('service_removed')]).then(loadServices, loadServices);
 }
 
 // hass.auth's refreshAccessToken: the page asks for the token the panel holds now (the panel renews its own).
@@ -1895,9 +1940,14 @@ function vitroRefreshToken() {
     }, QUEUED_CALL_MS);
   });
 }
-function authObject() {
-  return { data: { access_token: accessToken, hassUrl: location.origin }, accessToken, expired: false, refreshAccessToken: vitroRefreshToken };
-}
+// One Auth for the page, as HA's client keeps one: a card that holds on to it reads the token the panel holds now.
+const vitroAuth = {
+  data: { get access_token() { return accessToken; }, hassUrl: location.origin },
+  get accessToken() { return accessToken; },
+  get expired() { return false; },
+  refreshAccessToken: vitroRefreshToken,
+};
+function authObject() { return vitroAuth; }
 
 // hass.user until Home Assistant says who signed in, and when it doesn't know.
 const ANON_USER = { id: 'vitro', name: 'Panel', is_admin: false, is_owner: false };
@@ -1964,10 +2014,7 @@ function makeHass() {
       enumerable: true,
       configurable: true,
       get() {
-        if (!registriesAsked) {
-          registriesAsked = true;
-          sendBridge({ type: 'registries' });
-        }
+        askRegistries();
         return snapshot[key];
       },
     });
@@ -2017,10 +2064,17 @@ function connectBridge() {
         if (up !== haConnected) {
           haConnected = up;
           // HA's client asks a subscription's preCheck again before it resubscribes: one that says no now ends.
+          connGeneration++;
+          // The answer of this reconnect's check only: an earlier one that settles late changes nothing.
           if (up) for (const [sid, entry] of Array.from(pageSubs)) {
             if (!entry.preCheck) continue;
+            const gen = connGeneration;
             Promise.resolve().then(() => entry.preCheck()).then((ok) => {
-              if (!ok && pageSubs.get(sid) === entry) { pageSubs.delete(sid); sendIfOpen({ type: 'unsubscribe', sid }); }
+              if (ok || gen !== connGeneration || pageSubs.get(sid) !== entry) return;
+              pageSubs.delete(sid);
+              sendIfOpen({ type: 'unsubscribe', sid });
+              // Never started: the card's subscribeMessage fails, as HA's does when its pre-check says no.
+              if (!entry.acked) entry.reject(new Error('Pre-check failed'));
             }, () => {});
           }
           fireConn(up ? 'ready' : 'disconnected');

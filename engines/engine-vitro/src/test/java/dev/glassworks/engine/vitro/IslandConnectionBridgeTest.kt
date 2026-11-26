@@ -211,6 +211,37 @@ class IslandConnectionBridgeTest {
         assertTrue(sent.ofType("subError").isEmpty())
     }
 
+    @Test fun aMoveInTheLayoutKeepsLiveSubscriptionsAndADropMeanwhileIsHeard() {
+        val (island, send, sent) = island()
+        island.handleIslandMessage(subscribe(1, "scheduler/subscribe"), send)
+        val parent = island.parent as android.view.ViewGroup
+        parent.removeView(island)
+        connectionWatcher!!(false)
+        parent.addView(island)
+        idle()
+        assertEquals("heard while detached", listOf(true, false), sent.ofType("conn").map { it.getBoolean("connected") })
+        connectionWatcher!!(true)
+        assertEquals("started again once, on the new connection", 2, subs.size)
+        // A move with no drop: nothing restarts.
+        parent.removeView(island)
+        parent.addView(island)
+        idle()
+        assertEquals(2, subs.size)
+        assertFalse(subs.last().cancelled)
+    }
+
+    @Test fun aSecondBridgeOpeningMeanwhileDoesntHideAChangeFromTheFirst() {
+        val (island, send, sent) = island()
+        connected = false
+        val sent2 = ArrayList<JSONObject>()
+        slot().onConnected { sent2 += it }
+        // The watcher hears of the drop after the second bridge read it.
+        connectionWatcher!!(false)
+        assertEquals(listOf(true, false), sent.ofType("conn").map { it.getBoolean("connected") })
+        assertEquals(listOf(false), sent2.ofType("conn").map { it.getBoolean("connected") })
+        island.release()
+    }
+
     @Test fun aRefusedSubscriptionIsTheCardsErrorAndALostOneWaits() {
         val (island, send, sent) = island()
         island.handleIslandMessage(subscribe(1, "admin/only"), send)
@@ -259,6 +290,7 @@ class IslandConnectionBridgeTest {
         val (other, send2, _) = island()
         other.handleIslandMessage(JSONObject().put("type", "cardBroken").put("member", "</script><b>"), send2)
         idle()
+        assertEquals("the second card's report arrived", 2, failed.size)
         assertFalse("a name that isn't an identifier never reaches the log", "<" in failed.last().second)
     }
 

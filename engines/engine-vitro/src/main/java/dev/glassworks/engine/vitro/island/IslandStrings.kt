@@ -27,10 +27,10 @@ object IslandStrings {
     @Volatile private var last: Snapshot? = null
 
     /**
-     * The last few sets, by hash: a page made just before the strings changed (another language, more labels) still
+     * The last few sets made, by hash, oldest out first (a read doesn't keep one longer): a page made just before the strings changed (another language, more labels) still
      * gets the set it asked for, never another language's.
      */
-    private val recent = object : LinkedHashMap<String, Snapshot>(8, 0.75f, true) {
+    private val recent = object : LinkedHashMap<String, Snapshot>(8, 0.75f, false) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Snapshot>?) = size > KEPT
     }
 

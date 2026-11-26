@@ -1114,7 +1114,7 @@ class VitroEngineTest {
         assertTrue(html.contains("ownKeys(target) {"))
         assertTrue(html.contains("sendBridge({ type: 'watchAll' });"))
         assertTrue("no lookup watch once it follows all", html.contains("if (!walksAll && typeof prop === 'string' && prop.includes('.'))"))
-        assertTrue(html.contains("return { data: { access_token: accessToken, hassUrl: location.origin }, accessToken, expired: false, refreshAccessToken: vitroRefreshToken };"))
+        assertTrue(html.contains("data: { get access_token() { return accessToken; }, hassUrl: location.origin },"))
         // Navigation and actions go back over the bridge.
         assertTrue(html.contains("window.addEventListener('location-changed'"))
         assertTrue(html.contains("window.addEventListener('hass-navigate'"))
