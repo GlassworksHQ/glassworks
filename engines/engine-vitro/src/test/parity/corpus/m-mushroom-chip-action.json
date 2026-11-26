@@ -1,0 +1,21 @@
+{
+ "title": "Mushroom chips: action (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "action",
+    "icon": "mdi:home-assistant",
+    "icon_color": "blue"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {},
+  "entities": []
+ }
+}

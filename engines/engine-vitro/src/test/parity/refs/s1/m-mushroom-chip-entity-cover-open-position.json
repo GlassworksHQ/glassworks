@@ -1,0 +1,117 @@
+{
+ "case": "m-mushroom-chip-entity-cover-open-position",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 54
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 38,
+   "type": "mushroom-chips-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Open",
+   "x": 33.39,
+   "y": 11.59,
+   "w": 25.44,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "cover.cover_open_position": {
+   "s": "open",
+   "a": {
+    "current_position": 40,
+    "device_class": "blind",
+    "supported_features": 15,
+    "friendly_name": "Office Blind"
+   },
+   "lc": 1794496080,
+   "lu": 1794496080
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "cover.cover_open_position",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Blind",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Office"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "cover"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "cover": {
+     "_": {
+      "default": "mdi:window-open",
+      "state": {
+       "closed": "mdi:window-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     },
+     "blind": {
+      "default": "mdi:blinds-horizontal",
+      "state": {
+       "closed": "mdi:blinds-horizontal-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.cover.entity_component._.state.closed": "Closed",
+    "component.cover.entity_component._.state.closing": "Closing",
+    "component.cover.entity_component._.state.open": "Open",
+    "component.cover.entity_component._.state.opening": "Opening",
+    "component.cover.entity_component._.state.stopped": "Stopped"
+   },
+   "entity": {}
+  }
+ }
+}

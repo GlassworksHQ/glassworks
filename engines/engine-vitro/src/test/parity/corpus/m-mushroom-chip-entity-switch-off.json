@@ -1,0 +1,45 @@
+{
+ "title": "Mushroom chips: entity-switch-off (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "switch.switch_off": "off"
+ },
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "entity",
+    "entity": "switch.switch_off"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "switch.switch_off": {
+    "state": "off",
+    "last_changed": "-2h",
+    "attributes": {
+     "friendly_name": "Patio Heater"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "switch.switch_off",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-patio",
+    "name": "Patio"
+   }
+  ]
+ }
+}

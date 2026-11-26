@@ -25,6 +25,15 @@ data class PixelDiff(
     val meanLuma: Double,
     /** One pixel per CSS px: the reference in grey, differences in red (tolerant) and orange (strict only), masks in blue. */
     val image: Bitmap,
+    /**
+     * The worst small region: the color distance (pixelmatch's YIQ, square-rooted to 0..1) between HA's and Vitro's mean
+     * color over a [ParityDiff.REGION] CSS px square, where Vitro's square may sit up to [ParityDiff.REGION_SHIFT] px
+     * away. A share of the whole crop can't see a small element in the wrong color (a 24 px icon green where HA's is
+     * white is 1% of a chips card); a mean over the square ignores antialiasing and sub-pixel text, but not a color.
+     */
+    val region: Double = 0.0,
+    /** Where [region] is, in CSS px of the crop; null when nothing was compared. */
+    val regionAt: Rect? = null,
 )
 
 /**
@@ -39,6 +48,15 @@ object ParityDiff {
     /** [yiq] is a squared distance, so pixelmatch compares it with the threshold squared. */
     const val MAX_DELTA = THRESHOLD * THRESHOLD
     private const val MAX_YIQ = 35215.0
+
+    /** The side of a region [PixelDiff.region] compares, CSS px: about one icon. */
+    const val REGION = 16
+
+    /** How far Vitro's region may sit from HA's and still count as the same, CSS px. */
+    const val REGION_SHIFT = 2
+
+    /** Regions are taken every this many CSS px. */
+    private const val REGION_STEP = 4
 
     /** Box-filters [b] to [w] x [h] samples (premultiplied over [bg], so transparent edges compare as the page). */
     fun downsample(b: Bitmap, w: Int, h: Int, bg: Int = Color.BLACK): IntArray {
@@ -121,9 +139,65 @@ object ParityDiff {
                 px[i] = Color.rgb(235, 40, 40)
             }
         }
+        val (region, at) = worstRegion(a, b, w, h, masked)
+        at?.let { r ->
+            // The worst region, outlined in magenta.
+            for (x in r.left until r.right) for (y in intArrayOf(r.top, r.bottom - 1)) if (y in 0 until h && x in 0 until w) px[y * w + x] = Color.MAGENTA
+            for (y in r.top until r.bottom) for (x in intArrayOf(r.left, r.right - 1)) if (y in 0 until h && x in 0 until w) px[y * w + x] = Color.MAGENTA
+        }
         out.setPixels(px, 0, w, 0, 0, w, h)
         val total = max(1, n).toDouble()
-        return PixelDiff(strict / total, tolerant / total, lumaSum / total, out)
+        return PixelDiff(strict / total, tolerant / total, lumaSum / total, out, region, at)
+    }
+
+    /** Per-channel summed-area table of [p] ([w] x [h]), (w+1) x (h+1). */
+    private fun sat(p: IntArray, w: Int, h: Int, channel: (Int) -> Int): LongArray {
+        val t = LongArray((w + 1) * (h + 1))
+        for (y in 0 until h) {
+            var row = 0L
+            for (x in 0 until w) {
+                row += channel(p[y * w + x])
+                t[(y + 1) * (w + 1) + x + 1] = t[y * (w + 1) + x + 1] + row
+            }
+        }
+        return t
+    }
+
+    /**
+     * [PixelDiff.region]: the largest distance between HA's mean color over a [REGION] square and Vitro's over the
+     * nearest-matching square within [REGION_SHIFT], with where it is. Squares touching a mask are left out.
+     */
+    fun worstRegion(a: IntArray, b: IntArray, w: Int, h: Int, masked: List<Rect> = emptyList()): Pair<Double, Rect?> {
+        if (w < REGION || h < REGION) return 0.0 to null
+        val sa = listOf(sat(a, w, h, Color::red), sat(a, w, h, Color::green), sat(a, w, h, Color::blue))
+        val sb = listOf(sat(b, w, h, Color::red), sat(b, w, h, Color::green), sat(b, w, h, Color::blue))
+        val area = (REGION * REGION).toLong()
+        fun mean(t: List<LongArray>, x: Int, y: Int): Int {
+            val c = t.map { s ->
+                val v = s[(y + REGION) * (w + 1) + x + REGION] - s[y * (w + 1) + x + REGION] - s[(y + REGION) * (w + 1) + x] + s[y * (w + 1) + x]
+                (v / area).toInt()
+            }
+            return Color.rgb(c[0], c[1], c[2])
+        }
+        var worst = 0.0
+        var at: Rect? = null
+        val xs = (0..w - REGION step REGION_STEP).toMutableList().apply { if (last() != w - REGION) add(w - REGION) }
+        val ys = (0..h - REGION step REGION_STEP).toMutableList().apply { if (last() != h - REGION) add(h - REGION) }
+        for (y in ys) for (x in xs) {
+            val r = Rect(x, y, x + REGION, y + REGION)
+            if (masked.any { Rect.intersects(it, r) }) continue
+            val ma = mean(sa, x, y)
+            var best = Double.MAX_VALUE
+            for (dy in -REGION_SHIFT..REGION_SHIFT) for (dx in -REGION_SHIFT..REGION_SHIFT) {
+                val xx = x + dx; val yy = y + dy
+                if (xx < 0 || yy < 0 || xx > w - REGION || yy > h - REGION) continue
+                best = min(best, yiq(ma, mean(sb, xx, yy)))
+                if (best == 0.0) break
+            }
+            val d = Math.sqrt(best)
+            if (d > worst) { worst = d; at = r }
+        }
+        return worst to at
     }
 
     /** HA | Vitro | diff, side by side under one caption line, at the references' scale (the diff is scaled up). */

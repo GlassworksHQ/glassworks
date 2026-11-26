@@ -1,0 +1,43 @@
+{
+ "title": "button: fan on-speed (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "fan.fan_on_speed": "on"
+ },
+ "card": {
+  "type": "button",
+  "entity": "fan.fan_on_speed"
+ },
+ "fixture": {
+  "states": {
+   "fan.fan_on_speed": {
+    "state": "on",
+    "last_changed": "-25m",
+    "attributes": {
+     "percentage": 67,
+     "percentage_step": 33.333333333333336,
+     "supported_features": 49,
+     "friendly_name": "Bedroom Ceiling Fan"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "fan.fan_on_speed",
+    "pl": "demo",
+    "di": "dev-bedroom",
+    "en": "Ceiling Fan",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-bedroom",
+    "name": "Bedroom"
+   }
+  ]
+ }
+}

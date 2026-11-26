@@ -1,0 +1,48 @@
+{
+ "title": "Mushroom chips: entity-alarm-control-panel-disarmed (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "alarm_control_panel.alarm_control_panel_disarmed": "disarmed"
+ },
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "entity",
+    "entity": "alarm_control_panel.alarm_control_panel_disarmed"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "alarm_control_panel.alarm_control_panel_disarmed": {
+    "state": "disarmed",
+    "last_changed": "-2h",
+    "attributes": {
+     "code_format": "number",
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_disarmed",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-house",
+    "name": "House"
+   }
+  ]
+ }
+}

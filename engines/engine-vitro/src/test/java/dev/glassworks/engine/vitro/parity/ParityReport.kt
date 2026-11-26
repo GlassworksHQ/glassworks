@@ -16,7 +16,7 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 enum class ParityStatus(val label: String) {
-    REGRESSION("regression"), ERROR("error"), NO_REFERENCE("no reference"), DRIFT("known drift"), MATCH("match"), COLLECTED("collected"),
+    REGRESSION("regression"), ERROR("error"), NO_REFERENCE("no reference"), OPEN("open bug"), DRIFT("known drift"), MATCH("match"), COLLECTED("collected"),
 }
 
 /** One HA text run and where Vitro has it. Positions are CSS px relative to each side's own card slot. */
@@ -48,6 +48,7 @@ data class ParityMeasure(
 
     fun over(t: Threshold): List<String> = buildList {
         if (pixel.tolerant > t.pixel) add("pixels ${pct(pixel.tolerant)} > ${pct(t.pixel)}")
+        if (pixel.region > t.region) add("a ${ParityDiff.REGION} px region differs in color: Δ${num2(pixel.region)} > ${num2(t.region)}${pixel.regionAt?.let { " at ${it.left},${it.top}" } ?: ""}")
         if (bounds > t.bounds) add("bounds Δ${num(bounds)} px > ${num(t.bounds)}")
         if (fontDelta > t.font) add("font Δ${num(fontDelta)} px > ${num(t.font)}")
         if (missingTexts.size > t.missingText) add("${missingTexts.size} HA text(s) not found in Vitro's views")
@@ -79,6 +80,7 @@ fun fatalResults(results: List<ParityResult>, acceptDrift: Boolean): List<Parity
 }
 
 internal fun pct(v: Double) = String.format(Locale.ROOT, "%.1f%%", v * 100)
+internal fun num2(v: Double) = String.format(Locale.ROOT, "%.2f", v)
 internal fun num(v: Double) = if (v.isInfinite()) "∞" else String.format(Locale.ROOT, "%.1f", v)
 
 object ParityCompare {
@@ -193,12 +195,15 @@ class ParityBaseline(private val file: File) {
     fun entry(key: String): JSONObject? = json.optJSONObject(key)
 
     /** Why [m] is worse than the known drift for [key], or empty when it isn't. */
-    fun worse(key: String, m: ParityMeasure): List<String> {
+    fun worse(key: String, m: ParityMeasure, t: Threshold = Threshold()): List<String> {
         val b = entry(key) ?: return listOf("not in baseline.json")
         return buildList {
             if (m.pixel.tolerant > b.optDouble("pixel", 0.0) + PIXEL_SLACK) add("pixels ${pct(m.pixel.tolerant)} > baseline ${pct(b.optDouble("pixel"))}")
             val known = boundsOf(b)
             if (m.bounds > known + BOUNDS_SLACK) add("bounds Δ${num(m.bounds)} > baseline ${num(known)}")
+            // An entry from before the region check has none: the case's own threshold is what it was held to.
+            val region = max(b.optDouble("region", 0.0), t.region)
+            if (m.pixel.region > region + REGION_SLACK) add("region Δ${num2(m.pixel.region)} > baseline ${num2(region)}")
             if (m.fontDelta > b.optDouble("font", 0.0) + FONT_SLACK) add("font Δ${num(m.fontDelta)} > baseline ${num(b.optDouble("font"))}")
             if (m.missingTexts.size > b.optInt("missingText", 0)) add("${m.missingTexts.size} texts missing > baseline ${b.optInt("missingText")}")
             // Vitro's card count minus HA's: a known mismatch is accepted as it is, a new or changed one isn't.
@@ -214,17 +219,20 @@ class ParityBaseline(private val file: File) {
         val ran = results.filter { it.measure != null }.map { it.key }.toSet()
         val out = JSONObject()
         out.put("_comment", "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: " +
-            "${pct(PIXEL_SLACK)} pixels, $BOUNDS_SLACK px bounds, $FONT_SLACK px font). Regenerate with " +
+            "${pct(PIXEL_SLACK)} pixels, $BOUNDS_SLACK px bounds, $FONT_SLACK px font, $REGION_SLACK region). Regenerate with " +
             "-PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the " +
             "diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.")
         val entries = java.util.TreeMap<String, Any>()
         for (k in json.keys().asSequence().filter { it !in ran && !it.startsWith("_") }) entries[k] = json.get(k)
         for (r in results) {
             val m = r.measure ?: continue
+            // An open bug is tracked in open.json, never as drift.
+            if (r.status == ParityStatus.OPEN) continue
             if (m.over(r.case.threshold).isEmpty()) continue
             entries[r.key] = JSONObject()
                 .put("pixel", round(m.pixel.tolerant, 4)).put("bounds", if (m.bounds.isInfinite()) UNBOUNDED else round(m.bounds, 1))
                 .put("font", round(m.fontDelta, 1)).put("missingText", m.missingTexts.size)
+                .apply { if (m.pixel.region > r.case.threshold.region) put("region", round(m.pixel.region, 2)) }
                 .apply { if (m.slotsVitro != m.slotsHa) put("slotDelta", m.slotsVitro - m.slotsHa) }
                 .put("reason", entry(r.key)?.optString("reason")?.takeIf { it.isNotBlank() } ?: "not triaged yet (#794)")
         }
@@ -247,8 +255,44 @@ class ParityBaseline(private val file: File) {
         const val PIXEL_SLACK = 0.02
         const val BOUNDS_SLACK = 1.0
         const val FONT_SLACK = 0.5
+        const val REGION_SLACK = 0.02
         private fun round(v: Double, places: Int): Double { val f = Math.pow(10.0, places.toDouble()); return Math.round(v * f) / f }
     }
+}
+
+/**
+ * open.json: cases Vitro draws wrong today whose fix an open PR owns, per frame/case, each with its `owner` (the PR,
+ * `#928`) and `reason`. Unlike baseline.json, which is for drift HA's and Vitro's text engines can't avoid (sub-pixel
+ * metrics), these are real bugs: the run reports them as open (not failing, so the case can land before its fix) and
+ * fails once one matches, so the fix drops its entry and the case guards it from then on. A case is never in both files.
+ */
+class ParityOpen(private val file: File) {
+    private val json: JSONObject = file.takeIf { it.isFile }?.readText()?.takeIf { it.isNotBlank() }?.let(::JSONObject) ?: JSONObject()
+
+    /** The entry for [key] (`frame/case`), or null. An entry without an owner PR is an error, not an open bug. */
+    fun entry(key: String): JSONObject? = json.optJSONObject(key)?.also {
+        require(Regex("^#\\d+$").matches(it.optString("owner"))) { "open.json $key: `owner` must be the PR that fixes it (#123)" }
+        require(it.optString("reason").isNotBlank()) { "open.json $key: `reason` says what Vitro draws wrong" }
+    }
+
+    /** What the run says about an open entry: the bug and who owns its fix. */
+    fun describe(key: String): String? = entry(key)?.let { "open (${it.getString("owner")}): ${it.getString("reason")}" }
+
+    /**
+     * How an open entry judges a measured case: null when [key] isn't listed; otherwise OPEN with the bug while the case
+     * is still [over] its threshold, and ERROR once it matches (drop the entry) or when baseline.json lists it too
+     * ([inBaseline]).
+     */
+    fun judge(key: String, over: List<String>, inBaseline: Boolean): Pair<ParityStatus, List<String>>? {
+        val bug = describe(key) ?: return null
+        return when {
+            inBaseline -> ParityStatus.ERROR to listOf("listed in both open.json and baseline.json: an open bug isn't drift")
+            over.isEmpty() -> ParityStatus.ERROR to listOf("matches HA now: drop it from open.json ($bug)")
+            else -> ParityStatus.OPEN to over + bug
+        }
+    }
+
+    val keys: Set<String> get() = json.keys().asSequence().filter { !it.startsWith("_") }.toSet()
 }
 
 /** index.html, report.md and report.json under [dir], with one side-by-side image per case in img/. */
@@ -264,7 +308,7 @@ object ParityReportWriter {
     private fun json(r: ParityResult) = JSONObject().apply {
         put("corpus", r.corpus); put("frame", r.frame.id); put("case", r.case.id); put("title", r.case.title); put("status", r.status.name.lowercase())
         r.measure?.let { m ->
-            put("pixelTolerant", m.pixel.tolerant); put("pixelStrict", m.pixel.strict); put("meanLuma", m.pixel.meanLuma)
+            put("pixelTolerant", m.pixel.tolerant); put("pixelStrict", m.pixel.strict); put("region", m.pixel.region); put("meanLuma", m.pixel.meanLuma)
             put("bounds", if (m.bounds.isInfinite()) JSONObject.NULL else m.bounds); put("slotsHa", JSONArray(m.haSlots.map(::rectJson))); put("slotsVitro", JSONArray(m.vitroSlots.map(::rectJson)))
             put("fontDelta", m.fontDelta); put("positionDelta", m.positionDelta); put("missingTexts", JSONArray(m.missingTexts))
             put("texts", JSONArray(m.texts.map { t -> JSONObject().put("text", t.text).put("sizeHa", t.sizeHa).put("sizeVitro", t.sizeVitro ?: JSONObject.NULL).put("dx", t.dx ?: JSONObject.NULL).put("dy", t.dy ?: JSONObject.NULL).apply { if (t.described) put("described", true) } }))
@@ -279,15 +323,15 @@ object ParityReportWriter {
     private fun markdown(results: List<ParityResult>, haVersion: String) = buildString {
         appendLine("# Vitro parity report")
         appendLine()
-        appendLine("Home Assistant $haVersion. ${counts(results)}. Pixels: share of the card's crop that differs (1 sample per CSS px, ±1 px shift tolerated). Bounds: largest card edge offset. Font: largest text size difference. Texts: HA text runs found in Vitro's views.")
+        appendLine("Home Assistant $haVersion. ${counts(results)}. Pixels: share of the card's crop that differs (1 sample per CSS px, ±1 px shift tolerated). Region: the largest color distance between HA's and Vitro's mean over a 16 px square (±2 px shift), magenta in the diff. Bounds: largest card edge offset. Font: largest text size difference. Texts: HA text runs found in Vitro's views.")
         appendLine()
-        appendLine("| Status | Frame | Case | Pixels | Bounds Δ | Font Δ | Texts | Why |")
-        appendLine("|---|---|---|---:|---:|---:|---:|---|")
+        appendLine("| Status | Frame | Case | Pixels | Region Δ | Bounds Δ | Font Δ | Texts | Why |")
+        appendLine("|---|---|---|---:|---:|---:|---:|---:|---|")
         for (r in results) {
             val m = r.measure
             val texts = m?.let { "${it.texts.count { t -> t.found }}/${it.texts.size}" } ?: ""
             val why = (r.reasons + r.notes).joinToString("; ").replace("|", "\\|")
-            appendLine("| ${r.status.label} | ${r.frame.id} | ${r.case.id} | ${m?.let { pct(it.pixel.tolerant) } ?: ""} | ${m?.let { num(it.bounds) } ?: ""} | ${m?.let { num(it.fontDelta) } ?: ""} | $texts | $why |")
+            appendLine("| ${r.status.label} | ${r.frame.id} | ${r.case.id} | ${m?.let { pct(it.pixel.tolerant) } ?: ""} | ${m?.let { num2(it.pixel.region) } ?: ""} | ${m?.let { num(it.bounds) } ?: ""} | ${m?.let { num(it.fontDelta) } ?: ""} | $texts | $why |")
         }
     }
 
@@ -302,7 +346,7 @@ h1{font-size:20px;margin:0 0 4px}p{color:var(--mu);margin:0 0 16px;max-width:900
 .r{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin:0 0 12px}
 .h{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline}.h b{font-size:15px}.m{color:var(--mu)}
 .s{font-weight:600;padding:1px 8px;border-radius:99px;font-size:12px}
-.regression,.error,.no-reference{background:#fee2e2;color:#991b1b}.known-drift{background:#fef3c7;color:#92400e}.match{background:#dcfce7;color:#166534}.collected{background:#e0e7ff;color:#3730a3}
+.regression,.error,.no-reference{background:#fee2e2;color:#991b1b}.known-drift{background:#fef3c7;color:#92400e}.open-bug{background:#fce7f3;color:#9d174d}.match{background:#dcfce7;color:#166534}.collected{background:#e0e7ff;color:#3730a3}
 img{max-width:100%;height:auto;margin-top:8px;border-radius:6px;image-rendering:auto}
 ul{margin:6px 0 0;padding-left:18px;color:var(--mu)}
 </style></head><body>""")
@@ -310,7 +354,7 @@ ul{margin:6px 0 0;padding-left:18px;color:var(--mu)}
         for (r in results) {
             val m = r.measure
             append("<div class=\"r\"><div class=\"h\"><span class=\"s ${r.status.label.replace(' ', '-')}\">${esc(r.status.label)}</span><b>${esc(r.frame.id)} / ${esc(r.case.id)}</b><span class=\"m\">${esc(r.case.title)}</span>")
-            if (m != null) append("<span>pixels ${pct(m.pixel.tolerant)} (strict ${pct(m.pixel.strict)})</span><span>bounds Δ${num(m.bounds)} px</span><span>font Δ${num(m.fontDelta)} px</span><span>texts ${m.texts.count { it.found }}/${m.texts.size}</span>")
+            if (m != null) append("<span>pixels ${pct(m.pixel.tolerant)} (strict ${pct(m.pixel.strict)})</span><span>region Δ${num2(m.pixel.region)}</span><span>bounds Δ${num(m.bounds)} px</span><span>font Δ${num(m.fontDelta)} px</span><span>texts ${m.texts.count { it.found }}/${m.texts.size}</span>")
             append("</div>")
             val lines = r.reasons + r.notes + (m?.missingTexts?.take(8)?.map { "not in Vitro's views: “$it”" } ?: emptyList()) +
                 (m?.texts?.filter { it.sizeVitro != null && abs(it.sizeVitro - it.sizeHa) > 0.5 }?.take(8)?.map { "“${it.text.take(40)}”: HA ${num(it.sizeHa)} px, Vitro ${num(it.sizeVitro!!)} px" } ?: emptyList())

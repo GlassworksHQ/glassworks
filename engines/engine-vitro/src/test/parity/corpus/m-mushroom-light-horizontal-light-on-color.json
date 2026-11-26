@@ -1,0 +1,67 @@
+{
+ "title": "mushroom-light-horizontal: light on-color (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "light.light_on_color": "on"
+ },
+ "card": {
+  "type": "custom:mushroom-light-card",
+  "entity": "light.light_on_color",
+  "layout": "horizontal",
+  "show_brightness_control": true,
+  "use_light_color": true
+ },
+ "fixture": {
+  "states": {
+   "light.light_on_color": {
+    "state": "on",
+    "last_changed": "-12m",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "color_mode": "hs",
+     "brightness": 204,
+     "hs_color": [
+      24.0,
+      84.0
+     ],
+     "rgb_color": [
+      255,
+      129,
+      40
+     ],
+     "xy_color": [
+      0.594,
+      0.371
+     ],
+     "friendly_name": "Kitchen Pendant"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.light_on_color",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   }
+  ]
+ }
+}

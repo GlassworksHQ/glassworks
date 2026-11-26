@@ -1,0 +1,55 @@
+{
+ "title": "mushroom-climate: climate heat-cool (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "climate.climate_heat_cool": "heat_cool"
+ },
+ "card": {
+  "type": "custom:mushroom-climate-card",
+  "entity": "climate.climate_heat_cool",
+  "show_temperature_control": true
+ },
+ "fixture": {
+  "states": {
+   "climate.climate_heat_cool": {
+    "state": "heat_cool",
+    "last_changed": "-3h",
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat",
+      "cool",
+      "heat_cool"
+     ],
+     "min_temp": 7,
+     "max_temp": 35,
+     "target_temp_step": 0.5,
+     "current_temperature": 21.3,
+     "target_temp_low": 19,
+     "target_temp_high": 24,
+     "hvac_action": "idle",
+     "supported_features": 386,
+     "friendly_name": "Hallway Thermostat"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "climate.climate_heat_cool",
+    "pl": "demo",
+    "di": "dev-hallway",
+    "en": "Thermostat",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway",
+    "name": "Hallway"
+   }
+  ]
+ }
+}

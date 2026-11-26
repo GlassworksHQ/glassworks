@@ -587,6 +587,13 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     private val code = StringBuilder()
     private val armStates: List<String> = readStates(config.raw.optJSONArray("states"))
 
+    /**
+     * The arm buttons: the card's `states` as written, or, without them, HA's defaults (arm home, arm away) that the
+     * alarm supports (`supported_features`), as hui-alarm-panel-card filters them.
+     */
+    private fun shownArmStates(s: EntityState?): List<String> =
+        if (config.raw.has("states")) armStates else DEFAULT_STATES.filter { supports(s, it) }
+
     init {
         val col = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
@@ -682,7 +689,8 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
         renderCode()
 
         actionsRow.removeAllViews()
-        val buttons = if (state == "disarmed" || s == null || s.isUnavailable) armStates else listOf("disarm")
+        // hui-alarm-panel-card: the arm buttons only while disarmed, Disarm in any other state (unavailable too).
+        val buttons = if (state == "disarmed" || s == null) shownArmStates(s) else listOf("disarm")
         buttons.forEach { action ->
             // ha-button: a 32 px tonal pill, 14 px / 500, 12 px padding (disarm in HA's danger colors).
             val danger = action == "disarm"
@@ -750,6 +758,16 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
         fun readStates(arr: JSONArray?): List<String> {
             if (arr == null || arr.length() == 0) return DEFAULT_STATES
             return (0 until arr.length()).mapNotNull { arr.optString(it, "").ifEmpty { null } }.ifEmpty { DEFAULT_STATES }
+        }
+
+        /** HA's AlarmControlPanelEntityFeature bit for each arm action. */
+        private val ARM_FEATURE = mapOf("arm_home" to 1, "arm_away" to 2, "arm_night" to 4, "arm_custom_bypass" to 16, "arm_vacation" to 32)
+
+        /** Whether [s] supports [action] (HA's `supportsFeature`); an entity without `supported_features` supports none. */
+        fun supports(s: EntityState?, action: String): Boolean {
+            val bits = (s?.attributes?.get("supported_features") as? Number)?.toInt() ?: return false
+            val bit = ARM_FEATURE[action] ?: return true
+            return bits and bit != 0
         }
 
         /** `arm_home` → `alarm_arm_home`, `disarm` → `alarm_disarm`. */

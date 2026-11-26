@@ -1,0 +1,46 @@
+{
+ "title": "mushroom-light-plain: light on-dimmed (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "light.light_on_dimmed": "on"
+ },
+ "card": {
+  "type": "custom:mushroom-light-card",
+  "entity": "light.light_on_dimmed"
+ },
+ "fixture": {
+  "states": {
+   "light.light_on_dimmed": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 40,
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Kitchen Pendant"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.light_on_dimmed",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   }
+  ]
+ }
+}

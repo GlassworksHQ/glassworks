@@ -1,0 +1,39 @@
+{
+ "title": "Mushroom chips: weather-unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "weather.unavailable": "unavailable"
+ },
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "weather",
+    "entity": "weather.unavailable",
+    "show_conditions": true,
+    "show_temperature": true
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "weather.unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "restored": true,
+     "friendly_name": "Home"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "weather.unavailable",
+    "pl": "met"
+   }
+  ]
+ }
+}

@@ -1,0 +1,378 @@
+{
+ "case": "m-mushroom-chip-row",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 100
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 84,
+   "type": "mushroom-chips-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Home",
+   "x": 33.39,
+   "y": 11.59,
+   "w": 28.94,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Away",
+   "x": 113.72,
+   "y": 11.59,
+   "w": 26.17,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 191.28,
+   "y": 11.59,
+   "w": 13.52,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "21.4 °C",
+   "x": 256.19,
+   "y": 11.59,
+   "w": 35.69,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Sunny ⸱ 14.2 °C",
+   "x": 343.27,
+   "y": 11.59,
+   "w": 74.48,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Locked",
+   "x": 33.39,
+   "y": 57.59,
+   "w": 35.19,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.light_on_color": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "color_temp",
+     "hs"
+    ],
+    "min_color_temp_kelvin": 2000,
+    "max_color_temp_kelvin": 6535,
+    "min_mireds": 153,
+    "max_mireds": 500,
+    "supported_features": 40,
+    "color_mode": "hs",
+    "brightness": 204,
+    "hs_color": [
+     24,
+     84
+    ],
+    "rgb_color": [
+     255,
+     129,
+     40
+    ],
+    "xy_color": [
+     0.594,
+     0.371
+    ],
+    "friendly_name": "Kitchen Pendant"
+   },
+   "lc": 1794498960,
+   "lu": 1794498960
+  },
+  "lock.lock_locked": {
+   "s": "locked",
+   "a": {
+    "supported_features": 0,
+    "friendly_name": "Front Door Lock"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "person.away": {
+   "s": "not_home",
+   "a": {
+    "editable": true,
+    "id": "robin",
+    "device_trackers": [],
+    "friendly_name": "Robin"
+   },
+   "lc": 1794488880,
+   "lu": 1794488880
+  },
+  "person.home": {
+   "s": "home",
+   "a": {
+    "editable": true,
+    "id": "robin",
+    "device_trackers": [],
+    "friendly_name": "Robin"
+   },
+   "lc": 1794488880,
+   "lu": 1794488880
+  },
+  "sensor.sensor_temperature": {
+   "s": "21.42",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794499560,
+   "lu": 1794499560
+  },
+  "weather.sunny": {
+   "s": "sunny",
+   "a": {
+    "dew_point": 7.8,
+    "temperature_unit": "°C",
+    "humidity": 82,
+    "cloud_coverage": 40,
+    "uv_index": 1.2,
+    "pressure": 1018.2,
+    "pressure_unit": "hPa",
+    "wind_bearing": 210,
+    "wind_speed": 12.4,
+    "wind_speed_unit": "km/h",
+    "visibility_unit": "km",
+    "precipitation_unit": "mm",
+    "supported_features": 1,
+    "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute.",
+    "temperature": 14.2,
+    "friendly_name": "Home"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.light_on_color",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "lock.lock_locked",
+    "pl": "demo",
+    "di": "device-2",
+    "en": "Door Lock",
+    "np": "device"
+   },
+   {
+    "ei": "person.away",
+    "pl": "person"
+   },
+   {
+    "ei": "person.home",
+    "pl": "person"
+   },
+   {
+    "ei": "sensor.sensor_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-3",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "weather.sunny",
+    "pl": "met"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Kitchen"
+   },
+   {
+    "id": "device-2",
+    "name": "Front"
+   },
+   {
+    "id": "device-3",
+    "name": "Living Room"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light",
+    "lock",
+    "person",
+    "sensor",
+    "weather"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "lock": {
+     "_": {
+      "default": "mdi:lock",
+      "state": {
+       "jammed": "mdi:lock-alert",
+       "locking": "mdi:lock-clock",
+       "open": "mdi:lock-open-variant",
+       "opening": "mdi:lock-clock",
+       "unlocked": "mdi:lock-open-variant",
+       "unlocking": "mdi:lock-clock"
+      }
+     }
+    },
+    "person": {
+     "_": {
+      "default": "mdi:account",
+      "state": {
+       "not_home": "mdi:account-arrow-right"
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    },
+    "weather": {
+     "_": {
+      "default": "mdi:weather-partly-cloudy",
+      "state": {
+       "clear-night": "mdi:weather-night",
+       "cloudy": "mdi:weather-cloudy",
+       "exceptional": "mdi:alert-circle-outline",
+       "fog": "mdi:weather-fog",
+       "hail": "mdi:weather-hail",
+       "lightning": "mdi:weather-lightning",
+       "lightning-rainy": "mdi:weather-lightning-rainy",
+       "pouring": "mdi:weather-pouring",
+       "rainy": "mdi:weather-rainy",
+       "snowy": "mdi:weather-snowy",
+       "snowy-rainy": "mdi:weather-snowy-rainy",
+       "sunny": "mdi:weather-sunny",
+       "windy": "mdi:weather-windy",
+       "windy-variant": "mdi:weather-windy-variant"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.lock.entity_component._.state.jammed": "Jammed",
+    "component.lock.entity_component._.state.locked": "Locked",
+    "component.lock.entity_component._.state.locking": "Locking",
+    "component.lock.entity_component._.state.open": "Open",
+    "component.lock.entity_component._.state.opening": "Opening",
+    "component.lock.entity_component._.state.unlocked": "Unlocked",
+    "component.lock.entity_component._.state.unlocking": "Unlocking",
+    "component.person.entity_component._.state.home": "Home",
+    "component.person.entity_component._.state.not_home": "Away",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On",
+    "component.weather.entity_component._.state.clear-night": "Clear, night",
+    "component.weather.entity_component._.state.cloudy": "Cloudy",
+    "component.weather.entity_component._.state.exceptional": "Exceptional",
+    "component.weather.entity_component._.state.fog": "Fog",
+    "component.weather.entity_component._.state.hail": "Hail",
+    "component.weather.entity_component._.state.lightning": "Lightning",
+    "component.weather.entity_component._.state.lightning-rainy": "Lightning, rainy",
+    "component.weather.entity_component._.state.partlycloudy": "Partly cloudy",
+    "component.weather.entity_component._.state.pouring": "Pouring",
+    "component.weather.entity_component._.state.rainy": "Rainy",
+    "component.weather.entity_component._.state.snowy": "Snowy",
+    "component.weather.entity_component._.state.snowy-rainy": "Snowy, rainy",
+    "component.weather.entity_component._.state.sunny": "Sunny",
+    "component.weather.entity_component._.state.windy": "Windy",
+    "component.weather.entity_component._.state.windy-variant": "Windy, cloudy"
+   },
+   "entity": {}
+  }
+ }
+}

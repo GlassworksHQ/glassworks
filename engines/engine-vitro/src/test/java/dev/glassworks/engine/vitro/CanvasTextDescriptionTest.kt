@@ -107,6 +107,39 @@ class CanvasTextDescriptionTest {
     }
 
     @Test
+    fun anUnavailableAlarmShowsDisarmAsHaDoes() {
+        // HA's alarm panel: the arm buttons only while disarmed; Disarm in every other state, unavailable too.
+        val store = EntityStore()
+        store.putLocal(EntityState("alarm_control_panel.home", "unavailable", mapOf("supported_features" to 63)))
+        val card = dev.glassworks.engine.vitro.cards.AlarmPanelCardView(
+            context(store), LovelaceParser.parseCard(JSONObject("""{"type": "alarm-panel", "entity": "alarm_control_panel.home"}""")),
+        )
+        activity.setContentView(card)
+        val row = card.javaClass.getDeclaredField("actionsRow").apply { isAccessible = true }.get(card) as ViewGroup
+        val labels = (0 until row.childCount).map { (row.getChildAt(it) as android.widget.TextView).text.toString() }
+        assertEquals(1, labels.size)
+        assertEquals(false, row.getChildAt(0).isEnabled)
+    }
+
+    @Test
+    fun theDefaultArmButtonsAreTheOnesTheAlarmSupports() {
+        fun buttons(features: Int, states: String = ""): Int {
+            val store = EntityStore()
+            store.putLocal(EntityState("alarm_control_panel.home", "disarmed", mapOf("supported_features" to features)))
+            val card = dev.glassworks.engine.vitro.cards.AlarmPanelCardView(
+                context(store), LovelaceParser.parseCard(JSONObject("""{"type": "alarm-panel", "entity": "alarm_control_panel.home"$states}""")),
+            )
+            activity.setContentView(card)
+            return (card.javaClass.getDeclaredField("actionsRow").apply { isAccessible = true }.get(card) as ViewGroup).childCount
+        }
+        // arm_away (2) and arm_night (4): of HA's defaults (home, away), only away.
+        assertEquals(1, buttons(6))
+        assertEquals(2, buttons(63))
+        // States the card lists are shown as written.
+        assertEquals(2, buttons(6, ""","states": ["arm_home", "arm_night"]"""))
+    }
+
+    @Test
     fun anUnsubmittedAlarmCodeIsForgottenWhenTheCardIsHidden() {
         val store = EntityStore()
         store.putLocal(EntityState("alarm_control_panel.home", "disarmed", mapOf("code_format" to "number", "supported_features" to 3)))

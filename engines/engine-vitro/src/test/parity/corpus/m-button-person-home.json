@@ -1,0 +1,42 @@
+{
+ "title": "button: person home (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "person.home": "home"
+ },
+ "card": {
+  "type": "button",
+  "entity": "person.home"
+ },
+ "fixture": {
+  "states": {
+   "person.home": {
+    "state": "home",
+    "last_changed": "-3h",
+    "attributes": {
+     "editable": true,
+     "id": "robin",
+     "device_trackers": [],
+     "friendly_name": "Robin"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "person.home",
+    "pl": "person"
+   }
+  ],
+  "persons": [
+   {
+    "id": "robin",
+    "name": "Robin",
+    "user_id": null,
+    "device_trackers": []
+   }
+  ]
+ }
+}

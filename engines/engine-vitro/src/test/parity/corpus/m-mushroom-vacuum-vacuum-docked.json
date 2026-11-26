@@ -1,0 +1,51 @@
+{
+ "title": "mushroom-vacuum: vacuum docked (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "vacuum.vacuum_docked": "docked"
+ },
+ "card": {
+  "type": "custom:mushroom-vacuum-card",
+  "entity": "vacuum.vacuum_docked",
+  "commands": [
+   "start_pause",
+   "return_home"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "vacuum.vacuum_docked": {
+    "state": "docked",
+    "last_changed": "-3h",
+    "attributes": {
+     "fan_speed_list": [
+      "silent",
+      "standard"
+     ],
+     "fan_speed": "standard",
+     "battery_level": 100,
+     "supported_features": 14204,
+     "friendly_name": "Ground Floor Robot"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "vacuum.vacuum_docked",
+    "pl": "demo",
+    "di": "dev-ground-floor",
+    "en": "Robot",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-ground-floor",
+    "name": "Ground Floor"
+   }
+  ]
+ }
+}

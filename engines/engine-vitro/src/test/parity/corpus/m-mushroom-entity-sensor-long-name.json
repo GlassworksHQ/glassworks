@@ -1,0 +1,44 @@
+{
+ "title": "mushroom-entity: sensor long-name (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "sensor.sensor_long_name": "21.42"
+ },
+ "card": {
+  "type": "custom:mushroom-entity-card",
+  "entity": "sensor.sensor_long_name"
+ },
+ "fixture": {
+  "states": {
+   "sensor.sensor_long_name": {
+    "state": "21.42",
+    "last_changed": "-2m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Upstairs Guest Bedroom Reading Nook Temperature Next To The Window"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.sensor_long_name",
+    "pl": "esphome",
+    "di": "dev-upstairs-guest-bedroom-reading-nook",
+    "en": "Temperature Next To The Window",
+    "np": "device",
+    "dp": 1
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-upstairs-guest-bedroom-reading-nook",
+    "name": "Upstairs Guest Bedroom Reading Nook"
+   }
+  ]
+ }
+}

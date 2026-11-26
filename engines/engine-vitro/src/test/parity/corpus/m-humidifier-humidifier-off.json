@@ -1,0 +1,52 @@
+{
+ "title": "humidifier: humidifier off (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "humidifier.humidifier_off": "off"
+ },
+ "card": {
+  "type": "humidifier",
+  "entity": "humidifier.humidifier_off"
+ },
+ "fixture": {
+  "states": {
+   "humidifier.humidifier_off": {
+    "state": "off",
+    "last_changed": "-4h",
+    "attributes": {
+     "min_humidity": 30,
+     "max_humidity": 80,
+     "available_modes": [
+      "normal",
+      "eco"
+     ],
+     "current_humidity": 52,
+     "humidity": 45,
+     "mode": "normal",
+     "action": "off",
+     "device_class": "humidifier",
+     "supported_features": 1,
+     "friendly_name": "Nursery Humidifier"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "humidifier.humidifier_off",
+    "pl": "demo",
+    "di": "dev-nursery",
+    "en": "Humidifier",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-nursery",
+    "name": "Nursery"
+   }
+  ]
+ }
+}

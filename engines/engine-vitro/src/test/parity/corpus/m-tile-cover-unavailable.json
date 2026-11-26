@@ -1,0 +1,43 @@
+{
+ "title": "tile: cover unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "cover.cover_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "cover.cover_unavailable"
+ },
+ "fixture": {
+  "states": {
+   "cover.cover_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "device_class": "blind",
+     "restored": true,
+     "supported_features": 15,
+     "friendly_name": "Office Blind"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.cover_unavailable",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-office",
+    "name": "Office"
+   }
+  ]
+ }
+}

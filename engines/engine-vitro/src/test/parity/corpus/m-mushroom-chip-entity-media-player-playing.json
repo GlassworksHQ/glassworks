@@ -1,0 +1,56 @@
+{
+ "title": "Mushroom chips: entity-media-player-playing (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "media_player.media_player_playing": "playing"
+ },
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "entity",
+    "entity": "media_player.media_player_playing"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "media_player.media_player_playing": {
+    "state": "playing",
+    "last_changed": "-4m",
+    "attributes": {
+     "volume_level": 0.31,
+     "is_volume_muted": false,
+     "media_content_type": "music",
+     "media_duration": 245,
+     "media_position": 92,
+     "media_position_updated_at": "@-60s",
+     "media_title": "Evening Tide",
+     "media_artist": "The Placeholder Trio",
+     "entity_picture": "/local/vitro-harness-fixtures/images/album.png",
+     "device_class": "speaker",
+     "supported_features": 152511,
+     "friendly_name": "Den Speaker"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "media_player.media_player_playing",
+    "pl": "demo",
+    "di": "dev-den",
+    "en": "Speaker",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-den",
+    "name": "Den"
+   }
+  ]
+ }
+}

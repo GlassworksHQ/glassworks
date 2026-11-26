@@ -1,0 +1,95 @@
+{
+ "title": "entities: every binary-sensor state (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "binary_sensor.binary_sensor_door_open": "on",
+  "binary_sensor.binary_sensor_door_closed": "off",
+  "binary_sensor.binary_sensor_motion": "on",
+  "binary_sensor.binary_sensor_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "entities",
+  "entities": [
+   "binary_sensor.binary_sensor_door_open",
+   "binary_sensor.binary_sensor_door_closed",
+   "binary_sensor.binary_sensor_motion",
+   "binary_sensor.binary_sensor_unavailable"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "binary_sensor.binary_sensor_door_open": {
+    "state": "on",
+    "last_changed": "-4m",
+    "attributes": {
+     "device_class": "door",
+     "friendly_name": "Back Door"
+    }
+   },
+   "binary_sensor.binary_sensor_door_closed": {
+    "state": "off",
+    "last_changed": "-1h",
+    "attributes": {
+     "device_class": "door",
+     "friendly_name": "Back Door"
+    }
+   },
+   "binary_sensor.binary_sensor_motion": {
+    "state": "on",
+    "last_changed": "-30s",
+    "attributes": {
+     "device_class": "motion",
+     "friendly_name": "Back Door"
+    }
+   },
+   "binary_sensor.binary_sensor_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "device_class": "door",
+     "restored": true,
+     "friendly_name": "Back Door"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "binary_sensor.binary_sensor_door_open",
+    "pl": "zha",
+    "di": "dev-back",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "binary_sensor.binary_sensor_door_closed",
+    "pl": "zha",
+    "di": "dev-back",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "binary_sensor.binary_sensor_motion",
+    "pl": "zha",
+    "di": "dev-back",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "binary_sensor.binary_sensor_unavailable",
+    "pl": "zha",
+    "di": "dev-back",
+    "en": "Door",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-back",
+    "name": "Back"
+   }
+  ]
+ }
+}

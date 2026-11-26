@@ -1,0 +1,42 @@
+{
+ "title": "tile: cover unknown (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "cover.cover_unknown": "unknown"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "cover.cover_unknown"
+ },
+ "fixture": {
+  "states": {
+   "cover.cover_unknown": {
+    "state": "unknown",
+    "last_changed": "-1h",
+    "attributes": {
+     "device_class": "garage",
+     "supported_features": 3,
+     "friendly_name": "Office Blind"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.cover_unknown",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-office",
+    "name": "Office"
+   }
+  ]
+ }
+}
