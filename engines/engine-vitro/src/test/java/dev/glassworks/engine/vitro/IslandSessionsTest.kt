@@ -30,6 +30,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -692,12 +693,13 @@ class IslandSessionsTest {
         token: () -> String? = { null },
         calls: MutableList<String> = ArrayList(),
         tokenWatchers: MutableSet<() -> Unit> = HashSet(),
+        onWatchAll: () -> Unit = {},
     ) = VitroCardContext(
         context = activity, haBase = base, store = store, theme = ThemeResolver.resolve(ThemeCatalog(), dark),
         resources = emptyList(), accessToken = token, callService = { d, s, _, _ -> calls += "$d.$s" }, navigate = {},
         openMoreInfo = {}, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
         islandServer = server, openIslandPage = { RecordingPage(activity).also { pages += it } },
-        watchAllEntities = { calls += "watchAll" },
+        watchAllEntities = { calls += "watchAll"; onWatchAll() },
         watchRegistries = { _ -> calls += "registries"; { calls += "registries released" } },
         watchToken = { onChange -> tokenWatchers += onChange; { tokenWatchers -= onChange } },
     )
@@ -791,6 +793,38 @@ class IslandSessionsTest {
         next.release()
         assertTrue(page.closed)
         assertTrue(slots(islands).isEmpty())
+    }
+
+    @Test fun aHandedOffPageWhoseBridgeConnectsWhileTheNextCardIsBuiltIsSeeded() {
+        val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
+        val pages = ArrayList<RecordingPage>()
+        // HA hasn't answered yet: the seed is incomplete, so the socket is remembered for a second one.
+        val store = EntityStore()
+        val config = LovelaceParser.parseCard(JSONObject(cardJson))
+        val old = WebIslandCardView(context(store, islands, dark = true, pages), config)
+        slots(islands).values.single().onConnected {}
+        old.handleIslandMessage(JSONObject().put("type", "watchAll")) {}
+        val handed = old.handOff()!!
+
+        // The kept page's bridge comes back on its own thread as soon as the slot answers to the next card, which may
+        // be before that card's constructor is done: here, from inside it (the walk-all-states hand-over step).
+        val sent = ArrayList<JSONObject>()
+        var connected: Throwable? = null
+        val ctx = context(store, islands, dark = true, pages, onWatchAll = {
+            connected = runCatching { slots(islands).values.single().onConnected { sent += it } }.exceptionOrNull()
+        })
+        val next = WebIslandCardView(ctx, LovelaceParser.parseCard(JSONObject(cardJson)), adopted = handed)
+        assertNull("the early bridge is seeded: $connected", connected)
+        assertTrue(sent.any { it.getString("type") == "snapshot" && !it.getBoolean("complete") })
+        // HA's answer lands: that early socket gets the complete snapshot too.
+        activity.setContentView(next)
+        idle()
+        sent.clear()
+        store.putLocal(lamp("on"))
+        store.markSnapshot(setOf("light.lounge_lamp"))
+        idle()
+        assertTrue(sent.toString(), sent.any { it.getString("type") == "snapshot" && it.getBoolean("complete") })
+        next.release()
     }
 
     @Test fun anIframesPageHandedOffPausedResumesWhenItsNextCardShows() {

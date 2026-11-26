@@ -153,6 +153,12 @@ class WebIslandCardView(
     private val pageSubs = HashMap<(JSONObject) -> Unit, HashMap<Int, PageSub>>()
     private val sentConnected = HashMap<(JSONObject) -> Unit, Boolean>()
 
+    /**
+     * Sockets seeded before HA had answered for this card's entities: they're seeded again once it has. Under
+     * [seedLock], and declared before `init` for the same reason as [pageSubs].
+     */
+    private val incompleteSeeds = LinkedHashSet<(JSONObject) -> Unit>()
+
     /** The connection watcher's handle: on for as long as the island is this card's, a move in the layout included. */
     @Volatile private var connectionWatch: (() -> Unit)? = null
 
@@ -350,9 +356,6 @@ class WebIslandCardView(
         if (!complete) incompleteSeeds += send
         send(JSONObject().put("type", "snapshot").put("states", seed).put("complete", complete))
     }
-
-    /** Sockets seeded before HA had answered for this card's entities: they're seeded again once it has. */
-    private val incompleteSeeds = LinkedHashSet<(JSONObject) -> Unit>()
 
     /**
      * True when HA has answered for every entity the card names (a state, or HA's word that it has none); for a card
