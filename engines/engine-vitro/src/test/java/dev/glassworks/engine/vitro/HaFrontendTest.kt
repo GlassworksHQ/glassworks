@@ -158,6 +158,32 @@ class HaFrontendTest {
         assertTrue(asked.none { it.endsWith("de-d1.json") })
     }
 
+    @Test
+    fun anOlderReadEndingFirstLeavesTheNewerOneWanted() {
+        // D22: two reconnects in a row queue two reads of the same strings. The first one ending must not mark them as
+        // no longer on their way while the second is still queued, or the next ensure queues a third.
+        val client = Any()
+        HaFrontend.claim(client, origin)
+        // Without the Lovelace fragment nothing counts as installed, so only `wanted` stops a duplicate.
+        served.remove("$origin/static/translations/lovelace/de-d1.json")
+        val indexReads = java.util.concurrent.atomic.AtomicInteger(0)
+        val gates = List(3) { java.util.concurrent.CountDownLatch(1) }
+        HaFrontend.fetch = { url ->
+            if (url == "$origin/") gates.getOrNull(indexReads.getAndIncrement())?.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            served[url]?.toByteArray()
+        }
+        HaFrontend.ensure(client, origin, "de", revalidate = true) {}
+        HaFrontend.ensure(client, origin, "de", revalidate = true) {}
+        gates[0].countDown()
+        // The second read has started: the first one is over, its end included.
+        awaitCondition("the second read") { indexReads.get() == 2 }
+        HaFrontend.ensure(client, origin, "de") {}
+        gates[1].countDown()
+        gates[2].countDown()
+        assertTrue(HaFrontend.awaitIdle())
+        assertEquals("no third read while the second was on its way", 2, indexReads.get())
+    }
+
     private fun await(latch: java.util.concurrent.CountDownLatch) =
         assertTrue("in time", latch.await(5, java.util.concurrent.TimeUnit.SECONDS))
 
