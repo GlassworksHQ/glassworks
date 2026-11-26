@@ -604,6 +604,8 @@ class LovelaceModelTest {
             "http://192.0.2.10:8123/wall-test/living",
             "http://192.0.2.10:8123/clarity-ref",
             "https://homeassistant.local:8123/dashboard-wall/home?kiosk=1",
+            // A dot in a view's path isn't a file.
+            "http://192.0.2.10:8123/wall-test/v1.2",
         )) {
             assertTrue("$u is a dashboard", LovelaceParser.isDashboardUrl(u))
         }
@@ -625,6 +627,10 @@ class LovelaceModelTest {
             "http://192.0.2.10:8123/api/camera_proxy/camera.porch",
             "http://192.0.2.10:8123/local/page.html",
             "http://192.0.2.10:8123/hacsfiles/acme/acme-card.js",
+            // A page some other server hands out, such as Clarity's SurfaceFlinger check: the fallback draws it.
+            "http://127.0.0.1:8090/clarity/page/sfcheck.html",
+            "http://192.0.2.10:8123/wall-test/plan.HTM",
+            "http://192.0.2.10:8123/wall-test/report.json",
         )) {
             assertFalse("$u is not a dashboard", LovelaceParser.isDashboardUrl(u))
         }

@@ -156,6 +156,7 @@ class VitroEngineTest {
         assertNotNull(legacy.started)
         assertSame(legacy.started, engine.started)
         assertEquals("Legacy Gecko 1.0", engine.name)
+        assertFalse("off: the app keeps no copy of HA's localStorage", engine.keepsPageStorage)
     }
 
     @Test
@@ -183,7 +184,9 @@ class VitroEngineTest {
         val engine = vitro()
         assertEquals("before the first open it is still the fallback's", "FakeGecko 1.0", engine.name)
         assertNull(engine.started)
+        assertFalse(engine.keepsPageStorage)
         openPage(engine)
+        assertTrue("on: the islands start from HA's localStorage", engine.keepsPageStorage)
         assertEquals(VitroEngine.VERSION_NAME, engine.name)
         assertSame(settings, engine.started)
         assertEquals("the content-process question is still the fallback's", true, engine.isContentProcess("x:tab"))
@@ -566,10 +569,13 @@ class VitroEngineTest {
     fun aDashboardWithNoViewsIsReady() {
         server.dashboardConfig = JSONObject("""{"views": []}""")
         val page = openPage(vitro())
+        // On screen, as the panel shows it: a detached view is never shown, so the check below would hold vacuously.
+        activity.setContentView(page.view)
         page.load("$base/wall-test/living")
         awaitMain("ready") { host.messages("ready").isNotEmpty() }
         assertEquals("vitro", host.messages("ready").single().getString("why"))
         assertEquals(listOf(true), host.pageStops.toList())
+        assertTrue("the page is on screen", vitroView(page).isAttachedToWindow && vitroView(page).isShown)
         fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
         assertFalse(
             "no \"Connecting…\" left on a ready page",

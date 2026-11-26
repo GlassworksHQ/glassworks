@@ -374,7 +374,7 @@ What a fallback does to the grade depends on whether the camera played on its vi
 | The camera | Its camera task, graded on the view's path (WebRTC) |
 |---|---|
 | Never showed a WebRTC frame, and showed another kind instead | Fails, as a camera that doesn't play over WebRTC does on the web engine. The page's limit says "a camera fell back to … on Vitro (it never played over WebRTC)" |
-| Showed WebRTC frames, then fell back to another kind | Graded on its WebRTC frames, under the same bars: the first frame stands, and the time after WebRTC stopped has no WebRTC frames, so it counts against frames shown and as a stall |
+| Showed WebRTC frames, then fell back to another kind | Graded on its WebRTC frames, under the same bars: the first frame stands, and the time after WebRTC stopped has no WebRTC frames, so it counts against frames shown, and as a stall when that gap meets the freeze rule (above) |
 
 Two differences, and what they mean:
 - **The pictures are timed on the main thread.** A stream reports each picture through its listener on the main
@@ -394,9 +394,14 @@ provisional when the camera could change the letter. The report says why (`typic
 measured on Vitro (this build's cameras don't report to Clarity …)`).
 
 **Frames on screen.** Vitro draws into the app's own window, not into a SurfaceView, so on Vitro the runner reads
-that window's layer (`perflib.window_layers`: `<package>/<activity>#0` on Android 10). The SurfaceFlinger check
-before the run still opens its page, which Vitro shows in its GeckoView fallback, so the check reads the
-SurfaceView. A layer's history length is SurfaceFlinger's own, the same for both layers on the same Android.
+that window's layer (`perflib.window_layers`: `<package>/<activity>#0` on Android 10). A layer's history length
+is SurfaceFlinger's own, the same for both layers on the same Android.
+
+The SurfaceFlinger check before the run (`--sf-poll auto`, the default) doesn't work on Vitro yet. It is meant to
+open its page in Vitro's GeckoView fallback and read the SurfaceView, but Vitro takes the page's address for a
+dashboard (`LovelaceModel.isDashboardUrl` sends only Home Assistant's own panels to the fallback) and tries to draw
+it natively, so the check finds no frames and stops the run. Until Vitro sends that page to its fallback, give
+Vitro runs the reading the check would pick: `--sf-poll 0` on the S1, and `--sf-poll 0.3` on the Pixel Tablet.
 
 **The clock.** Vitro's lines are timed on the device's monotonic clock (`clock: "monotonic"`, ms after
 `origin_mono_ms`). That's the same clock logcat and SurfaceFlinger use, so `perflib.page_to_mono_ms` ties them

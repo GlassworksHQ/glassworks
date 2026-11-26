@@ -28,3 +28,20 @@ export function captureMode({ touch, docHeight, viewportHeight, slots, dialog })
 
 /** Whether a page captured in [mode] had HA's coarse pointer (the reference's `viewport.touch`). */
 export const capturedWithTouch = (mode) => mode === 'touch' || mode === 'grow' || mode === 'dialog-touch';
+
+/** How many times a `grow` capture grows the window to its page before it gives up. */
+export const MAX_GROWS = 3;
+
+/**
+ * After a `grow` capture grew the window to the page ([grows] times) and the page settled again: `fits` when the page
+ * now fits the window, so the plain screenshot holds all of it, or `grow` to grow again. A page whose height follows
+ * the window's (`calc(100vh + 104px)`) never fits: after [MAX_GROWS] tries this throws, the case fails and no
+ * reference is saved, rather than a screenshot the window cuts short.
+ */
+export function afterGrow({ docHeight, viewportHeight, grows }) {
+  if (docHeight <= viewportHeight) return 'fits';
+  if (grows >= MAX_GROWS) {
+    throw new Error(`the page is still taller than the window after growing it ${grows} times (${docHeight} > ${viewportHeight} px): its height follows the window's`);
+  }
+  return 'grow';
+}
