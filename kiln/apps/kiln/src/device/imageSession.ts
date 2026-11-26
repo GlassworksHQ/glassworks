@@ -11,9 +11,9 @@ import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glasswork
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
 import { askAdb, nothingPicked } from './adbAsk';
 import {
-  ProxyError, WrongImage, adbKeyStep, cap, checkInPlace, defaultImage, imageFromLink, parseSparseWrites, pickInList, plan, readNamedBackupZip, sha256Hex, sourceFile, systemKeyStep, wifiStep,
+  ProxyError, RestoreRefused, WrongImage, adbKeyStep, cap, checkInPlace, checkRestorePoint, defaultImage, deviceFileState, imageFromLink, parseSparseWrites, pickInList, plan, readNamedBackupZip, recordRestoreFiles, sha256Hex, sourceFile, systemKeyStep, wifiStep,
   type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type InPlaceCode, type NamedPart, type ReadBackFile,
-  type PlannedStep, type PrepareStep,
+  type PlannedStep, type PrepareStep, type RestoredFile,
 } from '@glassworks/kiln-core';
 import type { BluetoothLike } from './channels';
 import { InPlaceReceiver, UnverifiedBundle, fallbackWords, fromHexString, hotspotUrls, memoryInPlaceStore, newSecret, restorePointZip, toHexString, type InPlaceStore, type Received } from './inPlace';
@@ -193,6 +193,8 @@ export interface UndoView {
   /** Kiln restarted the device into fastboot over adb. */
   restarted?: boolean;
   error?: string;
+  /** A check before the first write found the restore point doesn't fit: why. Nothing was written (restore.ts). */
+  refused?: string;
   x?: number;
 }
 /**
@@ -388,6 +390,8 @@ export class ImageSession {
   private undoWrote?: { serial: string; digest: string; parts: string[] };
   /** Where this browser keeps the way back's restore point (its store key), once it is one this browser kept. */
   private undoKey?: { serial: string; digest: string };
+  /** The device's files were each read over adb and found as the restore point expects, before this restart (checkUndoDevice). */
+  private undoDeviceChecked = false;
   /**
    * An in-place run's second-session writes started so far, finished or not (the `received` mark's `began`): once one
    * has, Start over isn't honest, and a lost bundle offers the way back.
@@ -997,15 +1001,14 @@ export class ImageSession {
             // back writes it nowhere else
             const deviceIdHash = await sha256Hex(enc.encode(this.serial.trim()));
             if (built.manifest?.deviceIdHash !== undefined && built.manifest.deviceIdHash !== deviceIdHash) throw new Error('The frame\'s restore point names another device than this one. Nothing more was written.');
-            const manifest = { ...built.manifest, deviceIdHash };
+            const kept = [{ filename: sparse, data: restore }, ...Object.entries(built.files ?? {}).map(([filename, data]) => ({ filename, data }))];
+            // each file's size and SHA-256 as made now: the way back checks the restore point against them before it
+            // writes, since nothing it writes can be read back after (restore.ts)
+            const manifest = { ...built.manifest, deviceIdHash, kiln: { files: await recordRestoreFiles(kept) } };
             this.restore = {
               partition: surgical.partition,
               sparse,
-              files: [
-                { filename: sparse, data: restore },
-                { filename: 'manifest.json', data: enc.encode(`${JSON.stringify(manifest, null, 2)}\n`) },
-                ...Object.entries(built.files ?? {}).map(([filename, data]) => ({ filename, data })),
-              ],
+              files: [kept[0]!, { filename: 'manifest.json', data: enc.encode(`${JSON.stringify(manifest, null, 2)}\n`) }, ...kept.slice(1)],
             };
             work('in-place', 1);
             break;
@@ -1345,6 +1348,7 @@ export class ImageSession {
     parseSparseWrites(sparse.data); // a whole sparse image, before anything else
     this.undoFiles = { files, sparse, ...(manifest ? { manifest } : {}) };
     this.undoKey = key;
+    this.undoDeviceChecked = false;
     return 'browser';
   }
 
@@ -1448,6 +1452,7 @@ export class ImageSession {
       const serial = (await bounded(p, this.d.frame).run('getprop ro.serialno').catch(() => ({ out: '' }))).out.trim();
       const same = typeof want === 'string' && !!serial && await sha256Hex(new TextEncoder().encode(serial)) === want.toLowerCase();
       if (typeof want === 'string' && serial && !same) throw new Error('This restore point was made on another device. Connect that one. Nothing was changed.');
+      await this.checkUndoDevice(p);
       const before = this.d.frame.imageFlow.inPlace?.beforeRestore;
       if (before && same) await before(bounded(p, this.d.frame), { onStep: this.log }).catch((e: Error) => this.log('', `undoing the app's changes: ${e.message}`));
       else if (before) this.log('', 'Kiln couldn\'t tell over adb that this is the device the restore point was made on, so it changed nothing over adb');
@@ -1455,6 +1460,7 @@ export class ImageSession {
       this.set({ connecting: false, undo: { ...this.state.undo!, at: 'fastboot', restarted: true, error: undefined } });
     } catch (e) {
       void p?.close?.().catch(() => {});
+      if (e instanceof RestoreRefused) { this.log('Stopped', e.message); this.set({ connecting: false, undo: { ...this.state.undo!, refused: e.message } }); return; }
       this.set({ connecting: false, connectError: e instanceof AdbAuthTimeout ? this.d.frame.words['fastboot.notLetIn'] : (e as Error).message });
     }
   }
@@ -1475,15 +1481,17 @@ export class ImageSession {
     try { fb = await req; } catch (e) { this.set({ connecting: false, connectError: (e as Error).message }); return; }
     const partition = this.restorePartition();
     try {
+      // every check Kiln can make before the first write (restore.ts): nothing of the restore can be read back after it
       const bytes = await fb.partitionSize(partition);
-      const sparse = parseSparseWrites(u.sparse.data);
-      if (sparse.totalBytes !== bytes) throw new Error(`This restore point is for a ${partition} partition of ${sparse.totalBytes} bytes; this device's is ${bytes}. Nothing was written.`);
-      // a restore point is for one device: one that doesn't say which (or that fastboot can't name) isn't written
-      const want = u.manifest?.deviceIdHash;
-      if (typeof want !== 'string' || !/^[0-9a-f]{64}$/i.test(want)) throw new Error('This restore point doesn\'t say which device it was made on, so Kiln won\'t write it. Nothing was written.');
       const serial = (await fb.getvar('serialno').catch(() => '')).trim();
-      if (!serial || await sha256Hex(new TextEncoder().encode(serial)) !== want.toLowerCase()) throw new Error('This restore point was made on another device. Nothing was written.');
-      if (sparse.filled.length) throw new Error('This restore point fills blocks instead of restoring them, so Kiln won\'t write it. Nothing was written.');
+      const restored = this.restoredFiles(u.manifest);
+      this.log('Checking the restore point before writing it');
+      const checked = await checkRestorePoint({ files: u.files, sparse: u.sparse.filename, ...(u.manifest ? { manifest: u.manifest } : {}), ...(restored ? { restored } : {}), partitionBytes: bytes, partition, serial });
+      checked.forEach((x) => this.log('', x));
+      if (!restored) this.log('', `the frame doesn't say which files the restore image puts back, so Kiln checked the restore point's own record only`);
+      this.log('', this.undoDeviceChecked ? `${this.d.frame.the}'s files were checked over adb before the restart (above)`
+        : `not checked: ${this.d.frame.the}'s files as they are now (Kiln didn't reach it over adb before this restart)`);
+      const sparse = parseSparseWrites(u.sparse.data);
       // what the install changed outside those blocks (the frame's way back: a fresh userdata, say), built before any write
       const wayBack = this.d.frame.imageFlow.inPlace?.wayBack;
       let after: { writes: Record<string, Blob>; what: string } | undefined;
@@ -1531,8 +1539,11 @@ export class ImageSession {
         for (const x of wayBack.partitions) await write(x, n++, () => after.writes[x]!, () => this.log(`Writing ${x}`));
         this.log('', after.what);
       }
-      // said in the log, as the rule asks: the restore has fastboot's OKAY on each write, and no read-back
-      this.log('', 'fastboot accepted every write; Kiln doesn\'t read the restore back in fastboot');
+      // said in the log, as the rule asks (AGENTS.md hard rule 1's exception): fastboot's OKAY on each write is the last
+      // check there is. Fastboot can't read the partition back, and the restored system starts with fresh app data,
+      // whose adb doesn't let this browser in
+      this.log('', 'fastboot accepted every write');
+      this.log('', `not read back: fastboot can't read a partition, and after the restore ${this.d.frame.the} no longer lets this browser in over adb. Everything was checked before the first write (above)`);
       this.log(`Restarting ${this.d.frame.the}`);
       await fb.reboot();
       this.d.progress?.set(undefined);
@@ -1540,8 +1551,51 @@ export class ImageSession {
       this.set({ undo: { ...this.state.undo!, at: 'done', x: 1 } });
     } catch (e) {
       this.log('Stopped', (e as Error).message);
+      if (e instanceof RestoreRefused) { this.set({ connecting: false, undo: { ...this.state.undo!, at: 'fastboot', refused: e.message, error: undefined } }); return; }
       this.set({ connecting: false, undo: { ...this.state.undo!, at: this.state.undo?.at === 'working' ? 'error' : 'fastboot', error: (e as Error).message } });
     }
+  }
+
+  /** The files the frame says the restore image puts back (InPlaceCode `restored`); a manifest it can't read is refused. */
+  private restoredFiles(manifest: Record<string, unknown> | undefined): readonly RestoredFile[] | undefined {
+    const read = this.d.frame.imageFlow.inPlace?.restored;
+    if (!read) return undefined;
+    if (!manifest) throw new RestoreRefused('This restore point has no manifest.json, so Kiln can\'t check it. Nothing was written.');
+    try { return read(manifest); } catch (e) { throw new RestoreRefused(`${(e as Error).message} Nothing was written.`); }
+  }
+
+  /**
+   * Before the restart into fastboot, while the device still lets this browser in: each file the restore image puts
+   * back, read over adb's sync and compared with the restore point. What the install wrote, or still the original, is
+   * what the restore expects; anything else, or a file that's gone, means something else changed the system since, and
+   * the old blocks may no longer belong to that file, so nothing is written. A file Kiln can't read is logged as
+   * unchecked: a failed read says nothing about the device.
+   */
+  private async checkUndoDevice(p: PanelShell): Promise<void> {
+    const u = this.undoFiles;
+    const the = this.d.frame.the;
+    const files = this.restoredFiles(u?.manifest);
+    if (!files?.length) return;
+    this.log(`Checking ${the}'s files against the restore point`);
+    let all = true;
+    for (const f of files) {
+      const name = f.path.slice(f.path.lastIndexOf('/') + 1) || f.path;
+      let got: Uint8Array;
+      try {
+        if (!p.pull) throw new Error('this connection can\'t read files');
+        got = await pullWithin(p, f.path, Math.max(f.size, f.written?.size ?? 0), READ_BACK_MS);
+      } catch (e) {
+        const gone = await bounded(p, this.d.frame).run(`ls ${f.path}`).then((r) => /no such file/i.test(r.out)).catch(() => false);
+        if (gone) throw new RestoreRefused(`${name} is no longer on ${the}, so this restore point doesn't fit its system anymore. Nothing was changed.`);
+        this.log('', `not checked: ${name} (Kiln couldn't read it: ${(e as Error).message})`);
+        all = false;
+        continue;
+      }
+      const state = await deviceFileState(f, got);
+      if (state === 'other') throw new RestoreRefused(`${name} on ${the} has changed since this restore point was made, so the restore may no longer fit it. Nothing was changed.`);
+      this.log('', state === 'written' ? `${name} on ${the} is what the install wrote: the restore point fits` : `${name} on ${the} is still the original: the restore writes the same bytes back`);
+    }
+    this.undoDeviceChecked = all;
   }
 
   private async restart(p: PanelShell) {

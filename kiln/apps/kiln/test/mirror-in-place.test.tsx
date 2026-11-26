@@ -333,9 +333,11 @@ describe('Glassworks on the stock software', () => {
     expect(name).toMatch(/^glassworks-in-place-\d{8}-\d{6}\.zip$/);
     expect(r.image.state.restorePoint).toMatchObject({ offered: true, downloaded: true }); // toRestorePoint confirmed the first copy
     const { files } = await readNamedBackupZip(new NodeBlob([await bytesOf(blob) as Uint8Array<ArrayBuffer>]) as unknown as Blob);
-    expect(files.map((f) => f.filename).sort()).toEqual(['manifest.json', 'restore-services.sparse']);
-    const manifest = JSON.parse(new TextDecoder().decode(files.find((f) => f.filename === 'manifest.json')!.data)) as { servicesJar: { restoreSparse: string } };
+    expect(files.map((f) => f.filename).sort()).toEqual(['manifest.json', 'restore-services.sparse', 'services.jar.orig']);
+    const manifest = JSON.parse(new TextDecoder().decode(files.find((f) => f.filename === 'manifest.json')!.data)) as { servicesJar: { restoreSparse: string }; kiln: { files: Record<string, { size: number; sha256: string }> } };
     expect(manifest.servicesJar.restoreSparse).toBe('restore-services.sparse');
+    // each file's size and SHA-256 as made, for the way back's check before it writes
+    for (const f of files.filter((x) => x.filename !== 'manifest.json')) expect(manifest.kiln.files[f.filename]).toEqual({ size: f.data.length, sha256: await sha256Hex(f.data) });
     expect(await sha256Hex(files.find((f) => f.filename === 'restore-services.sparse')!.data)).toBe(r.image.state.restorePoint?.digest);
   });
 });
@@ -553,8 +555,9 @@ describe('the way back (restore-blocks)', () => {
     expect(r.image.state.undo?.at).toBe('done');
     expect(r.flashed.slice(before)).toEqual(['system', 'userdata']);
     expect(r.image.state.log.join('\n')).toContain('as after a factory reset');
-    // the log says which check ran: fastboot's OKAY on each write, no read-back in fastboot
-    expect(r.image.state.log.join('\n')).toContain('Kiln doesn\'t read the restore back in fastboot');
+    // the log says which checks ran: everything before the first write, fastboot's OKAY on each write, and no read-back
+    expect(r.image.state.log.join('\n')).toContain('fastboot accepted every write');
+    expect(r.image.state.log.join('\n')).toMatch(/not read back: fastboot can't read a partition, and after the restore the Mirror no longer lets this browser in over adb/);
     expect(device()).toMatchObject({ installed: undefined, owner: undefined }); // the fresh userdata took the app and its owner
   });
 
@@ -635,7 +638,7 @@ describe('the way back (restore-blocks)', () => {
     await fresh.image.pickRestoreZip(new NodeBlob([await bytesOf(zip.blob) as Uint8Array<ArrayBuffer>]) as unknown as Blob, zip.name);
     fresh.image.undoByHand();
     await fresh.image.undoFlash();
-    expect(fresh.image.state.undo?.error).toMatch(/doesn't say which device/);
+    expect(fresh.image.state.undo?.refused).toMatch(/doesn't say which device/);
     expect(fresh.flashed).toEqual([]);
   });
 
@@ -683,6 +686,155 @@ describe('the way back (restore-blocks)', () => {
     await fresh.image.undoFlash();
     expect(fresh.image.state.undo?.at).toBe('done');
     expect(fresh.flashed).toEqual(['system', 'userdata']);
+  });
+});
+
+describe('the way back checks everything it can before it writes', () => {
+  async function installed(o: Parameters<typeof rig>[0] = {}) {
+    const r = rig(o);
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    await r.image.connectAdb();
+    return r;
+  }
+  /** This browser's restore point with one file swapped for `edit`'s; the record in its manifest stays as saved. */
+  async function editKept(r: Rig, edit: (files: { filename: string; data: Uint8Array }[]) => { filename: string; data: Uint8Array }[]) {
+    const kept = (await r.store.latestRestore())!;
+    await r.store.putRestore(kept.serial, kept.digest, edit(kept.files));
+  }
+  const log = (r: Rig) => r.image.state.log.join('\n');
+  /** adb on the same Mirror, with services.jar as `pull` gives it (something other than Kiln changed it, say). */
+  const withJar = (r: Rig, pull: () => Promise<Uint8Array>, run?: (c: string) => { out: string; code: number } | undefined) => async () => {
+    const a = r.adb();
+    const was = a.run.bind(a);
+    return Object.assign(a, { pull, run: async (c: string, s?: AbortSignal) => run?.(c) ?? was(c, s) });
+  };
+
+  it('over adb and in fastboot: each check is in the log, and only then the writes', async () => {
+    const r = await installed();
+    await r.image.startUndo();
+    await r.image.undoRestart();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.at).toBe('done');
+    const l = log(r);
+    expect(l).toContain('services.jar on the Mirror is what the install wrote: the restore point fits');
+    expect(l).toContain('restore point: each of its 2 files has the size and SHA-256 recorded when it was saved');
+    expect(l).toContain('restore point: made on this device');
+    expect(l).toMatch(/restore image: puts back the original services\.jar \(16384 bytes, SHA-256 [0-9a-f]{12}…\) in its own blocks/);
+    expect(l).toContain('restore image: writes no block outside those files');
+    expect(l).toContain('the Mirror\'s files were checked over adb before the restart');
+    // the checks come before the first write
+    expect(l.indexOf('restore image: writes no block outside')).toBeLessThan(l.indexOf('Writing the restore point to system'));
+    expect(l).not.toContain(FAKE_SERIAL);
+  });
+
+  it('by its buttons, with no adb: says the device\'s files weren\'t checked, and checks the rest', async () => {
+    const r = await installed();
+    await r.image.startUndo();
+    r.image.undoByHand();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.at).toBe('done');
+    expect(log(r)).toContain('not checked: the Mirror\'s files as they are now (Kiln didn\'t reach it over adb before this restart)');
+    expect(log(r)).toContain('restore image: writes no block outside those files');
+  });
+
+  it('a file that changed since the restore point was saved: nothing is written, and the screen says why with a way out', async () => {
+    const r = await installed();
+    await editKept(r, (files) => files.map((f) => (f.filename === 'services.jar.orig' ? { ...f, data: f.data.map((x, i) => (i === 0 ? x ^ 1 : x)) } : f)));
+    await r.image.startUndo();
+    r.image.undoByHand();
+    const before = r.flashed.length;
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.refused).toBe('services.jar.orig isn\'t the file Kiln saved in this restore point. Nothing was written.');
+    expect(r.flashed.length).toBe(before);
+    expect(r.progress.mark?.at).not.toBe('undo'); // no checkpoint: the way back didn't begin
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    expect(screen.getByRole('heading', { name: 'Kiln won’t write this restore point' })).toBeTruthy();
+    expect(screen.getByText(/services\.jar\.orig isn't the file Kiln saved/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pick another restore point' })).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Choose another install' })); });
+    expect(r.image.state.screen).toBe('choose');
+  });
+
+  it('a restore point missing a file it recorded is refused', async () => {
+    const r = await installed();
+    await editKept(r, (files) => files.filter((f) => f.filename !== 'services.jar.orig'));
+    await r.image.startUndo();
+    r.image.undoByHand();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.refused).toMatch(/^This restore point is missing services\.jar\.orig\./);
+  });
+
+  it('a manifest the frame can\'t read is refused', async () => {
+    const r = await installed();
+    await editKept(r, (files) => files.map((f) => {
+      if (f.filename !== 'manifest.json') return f;
+      const m = JSON.parse(new TextDecoder().decode(f.data)) as Record<string, unknown>;
+      delete m.servicesJar;
+      return { ...f, data: new TextEncoder().encode(JSON.stringify(m)) };
+    }));
+    await r.image.startUndo();
+    r.image.undoByHand();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.refused).toBe('The restore point\'s manifest doesn\'t describe services.jar. Nothing was written.');
+  });
+
+  it('a restore point from before the record still goes, checked against the original file it keeps', async () => {
+    const r = await installed();
+    await editKept(r, (files) => files.map((f) => {
+      if (f.filename !== 'manifest.json') return f;
+      const m = JSON.parse(new TextDecoder().decode(f.data)) as Record<string, unknown>;
+      delete m.kiln;
+      return { ...f, data: new TextEncoder().encode(JSON.stringify(m)) };
+    }));
+    await r.image.startUndo();
+    r.image.undoByHand();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.at).toBe('done');
+    expect(log(r)).toMatch(/made before Kiln recorded each file's SHA-256/);
+  });
+
+  it('over adb, a file something else changed since: no restart into fastboot, nothing written', async () => {
+    const r = await installed();
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress, deps: { requestAdb: withJar(r, async () => new Uint8Array(16384).fill(7)) } });
+    await b.image.startUndo();
+    await b.image.undoRestart();
+    expect(b.image.state.undo).toMatchObject({ at: 'start', refused: 'services.jar on the Mirror has changed since this restore point was made, so the restore may no longer fit it. Nothing was changed.' });
+    expect(b.image.state.undo?.restarted).toBeUndefined();
+    expect(b.flashed).toEqual([]);
+  });
+
+  it('over adb, a file that\'s gone is refused; one Kiln can\'t read is logged as unchecked, and the restore goes on', async () => {
+    const r = await installed();
+    const gone = rig({ dev: r.dev, store: r.store, progress: r.progress, deps: { requestAdb: withJar(r, async () => { throw new Error('No such file or directory'); },
+      (c) => (c.startsWith('ls ') ? { out: `ls: ${c.slice(3)}: No such file or directory\n`, code: 1 } : undefined)) } });
+    await gone.image.startUndo();
+    await gone.image.undoRestart();
+    expect(gone.image.state.undo?.refused).toMatch(/^services\.jar is no longer on the Mirror, so this restore point doesn't fit its system anymore\. Nothing was changed\.$/);
+    const unread = rig({ dev: r.dev, store: r.store, progress: r.progress, deps: { requestAdb: withJar(r, async () => { throw new Error('Permission denied'); }) } });
+    await unread.image.startUndo();
+    await unread.image.undoRestart();
+    expect(unread.image.state.undo).toMatchObject({ at: 'fastboot', restarted: true });
+    expect(log(unread)).toContain('not checked: services.jar (Kiln couldn\'t read it: Permission denied)');
+    await unread.image.undoFlash();
+    expect(unread.image.state.undo?.at).toBe('done');
+    expect(log(unread)).toContain('not checked: the Mirror\'s files as they are now');
+  });
+
+  it('after a write the system didn\'t take, the original file is what the restore expects too', async () => {
+    const r = rig({ systemNotTaken: true });
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    await r.image.connectAdb();
+    expect(r.image.state.notTaken).toBe(true);
+    await r.image.restoreAfterError();
+    await vi.waitFor(() => expect(r.image.state.undo?.source).toBe('browser'));
+    await r.image.undoRestart();
+    expect(log(r)).toContain('services.jar on the Mirror is still the original: the restore writes the same bytes back');
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.at).toBe('done');
   });
 });
 
@@ -1027,7 +1179,7 @@ describe('routes and screens', () => {
   });
 
   it.each(['place-start', 'place-fastboot', 'place-confirm', 'place-receive-file', 'place-restore-point', 'place-restore-offered', 'place-restore-copied', 'place-fastboot-again', 'place-connect', 'place-first-start', 'place-installing',
-    'place-error-write', 'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken'] as const)('%s renders, with one ember button at most', async (d) => {
+    'place-error-write', 'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-undo-refused', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken'] as const)('%s renders, with one ember button at most', async (d) => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, d, true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
@@ -1036,6 +1188,15 @@ describe('routes and screens', () => {
     expect(document.body.textContent).not.toContain(FAKE_SERIAL);
     expect(document.body.textContent).not.toContain('Check every part'); // the restore isn't read back, so no screen says it is
   }, 20_000);
+
+  it('place-undo-refused stops on the refusal, with nothing written and the way out', async () => {
+    const { image, app } = await imageDemo(mirrorEntry, 'place-undo-refused', true);
+    expect(image.state.undo?.refused).toMatch(/isn't the file Kiln saved in this restore point\. Nothing was written\./);
+    render(<ImageFlow image={image} app={app} />);
+    await act(async () => {});
+    expect(screen.getByRole('heading', { name: 'Kiln won’t write this restore point' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Choose another install' }).className).toContain('ember');
+  });
 
   it('the first screen says the whole road up front: every part, in order, the person\'s marked, with how long', async () => {
     const { image, app } = await imageDemo(mirrorEntry, 'place-start', true);

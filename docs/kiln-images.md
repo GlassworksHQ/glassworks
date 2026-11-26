@@ -164,6 +164,12 @@ Kiln puts its own steps around every recipe. A recipe can't list, skip or move t
 6. **The way back**, on Done: how to put the other image back, or for an in-place recipe, the restore
    point written over the blocks it changed (from this browser, or from the downloaded zip), on the
    device it was made on only. After a write in the install fails, the error screen offers it too.
+   Nothing can read the restore back once it's written (the bootloader can't read a partition, and the
+   fresh app data drops this browser's adb key), so Kiln checks it before the first write instead:
+   each file against the size and SHA-256 recorded when it was made, the device it was made on, the
+   restore image's shape, and that it puts back exactly the original files the frame names, byte for
+   byte. While adb still lets Kiln in, it also checks that those files on the device are what the
+   install wrote or still the originals. Any failed check writes nothing.
 
 Every file is downloaded and checked before Kiln connects to the device, so a failed download never
 leaves a half-written device.

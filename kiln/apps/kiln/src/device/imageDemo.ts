@@ -20,7 +20,7 @@ export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downl
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed',
   ...['place-choose', 'place-start', 'place-fastboot', 'place-confirm', 'place-stage', 'place-join-wifi', 'place-joined', 'place-wifi-unreachable', 'place-receive-lan', 'place-receive-ble', 'place-lna-denied', 'place-receive-file', 'place-restore-point', 'place-restore-offered', 'place-restore-copied',
     'place-fastboot-again', 'place-working', 'place-connect', 'place-first-start', 'place-installing', 'place-done', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken', 'place-error-write',
-    'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-run', 'place-resume', 'place-resume-staged'] as const] as const;
+    'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-undo-refused', 'place-run', 'place-resume', 'place-resume-staged'] as const] as const;
 export type ImageDemo = (typeof IMAGE_DEMOS)[number];
 
 const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
@@ -315,6 +315,12 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   await image.continueInstall();
   if (name === 'place-connect') return done;
   if (name.startsWith('place-undo')) {
+    // place-undo-refused: a restore point whose original file changed in this browser since it was saved; the check
+    // before the first write refuses it, and nothing is written
+    if (name === 'place-undo-refused') {
+      const kept = (await store.latestRestore())!;
+      await store.putRestore(kept.serial, kept.digest, kept.files.map((f) => (f.filename.endsWith('.orig') ? { ...f, data: f.data.map((x, i) => (i === 0 ? x ^ 1 : x)) } : f)));
+    }
     await image.startUndo();
     if (name === 'place-undo') return done;
     undoing = true;

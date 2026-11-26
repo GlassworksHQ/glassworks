@@ -616,12 +616,28 @@ export function InPlaceUndo({ f, s }: P) {
         <span className="okmark" aria-hidden="true">✓</span>
         <h2 id="h">{`${cap(d.the)} is back on its original system`}</h2>
         <p className="lede">{`Kiln wrote back every part it changed, and ${d.the} is restarting. Its first start takes a few minutes.`}</p>
+        {/* the restore's exception to read-back (AGENTS.md hard rule 1): checked before the write, not after it */}
+        <p className="small">{`Kiln checked the restore point before writing it. ${cap(d.the)} can’t be read after a restore, so its original start screen is the sign it worked.`}</p>
         <Foot back={null}>
           <button type="button" className="btn ghost" onClick={() => f.backToChoice()}>Install Glassworks again</button>
           <a className="btn ember" href="/">Back to Kiln</a>
         </Foot>
         <Log s={s} />
       </section>
+    );
+  }
+  if (u.refused) {
+    // a check before the first write failed (restore.ts): nothing was written, and the way out is another restore point
+    // or another install
+    return (
+      <Problem title="Kiln won’t write this restore point" safeTone="info" safe={u.refused}
+        fix="Pick another restore point made on this device, or choose another install."
+        details={<pre className="rawlog">{[...s.log].reverse().join('\n') || 'Nothing yet.'}</pre>}>
+        <Foot back={null}>
+          <button type="button" className="btn ghost" onClick={() => void f.startUndo()}>Pick another restore point</button>
+          <button type="button" className="btn ember" onClick={() => f.backToChoice()}>Choose another install</button>
+        </Foot>
+      </Problem>
     );
   }
   if (u.at === 'error') {
@@ -635,8 +651,8 @@ export function InPlaceUndo({ f, s }: P) {
     );
   }
   if (u.at === 'working') {
-    // no check row: the restore isn't read back (fastboot's OKAY on each write is all Kiln has here, and the log says so)
-    const rows = rowsAt([{ id: 'write', label: 'Put the original parts back', x: u.x ?? 0 }, { id: 'restart', label: `Restart ${d.the}` }], 0);
+    // the checks ran before the first write; no read-back row after it: the restore can't be read back (the log says so)
+    const rows = rowsAt([{ id: 'check', label: 'Check the restore point' }, { id: 'write', label: 'Put the original parts back', x: u.x ?? 0 }, { id: 'restart', label: `Restart ${d.the}` }], 1);
     return (
       <section className="card" aria-labelledby="h">
         <h2 id="h">Putting the original system back</h2>

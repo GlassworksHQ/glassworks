@@ -2,7 +2,7 @@
 // bundle's checks (signature, serial, odex stop-gate), the build Kiln checks with checkInPlace, and the app's install
 // with Device Owner. Every serial, address and key is made up.
 import { Disk, Ext4, MemoryStore, readSparse } from '@glassworks/ext4';
-import { checkInPlace } from '@glassworks/kiln-core';
+import { checkInPlace, checkRestorePoint, recordRestoreFiles, sha256Hex } from '@glassworks/kiln-core';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { bootInPlaceZip } from '../src/bootstill';
 import design from '../../design/installer.json';
 import {
-  BundleRefused, DEFAULT_PROBE_APP_UID, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata, installInPlace, mirrorInPlace,
+  BundleRefused, DEFAULT_PROBE_APP_UID, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata, installInPlace, mirrorInPlace, restoredFiles,
 } from '../src';
 import { ADB_KEYS, macFromSerial } from '../src/image';
 import { INSTALLER_MAC_SETTING, USB_ALLOW_PERMISSION_SETTING, factoryUserdata, keptBundleFits } from '../src/inplace';
@@ -218,6 +218,15 @@ describe('the build', () => {
       expect((built.manifest as { bootAnimation: { size: number; extents: unknown[] } }).bootAnimation).toMatchObject({ size: STOCK_BOOT_SIZE, extents: bootExtents });
       // read back over adb after the restart, with services.jar
       expect(built.readBack).toContainEqual({ path: '/system/media/bootanimation.zip', sha256: createHash('sha256').update(ours).digest('hex'), size: STOCK_BOOT_SIZE });
+      // the way back's check before it writes (kiln-core restore.ts) takes this build's restore point as Kiln keeps it:
+      // the restore image puts back exactly the original jar and boot animation, and nothing else
+      const files = [{ filename: 'restore-services.sparse', data: restore }, ...Object.entries(built.files ?? {}).map(([filename, data]) => ({ filename, data }))];
+      const manifest = { ...built.manifest, kiln: { files: await recordRestoreFiles(files) } };
+      const restored = restoredFiles(manifest);
+      expect(restored.map((f) => [f.path, f.file])).toEqual([['/system/framework/services.jar', 'services.jar.orig'], ['/system/media/bootanimation.zip', 'bootanimation.zip.orig']]);
+      expect(restored[1]!.written).toEqual({ sha256: createHash('sha256').update(ours).digest('hex') });
+      const lines = await checkRestorePoint({ files, sparse: 'restore-services.sparse', manifest, restored, partitionBytes: SYSTEM_BYTES, partition: 'system', serial: FAKE_SERIAL });
+      expect(lines.filter((x) => x.startsWith('restore image: puts back the original'))).toHaveLength(2);
     }, 60_000);
 
     it.skipIf(!HAS_D8)('stays lululemon\'s when Kiln has no compact animation, and the write and restore leave its blocks alone', async () => {
@@ -313,5 +322,34 @@ describe('the simulated stock Mirror', () => {
     await fb2.flashBlob('system', built.writes['system-in-place']!);
     await fb2.reboot();
     expect(dev.staged()).toBe(false);
+  });
+});
+
+describe('the restore point\'s files, for the way back\'s check', () => {
+  const jar = { path: '/system/framework/services.jar', size: 10, originalSha256: 'AB'.repeat(32), patchedSha256: 'cd'.repeat(32), origFile: 'services.jar.orig',
+    extents: [{ logical: 0, physical: 4096, block: 1, length: 4096, blocks: 1, flags: 1 }] };
+
+  it('reads services.jar, and the boot animation when the install changed it, from the manifest', async () => {
+    expect(restoredFiles({ servicesJar: jar })).toEqual([{ path: jar.path, file: 'services.jar.orig', size: 10, sha256: 'ab'.repeat(32),
+      extents: [{ logical: 0, physical: 4096, length: 4096 }], written: { sha256: 'cd'.repeat(32) } }]);
+    const boot = { ...jar, path: '/system/media/bootanimation.zip', origFile: 'bootanimation.zip.orig' };
+    expect(restoredFiles({ servicesJar: jar, bootAnimation: boot }).map((f) => f.file)).toEqual(['services.jar.orig', 'bootanimation.zip.orig']);
+    // a restore point that doesn't record what was written: only the original is checked against
+    const { patchedSha256: _, ...noWritten } = jar;
+    expect(restoredFiles({ servicesJar: noWritten })[0]!.written).toBeUndefined();
+  });
+
+  it('throws on a manifest that doesn\'t describe them', () => {
+    expect(() => restoredFiles({})).toThrow('The restore point\'s manifest doesn\'t describe services.jar.');
+    expect(() => restoredFiles({ servicesJar: { ...jar, origFile: undefined } })).toThrow(/describe services\.jar/);
+    expect(() => restoredFiles({ servicesJar: { ...jar, extents: [{ logical: 0 }] } })).toThrow(/describe services\.jar/);
+    expect(() => restoredFiles({ servicesJar: jar, bootAnimation: { size: 1 } })).toThrow('The restore point\'s manifest doesn\'t describe the boot animation.');
+  });
+
+  it('the simulated Mirror\'s build keeps the same shape, so Kiln\'s tests check what a real restore point holds', async () => {
+    const b = await buildFakeGwsbBundle({ secret: SECRET });
+    const built = await simInPlace.code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL });
+    const [f] = restoredFiles(built.manifest!);
+    expect(f!.sha256).toBe(await sha256Hex(built.files![f!.file]!));
   });
 });

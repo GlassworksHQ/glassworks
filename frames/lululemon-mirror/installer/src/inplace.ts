@@ -15,7 +15,7 @@
 import type { PanelShell } from '@glassworks/adb';
 import { Steps, grantPermissions, kioskVersion, startApp, zipEntry } from '@glassworks/app-adb';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
-import { inPlaceWords, parseGwsbBundle, sha256Hex, verifyGwsbBundle, type FirstStart, type InPlaceCode } from '@glassworks/kiln-core';
+import { inPlaceWords, parseGwsbBundle, sha256Hex, verifyGwsbBundle, type FirstStart, type InPlaceCode, type RestoredFile } from '@glassworks/kiln-core';
 import { GLASSWORKS, type MirrorApp } from './app';
 import { makeOnlyHome, setPortrait } from './flash';
 import { AID, LABELS, buildUserdata, macFromSerial } from './image';
@@ -390,6 +390,7 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
       return { writes: { 'system-in-place': blob(write), userdata }, restore: blob(restore), manifest, files: { [ORIGINAL_JAR]: jar, ...(boot ? { [ORIGINAL_BOOT]: boot.data } : {}) }, readBack };
     },
     keptMatches: keptBundleFits,
+    restored: restoredFiles,
     appInstall: (p, o) => installInPlace(p, o),
     // no beforeRestore: everything app-install changed is in userdata, which the way back writes fresh (below), so
     // there is nothing to undo over adb first, and the way back works the same when Kiln can't reach adb at all
@@ -407,4 +408,29 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
     channels: { lan: { ...STOCK_PROBE_LAN }, ble: { ...STOCK_PROBE_BLE } },
     words: inPlaceWords(words),
   };
+}
+
+/**
+ * The files a restore point's image puts back, from its manifest (the one `build` makes, which tools/mirror's
+ * surgical-adb --backup-dir also writes): services.jar, and the boot animation when the install changed it. Kiln checks
+ * the restore image and the Mirror against them before the way back writes anything (kiln-core restore.ts).
+ */
+export function restoredFiles(manifest: Record<string, unknown>): RestoredFile[] {
+  const one = (key: string, required: boolean): RestoredFile | undefined => {
+    const x = manifest[key] as Record<string, unknown> | undefined;
+    if (x === undefined && !required) return undefined;
+    const extents = x?.extents;
+    const ok = !!x && typeof x.path === 'string' && typeof x.size === 'number' && typeof x.originalSha256 === 'string' && typeof x.origFile === 'string'
+      && Array.isArray(extents) && extents.every((e) => typeof e?.logical === 'number' && typeof e?.physical === 'number' && typeof e?.length === 'number');
+    if (!ok) throw new Error(`The restore point's manifest doesn't describe ${key === 'servicesJar' ? 'services.jar' : 'the boot animation'}.`);
+    return {
+      path: x.path as string,
+      file: x.origFile as string,
+      size: x.size as number,
+      sha256: (x.originalSha256 as string).toLowerCase(),
+      extents: (extents as { logical: number; physical: number; length: number }[]).map((e) => ({ logical: e.logical, physical: e.physical, length: e.length })),
+      ...(typeof x.patchedSha256 === 'string' && x.patchedSha256 ? { written: { sha256: x.patchedSha256.toLowerCase() } } : {}),
+    };
+  };
+  return [one('servicesJar', true)!, ...[one('bootAnimation', false)].filter((x): x is RestoredFile => !!x)];
 }

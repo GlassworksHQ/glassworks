@@ -7,6 +7,7 @@ import type { ImageFile, ImageRecipe } from './images';
 import type { AskCopy, FrameSim, KilnFrame } from './frame';
 import type { StepCredits } from './recipe';
 import type { RecoveryData } from './recovery';
+import type { RestoredFile } from './restore';
 import type { UsbEntry } from './usb';
 
 /** A download that Kiln's route couldn't serve: Kiln's bug, never the person's. */
@@ -173,6 +174,14 @@ export interface InPlaceCode {
    * effort, and only on the device the restore point was made on (Kiln checks its serial first).
    */
   beforeRestore?(p: PanelShell, o: { onStep: Step }): Promise<void>;
+  /**
+   * The files a restore point's image puts back, read from its manifest (the one `build` made, or an earlier build's):
+   * each one's path on the device, its original copy in the restore point, size, SHA-256 and blocks, and what the
+   * install wrote there. Kiln checks the restore image against them before the way back writes anything, and the files
+   * on the device too while adb still lets it in (restore.ts). Throws on a manifest it can't read. None: Kiln checks
+   * only what the restore point records of itself.
+   */
+  restored?(manifest: Record<string, unknown>): readonly RestoredFile[];
   /**
    * The way back's other writes over fastboot, after the restore image: what the install changed outside the blocks
    * the restore point covers, put back as the device had it (a fresh userdata, say, so nothing `appInstall` set stays).

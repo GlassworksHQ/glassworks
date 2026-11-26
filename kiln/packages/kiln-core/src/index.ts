@@ -14,6 +14,7 @@ export {
   type FrameAccess, type ImageFile, type ImageLink, type ImageRecipe, type ImageStep, type PlannedStep, type RestorePoint, type SafetyStep, type StepKind,
 } from './images';
 export { checkInPlace, mergeRanges, parseSparseWriteRanges, parseSparseWrites, type ByteRange, type InPlaceCheckInput, type SparseWrites } from './inplace';
+export { RestoreRefused, checkRestorePoint, deviceFileState, recordRestoreFiles, restoreFileRecord, type DeviceFileState, type RestoreCheckInput, type RestoreFileRecord, type RestoredFile } from './restore';
 export {
   BundleSignatureError, IdbBundleCache, hmacSha256Hex, memoryBundleCache, parseGwsbBundle, sha256Hex, verifyGwsbBundle,
   type BundleCache, type BundleChannel, type BundleChannelKind, type ParsedGwsbBundle, type VerifyGwsbOptions,

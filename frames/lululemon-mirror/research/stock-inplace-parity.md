@@ -206,6 +206,17 @@ change to an existing file at the same size, or a change outside `/system`.
 - On a Mirror: an in-place install with this build writes `services.jar` and `bootanimation.zip` in their own blocks.
   The restore point puts both back (`restore-services.sparse` covers every block the write changed). Kiln's way back
   writes it, with a fresh `userdata`.
+- The way back can't be read back after it is written (**read**: the Mirror's fastboot has no `upload`, and the fresh
+  `userdata` drops this browser's adb key, so stock's adb asks again). Decided 2026-11-25 (maintainer): check before,
+  not after; the exception is in AGENTS.md rule 1 and kiln/AGENTS.md. Before the first write Kiln checks the restore
+  point's own record (`manifest.json` `kiln.files`: each file's size and SHA-256 when it was made), the serial's
+  SHA-256, the image's shape, and that `restore-services.sparse` holds exactly `services.jar.orig` (and
+  `bootanimation.zip.orig`) in the extents the manifest names (`restoredFiles` in `installer/src/inplace.ts`, kiln-core
+  `restore.ts`). Over adb, before the restart into fastboot, it reads both files from the running Mirror: what the
+  install wrote or still stock's goes on; anything else, or a file that's gone, writes nothing. **Verified off-device**
+  2026-11-25 (`inplace.test.ts`: the real build's restore point passes; kiln-core `restore.test.ts`: each refusal;
+  Kiln's `mirror-in-place.test.tsx`). Not run on a Mirror yet. A restore point made before `kiln.files` existed is
+  still checked by its contents against the originals it keeps.
 
 ## Open questions
 
