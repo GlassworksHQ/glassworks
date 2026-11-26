@@ -53,9 +53,9 @@ class BubbleCardTest {
     private val calls = ArrayList<Call>()
     private val actions = ArrayList<String>()
 
-    private fun context(store: EntityStore) = VitroCardContext(
+    private fun context(store: EntityStore, haBase: String = FakeHaServer.BASE) = VitroCardContext(
         context = activity,
-        haBase = FakeHaServer.BASE,
+        haBase = haBase,
         store = store,
         theme = ThemeResolver.resolve(ThemeCatalog(), true),
         resources = emptyList(),
@@ -143,6 +143,95 @@ class BubbleCardTest {
         assertTrue(slider.inIsland(IslandScripts.of(LovelaceResourceList(bubble, bubbleModules = false))))
         // Other cards don't care about Bubble's modules.
         assertFalse(card("""{"type": "tile", "entity": "light.desk"}""").inIsland(withModules))
+    }
+
+    @Test
+    fun rowSizesThatWouldEraseTheCardGoToTheIslandAndNeverBreakTheBuild() {
+        fun json(extra: String) = """{"type": "custom:bubble-card", "card_type": "button", "entity": "light.desk", "card_layout": "large", $extra}"""
+        for (extra in listOf(""""rows": 0.125""", """"grid_options": {"rows": "NaN"}""", """"grid_options": {"rows": 0.5}""", """"rows": -1""")) {
+            assertEquals(extra, CardRoute.ISLAND, route(json(extra)).route)
+        }
+        for (extra in listOf(""""rows": 2""", """"grid_options": {"rows": "auto", "columns": 6}""", """"grid_options": {"rows": 1}""")) {
+            assertEquals(extra, CardRoute.NATIVE, route(json(extra)).route)
+        }
+        assertEquals(CardRoute.ISLAND, route("""{"type": "custom:bubble-card", "card_type": "separator", "rows": 0.4}""").route)
+        assertEquals(CardRoute.NATIVE, route("""{"type": "custom:bubble-card", "card_type": "separator", "grid_options": {"rows": 0.8}}""").route)
+        // Drawn anyway (a fallback with no island): the default row, not a crash or a card with no height.
+        val ctx = context(store(entity("light.desk", "on"))).also { it.viewType = "sections" }
+        val b = BubbleCardView(ctx, card(json(""""grid_options": {"rows": "NaN"}""")))
+        ShadowLooper.idleMainLooper()
+        assertEquals(Math.round(56 * ctx.dp), b.getChildAt(0).layoutParams.height)
+    }
+
+    @Test
+    fun timestampAttributesGoToTheIsland() {
+        for (attribute in listOf("next_rising", "start_time", "timestamp")) {
+            val json = """{"type": "custom:bubble-card", "card_type": "button", "button_type": "state", "entity": "sun.sun",
+                "show_state": false, "show_attribute": true, "attribute": "$attribute"}"""
+            assertEquals(attribute, CardRoute.ISLAND, route(json).route)
+        }
+        assertEquals(CardRoute.NATIVE, route("""{"type": "custom:bubble-card", "card_type": "button", "button_type": "state",
+            "entity": "sun.sun", "show_attribute": true, "attribute": "elevation"}""").route)
+    }
+
+    @Test
+    fun anIconOnlyButtonIsNamedAfterWhatItsTapDoes() {
+        val n = bubble(store(), """{"type": "custom:bubble-card", "card_type": "button", "button_type": "name", "icon": "mdi:palette",
+            "tap_action": {"action": "navigate", "navigation_path": "/home/scenes"}}""")
+        val info = n.iconTarget!!.createAccessibilityNodeInfo()
+        assertEquals("Navigate", info.contentDescription?.toString())
+        // A card with an entity is named after it.
+        val b = bubble(store(entity("light.desk", "on")), """{"type": "custom:bubble-card", "card_type": "button", "entity": "light.desk", "show_name": false}""")
+        assertEquals("Desk Lamp", b.buttonTarget!!.createAccessibilityNodeInfo().contentDescription?.toString())
+    }
+
+    @Test
+    fun theIconStaysUntilThePictureLoadsAndAFailedPictureIsAskedForAgainLater() {
+        val hits = java.util.concurrent.atomic.AtomicInteger()
+        val png = java.io.ByteArrayOutputStream().also {
+            android.graphics.Bitmap.createBitmap(4, 4, android.graphics.Bitmap.Config.ARGB_8888).compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }.toByteArray()
+        val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/") { ex ->
+                // The first answer fails; the server recovers after.
+                val ok = hits.incrementAndGet() > 1
+                if (ok) { ex.sendResponseHeaders(200, png.size.toLong()); ex.responseBody.use { it.write(png) } }
+                else { ex.sendResponseHeaders(500, -1); ex.close() }
+            }
+            start()
+        }
+        try {
+            val st = store(entity("person.robin", "home", "entity_picture" to "/local/robin-${System.nanoTime()}.png"))
+            val ctx = context(st, "http://127.0.0.1:${server.address.port}")
+            val pendingBefore = VitroCardContext.pendingImageLoads.get()
+            val b = BubbleCardView(ctx, card("""{"type": "custom:bubble-card", "card_type": "button", "entity": "person.robin"}"""))
+            // On screen: HA loads no picture for a card that isn't shown, and neither does Vitro.
+            activity.setContentView(b)
+            ShadowLooper.idleMainLooper()
+            fun views(): Pair<View, View> {
+                val container = (b.iconTarget as ViewGroup)
+                return container.getChildAt(0) to container.getChildAt(1)
+            }
+            // While it loads: the icon.
+            assertEquals(View.VISIBLE, views().first.visibility)
+            assertEquals(View.GONE, views().second.visibility)
+            awaitCondition("the failed load", tick = { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50)) }) { hits.get() == 1 && VitroCardContext.pendingImageLoads.get() == pendingBefore }
+            ShadowLooper.idleMainLooper()
+            assertEquals(View.VISIBLE, views().first.visibility)
+            assertEquals(View.GONE, views().second.visibility)
+            // An update soon after doesn't ask again.
+            st.putLocal(st["person.robin"]!!.copy(lastUpdated = 1.0))
+            ShadowLooper.idleMainLooper()
+            assertEquals(1, hits.get())
+            // Later, an update does, and the picture replaces the icon.
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(31))
+            st.putLocal(st["person.robin"]!!.copy(lastUpdated = 2.0))
+            awaitCondition("the picture", tick = { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50)) }) { views().second.visibility == View.VISIBLE }
+            assertEquals(2, hits.get())
+            assertEquals(View.GONE, views().first.visibility)
+        } finally {
+            server.stop(0)
+        }
     }
 
     // ---- Actions and services
