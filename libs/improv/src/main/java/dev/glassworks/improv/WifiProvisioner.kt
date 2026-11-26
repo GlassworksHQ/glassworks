@@ -274,7 +274,7 @@ public class WifiProvisioner(
      * Saves the configured networks (Android 7 and earlier forget what addNetwork added until the app saves). Tries twice;
      * a failure is logged and the join still counts, since the network works until the next restart.
      */
-    /** Saved networks holding an attempt's untested credential (it failed, or another network came up): none is saved yet. */
+    /** Entries holding an attempt's untested credential (still running, failed, or another network came up): no save yet. */
     private val saveGate = SaveGate()
 
     @Suppress("DEPRECATION")
@@ -414,6 +414,9 @@ public class WifiProvisioner(
                 Log.w(TAG, "addNetwork refused (not device owner / no SYSTEM_ALERT_WINDOW?); trying a suggestion")
                 return false
             }
+            // from here until this network connects itself, or its entry is removed, its credential is untested: no save
+            // (this attempt's or another's) may keep it
+            saveGate.unconfirmed(netId)
             // unknown counts as not ours: a failed attempt may leave its entry behind, but never removes one saved earlier
             addedNew = SavedNetworks.madeHere(netId, idsBefore, Compat.listsSavedNetworks(isDeviceOwner, loc)) == true
             val enabled = wm.enableNetwork(netId, true)
@@ -422,7 +425,7 @@ public class WifiProvisioner(
             Log.i(TAG, "addNetwork -> $netId (new=$addedNew), enableNetwork -> $enabled")
             if (!enabled) {
                 // don't leave our new entry behind: a later save (below API 26) would keep it for good
-                if (addedNew) Log.i(TAG, "removeNetwork($netId) -> ${wm.removeNetwork(netId)}") else saveGate.failed(netId)
+                if (addedNew) removeOurs(netId)
                 finish(Outcome.Failed("enableNetwork refused", null))
                 return true
             }
@@ -471,7 +474,7 @@ public class WifiProvisioner(
                 // takes any network. When another one came up, this attempt's entry is untested, so no later save may
                 // keep it until it connects itself
                 if (netId != -1 && Compat.mustSaveNetworks) {
-                    if (i.networkId == netId) saveNetworks(netId) else saveGate.failed(netId)
+                    if (i.networkId == netId) saveNetworks(netId)
                 }
                 return Outcome.Connected(ssid, ip, method)
             }
@@ -480,12 +483,18 @@ public class WifiProvisioner(
             return null
         }
 
+        /** Removes an entry this attempt made; only a removal Android confirms lets later saves go ahead. */
+        private fun removeOurs(id: Int) {
+            val removed = runCatching { wm.removeNetwork(id) }.getOrDefault(false)
+            Log.i(TAG, "removeNetwork($id) -> $removed")
+            if (removed) saveGate.removed(id)
+        }
+
         private fun failAndRestore(reason: String): Outcome.Failed {
             var restored: String? = null
-            // an entry addNetwork reused now holds this attempt's credential; Android 7 and earlier put the saved one back
-            // at the next restart, unless something saves first
-            if (netId != -1 && !addedNew) saveGate.failed(netId)
-            if (netId != -1 && addedNew) Log.i(TAG, "removeNetwork($netId) -> ${wm.removeNetwork(netId)}")
+            // an entry addNetwork reused keeps this attempt's credential, so it stays unconfirmed: Android 7 and earlier put
+            // the saved one back at the next restart, unless something saves first
+            if (netId != -1 && addedNew) removeOurs(netId)
             if (Compat.hasNetworkSuggestions) suggestion?.let { Log.i(TAG, "removeNetworkSuggestions -> ${wm.removeNetworkSuggestions(listOf(it))}") }
             if (netId != -1) {
                 if (prevNetId != -1) {
@@ -593,20 +602,24 @@ internal object SavedNetworks {
 }
 
 /**
- * Keeps a failed attempt's credential from being saved (Android 7 and earlier). `addNetwork` updates a saved network
- * with the same name in place, and its old password can't be read back to restore it. Until a restart, Android only
- * holds the change in memory, and a restart puts the saved password back, unless `saveConfiguration`, which writes
- * every network, runs first. So no save runs while a network a failed attempt touched is unconfirmed; joining that
- * same network later confirms it. A network joined meanwhile is kept until the next restart only, as before this saved.
+ * Keeps an untested credential from being saved (Android 7 and earlier). `addNetwork` updates a saved network with the
+ * same name in place, and its old password can't be read back to restore it; until a restart Android holds the change
+ * in memory only, and a restart puts the saved password back, unless `saveConfiguration`, which writes every network,
+ * runs first. So every entry an attempt adds or updates is unconfirmed from that moment, whether the attempt is still
+ * running, failed, or another network came up instead, and no save runs while any is. Joining that network confirms it;
+ * removing an entry the attempt made clears it. A network joined meanwhile lasts until the next restart, as before.
  */
 internal class SaveGate {
-    private val tainted = mutableSetOf<Int>()
+    private val unconfirmed = mutableSetOf<Int>()
 
-    @Synchronized fun failed(netId: Int) { tainted += netId }
+    @Synchronized fun unconfirmed(netId: Int) { unconfirmed += netId }
 
-    /** Whether saving is safe now; [joined] is the network just joined, which a failed attempt no longer taints. */
+    /** The entry is gone (Android confirmed its removal): nothing of it is left to save. */
+    @Synchronized fun removed(netId: Int) { unconfirmed -= netId }
+
+    /** Whether saving is safe now; [joined] is the network just joined, which that confirms. */
     @Synchronized fun maySave(joined: Int?): Boolean {
-        joined?.let { tainted -= it }
-        return tainted.isEmpty()
+        joined?.let { unconfirmed -= it }
+        return unconfirmed.isEmpty()
     }
 }
