@@ -514,7 +514,10 @@ def _state_class(eid):
 def _change(values, increasing):
     """How much a counter rose across [values] (the previous close, then each value held), as HA's recorder sums it.
     A total_increasing value below 0.9 of the one before is a meter reset (`reset_detected`): the new cycle starts
-    from 0, so the value after the reset counts in full. A smaller drop, or any drop of a `total`, counts as it is."""
+    from 0, so the value after the reset counts in full. A smaller drop, or any drop of a `total`, counts as it is.
+    A negative total_increasing reading is skipped (`warn_negative`, then the recorder moves on to the next one)."""
+    if increasing:
+        values = [v for v in values if v >= 0]
     change = 0.0
     for prev, cur in zip(values, values[1:]):
         change += cur if increasing and cur < 0.9 * prev else cur - prev
@@ -598,8 +601,8 @@ def statistic_during_period(m):
     """recorder/statistic_during_period: one entity's max, mean and min (a measurement) or change (a total) over a
     `calendar` (hour, day, week, month, year, with `offset`), `fixed_period` or `rolling_window` window. Read from the
     entity's series at HA's short-term granularity (5 minutes) across the window's own bounds, as HA joins its
-    short-term statistics at a partial hour: a total's change is its value at the end less its value at the start
-    (HA's newest less oldest sum). Null for a value the window holds no data for."""
+    short-term statistics at a partial hour: a total's change is its newest less its oldest sum across the window
+    (a meter's resets counted as _change does). Null for a value the window holds no data for."""
     eid = m.get("statistic_id")
     now = datetime.datetime.fromtimestamp(NOW, tz())
     end = NOW
@@ -666,17 +669,10 @@ def statistic_during_period(m):
         out["mean"] = round(sum(v * d for v, d in held) / span, 6) if held else None
         out["min"] = round(min(v for v, _ in held), 6) if held else None
     elif meta:
-        readings = [v for _, v in points if v is not None]
-        if not readings:
-            out["change"] = None
-        elif (states().get(eid) or {}).get("attributes", {}).get("state_class") == "total_increasing":
-            # A meter: a drop is a reset, after which the new reading is what it counted since (HA's reset-aware sum).
-            total = 0.0
-            for a, b in zip(readings, readings[1:]):
-                total += b - a if b >= a else b
-            out["change"] = round(total, 6)
-        else:
-            out["change"] = round(readings[-1] - readings[0], 6)
+        # The recorder's sum over the window: a meter's reset, dip and negative readings as statistics() reads them.
+        increasing = _state_class(eid) == "total_increasing"
+        readings = [v for _, v in points if v is not None and (v >= 0 or not increasing)]
+        out["change"] = round(_change(readings, increasing), 6) if readings else None
     types = m.get("types")
     return {k: v for k, v in out.items() if not types or k in types}
 
