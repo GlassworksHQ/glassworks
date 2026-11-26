@@ -3,15 +3,17 @@
 // stock-bloat `pm hide`/`pm unhide`. The Device Owner patch is checked on a real DEX built with
 // javac + d8 (skipped without an Android SDK) and disassembled with dexdump.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { crc32 } from 'node:zlib';
 import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
+import { zipEntry, zipNames } from '@glassworks/app-adb';
 import { Disk, MemoryStore, parseSparseHeader, readSparse } from '@glassworks/ext4';
 import { describe, expect, it } from 'vitest';
 import {
-  STOCK_BLOAT_PACKAGES, STOCK_BUNDLE_MAGIC, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES,
-  buildSurgicalSparseImage, decodeStockBundle, encodeStockBundle, hideStockBloat, patchStockServicesJar,
+  STOCK_BLOAT_PACKAGES, STOCK_BOOTANIMATION_BYTES, STOCK_BUNDLE_MAGIC, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES,
+  buildSurgicalSparseImage, decodeStockBundle, encodeStockBundle, hideStockBloat, padZipToExactLength, patchStockServicesJar,
   unhideStockBloat, type FiemapExtent,
 } from '../src';
 import { GLASS_PANES_KEY_FINGERPRINT, adbFingerprint } from '../src/services';
@@ -313,5 +315,105 @@ describe('hideStockBloat / unhideStockBloat', () => {
     const p = new HideFake();
     await expect(hideStockBloat(p, ['com.mirror.watchdog', 'bad; id'])).rejects.toThrow(/invalid Android package name/);
     expect(p.cmds).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// padZipToExactLength
+// ---------------------------------------------------------------------------
+
+/** A STORED zip of the given files with an optional comment, laid out as Python's zipfile writes it. */
+function storedZip(files: Record<string, string>, comment = new Uint8Array(0)): Uint8Array {
+  const te = new TextEncoder();
+  const locals: Uint8Array[] = [], centrals: Uint8Array[] = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const n = te.encode(name), data = te.encode(text), crc = crc32(data);
+    const lh = new Uint8Array(30 + n.length + data.length), l = new DataView(lh.buffer);
+    l.setUint32(0, 0x04034b50, true); l.setUint16(4, 20, true); l.setUint32(14, crc, true);
+    l.setUint32(18, data.length, true); l.setUint32(22, data.length, true); l.setUint16(26, n.length, true);
+    lh.set(n, 30); lh.set(data, 30 + n.length);
+    const ch = new Uint8Array(46 + n.length), c = new DataView(ch.buffer);
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint32(16, crc, true);
+    c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, n.length, true);
+    c.setUint32(42, offset, true); ch.set(n, 46);
+    locals.push(lh); centrals.push(ch); offset += lh.length;
+  }
+  const cdSize = centrals.reduce((a, b) => a + b.length, 0);
+  const eocd = new Uint8Array(22 + comment.length), e = new DataView(eocd.buffer);
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, centrals.length, true); e.setUint16(10, centrals.length, true);
+  e.setUint32(12, cdSize, true); e.setUint32(16, offset, true); e.setUint16(20, comment.length, true); eocd.set(comment, 22);
+  const out = new Uint8Array(offset + cdSize + eocd.length);
+  let at = 0;
+  for (const part of [...locals, ...centrals, eocd]) { out.set(part, at); at += part.length; }
+  return out;
+}
+
+function unzipTest(zip: Uint8Array): string | undefined {
+  try { execFileSync('unzip', ['-v'], { stdio: 'ignore' }); } catch { return undefined; }
+  const dir = mkdtempSync(join(tmpdir(), 'gw-padzip-'));
+  try {
+    writeFileSync(join(dir, 'a.zip'), zip);
+    return execFileSync('unzip', ['-t', join(dir, 'a.zip')], { encoding: 'utf8' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+describe('padZipToExactLength', () => {
+  const zip = storedZip({ 'desc.txt': '300 400 10\np 0 0 g3 #0a0b0f\n', 'g3/00.png': 'not really a png' });
+
+  it('pads to the exact length with a zero comment, and the zip reads the same', async () => {
+    const target = zip.length + 1000;
+    const padded = padZipToExactLength(zip, target);
+    expect(padded.length).toBe(target);
+    expect(padded.subarray(0, zip.length - 2)).toEqual(zip.subarray(0, zip.length - 2)); // only the comment length changes
+    expect(new DataView(padded.buffer).getUint16(zip.length - 2, true)).toBe(1000);
+    expect(padded.subarray(zip.length).every((b) => b === 0)).toBe(true);
+    expect(zipNames(padded)).toEqual(['desc.txt', 'g3/00.png']);
+    expect(new TextDecoder().decode(await zipEntry(padded, 'desc.txt'))).toBe('300 400 10\np 0 0 g3 #0a0b0f\n');
+    const t = unzipTest(padded);
+    if (t !== undefined) expect(t).toMatch(/No errors detected/);
+  });
+
+  it('returns an equal copy at zero padding, and pads by the most a comment holds', () => {
+    const same = padZipToExactLength(zip, zip.length);
+    expect(same).toEqual(zip);
+    expect(same).not.toBe(zip);
+    const most = padZipToExactLength(zip, zip.length + 0xffff);
+    expect(new DataView(most.buffer).getUint16(zip.length - 2, true)).toBe(0xffff);
+    expect(zipNames(most)).toEqual(['desc.txt', 'g3/00.png']);
+  });
+
+  it('leaves the input untouched', () => {
+    const copy = Uint8Array.from(zip);
+    padZipToExactLength(zip, zip.length + 10);
+    expect(zip).toEqual(copy);
+  });
+
+  it('works on a view into a larger buffer', () => {
+    const big = new Uint8Array(zip.length + 64);
+    big.set(zip, 32);
+    const padded = padZipToExactLength(big.subarray(32, 32 + zip.length), zip.length + 5);
+    expect(zipNames(padded)).toEqual(['desc.txt', 'g3/00.png']);
+  });
+
+  it('refuses a zip longer than the target, too much padding, a comment, or no end record', () => {
+    expect(() => padZipToExactLength(zip, zip.length - 1)).toThrow(/longer than the/);
+    expect(() => padZipToExactLength(zip, zip.length + 0x10000)).toThrow(/more than a zip comment holds/);
+    const commented = storedZip({ 'desc.txt': 'x' }, new TextEncoder().encode('hi'));
+    expect(() => padZipToExactLength(commented, commented.length + 4)).toThrow(/already has a 2-byte comment/);
+    expect(() => padZipToExactLength(zip.subarray(0, zip.length - 1), zip.length + 4)).toThrow(/no End-Of-Central-Directory/);
+    expect(() => padZipToExactLength(new Uint8Array(4), 10)).toThrow(/no End-Of-Central-Directory/);
+    expect(() => padZipToExactLength(zip, Number.NaN)).toThrow(/not a whole number/);
+  });
+
+  it('takes the committed compact boot animation to stock 1.24.0\'s exact size', async () => {
+    const compact = new Uint8Array(readFileSync(join(__dirname, '../../../../branding/lululemon-mirror/bootanimation-compact.zip')));
+    const padded = padZipToExactLength(compact, STOCK_BOOTANIMATION_BYTES);
+    expect(padded.length).toBe(22901);
+    expect(new TextDecoder().decode(await zipEntry(padded, 'desc.txt')).split('\n')[0]).toBe('1080 1920 10');
+    const t = unzipTest(padded);
+    if (t !== undefined) expect(t).toMatch(/No errors detected/);
   });
 });

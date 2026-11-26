@@ -19,9 +19,9 @@ export { GLASSWORKS_IMAGE, GLASSWORKS_IN_PLACE, GLASS_PANES_IMAGE, MIRROR_ACCESS
 export { ADB_KEYS, WIFI_CONF, WIFI_TEMPLATE, saveWifi, setAdbKeys, setImageKey } from './image';
 export { systemWithKey, userdataWithKey, userdataWithWifi, wifiOn, wifiTemplate, within } from './wifi';
 export {
-  MAX_RAW_CHUNK_BLOCKS, SPARSE_BLOCK_SIZE, START_CONFIRMATION_LOG_STRING, STOCK_BLOAT_PACKAGES, STOCK_BUNDLE_MAGIC,
-  STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES, buildSurgicalSparseImage, decodeStockBundle, encodeStockBundle,
-  hideStockBloat, patchStockServicesJar, unhideStockBloat,
+  MAX_RAW_CHUNK_BLOCKS, SPARSE_BLOCK_SIZE, START_CONFIRMATION_LOG_STRING, STOCK_BLOAT_PACKAGES, STOCK_BOOTANIMATION_BYTES,
+  STOCK_BUNDLE_MAGIC, STOCK_SERVICES_JAR_PATH, STOCK_SYSTEM_PARTITION_BYTES, buildSurgicalSparseImage, decodeStockBundle,
+  encodeStockBundle, hideStockBloat, padZipToExactLength, patchStockServicesJar, unhideStockBloat,
   type DecodedStockBundle, type DeviceOwnerPatch, type FiemapExtent, type PatchStockServicesJarOptions,
   type PatchedServicesJar, type StockBloatChange, type StockBundleMeta,
 } from './stock';

@@ -101,7 +101,7 @@ export interface FrameDesign {
   /** the screen in px, upright, as people see it (the Mirror: 1080x1920; branding/boot reads it). A panel that stands turned says so with `boot.rotate` */
   display?: { width: number; height: number };
   /** the boot branding's format limits (branding/boot/target.py); `rotate`: degrees counter-clockwise from `display` into the panel's framebuffer */
-  boot?: { androidApi?: number; splash?: 'allwinner-boot-resource'; zipBudget?: number; rotate?: 90 | 270 };
+  boot?: { androidApi?: number; splash?: 'allwinner-boot-resource'; zipBudget?: number; rotate?: 90 | 270; compactBudget?: number };
   /** what the device's userspace runs, preferred first; the app's release builds every frame's (#98). Optional so code that builds a FrameDesign without it still compiles */
   abis?: Abi[];
   /** the device can sit on a dock (the Pixel Tablet): the app gives Home Assistant its Docked sensor from the start (docs/esphome.md#docked) */

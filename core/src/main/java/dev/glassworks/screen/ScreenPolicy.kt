@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
+import dev.glassworks.frame.SleepMode
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.log10
@@ -37,7 +38,9 @@ import kotlin.math.log10
  *  - A voice run pauses the idle timeout while it runs ([voiceRunning]) and while it shows ([voiceShowing]), so the
  *    screen doesn't go dark in the middle of a long answer; the countdown starts again when the run ends.
  *
- * Turning the screen off uses DevicePolicyManager.lockNow() when [admin] is an active device admin.
+ * Turning the screen off uses DevicePolicyManager.lockNow() when [admin] is an active device admin. On a frame whose
+ * [sleepMode] is [SleepMode.BACKLIGHT_OFF] it never does: Android's display stays on, and sleep is a [blackout]
+ * (brightness 0 and a black screen over the page) that any [wake] ends.
  *
  * A wake that comes without a touch ([wake]: Home Assistant, a timer, voice, Improv, a notification)
  * holds a screen wake lock until the kiosk's own idle timeout puts the screen to sleep (#257). After a
@@ -57,6 +60,8 @@ class ScreenPolicy(
     private val logTag: String,
     /** The wake lock's tag, as `dumpsys power` shows it. */
     private val wakeLockTag: String,
+    /** How the frame's screen sleeps ([dev.glassworks.frame.Frame.sleepMode]). */
+    private val sleepMode: SleepMode = SleepMode.LOCK,
 ) {
     internal companion object {
         const val TICK_MS = 1000L
@@ -82,6 +87,12 @@ class ScreenPolicy(
          */
         const val VOICE_MAX_MS = 10 * 60_000L
 
+        /**
+         * The window brightness of a [blackout]: `WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF`. On a device whose
+         * lowest brightness is 0 (the lululemon Mirror's) the backlight goes off; elsewhere it is the lowest it goes.
+         */
+        const val BLACKOUT_BRIGHTNESS = 0f
+
         /** The most automatic brightness may reach: [max], or full while something [held] the screen. */
         fun brightnessCap(held: Boolean, max: Float): Float = if (held) 1f else max
     }
@@ -101,6 +112,12 @@ class ScreenPolicy(
     @Volatile var lux = Float.NaN; private set
     @Volatile var brightness = -1f; private set
     @Volatile var screenOn = true; private set
+
+    /**
+     * Asleep with the display still on ([SleepMode.BACKLIGHT_OFF]): the window at [BLACKOUT_BRIGHTNESS], and the
+     * activity draws black over the page ([onBlackout]). [screenOn] is false meanwhile. Main thread.
+     */
+    var blackout = false; private set
     private var lastActivity = SystemClock.elapsedRealtime()
     /** Why the screen is held ([hold]). Main thread. */
     private val holds = HashSet<String>()
@@ -137,7 +154,14 @@ class ScreenPolicy(
     var onKeepScreenOn: ((Boolean) -> Unit)? = null
         set(v) { field = v; v?.invoke(keepOn) }
     var onBrightness: ((Float) -> Unit)? = null
-        set(v) { field = v; v?.invoke(brightness) }
+        set(v) { field = v; v?.invoke(windowBrightness) }
+
+    /** Activity hook: draw black over everything, and wake on a tap, while true ([blackout]). */
+    var onBlackout: ((Boolean) -> Unit)? = null
+        set(v) { field = v; v?.invoke(blackout) }
+
+    /** What the window gets: [brightness], or [BLACKOUT_BRIGHTNESS] in a [blackout]. */
+    private val windowBrightness: Float get() = if (blackout) BLACKOUT_BRIGHTNESS else brightness
     /** Fired on any state change (presence/lux/screen); used to push updates to the page. */
     var onStateChanged: (() -> Unit)? = null
 
@@ -168,7 +192,7 @@ class ScreenPolicy(
         dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         adminComponent = ComponentName(ctx, admin)
         lastActivity = SystemClock.elapsedRealtime()
-        screenOn = pm.isInteractive
+        screenOn = pm.isInteractive && !blackout
         watchSystemBrightness()
         // The light sensor reports only on change, so auto brightness off can't wait for a reading.
         updateBrightness()
@@ -226,6 +250,32 @@ class ScreenPolicy(
         lastActivity = SystemClock.elapsedRealtime()
         setKeepOn(true)
         keepAwake()
+        if (blackout) endBlackout()
+    }
+
+    /** Back from a [blackout]: the page shows again, at the brightness the policy says now. */
+    private fun endBlackout() {
+        blackout = false
+        screenOn = true
+        onBlackout?.invoke(false)
+        // The light may have changed while it was dark: go straight to the new target.
+        if (prefs.autoBrightness && !lux.isNaN()) updateBrightness(immediate = true)
+        onBrightness?.invoke(windowBrightness)
+        notifyChanged()
+    }
+
+    /**
+     * [SleepMode.BACKLIGHT_OFF]'s sleep: Android's display stays on (no lockNow, keep-screen-on stays, the wake lock
+     * stays), and only the light goes. The tick keeps the wake lock while it lasts.
+     */
+    private fun startBlackout() {
+        if (blackout) return
+        blackout = true
+        screenOn = false
+        setKeepOn(true)
+        onBrightness?.invoke(windowBrightness)
+        onBlackout?.invoke(true)
+        notifyChanged()
     }
 
     private fun keepAwake() {
@@ -409,6 +459,11 @@ class ScreenPolicy(
      * waits for the system timeout; after an idle sleep it keeps the screen on again if the mode changed to "always".
      */
     private fun sleep(reason: String, asked: Boolean) {
+        if (sleepMode == SleepMode.BACKLIGHT_OFF) {
+            Log.i(logTag, "sleep ($reason) backlight off")
+            startBlackout()
+            return
+        }
         Log.i(logTag, "sleep ($reason) admin=$isAdmin")
         letGo()
         if (isAdmin) {
@@ -440,6 +495,12 @@ class ScreenPolicy(
                 stayOn(VOICE_RUN, false)
                 stayOn(VOICE_SHOWN, false)
             }
+            // A blackout keeps Android's display on: renew the wake lock a wake took, as while awake, and
+            // not once the device isn't interactive (the same power-key race as below).
+            if (blackout) {
+                if (awake?.isHeld == true && pm.isInteractive && SystemClock.elapsedRealtime() - awakeSince >= AWAKE_REFRESH_MS) keepAwake()
+                return
+            }
             if (!screenOn) return
             // Still wanted on: take the wake lock again before its own timeout runs out. Not while the
             // device isn't interactive: the power key may have just turned it off, its broadcast not yet
@@ -458,17 +519,32 @@ class ScreenPolicy(
         }
     }
 
+    private var systemScreenOff = false
+
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            screenOn = i.action == Intent.ACTION_SCREEN_ON
-            Log.i(logTag, "screen ${if (screenOn) "ON" else "OFF"}")
-            // Turned off by the power key or anything else: don't hold it against that. Not when a wake
-            // already turned it on again (a late broadcast from the sleep before it).
-            if (!screenOn && !pm.isInteractive) letGo()
-            if (screenOn) {
-                lastActivity = SystemClock.elapsedRealtime()
-                setKeepOn(true)
+            val on = i.action == Intent.ACTION_SCREEN_ON
+            Log.i(logTag, "screen ${if (on) "ON" else "OFF"}")
+            if (!on) {
+                systemScreenOff = true
+                screenOn = false
+                // Turned off by the power key or anything else: don't hold it against that. Not when a wake
+                // already turned it on again (a late broadcast from the sleep before it).
+                if (!pm.isInteractive) letGo()
+                notifyChanged()
+                return
             }
+            // A real system SCREEN_OFF followed by SCREEN_ON wakes even out of blackout; a stray
+            // SCREEN_ON with no preceding SCREEN_OFF leaves an active blackout intact.
+            val wasSystemOff = systemScreenOff
+            systemScreenOff = false
+            if (blackout && wasSystemOff) {
+                wake("screen on")
+                return
+            }
+            screenOn = !blackout
+            lastActivity = SystemClock.elapsedRealtime()
+            setKeepOn(true)
             notifyChanged()
         }
     }
@@ -538,7 +614,7 @@ class ScreenPolicy(
             val manual = if (prefs.autoBrightness) -1f else prefs.manualBrightness.let { if (it > 0f) it else -1f }
             if (brightness != manual) {
                 brightness = manual
-                onBrightness?.invoke(manual)
+                onBrightness?.invoke(windowBrightness)
                 notifyChanged()
             }
             return
@@ -552,7 +628,7 @@ class ScreenPolicy(
         val next = if (brightness < 0f || immediate) target else brightness + (target - brightness) * 0.3f
         if (brightness < 0f || kotlin.math.abs(next - brightness) > 0.01f) {
             brightness = next
-            onBrightness?.invoke(next)
+            onBrightness?.invoke(windowBrightness)
         }
     }
 
