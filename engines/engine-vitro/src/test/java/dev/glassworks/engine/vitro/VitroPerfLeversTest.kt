@@ -353,6 +353,41 @@ class VitroPerfLeversTest {
         }
     }
 
+    // An island a card makes later (an auto-entities match, a conditional's child) inside a card whose size can't change
+    // (sections, fixed grid_options.rows): the card's layer came first and no resize takes it off (Greptile on #947).
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun anIslandAddedLaterLiftsTheLayerOfACardOfFixedSize() {
+        val store = EntityStore()
+        val vv = vitroView(store, """{"views": []}""")
+        vv.cardLayers = VitroView.CardLayers.ALL
+        activity.setContentView(vv)
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject("""{"views": [{"title": "Home", "type": "sections",
+            "sections": [{"type": "grid", "cards": [{"type": "vertical-stack", "grid_options": {"rows": 4},
+                "cards": [{"type": "markdown", "content": "Nothing matches yet"}]}]}]}]}""")), null)
+        fun lay() {
+            vv.measure(View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY))
+            vv.layout(0, 0, 1280, 800)
+            idle()
+        }
+        lay()
+        val markdown = all(vv).filterIsInstance<MarkdownCardView>().single()
+        val above = generateSequence(markdown.parent as View) { it.parent as? View }.takeWhile { it !== vv }.toList()
+        assertTrue("the stack starts on a layer", above.any { it.layerType == View.LAYER_TYPE_HARDWARE })
+        val sizes = above.map { it.width to it.height }
+
+        // A match lands: the stack gains an iframe beside its markdown.
+        val island = IframeCardView(ctx(store), LovelaceParser.parseDashboard(JSONObject(
+            """{"views": [{"cards": [{"type": "iframe", "url": "https://example.com/", "aspect_ratio": "60%"}]}]}""",
+        )).views.single().cards.single())
+        (markdown.parent as ViewGroup).addView(island)
+        lay()
+
+        assertEquals("the stack kept its size (no resize to hear)", sizes, above.map { it.width to it.height })
+        val held = generateSequence(island as View) { it.parent as? View }.takeWhile { it !== vv }.toList()
+        held.forEach { assertEquals("no layer on ${it.javaClass.simpleName} over the island", View.LAYER_TYPE_NONE, it.layerType) }
+    }
+
     @Test
     fun playsLiveVideoLooksInsideStacks() {
         fun card(json: String) = LovelaceParser.parseCard(JSONObject(json))
