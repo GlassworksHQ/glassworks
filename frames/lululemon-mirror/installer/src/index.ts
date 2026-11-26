@@ -26,7 +26,7 @@ export {
   type PatchedServicesJar, type StockApPatch, type StockBloatChange, type StockBundleMeta,
 } from './stock';
 export {
-  BundleRefused, ORIGINAL_JAR, RESTORE_SPARSE, STOCK_PROBE_BLE, STOCK_PROBE_LAN, bundleExtents, checkNotOdexed, installInPlace, mirrorInPlace,
+  BundleRefused, ORIGINAL_JAR, RESTORE_SPARSE, STOCK_PROBE_BLE, STOCK_PROBE_LAN, bundleExtents, checkNotOdexed, installInPlace, mirrorInPlace, restoredFiles,
 } from './inplace';
 export {
   DEFAULT_PROBE_APP_PACKAGE, DEFAULT_PROBE_APP_UID, STAGE_SECRET_BYTES, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildPackagesXml, buildStageUserdata,

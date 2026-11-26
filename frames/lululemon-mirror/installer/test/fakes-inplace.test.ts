@@ -84,12 +84,12 @@ describe('buildFakeGwsbBundle', () => {
       servicesHasClassesDex: false, lanIp: null, httpPort: 18000, serialno: '0000fake99', mirrorVersion: '2.0.0' });
   });
 
-  it('signs with the per-run secret: HMAC-SHA256 over the meta without hmacSha256, then the jar', async () => {
+  it('signs with the per-run secret: HMAC-SHA256 over the meta up to hmacSha256 (no closing brace), then the jar', async () => {
     const b = await buildFakeGwsbBundle({ secret: SECRET });
     expect(b.metaJson).toBe(`${b.metaBaseJson.slice(0, -1)},"hmacSha256":"${b.hmacSha256}"}`);
     expect(b.metaJson.endsWith(`,"hmacSha256":"${b.hmacSha256}"}`)).toBe(true);
     expect(b.meta.hmacSha256).toBe(b.hmacSha256);
-    expect(b.hmacSha256).toBe(await hmacSha256Hex(SECRET, new TextEncoder().encode(b.metaBaseJson), b.jarBytes));
+    expect(b.hmacSha256).toBe(await hmacSha256Hex(SECRET, new TextEncoder().encode(b.metaBaseJson.slice(0, -1)), b.jarBytes));
     expect(await verifyFakeGwsb(b.bytes, SECRET)).toEqual({ shaOk: true, hmacOk: true });
     // another run's secret doesn't verify it
     expect((await verifyFakeGwsb(b.bytes, new Uint8Array(32))).hmacOk).toBe(false);

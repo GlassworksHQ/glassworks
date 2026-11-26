@@ -53,6 +53,8 @@ export interface UsbState {
   brand?: string | 'other';
   /** where the brand screen's Back goes */
   brandFrom?: UsbScreen;
+  /** where the debugging steps' Back goes: the brand list when a brand was picked there, else the named device */
+  stepsFrom?: 'brand' | 'named';
   /** the browser's device list is open (the unclaimed device, or its adb interface and Allow) */
   finding?: boolean;
   findError?: string;
@@ -219,11 +221,20 @@ export class UsbSession {
   chooseBrand() {
     const b = this.state.brand;
     if (!b) return;
-    this.set({ identified: this.d.frame.identifyPicked(b === 'other' ? undefined : b), screen: 'debug' });
+    this.set({ identified: this.d.frame.identifyPicked(b === 'other' ? undefined : b), screen: 'debug', stepsFrom: 'brand' });
   }
 
   /** Continue on the named screen. */
-  toSteps() { if (!this.blocked()) this.set({ screen: 'debug' }); }
+  toSteps() { if (!this.blocked()) this.set({ screen: 'debug', stepsFrom: 'named' }); }
+
+  /** Back from the named screen to the first one: the device picked goes, and Find asks the browser's list again. */
+  restart() { if (this.state.finding) return; this.release(); this.set({ screen: 'find', identified: undefined, usbName: undefined, brand: undefined, stepsFrom: undefined, findError: undefined }); }
+
+  /** Back from the steps, to the screen that led there: the brand list, or the device Kiln named. */
+  backFromSteps() { this.set({ screen: this.state.stepsFrom ?? (this.state.identified?.pick ? 'brand' : 'named') }); }
+
+  /** Back from Tap Allow to the steps, once the ask has stopped (a refusal, nothing picked): not while it still waits for the tap. */
+  backToSteps() { if (!this.state.connecting && this.state.screen === 'allow') this.set({ screen: 'debug', connectError: undefined }); }
 
   /** From the first screen: undo an install (or back to installing). Undo needs USB debugging too, so the same steps follow. */
   setFlow(flow: Flow) { this.set({ flow }); }

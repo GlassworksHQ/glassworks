@@ -2,14 +2,19 @@
 // bundle's checks (signature, serial, odex stop-gate), the build Kiln checks with checkInPlace, and the app's install
 // with Device Owner. Every serial, address and key is made up.
 import { Disk, Ext4, MemoryStore, readSparse } from '@glassworks/ext4';
-import { checkInPlace } from '@glassworks/kiln-core';
+import { checkInPlace, checkRestorePoint, recordRestoreFiles, sha256Hex } from '@glassworks/kiln-core';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { bootInPlaceZip } from '../src/bootstill';
 import design from '../../design/installer.json';
 import {
-  BundleRefused, DEFAULT_PROBE_APP_UID, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata, installInPlace, mirrorInPlace,
+  BundleRefused, DEFAULT_PROBE_APP_UID, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata, installInPlace, mirrorInPlace, restoredFiles,
 } from '../src';
-import { ADB_KEYS } from '../src/image';
-import { factoryUserdata, keepWifiOn, keptBundleFits } from '../src/inplace';
+import { ADB_KEYS, macFromSerial } from '../src/image';
+import { INSTALLER_MAC_SETTING, USB_ALLOW_PERMISSION_SETTING, factoryUserdata, glassworksInPlace, keepWifiOn, keptBundleFits } from '../src/inplace';
+import { USB_ALLOW_PERMISSION } from '../src/stock';
 import type { PanelShell } from '@glassworks/adb';
 import { GLASSWORKS } from '../src/app';
 import { simInPlace } from '../src/sim';
@@ -103,6 +108,24 @@ describe('a bundle this browser kept', () => {
     expect(keptBundleFits(b.bytes, { fiemap: moved })).toBe(false);
   });
 
+  it('doesn\'t fit when the agent sends stock\'s boot animation and the kept copy came from an agent that didn\'t', async () => {
+    const old = await buildFakeGwsbBundle({ secret: SECRET });
+    expect(keptBundleFits(old.bytes, { fiemap: fiemapOf(old), bootAnimationSize: 22_901 })).toBe(false); // Bluetooth's short description
+    expect(keptBundleFits(old.bytes, { fiemap: fiemapOf(old), bootAnimation: { size: 22_901 } })).toBe(false);
+    expect(keptBundleFits(old.bytes, { fiemap: fiemapOf(old), bootAnimation: null })).toBe(true); // a Mirror with none
+  });
+
+  it('fits with a boot animation only while the agent reports it, whole, in the same blocks', async () => {
+    const anim = { size: 22_901, extents: [{ logical: 0, physical: 4096 * 6000, length: 4096 * 6, flags: 1 }] };
+    const fresh = await buildFakeGwsbBundle({ secret: SECRET, metaPatch: { bootAnimation: { size: 22_901, fiemap: anim } } });
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh), bootAnimation: { size: 22_901, fiemap: anim } })).toBe(true);
+    const moved = { ...anim, extents: [{ logical: 0, physical: 4096 * 7000, length: 4096 * 6, flags: 1 }] };
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh), bootAnimation: { size: 22_901, fiemap: moved } })).toBe(false);
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh), bootAnimation: { size: 22_901, fiemap: { truncated: true } } })).toBe(false);
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh), bootAnimationSize: 22_901 })).toBe(false); // Bluetooth's: no file map to compare
+    expect(keptBundleFits(fresh.bytes, { fiemap: fiemapOf(fresh) })).toBe(false);
+  });
+
   it('doesn\'t fit when the agent\'s description carries no whole file map (it trims it for Bluetooth)', async () => {
     const b = await buildFakeGwsbBundle({ secret: SECRET });
     expect(keptBundleFits(b.bytes, { fiemap: { truncated: true, extentCount: 1 } })).toBe(false);
@@ -152,7 +175,87 @@ describe('the build', () => {
     expect(m.systemBytes).toBe(SYSTEM_BYTES);
     expect(JSON.stringify(m)).not.toContain(FAKE_SERIAL);
     expect(built.files?.['services.jar.orig']).toEqual(jar);
+    // USB debugging on from the start of boot, as the stage has it: stock's own switch comes too late for app-install
+    const data = await openSparse(built.writes.userdata!);
+    expect(new TextDecoder().decode(await data.readFile('/property/persist.sys.usb.config'))).toBe('adb');
+    expect(new TextDecoder().decode(await data.readFile('/misc/adb/adb_keys'))).toBe(`${fakeAdbKey(4)}\n`);
   }, 60_000);
+
+  describe('the boot animation', () => {
+    const STOCK_BOOT_SIZE = 22_901; // stock 1.24.0's
+    const stockBoot = Uint8Array.from({ length: STOCK_BOOT_SIZE }, (_, i) => (i * 7 + 3) & 0xff);
+    const bootExtents = [{ logical: 0, physical: 4096 * 6000, block: 6000, length: 4096 * 6, blocks: 6, flags: 1 }];
+    const compact = new Uint8Array(readFileSync(join(__dirname, '../../../../branding/lululemon-mirror/bootanimation-compact.zip')));
+    /** The bundle with stock's boot animation as the agent sends it, signed with the rest. */
+    async function withBoot(patch: Record<string, unknown> = {}) {
+      const jar = buildSyntheticStockServicesJar();
+      const padded = Math.ceil(jar.length / 4096) * 4096;
+      const extents = [{ logical: 0, physical: 4096 * 5000, block: 5000, length: padded, blocks: padded / 4096, flags: 1 }];
+      const bootAnimation = { path: '/system/media/bootanimation.zip', size: STOCK_BOOT_SIZE, sha256: createHash('sha256').update(stockBoot).digest('hex'),
+        fiemap: { size: STOCK_BOOT_SIZE, extents: bootExtents }, base64: Buffer.from(stockBoot).toString('base64'), ...patch };
+      return buildFakeGwsbBundle({ secret: SECRET, jarBytes: jar, extents, metaPatch: { bootAnimation } });
+    }
+    async function blocks(sparse: Blob, at: number, n: number): Promise<Uint8Array> {
+      const { disk } = await readSparse(sparse.stream(), (h) => new Disk(new MemoryStore(), h.blockSize, h.blocks, { zeroed: true }));
+      return disk.read(at, n);
+    }
+
+    it.skipIf(!HAS_D8)('goes in stock\'s blocks at stock\'s size, and the restore point puts lululemon\'s back', async () => {
+      const b = await withBoot();
+      const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
+      expect(read.info.join('\n')).toContain(`bootanimation.zip ${STOCK_BOOT_SIZE} bytes`);
+      expect(read.extents).toContainEqual({ physical: 4096 * 6000, length: 4096 * 6 });
+      const built = await code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL, assets: { 'mirror-bootanimation-compact': compact } });
+      const write = await bytes(built.writes['system-in-place']!);
+      const restore = await bytes(built.restore);
+      expect(() => checkInPlace({ write, restore, extents: read.extents, partitionBytes: SYSTEM_BYTES })).not.toThrow();
+      const ours = bootInPlaceZip(compact, STOCK_BOOT_SIZE);
+      const written = await blocks(built.writes['system-in-place']!, 6000, 6);
+      expect(Buffer.from(written.subarray(0, STOCK_BOOT_SIZE)).equals(Buffer.from(ours))).toBe(true);
+      expect(written.subarray(STOCK_BOOT_SIZE).every((x) => x === 0)).toBe(true);
+      const back = await blocks(built.restore, 6000, 6);
+      expect(Buffer.from(back.subarray(0, STOCK_BOOT_SIZE)).equals(Buffer.from(stockBoot))).toBe(true);
+      expect(built.files?.['bootanimation.zip.orig']).toEqual(stockBoot);
+      expect((built.manifest as { bootAnimation: { size: number; extents: unknown[] } }).bootAnimation).toMatchObject({ size: STOCK_BOOT_SIZE, extents: bootExtents });
+      // read back over adb after the restart, with services.jar
+      expect(built.readBack).toContainEqual({ path: '/system/media/bootanimation.zip', sha256: createHash('sha256').update(ours).digest('hex'), size: STOCK_BOOT_SIZE });
+      // the way back's check before it writes (kiln-core restore.ts) takes this build's restore point as Kiln keeps it:
+      // the restore image puts back exactly the original jar and boot animation, and nothing else
+      const files = [{ filename: 'restore-services.sparse', data: restore }, ...Object.entries(built.files ?? {}).map(([filename, data]) => ({ filename, data }))];
+      const manifest = { ...built.manifest, kiln: { files: await recordRestoreFiles(files) } };
+      const restored = restoredFiles(manifest);
+      expect(restored.map((f) => [f.path, f.file])).toEqual([['/system/framework/services.jar', 'services.jar.orig'], ['/system/media/bootanimation.zip', 'bootanimation.zip.orig']]);
+      expect(restored[1]!.written).toEqual({ sha256: createHash('sha256').update(ours).digest('hex') });
+      const lines = await checkRestorePoint({ files, sparse: 'restore-services.sparse', manifest, restored, partitionBytes: SYSTEM_BYTES, partition: 'system', serial: FAKE_SERIAL });
+      expect(lines.filter((x) => x.startsWith('restore image: puts back the original'))).toHaveLength(2);
+    }, 60_000);
+
+    it.skipIf(!HAS_D8)('stays lululemon\'s when Kiln has no compact animation, and the write and restore leave its blocks alone', async () => {
+      const b = await withBoot();
+      const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
+      const built = await code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL });
+      const write = await bytes(built.writes['system-in-place']!);
+      const restore = await bytes(built.restore);
+      expect(() => checkInPlace({ write, restore, extents: read.extents, partitionBytes: SYSTEM_BYTES })).not.toThrow();
+      expect((await blocks(built.writes['system-in-place']!, 6000, 6)).every((x) => x === 0)).toBe(true); // untouched (DONT_CARE)
+      expect((built.manifest as { bootAnimationLeft?: string }).bootAnimationLeft).toMatch(/compact boot animation/);
+      expect(built.files?.['bootanimation.zip.orig']).toBeUndefined();
+      expect(built.readBack?.map((r) => r.path)).toEqual(['/system/framework/services.jar']);
+    }, 60_000);
+
+    it.skipIf(!HAS_D8)('stays lululemon\'s when the bundle\'s copy doesn\'t check out, and says why', async () => {
+      const b = await withBoot({ sha256: '0'.repeat(64) });
+      const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
+      expect(read.info.join('\n')).toContain('boot animation: stays lululemon\'s (its bytes don\'t match their SHA-256)');
+      expect(read.extents).not.toContainEqual({ physical: 4096 * 6000, length: 4096 * 6 });
+    }, 60_000);
+
+    it('an agent from before it sent the boot animation builds all the same: the boot animation stays lululemon\'s', async () => {
+      const b = await buildFakeGwsbBundle({ secret: SECRET });
+      const read = await code.readBundle(b.bytes, { secret: SECRET, serial: FAKE_SERIAL });
+      expect(read.info.join('\n')).toContain('boot animation: stays lululemon\'s (the setup agent didn\'t send it)');
+    });
+  });
 
   it('refuses an odexed build before it patches anything', async () => {
     const b = await buildFakeGwsbBundle({ secret: SECRET, servicesOdexFound: true });
@@ -205,6 +308,52 @@ describe('the app\'s install', () => {
     expect((await said({ out: '0\n' }, { out: '', code: 0 }, '0\n')).line).toBe('Wi-Fi: off, and not set (it reads 0 after the write)');
     expect(await said({ out: '0\n' })).toEqual({ line: 'Wi-Fi: was off, on from the next start', cmds: ['settings get global wifi_on', 'settings put global wifi_on 1', 'settings get global wifi_on'] });
   });
+
+  it('hands the app the image install\'s Home Assistant id before its first start, and lets it answer "Allow USB debugging?"', async () => {
+    const m = new FakeMirror({ kiosk: 'none', serialno: FAKE_SERIAL });
+    const lines: string[] = [];
+    await installInPlace(m, { apk: fakeMirrorApk(), onStep: (s, d) => lines.push(s || `  ${d}`), sleep: async () => {} });
+    const mac = await macFromSerial(FAKE_SERIAL);
+    const put = m.cmds.indexOf(`settings put global ${INSTALLER_MAC_SETTING} ${mac}`);
+    expect(put).toBeGreaterThan(-1);
+    // before anything starts the app: its first start picks the id and keeps it
+    expect(put).toBeLessThan(m.cmds.findIndex((c) => c.startsWith('am start') || c.startsWith('monkey')));
+    expect(m.cmds).toContain(`pm grant ${GLASSWORKS.package} android.permission.READ_LOGS`);
+    expect(m.cmds).toContain(`pm grant ${GLASSWORKS.package} ${USB_ALLOW_PERMISSION}`);
+    expect(m.cmds).toContain(`settings put global ${USB_ALLOW_PERMISSION_SETTING} ${USB_ALLOW_PERMISSION}`);
+    const log = lines.join('\n');
+    expect(log).toContain('USB debugging: the Manage page can let in other computers');
+    // the Glass Panes image's overlay defaults, over adb
+    for (const c of ['settings put system screen_off_timeout 2147483647', 'settings put global stay_on_while_plugged_in 7']) expect(m.cmds).toContain(c);
+    expect(log).not.toContain(mac!); // device-unique: the log names the setting only
+  });
+
+  it('without a serial, writes no id and says the app picks its own', async () => {
+    const m = new FakeMirror({ kiosk: 'none' });
+    const lines: string[] = [];
+    await installInPlace(m, { apk: fakeMirrorApk(), onStep: (s, d) => lines.push(s || `  ${d}`), sleep: async () => {} });
+    expect(m.cmds.some((c) => c.startsWith(`settings put global ${INSTALLER_MAC_SETTING}`))).toBe(false);
+    expect(lines.join('\n')).toContain('Home Assistant id: no serial reported, so the app picks its own');
+  });
+});
+
+describe('a reinstall, and stock\'s hotspot', () => {
+  // the install's services.jar empties MirrorApService.systemReady(): with Glassworks on, mirror-<serial> never opens
+  it('counts the hotspot gone once Glassworks is installed in place, and only then', async () => {
+    const code = mirrorInPlace(design.device.words);
+    expect(code.channels.lan?.hotspot).toBeTruthy();
+    expect(await code.ownWifiGone!(new FakeMirror({ kiosk: 'none', installed: 600 }))).toBe(true);
+    expect(await code.ownWifiGone!(new FakeMirror({ kiosk: 'none' }))).toBe(false); // stock (the agent's stage, say)
+  });
+
+  it('counts what it can\'t read as no', async () => {
+    const shell = (r: { out: string; code: number } | Error) => ({ run: async () => { if (r instanceof Error) throw r; return r; } }) as unknown as PanelShell;
+    expect(await glassworksInPlace(shell(new Error('closed')))).toBe(false);
+    expect(await glassworksInPlace(shell({ out: '', code: 1 }))).toBe(false);
+    // `pm list packages` matches by substring: a package whose name only starts with ours isn't ours
+    expect(await glassworksInPlace(shell({ out: `package:${GLASSWORKS.package}.other\n`, code: 0 }))).toBe(false);
+    expect(await glassworksInPlace(shell({ out: `package:${GLASSWORKS.package}\n`, code: 0 }))).toBe(true);
+  });
 });
 
 describe('the simulated stock Mirror', () => {
@@ -226,5 +375,38 @@ describe('the simulated stock Mirror', () => {
     await fb2.flashBlob('system', built.writes['system-in-place']!);
     await fb2.reboot();
     expect(dev.staged()).toBe(false);
+  });
+});
+
+describe('the restore point\'s files, for the way back\'s check', () => {
+  const jar = { path: '/system/framework/services.jar', size: 10, originalSha256: 'AB'.repeat(32), patchedSha256: 'cd'.repeat(32), origFile: 'services.jar.orig',
+    extents: [{ logical: 0, physical: 4096, block: 1, length: 4096, blocks: 1, flags: 1 }] };
+
+  it('reads services.jar, and the boot animation when the install changed it, from the manifest', async () => {
+    expect(restoredFiles({ servicesJar: jar })).toEqual([{ path: jar.path, file: 'services.jar.orig', size: 10, sha256: 'ab'.repeat(32),
+      extents: [{ logical: 0, physical: 4096, length: 4096 }], written: { sha256: 'cd'.repeat(32) } }]);
+    const boot = { ...jar, path: '/system/media/bootanimation.zip', origFile: 'bootanimation.zip.orig' };
+    expect(restoredFiles({ servicesJar: jar, bootAnimation: boot }).map((f) => f.file)).toEqual(['services.jar.orig', 'bootanimation.zip.orig']);
+    // a restore point that doesn't record what was written: only the original is checked against
+    const { patchedSha256: _, ...noWritten } = jar;
+    expect(restoredFiles({ servicesJar: noWritten })[0]!.written).toBeUndefined();
+  });
+
+  it('throws on a manifest that doesn\'t describe them', () => {
+    expect(() => restoredFiles({})).toThrow('The restore point\'s manifest doesn\'t describe services.jar.');
+    expect(() => restoredFiles({ servicesJar: { ...jar, origFile: undefined } })).toThrow(/describe services\.jar/);
+    // the paths are the Mirror's own: a manifest can't point Kiln's adb at anything else, or slip shell syntax in
+    expect(() => restoredFiles({ servicesJar: { ...jar, path: '/nope; reboot' } })).toThrow('The restore point\'s manifest puts services.jar somewhere other than /system/framework/services.jar.');
+    expect(() => restoredFiles({ servicesJar: jar, bootAnimation: { ...jar, path: '/system/framework/services.jar', origFile: 'b' } }))
+      .toThrow('The restore point\'s manifest puts the boot animation somewhere other than /system/media/bootanimation.zip.');
+    expect(() => restoredFiles({ servicesJar: { ...jar, extents: [{ logical: 0 }] } })).toThrow(/describe services\.jar/);
+    expect(() => restoredFiles({ servicesJar: jar, bootAnimation: { size: 1 } })).toThrow('The restore point\'s manifest doesn\'t describe the boot animation.');
+  });
+
+  it('the simulated Mirror\'s build keeps the same shape, so Kiln\'s tests check what a real restore point holds', async () => {
+    const b = await buildFakeGwsbBundle({ secret: SECRET });
+    const built = await simInPlace.code.build(b.bytes, { adbKey: fakeAdbKey(4), userdataBytes: 64 * 2 ** 20, partitionBytes: { system: SYSTEM_BYTES }, serial: FAKE_SERIAL });
+    const [f] = restoredFiles(built.manifest!);
+    expect(f!.sha256).toBe(await sha256Hex(built.files![f!.file]!));
   });
 });

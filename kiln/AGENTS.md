@@ -104,6 +104,19 @@ workspace's dependencies resolve, to the one copy at the root.
   there with the way back; a file Kiln can't read is logged as unchecked and the install goes on, since
   a failed read says nothing about the write. Which files and paths to check is the frame's data or
   code, never Kiln's.
+  **The one write that isn't read back: the stock Mirror's restore (the in-place way back).** After it,
+  nothing can read the device: its fastboot has no partition read, and the restore resets app data, so
+  stock's adb no longer trusts Kiln (maintainer, 2026-11-25; the exception in
+  [AGENTS.md](../AGENTS.md#hard-rules) rule 1). So Kiln checks everything it is about to write before
+  the first write (`packages/kiln-core/src/restore.ts`), and writes nothing if any check fails: every
+  file of the restore point has the size and SHA-256 recorded when it was made (its manifest's
+  `kiln.files`); it was made on this device (the SHA-256 of fastboot's serial); its restore image is
+  whole, sized for the partition, and fills nothing; that image puts back exactly the original files
+  the frame names (`InPlaceCode` `restored`), byte for byte, and writes no other block; and, while adb
+  still trusts Kiln before the restart, each of those files on the device is what the install wrote or
+  still the original. After the writes, fastboot's OKAY on each one is the last check there is, and
+  the log says so. Don't widen this exception to other writes, and don't drop a check before the write
+  to make up for it.
 - Assets (U-Boot, Magisk, the APK) are pinned by SHA-256 in `assets.lock.json` and checked on download.
   Bump the hash and the source together.
 - Only `app/` touches the DOM. Other modules talk through their exports, so `test/flow.test.ts` can

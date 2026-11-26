@@ -46,6 +46,8 @@ export interface LanChannelConfig {
   path: string;
   /** The agent's own page, for the file fallback (the user downloads the bundle there). */
   pagePath?: string;
+  /** The Wi-Fi network the device opens itself, `{serial}` standing for its serial, and its address there (InPlaceCode). */
+  hotspot?: { ssid: string; host: string };
 }
 
 export interface BleChannelConfig {

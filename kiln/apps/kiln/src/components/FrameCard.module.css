@@ -1,14 +1,12 @@
 /*
- * Kiln's states on the shared frame card: the picked card gets Kiln's ember ring, hovered or not
+ * Kiln's states on the shared frame card: the picked card gets an ink ring (a choice, not an action: ember is the action), hovered or not
  * (the :hover and :focus-visible selectors outrank the card's own hover rule in any load order).
  */
 .pick[data-state="checked"],
 .pick[data-state="checked"]:hover,
 .pick[data-state="checked"]:focus-visible {
-  border-color: color-mix(in srgb, var(--ember-b) 55%, transparent);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--ember-b) 35%, transparent),
-    0 24px 60px -30px color-mix(in srgb, var(--ember-b) 70%, transparent);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink), 0 24px 60px -34px color-mix(in srgb, var(--night) 45%, transparent);
 }
 
 .pick[data-disabled] {

@@ -158,9 +158,18 @@ describe('the picker, calm for a first visit and a returning one (#672)', () => 
     expect(screen.getByRole('link', { name: 'Undo an install' }).getAttribute('href')).toBe('/aqara-s1-plus/undo');
     fireEvent.click(screen.getByRole('radio', { name: /^lululemon Studio Mirror/ }));
     expect(screen.getByRole('link', { name: 'Finish setting up' }).getAttribute('href')).toBe('/lululemon-mirror/set-up');
-    // the Mirror's way back is its own image, on its own screens: no undo routes to send anyone to
-    expect(screen.queryByRole('link', { name: 'Undo an install' })).toBeNull();
+    // the Mirror's in-place install keeps a restore point, with routes of its own: someone back on another day finds it
+    expect(screen.getByRole('link', { name: 'Undo an install' }).getAttribute('href')).toBe('/lululemon-mirror/undo');
     expect(within(group('needs')).getByText('A micro-USB data cable')).toBeTruthy();
+  });
+
+  it('the S1\'s time on the picker is its install\'s own words, said once', () => {
+    render(<Picker />);
+    const needs = document.querySelector<HTMLElement>('[aria-labelledby="needs"]')!;
+    expect(within(needs).getAllByText('About 10 minutes')).toHaveLength(1);
+    // one source: the picker's list has no time of its own, the line comes from words.time.total
+    expect(INSTALLERS['aqara-s1-plus']!.picker!.needs.join(' ')).not.toMatch(/minute/);
+    expect(INSTALLERS['aqara-s1-plus']!.words?.time?.total).toBe('about 10 minutes');
   });
 
   it('every frame Kiln installs says what it needs and its way back (installer.json picker)', () => {

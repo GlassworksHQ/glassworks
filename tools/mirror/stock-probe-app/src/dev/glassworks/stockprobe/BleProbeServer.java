@@ -20,6 +20,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.os.HandlerThread;
 import android.os.ParcelUuid;
 import android.util.Log;
@@ -58,8 +59,30 @@ public final class BleProbeServer {
     private static final int DEFAULT_MTU = 23;
     private static final int MAX_ATTR = 512;
     private static final long SENT_WATCHDOG_MS = 1500L;
+    /**
+     * The gap between two notifications once the stack has shown it never confirms them. The stock 1.24.0 Mirror's
+     * Android 6 stack (2026-11-25) never called onNotificationSent, so waiting on it sent one chunk every 1.5 s. Kiln's
+     * resend passes fetch any chunk a paced stream loses.
+     */
+    private static final long PACE_MS = 20L;
     private static final int MAX_NOTIFY_RETRIES = 200;
     private static final int GATT_INVALID_OFFSET = 7;
+    /**
+     * How often bring-up looks at the adapter again while Bluetooth is off. ACTION_STATE_CHANGED alone isn't enough: on
+     * the stock 1.24.0 Mirror (2026-11-25) the probe started 0.2 s before the Bluetooth stack did, and STATE_ON never
+     * reached its receiver, so it waited forever with Bluetooth on.
+     */
+    private static final long ADAPTER_POLL_MS = 2000L;
+    /**
+     * How long bring-up waits after Bluetooth turns on before it opens the GATT server. On the stock 1.24.0 Mirror
+     * (Android 6, 2026-11-25) a service added 50 ms after STATE_ON was dropped: addService returned true and
+     * onServiceAdded never came, so advertising never started.
+     */
+    private static final long SETTLE_MS = 3000L;
+    /** How long to wait for onServiceAdded before the GATT server is closed and opened again. */
+    private static final long SERVICE_ADDED_TIMEOUT_MS = 5000L;
+    /** The longest wait between two tries at the GATT server. */
+    private static final long MAX_RETRY_MS = 30000L;
 
     private final Context ctx;
     private final HandlerThread thread;
@@ -74,6 +97,13 @@ public final class BleProbeServer {
     private boolean triedWithoutName;
     private boolean receiverRegistered;
     private boolean stopped;
+    private boolean saidOff;
+    private int offPolls;
+    private boolean settled;
+    /** When the settle delay ends (uptime ms): a second bring-up meanwhile (the poll, then STATE_ON) waits it out too. */
+    private long settleUntil;
+    private boolean serviceAdded;
+    private int gattTries;
 
     private final Map<String, Integer> mtus = new HashMap<>();
     private final Map<String, byte[]> metaSnapshots = new HashMap<>();
@@ -90,9 +120,26 @@ public final class BleProbeServer {
     private String awaitingDevice; // address of the device with an in-flight notification
     private int notifyRetries;
     private long sentInStream;
+    /** Set once onNotificationSent fails to come: from then on notifications go out every PACE_MS instead. */
+    private boolean paced;
+    private int sentCallbacks;
+    private long batchStartedAt;
+    private boolean saidOtherDevice;
     private final Runnable sentWatchdog = () -> {
         if (awaitingSent) {
-            Log.w(TAG, "BLE: onNotificationSent did not arrive; continuing");
+            if (!paced) {
+                paced = true;
+                ProbeLog.w(TAG, "BLE: onNotificationSent did not arrive (" + sentCallbacks + " so far); sending every "
+                        + PACE_MS + " ms from now on");
+            }
+            awaitingSent = false;
+            awaitingDevice = null;
+            pump();
+        }
+    };
+    /** The paced stream's gap is over. */
+    private final Runnable paceDone = () -> {
+        if (awaitingSent) {
             awaitingSent = false;
             awaitingDevice = null;
             pump();
@@ -114,7 +161,7 @@ public final class BleProbeServer {
                     receiverRegistered = true;
                 }
             } catch (Throwable t) {
-                Log.w(TAG, "BLE: could not watch the adapter state", t);
+                ProbeLog.w(TAG, "BLE: could not watch the adapter state", t);
             }
             bringUp();
         });
@@ -123,11 +170,13 @@ public final class BleProbeServer {
     public void stop() {
         h.post(() -> {
             stopped = true;
+            h.removeCallbacks(pollAdapter);
             tearDown();
             if (receiverRegistered) {
                 try { ctx.unregisterReceiver(stateReceiver); } catch (Throwable ignored) {}
                 receiverRegistered = false;
             }
+            h.removeCallbacks(serviceAddedWatchdog);
             thread.quitSafely();
         });
     }
@@ -136,22 +185,93 @@ public final class BleProbeServer {
         @Override
         public void onReceive(Context c, Intent i) {
             int state = i.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
+            ProbeLog.i(TAG, "BLE: adapter state changed to " + state);
             if (state == BluetoothAdapter.STATE_ON) bringUp();
-            else if (state == BluetoothAdapter.STATE_TURNING_OFF || state == BluetoothAdapter.STATE_OFF) tearDown();
+            else if (state == BluetoothAdapter.STATE_TURNING_OFF || state == BluetoothAdapter.STATE_OFF) {
+                h.removeCallbacks(pollAdapter);
+                h.removeCallbacks(serviceAddedWatchdog);
+                settled = false;
+                tearDown();
+                // keep looking: the STATE_ON broadcast after a restart can be missed too (see pollAdapter); stop() cancels it
+                if (!stopped) h.postDelayed(pollAdapter, ADAPTER_POLL_MS);
+            }
         }
     };
 
+    /** Looks at the adapter again in a moment, until it is on or the server stops (the broadcast may never come). */
+    private final Runnable pollAdapter = this::bringUp;
+
+    /** The service never showed up: close the GATT server and try again, a little later each time. */
+    private final Runnable serviceAddedWatchdog = this::retryGatt;
+
+    private void retryGatt() {
+        if (serviceAdded || stopped || gatt == null) return;
+        long wait = Math.min(MAX_RETRY_MS, SETTLE_MS * (1L << Math.min(gattTries - 1, 4)));
+        ProbeLog.w(TAG, "BLE: onServiceAdded did not arrive in " + (SERVICE_ADDED_TIMEOUT_MS / 1000) + " s (try " + gattTries
+                + "); reopening the GATT server in " + (wait / 1000) + " s");
+        tearDown();
+        h.postDelayed(pollAdapter, wait);
+    }
+
+    /** A snapshot for GET /log: the adapter as this app sees it and where bring-up got to. No name, no addresses. */
+    String describe() {
+        StringBuilder sb = new StringBuilder("ble:");
+        try {
+            BluetoothManager m = (BluetoothManager) ctx.getSystemService(Context.BLUETOOTH_SERVICE);
+            BluetoothAdapter a = m != null ? m.getAdapter() : null;
+            if (a == null) sb.append(" no adapter");
+            else {
+                sb.append(" state=").append(a.getState()).append(" enabled=").append(a.isEnabled());
+                sb.append(" leAdvertiser=").append(a.getBluetoothLeAdvertiser() != null);
+                sb.append(" multiAdv=").append(a.isMultipleAdvertisementSupported());
+            }
+        } catch (Throwable t) {
+            sb.append(" adapter read failed (").append(t.getClass().getSimpleName()).append(": ").append(t.getMessage()).append(')');
+        }
+        sb.append(" receiver=").append(receiverRegistered).append(" gatt=").append(gatt != null)
+          .append(" advertising=").append(advertising).append(" stopped=").append(stopped).append(" offPolls=").append(offPolls)
+          .append(" settled=").append(settled).append(" serviceAdded=").append(serviceAdded).append(" gattTries=").append(gattTries);
+        return sb.toString();
+    }
+
     private void bringUp() {
+        h.removeCallbacks(pollAdapter);
         if (stopped || gatt != null) return;
         try {
             manager = (BluetoothManager) ctx.getSystemService(Context.BLUETOOTH_SERVICE);
             BluetoothAdapter adapter = manager != null ? manager.getAdapter() : null;
-            if (adapter == null) { Log.i(TAG, "BLE: no Bluetooth adapter; BLE probe off"); return; }
-            if (!adapter.isEnabled()) { Log.i(TAG, "BLE: Bluetooth is off; waiting for it to turn on"); return; }
+            if (adapter == null) { ProbeLog.i(TAG, "BLE: no Bluetooth adapter; BLE probe off"); return; }
+            if (!adapter.isEnabled()) {
+                if (!saidOff) ProbeLog.i(TAG, "BLE: Bluetooth is off (state " + adapter.getState() + "); waiting for it to turn on");
+                else if (++offPolls % 15 == 0) ProbeLog.i(TAG, "BLE: still off after " + (offPolls * ADAPTER_POLL_MS / 1000) + " s (state " + adapter.getState() + ")");
+                saidOff = true;
+                h.postDelayed(pollAdapter, ADAPTER_POLL_MS);
+                return;
+            }
+            if (saidOff) ProbeLog.i(TAG, "BLE: Bluetooth is on");
+            saidOff = false;
+            if (!settled) {
+                // Give a stack that just came up a moment before asking it for a GATT server.
+                settled = true;
+                settleUntil = SystemClock.uptimeMillis() + SETTLE_MS;
+                ProbeLog.i(TAG, "BLE: waiting " + (SETTLE_MS / 1000) + " s for the Bluetooth stack to settle");
+                h.postDelayed(pollAdapter, SETTLE_MS);
+                return;
+            }
+            long settling = settleUntil - SystemClock.uptimeMillis();
+            if (settling > 0) {
+                // brought up again while it settles (the poll saw it on before STATE_ON came): keep the rest of the wait
+                h.postDelayed(pollAdapter, settling);
+                return;
+            }
             advertiser = adapter.getBluetoothLeAdvertiser();
-            if (advertiser == null) { Log.i(TAG, "BLE: no LE advertiser (multiAdv off?); BLE probe off"); return; }
+            if (advertiser == null) { ProbeLog.i(TAG, "BLE: no LE advertiser (multiAdv off?); BLE probe off"); return; }
+            ProbeLog.i(TAG, "BLE: LE advertiser found (multiple advertisement " + adapter.isMultipleAdvertisementSupported() + ")");
             gatt = manager.openGattServer(ctx, callback);
-            if (gatt == null) { Log.w(TAG, "BLE: openGattServer returned null"); return; }
+            if (gatt == null) { ProbeLog.w(TAG, "BLE: openGattServer returned null"); return; }
+            gattTries++;
+            serviceAdded = false;
+            ProbeLog.i(TAG, "BLE: GATT server open (try " + gattTries + "); adding the service");
 
             BluetoothGattService svc = new BluetoothGattService(SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY);
             svc.addCharacteristic(new BluetoothGattCharacteristic(META,
@@ -165,14 +285,21 @@ public final class BleProbeServer {
                     BluetoothGattDescriptor.PERMISSION_READ | BluetoothGattDescriptor.PERMISSION_WRITE));
             svc.addCharacteristic(dataChar);
             // Advertising starts in onServiceAdded, once the service is really there.
-            if (!gatt.addService(svc)) { Log.w(TAG, "BLE: addService refused"); tearDown(); }
+            if (!gatt.addService(svc)) {
+                ProbeLog.w(TAG, "BLE: addService refused");
+                h.postDelayed(serviceAddedWatchdog, 0);
+                return;
+            }
+            h.postDelayed(serviceAddedWatchdog, SERVICE_ADDED_TIMEOUT_MS);
         } catch (Throwable t) {
-            Log.w(TAG, "BLE: bring-up failed; BLE probe off", t);
+            ProbeLog.w(TAG, "BLE: bring-up failed; BLE probe off", t);
             tearDown();
         }
     }
 
     private void tearDown() {
+        h.removeCallbacks(serviceAddedWatchdog);
+        serviceAdded = false;
         clearStream();
         stopAdvertising();
         if (gatt != null) {
@@ -209,7 +336,7 @@ public final class BleProbeServer {
             advertiser.startAdvertising(settings, data, scan, advertiseCallback);
             advertising = true;
         } catch (Throwable t) {
-            Log.w(TAG, "BLE: startAdvertising failed", t);
+            ProbeLog.w(TAG, "BLE: startAdvertising failed", t);
         }
     }
 
@@ -223,7 +350,7 @@ public final class BleProbeServer {
     private final AdvertiseCallback advertiseCallback = new AdvertiseCallback() {
         @Override
         public void onStartSuccess(AdvertiseSettings s) {
-            Log.i(TAG, "BLE: advertising service " + SERVICE);
+            ProbeLog.i(TAG, "BLE: advertising service " + SERVICE);
         }
 
         @Override
@@ -237,7 +364,7 @@ public final class BleProbeServer {
                     startAdvertising();
                     return;
                 }
-                Log.w(TAG, "BLE: advertising failed, error " + errorCode);
+                ProbeLog.w(TAG, "BLE: advertising failed, error " + errorCode);
             });
         }
     };
@@ -246,8 +373,15 @@ public final class BleProbeServer {
         @Override
         public void onServiceAdded(int status, BluetoothGattService service) {
             h.post(() -> {
-                if (status == BluetoothGatt.GATT_SUCCESS) startAdvertising();
-                else Log.w(TAG, "BLE: service add failed, status " + status);
+                h.removeCallbacks(serviceAddedWatchdog);
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    serviceAdded = true;
+                    ProbeLog.i(TAG, "BLE: service added; advertising");
+                    startAdvertising();
+                } else {
+                    ProbeLog.w(TAG, "BLE: service add failed, status " + status);
+                    h.post(serviceAddedWatchdog);
+                }
             });
         }
 
@@ -256,10 +390,20 @@ public final class BleProbeServer {
             h.post(() -> {
                 String a = device.getAddress();
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    Log.i(TAG, "BLE: central connected");
+                    ProbeLog.i(TAG, "BLE: central connected (status " + status + ")");
                     if (!mtus.containsKey(a)) mtus.put(a, DEFAULT_MTU);
+                    // Hold the link. A link a remote central opened belongs to no app on this side, and the stack drops
+                    // such a link after its no-app idle timeout, a few seconds in. connect(device, false) adds this
+                    // server to the link's users, so it stays up for the transfer.
+                    if (gatt != null) {
+                        try { gatt.connect(device, false); } catch (Throwable t) { ProbeLog.w(TAG, "BLE: could not hold the link", t); }
+                    }
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    Log.i(TAG, "BLE: central disconnected");
+                    ProbeLog.i(TAG, "BLE: central disconnected (status " + status + ")");
+                    // Drop the background connection connect(device, false) left behind.
+                    if (gatt != null) {
+                        try { gatt.cancelConnection(device); } catch (Throwable ignored) {}
+                    }
                     mtus.remove(a);
                     metaSnapshots.remove(a);
                     preparedWrites.remove(a);
@@ -276,7 +420,7 @@ public final class BleProbeServer {
         public void onMtuChanged(BluetoothDevice device, int mtu) {
             h.post(() -> {
                 mtus.put(device.getAddress(), mtu);
-                Log.i(TAG, "BLE: MTU " + mtu);
+                ProbeLog.i(TAG, "BLE: MTU " + mtu);
             });
         }
 
@@ -350,9 +494,14 @@ public final class BleProbeServer {
         public void onNotificationSent(BluetoothDevice device, int status) {
             final String addr = device != null ? device.getAddress() : null;
             h.post(() -> {
-                if (!awaitingSent) return;
+                if (++sentCallbacks == 1) ProbeLog.i(TAG, "BLE: first onNotificationSent (status " + status + ")");
+                // A paced stream doesn't wait on these; one arriving late must not cut a gap short.
+                if (!awaitingSent || paced) return;
                 // Ignore stale completions from a different/previous device.
-                if (awaitingDevice != null && addr != null && !awaitingDevice.equals(addr)) return;
+                if (awaitingDevice != null && addr != null && !awaitingDevice.equals(addr)) {
+                    if (!saidOtherDevice) { saidOtherDevice = true; ProbeLog.w(TAG, "BLE: onNotificationSent for another device; ignored"); }
+                    return;
+                }
                 awaitingSent = false;
                 awaitingDevice = null;
                 h.removeCallbacks(sentWatchdog);
@@ -365,7 +514,7 @@ public final class BleProbeServer {
         try {
             if (gatt != null) gatt.sendResponse(device, requestId, status, offset, value);
         } catch (Throwable t) {
-            Log.w(TAG, "BLE: sendResponse failed", t);
+            ProbeLog.w(TAG, "BLE: sendResponse failed", t);
         }
     }
 
@@ -427,7 +576,9 @@ public final class BleProbeServer {
                 totalChunks = (b.size() + chunkSize - 1) / chunkSize;
                 long end = count == 0 ? totalChunks : Math.min(totalChunks, start + count);
                 metaSnapshots.remove(device.getAddress());
-                Log.i(TAG, "BLE: stream " + start + ".." + end + " of " + totalChunks + " chunks of " + chunkSize);
+                ProbeLog.i(TAG, "BLE: stream " + start + ".." + end + " of " + totalChunks + " chunks of " + chunkSize
+                        + (paced ? " (paced)" : ""));
+                batchStartedAt = SystemClock.elapsedRealtime();
                 queue.add(new long[] {IDX_INFO, 0});
                 if (start < end) queue.add(new long[] {start, end});
                 queue.add(new long[] {IDX_END, 0});
@@ -438,7 +589,8 @@ public final class BleProbeServer {
                 if (streamBundle == null) return; // no locked chunk size yet: send 0x01 first
                 streamDevice = device;
                 int n = v.length >= 3 ? ((v[1] & 0xff) | (v[2] & 0xff) << 8) : 0;
-                Log.i(TAG, "BLE: resend " + n + " chunks");
+                ProbeLog.i(TAG, "BLE: resend " + n + " chunks");
+                batchStartedAt = SystemClock.elapsedRealtime();
                 boolean wasIdle = queue.isEmpty() && !awaitingSent;
                 // Drop a pending END so the resent chunks land before it.
                 if (!queue.isEmpty() && queue.peekLast()[0] == IDX_END) queue.pollLast();
@@ -452,11 +604,11 @@ public final class BleProbeServer {
             } else if (op == OP_ABORT) {
                 if (isStreaming(device)) {
                     queue.clear();
-                    Log.i(TAG, "BLE: stream aborted");
+                    ProbeLog.i(TAG, "BLE: stream aborted");
                 }
             }
         } catch (Throwable t) {
-            Log.w(TAG, "BLE: command 0x" + Integer.toHexString(op) + " failed", t);
+            ProbeLog.w(TAG, "BLE: command 0x" + Integer.toHexString(op) + " failed", t);
         }
     }
 
@@ -489,13 +641,13 @@ public final class BleProbeServer {
             dataChar.setValue(frame);
             ok = gatt.notifyCharacteristicChanged(streamDevice, dataChar, false);
         } catch (Throwable t) {
-            Log.w(TAG, "BLE: notify failed", t);
+            ProbeLog.w(TAG, "BLE: notify failed", t);
             ok = false;
         }
         if (!ok) {
             // The stack's queue is busy (or the link is going away): try again shortly, then give up.
             if (++notifyRetries > MAX_NOTIFY_RETRIES) {
-                Log.w(TAG, "BLE: notifications keep failing; stopping the stream");
+                ProbeLog.w(TAG, "BLE: notifications keep failing; stopping the stream");
                 clearStream();
                 return;
             }
@@ -504,12 +656,17 @@ public final class BleProbeServer {
         }
         notifyRetries = 0;
         if (idx < IDX_END) sentInStream++;
+        if (idx == IDX_END) {
+            long ms = Math.max(1L, SystemClock.elapsedRealtime() - batchStartedAt);
+            ProbeLog.i(TAG, "BLE: batch done, " + sentInStream + " chunks in " + (ms / 1000) + " s (" + (sentInStream * chunkSize * 1000L / ms) + " B/s)");
+        }
         // Advance the queue only after the stack took the frame.
         if (idx >= IDX_END || r[0] + 1 >= r[1]) queue.pollFirst();
         else r[0] = idx + 1;
         awaitingSent = true;
         awaitingDevice = streamDevice.getAddress();
-        h.postDelayed(sentWatchdog, SENT_WATCHDOG_MS);
+        if (paced) h.postDelayed(paceDone, PACE_MS);
+        else h.postDelayed(sentWatchdog, SENT_WATCHDOG_MS);
     }
 
     private void clearStream() {
@@ -522,6 +679,7 @@ public final class BleProbeServer {
             awaitingSent = false;
             awaitingDevice = null;
             h.removeCallbacks(sentWatchdog);
+            h.removeCallbacks(paceDone);
         }
         notifyRetries = 0;
         streamDevice = null;
