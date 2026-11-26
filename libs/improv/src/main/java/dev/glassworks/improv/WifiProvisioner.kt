@@ -270,6 +270,21 @@ public class WifiProvisioner(
         connectNow(ssid, password, hidden, cb)
     }
 
+    /**
+     * Saves the configured networks (Android 7 and earlier forget what addNetwork added until the app saves). Tries twice;
+     * a failure is logged and the join still counts, since the network works until the next restart.
+     */
+    @Suppress("DEPRECATION")
+    private fun saveNetworks(): Boolean {
+        for (attempt in 1..2) {
+            val saved = runCatching { wm.saveConfiguration() }.getOrElse { false }
+            Log.i(TAG, "saveConfiguration (try $attempt) -> $saved")
+            if (saved) return true
+        }
+        Log.w(TAG, "couldn't save the Wi-Fi network: it works now, but Android may forget it after a restart")
+        return false
+    }
+
     private fun connectNow(ssid: String, password: String, hidden: Boolean?, cb: (Outcome) -> Unit) {
         ensureLocationIfDeviceOwner()
         Log.i(TAG, "connect to the chosen network (${ssid.length} char name, ${password.length} char password); ${status()}")
@@ -284,6 +299,8 @@ public class WifiProvisioner(
         if (loc && wifiUpAtStart && prevSsid == ssid) {
             // Already there: don't touch the saved config (we couldn't restore its password).
             Log.i(TAG, "already on the chosen network; reporting success without changes")
+            // an earlier join's save may have failed: saving again keeps the network past a restart on Android 7 and earlier
+            if (Compat.mustSaveNetworks) saveNetworks()
             return cb(Outcome.Connected(ssid, WifiSecurityRules.ipv4(info.ipAddress), "already-connected"))
         }
         if (!loc && wifiUpAtStart) {
@@ -440,10 +457,7 @@ public class WifiProvisioner(
             if (i?.supplicantState == SupplicantState.COMPLETED && onTarget && ip != null && wifiNetworkUp()) {
                 // joined: keep it past a restart. Android 7 and earlier forget a network addNetwork added until the app
                 // saves it (a Mirror on its stock Android 6 asked for Wi-Fi again on every boot, 2026-11-25)
-                if (netId != -1 && Compat.mustSaveNetworks) {
-                    @Suppress("DEPRECATION")
-                    Log.i(TAG, "saveConfiguration -> ${runCatching { wm.saveConfiguration() }.getOrElse { false }}")
-                }
+                if (netId != -1 && Compat.mustSaveNetworks) saveNetworks()
                 return Outcome.Connected(ssid, ip, method)
             }
             if (authErrors >= 2) return failAndRestore("wrong password (authentication failed)")
