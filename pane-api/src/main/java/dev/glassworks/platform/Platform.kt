@@ -81,6 +81,12 @@ open class PlatformApi(
      */
     val hasForegroundServiceStart: Boolean get() = apiLevel >= 26
 
+    /**
+     * Android enforces per-app "Install unknown apps" (`PackageManager.canRequestPackageInstalls`,
+     * Android 8). Below it there is no per-app check, only the device-wide unknown-sources setting.
+     */
+    val hasPerAppUnknownSources: Boolean get() = apiLevel >= 26
+
     /** `layoutInDisplayCutoutMode` exists (Android 9). */
     val hasDisplayCutoutMode: Boolean get() = apiLevel >= 28
 

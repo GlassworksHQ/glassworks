@@ -34,6 +34,7 @@ kiosk|improv_auto|Boolean|true
 kiosk|improv_proximity_auth|Boolean|false
 kiosk|lan_setup_until|Long|0
 kiosk|manual_brightness|Float|-1.0
+kiosk|master_level|Float|-1.0
 kiosk|max_brightness|Float|1.0
 kiosk|mic_gain|Float|1.0
 kiosk|mic_muted|Boolean|false
@@ -66,13 +67,14 @@ kiosk|setup_radio_migrated|Boolean|false
 kiosk|setup_silent_updates_answered|Boolean|false
 kiosk|setup_up_at_restart|Boolean|false
 kiosk|speaker_muted|Boolean|false
-kiosk|speaker_volume|Float|1.0
+kiosk|speaker_volume|-|-
 kiosk|time_zone_enabled|Boolean|true
 kiosk|time_zone_kept|String|""
 kiosk|update_channel|String|null
 kiosk|url|String|null
 kiosk|voice_enabled|Boolean|true
 kiosk|voice_overlay|Boolean|true
+kiosk|volume_raised|Boolean|false
 kiosk|wake_cutoff|Float|0.97
 kiosk|wake_model|String|"hey_jarvis_v0.1.tflite"
 kiosk|wake_on_approach|Boolean|true

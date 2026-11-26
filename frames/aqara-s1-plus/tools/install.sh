@@ -600,6 +600,7 @@ try adb shell pm grant "$PKG" android.permission.RECORD_AUDIO
 try adb shell pm grant "$PKG" android.permission.CAMERA
 try adb shell pm grant "$PKG" android.permission.WRITE_SECURE_SETTINGS   # presence range
 try adb shell appops set "$PKG" SYSTEM_ALERT_WINDOW allow                 # start from boot
+try adb shell appops set "$PKG" REQUEST_INSTALL_PACKAGES allow            # PackageInstaller fallback without root update service
 # Device admin (force-lock only) for instant screen-off. "already active" is fine.
 try adb shell dpm set-active-admin "$PKG/.AdminReceiver"
 

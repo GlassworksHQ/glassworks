@@ -117,8 +117,11 @@ class RadioFirmware(
 
     private fun label(id: String) = if (id == "stock") "Aqara stock" else "bundle image $id"
 
-    private fun needsV4() = "need the root helper v${RadioReports.BUNDLE_VERSION} (installed: v${helperVersion()}): " +
-        "update the panel's system software once with Kiln"
+    private fun needsV4(): String {
+        val installed = agent.version()?.let { "v$it" } ?: "none"
+        return "need the root helper v${RadioReports.BUNDLE_VERSION} (installed: $installed): " +
+            "update the panel's system software once with Kiln"
+    }
 
     companion object {
         const val KEEP = "Keep current"

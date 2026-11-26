@@ -41,7 +41,8 @@ import java.util.concurrent.ConcurrentHashMap
  * flags 3 + UUID128 18 + service data 10 = exactly 31 bytes. The device name goes in the scan
  * response. HA's `improv_ble` bluetooth matcher needs both the service UUID and the 0x4677 service
  * data (manifest.json), and py-improv-ble-client rejects service data that isn't exactly 6 bytes or
- * whose state isn't 1..4.
+ * whose state isn't 1..4. Below Android 8 the advertisement can't be updated in place, so a state change
+ * restarts it, but only once no client is connected (a restart dropped the connected client on Android 6).
  *
  * Characteristics (same properties as ESPHome improv_ble): state R/N, error R/N, RPC command W,
  * RPC result R/N, capabilities R. Notifications are queued one at a time (Android drops a
@@ -83,6 +84,10 @@ public class ImprovBleServer(
     private var useLegacyAdvertise = !Compat.hasAdvertisingSets
     private var advertising = false
     private var running = false
+    /** Advertising has started once in this run: a later failure is a refresh's, not the start's. */
+    private var advertisedOnce = false
+    /** A legacy refresh waits for the last client to leave ([updateAdvertisement]). */
+    private var refreshPending = false
 
     private val values = ConcurrentHashMap<UUID, ByteArray>()
     private val chars = HashMap<UUID, BluetoothGattCharacteristic>()
@@ -221,6 +226,8 @@ public class ImprovBleServer(
         }
         server = null
         running = false
+        advertisedOnce = false
+        refreshPending = false
         devices.clear(); subscribed.clear(); mtu.clear(); prepared.clear(); chars.clear()
     }
 
@@ -320,11 +327,23 @@ public class ImprovBleServer(
         if (Compat.hasAdvertisingSets && set != null) {
             set.setAdvertisingData(advData())
         } else if (useLegacyAdvertise && advertising) {
-            // Legacy API can't update in place: restart with the new service data.
-            runCatching { advertiser?.stopAdvertising(legacyCallback) }
-            advertising = false
-            startAdvertising()
+            // The legacy API can't update in place, so the new service data means stop and start again. Not while a
+            // client is connected: on Android 6 stopping the advertiser dropped the connected client ~270 ms later
+            // (Mirror, 2026-11-25), so the Wi-Fi result never reached it. The client has the state from the
+            // characteristic; the advertisement catches up when the last client leaves.
+            if (devices.isNotEmpty()) {
+                refreshPending = true
+                return
+            }
+            restartLegacyAdvertising()
         }
+    }
+
+    private fun restartLegacyAdvertising() {
+        refreshPending = false
+        runCatching { advertiser?.stopAdvertising(legacyCallback) }
+        advertising = false
+        startAdvertising()
     }
 
     // Null below Android 8: creating an AdvertisingSetCallback there throws NoClassDefFoundError.
@@ -360,12 +379,18 @@ public class ImprovBleServer(
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             main.post {
                 advertising = true
+                advertisedOnce = true
                 listener.onAdvertising(true, "startAdvertising (legacy API)")
             }
         }
 
         override fun onStartFailure(errorCode: Int) {
-            main.post { listener.onAdvertising(false, "startAdvertising failed: ${advertiseError(errorCode)}") }
+            main.post {
+                val why = "startAdvertising failed: ${advertiseError(errorCode)}"
+                // A refresh that fails leaves the GATT server and its clients up; the next refresh tries again.
+                if (advertisedOnce) Log.w(logTag, "$why (refreshing the advertisement)")
+                else listener.onAdvertising(false, why)
+            }
         }
     }
 
@@ -394,6 +419,8 @@ public class ImprovBleServer(
                     listener.onClientDisconnected(addr)
                     // Some stacks stop legacy advertising once a central connected; make sure it runs.
                     if (Compat.hasAdvertisingSets && running) runCatching { advSet?.enableAdvertising(true, 0, 0) }
+                    // A legacy refresh held back while clients were connected runs now, with the current state.
+                    if (running && refreshPending && devices.isEmpty()) restartLegacyAdvertising()
                 }
             }
         }
