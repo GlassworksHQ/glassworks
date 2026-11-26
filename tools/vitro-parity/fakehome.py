@@ -375,8 +375,13 @@ class Series:
             self.changes, self.attrs = None, {}
         else:
             pts = spec.get("points") or spec.get("steps") or []
-            self.changes = sorted((at(p[0]), str(p[1])) for p in pts)
-            self.attrs = {at(p[0]): resolve(p[2]) for p in pts if len(p) > 2}
+            # Points at one instant: the last one in the fixture holds, state and attributes, as the recorder keeps
+            # it. Collapsed here once, so the state, the history and the statistics all read the same timeline.
+            last = {}
+            for p in pts:
+                last[at(p[0])] = p
+            self.changes = sorted((t, str(p[1])) for t, p in last.items())
+            self.attrs = {t: resolve(p[2]) for t, p in last.items() if len(p) > 2}
 
     def attributes(self, t):
         """The attributes the last point at or before t gave, or None."""
@@ -485,13 +490,30 @@ def history(entity_ids, start, end, no_attributes=True, minimal=True):
     return out
 
 
+def _state_class(eid):
+    """The entity's state class for statistics: the fixture's `statistics` override, else its attribute."""
+    st = states().get(eid)
+    override = (fixture().get("statistics") or {}).get(eid) or {}
+    return override.get("state_class", ((st or {}).get("attributes") or {}).get("state_class"))
+
+
+def _change(values, increasing):
+    """How much a counter rose across [values] (the previous close, then each value held), as HA's recorder sums it.
+    A total_increasing value below 0.9 of the one before is a meter reset (`reset_detected`): the new cycle starts
+    from 0, so the value after the reset counts in full. A smaller drop, or any drop of a `total`, counts as it is."""
+    change = 0.0
+    for prev, cur in zip(values, values[1:]):
+        change += cur if increasing and cur < 0.9 * prev else cur - prev
+    return change
+
+
 def _meta(eid):
     st = states().get(eid)
     override = (fixture().get("statistics") or {}).get(eid) or {}
     if not st and not override:
         return None
     a = (st or {}).get("attributes", {})
-    sc = override.get("state_class", a.get("state_class"))
+    sc = _state_class(eid)
     if sc not in ("measurement", "total", "total_increasing"):
         return None
     unit = a.get("unit_of_measurement")
@@ -505,6 +527,16 @@ def _meta(eid):
 
 def statistics_metadata(ids):
     return [m for m in (_meta(e) for e in ids or []) if m]
+
+
+def _held(s, b, e):
+    """[(t, value, seconds held)]: every numeric value series [s] holds in the bucket [b, e), as HA's recorder
+    compiles one: the value at b, then each change before e (a change at e itself starts the next bucket). A value
+    that isn't a number (`unavailable`) holds its own time, which counts for none. (Points at one instant are one
+    point already: Series keeps the last.)"""
+    pts = s.changes_between(b, e - 1e-6)
+    spans = [(t, v, (pts[i + 1][0] if i + 1 < len(pts) else e) - t) for i, (t, v) in enumerate(pts)]
+    return [(t, float(v), w) for t, v, w in spans if v is not None and _num(v)]
 
 
 def statistics(ids, start, end, period, types):
@@ -521,15 +553,22 @@ def statistics(ids, start, end, period, types):
         rows, b = [], math.floor(t0 / step) * step
         total = 0.0
         while b + step <= t1 + 1e-6:
-            samples = [float(v) for v in (s.value(b + k * step / 12) for k in range(12)) if v is not None and _num(v)]
-            if samples:
+            held = _held(s, b, b + step)
+            if held:
+                samples = [v for _, v, _ in held]
                 row = {"start": int(b * 1000), "end": int((b + step) * 1000)}
                 if m["has_mean"]:
-                    for k, v in (("mean", sum(samples) / len(samples)), ("min", min(samples)), ("max", max(samples))):
+                    # HA's mean is weighted by how long each value held; min and max are over every value held.
+                    mean = sum(v * w for _, v, w in held) / sum(w for _, _, w in held)
+                    for k, v in (("mean", mean), ("min", min(samples)), ("max", max(samples))):
                         if k in types:
                             row[k] = round(v, 6)
                 else:
-                    change = max(0.0, samples[-1] - samples[0])
+                    # HA's change runs from the previous hour's close (a step right at b belongs to this bucket),
+                    # through every value held, a meter reset included.
+                    before = s.value(b - 1e-6)
+                    opening = float(before) if before is not None and _num(before) else samples[0]
+                    change = _change([opening] + samples, _state_class(eid) == "total_increasing")
                     total += change
                     for k, v in (("change", change), ("state", samples[-1]), ("sum", total)):
                         if k in types:

@@ -374,7 +374,7 @@ What a fallback does to the grade depends on whether the camera played on its vi
 | The camera | Its camera task, graded on the view's path (WebRTC) |
 |---|---|
 | Never showed a WebRTC frame, and showed another kind instead | Fails, as a camera that doesn't play over WebRTC does on the web engine. The page's limit says "a camera fell back to … on Vitro (it never played over WebRTC)" |
-| Showed WebRTC frames, then fell back to another kind | Graded on its WebRTC frames, under the same bars: the first frame stands, and the time after WebRTC stopped has no WebRTC frames, so it counts against frames shown and as a stall |
+| Showed WebRTC frames, then fell back to another kind | Graded on its WebRTC frames, under the same bars: the first frame stands, and the time after WebRTC stopped has no WebRTC frames, so it counts against frames shown, and as a stall when that gap meets the freeze rule (above) |
 
 Two differences, and what they mean:
 - **The pictures are timed on the main thread.** A stream reports each picture through its listener on the main
