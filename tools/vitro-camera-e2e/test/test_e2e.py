@@ -162,14 +162,24 @@ class Served(unittest.TestCase):
 
     @staticmethod
     def ws_message(sock):
-        h = sock.recv(2)
+        """One unmasked server frame's payload. fakeha's exact reader: a socket that closes mid-frame raises
+        ConnectionError rather than reading empty bytes for ever."""
+        h = fakeha._recv(sock, 2)
         n = h[1] & 0x7F
         if n == 126:
-            n = int.from_bytes(sock.recv(2), "big")
-        data = b""
-        while len(data) < n:
-            data += sock.recv(n - len(data))
-        return data
+            n = int.from_bytes(fakeha._recv(sock, 2), "big")
+        return fakeha._recv(sock, n)
+
+    def test_a_frame_cut_short_by_a_closed_socket_raises(self):
+        a, b = socket.socketpair()
+        try:
+            a.sendall(bytes([0x81, 10]) + b"auth")
+            a.close()
+            b.settimeout(5)
+            with self.assertRaises(ConnectionError):
+                self.ws_message(b)
+        finally:
+            b.close()
 
     def test_a_drop_cuts_the_websockets_and_refuses_new_ones_until_ha_is_back(self):
         sock = self.websocket()

@@ -95,7 +95,10 @@ internal class LiveCameraFeed(
     /** MJPEG failed: snapshots poll until [retry] opens it again. */
     private var mjpegDown = false
 
-    /** When [setActive] last hid it ([SystemClock.uptimeMillis]): a long hide tries what failed again on show. */
+    /**
+     * When [setActive] last hid it ([SystemClock.elapsedRealtime], which counts the device's deep sleep: a panel whose
+     * screen slept for hours was hidden that long): a long hide tries what failed again on show.
+     */
     private var hiddenAt = 0L
 
     /** [videoRetry] is posted. */
@@ -178,7 +181,7 @@ internal class LiveCameraFeed(
         if (!running || this.active == active) return
         this.active = active
         if (!active) {
-            hiddenAt = SystemClock.uptimeMillis()
+            hiddenAt = SystemClock.elapsedRealtime()
             stopPolling()
             cancelVideoRetry()
             ctx.main.removeCallbacks(retry)
@@ -200,7 +203,7 @@ internal class LiveCameraFeed(
             return
         }
         // Hidden long enough for the screen to have slept: what failed before may play now (HA restarted meanwhile).
-        if (SystemClock.uptimeMillis() - hiddenAt >= LONG_HIDE_MS) forgetFailures()
+        if (SystemClock.elapsedRealtime() - hiddenAt >= LONG_HIDE_MS) forgetFailures()
         // A video camera takes its slot again first; without one it goes to MJPEG (recompute closes the rest). A camera
         // that was capped before it hid starts over too: recompute asks for a slot, or waits for one, from its plan now.
         capped = false
