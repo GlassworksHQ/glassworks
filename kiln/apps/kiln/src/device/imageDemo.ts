@@ -3,19 +3,23 @@
 // built or downloaded (a stand-in reports progress); the fastboot and first-start answers are the frame's fakes.
 // `flash-…`: Glassworks; `image-…`: the choice and the frame's community image (issue 579).
 import { ProxyError, WrongImage, type DeviceEntry, type ImageMaker } from '@glassworks/kiln-core';
-import { ImageSession, type ImageDeps } from './imageSession';
+import { ImageSession, type DeviceProgress, type ImageDeps, type ProgressMark } from './imageSession';
 import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
 import { AppSession, releaseLine } from './appSession';
 import type { PanelShell } from '@glassworks/adb';
 import { standardDemo } from '../standard/demo';
 import type { StandardSession } from '../standard/session';
 import { withAppStreams } from '../wizard/demo';
+import { memoryInPlaceStore } from './inPlace';
+import type { BluetoothLike } from './channels';
 
 export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
   'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-adb-refused', 'flash-error-first-start', 'flash-setup', 'flash-setup-wifi', 'flash-setup-ha', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
-  'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed'] as const;
+  'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed',
+  ...['place-choose', 'place-stage', 'place-receive-lan', 'place-receive-ble', 'place-lna-denied', 'place-receive-file', 'place-restore-point',
+    'place-fastboot-again', 'place-working', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken', 'place-undo', 'place-run'] as const] as const;
 export type ImageDemo = (typeof IMAGE_DEMOS)[number];
 
 const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
@@ -115,6 +119,7 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
     ...deps,
   });
   const done = { image, app, standard: () => standard };
+  if (name.startsWith('place-')) return placeDemo({ frame, sim }, name, fast, deps, handOver);
   if (name === 'image-choose' || name === 'image-link') return done;
   if (name === 'image-choose-open') { image.showCommunity(true); return done; }
   if (name === 'image-choose-panes') { image.showCommunity(true); image.pick(community.id); return done; }
@@ -176,4 +181,125 @@ async function withCommunity(name: ImageDemo, d: { image: ImageSession; app: App
   if (name.startsWith('image-done-wifi')) { await image.connectAdb(); return d; }
   if (name === 'image-back-glassworks') image.wayBack(glassworks);
   return d;
+}
+
+/** A fetch whose bundle sends its first piece, then waits: the local network transfer, held on screen. */
+function heldFetch(f: typeof fetch): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const r = await f(input, init);
+    if (!r.body) return r;
+    const reader = r.body.getReader();
+    let sent = false;
+    return new Response(new ReadableStream<Uint8Array>({
+      async pull(c) {
+        if (sent) return new Promise<void>(() => {});
+        const { value } = await reader.read();
+        sent = true;
+        if (value) c.enqueue(value);
+      },
+    }), { status: r.status, headers: r.headers });
+  }) as typeof fetch;
+}
+
+/**
+ * `place-…`: Glassworks on the device's own software (an in-place recipe), on the frame's simulated stock device
+ * (`sim.inPlace`): its two fastboot sessions, its setup agent on the network and over Bluetooth, and adb after the
+ * install. Each name stops on one screen; `place-run` clicks through to the standard flow.
+ */
+async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, name: ImageDemo, fast: boolean, deps: Partial<ImageDeps>, handOver?: (p: PanelShell) => StandardSession | undefined) {
+  const ip = sim.inPlace;
+  const recipe = frame.imageFlow.recipes.find((r) => r.mode === 'in-place');
+  if (!ip || !recipe) throw new Error(`${frame.name} has no in-place install to show`);
+  let standard: StandardSession | undefined;
+  const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, fast ? 0 : ms));
+  const device = ip.device({
+    lan: name === 'place-lna-denied' ? 'lna-denied' : name === 'place-receive-ble' ? 'offline' : 'ok',
+    tampered: name === 'place-error-bundle',
+    // place-error-not-taken: fastboot takes the system write, but the started system still has the old file
+    systemNotTaken: name === 'place-error-not-taken',
+    tick: (ms) => tick(ms),
+    ...(fast ? {} : { bleFrameDelayMs: 120 }),
+  });
+  const held = <T>() => new Promise<T>(() => {});
+  let userdataWrites = 0;
+  const fastboot = () => {
+    const fb = device.fastboot();
+    // place-working: the second session's system write, held at half way
+    if (name === 'place-working') return { ...fb, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { if (p === 'system') { on?.(0.5); return held<void>(); } return fb.flashBlob(p, b, on); } };
+    // place-error-lost: the second session's userdata write (after the stage's) stops, once the system is written
+    if (name === 'place-error-lost') return { ...fb, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { if (p === 'userdata' && userdataWrites++ === 1) throw new Error('the bootloader stopped answering'); return fb.flashBlob(p, b, on); } };
+    return fb;
+  };
+  // the tab's progress mark, for place-error-lost's reload
+  let mark: ProgressMark | undefined;
+  const progress: DeviceProgress = { get: () => mark, set: (m) => { mark = m; } };
+  const frameWithStandIn = { ...frame, imageFlow: { ...frame.imageFlow, inPlace: name === 'place-stage' ? { ...ip.code, stage: () => held<Blob>() } : ip.code } };
+  const app = new AppSession({ frame, connect: async () => { throw new Error('not in this demo'); } }, true);
+  const sessionDeps: ImageDeps = {
+    frame: frameWithStandIn,
+    images: { fetch: async () => {}, download: async () => {}, file: async () => new Blob([]), check: async () => {}, build: async () => { throw new Error('not in this demo'); },
+      wifi: async () => new Blob([]), adbKey: async () => new Blob([]), systemKey: async () => new Blob([]), discard: async () => {} },
+    requestFastboot: async () => fastboot(),
+    requestAdb: async (o) => {
+      o?.onPicked?.();
+      const a = device.adb();
+      return Object.assign(withAppStreams(a, { online: true, radio: false }), a.rebootToBootloader ? { rebootToBootloader: () => a.rebootToBootloader!() } : {});
+    },
+    adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
+    apk: () => app.apkBytes(),
+    simulated: true,
+    sleep: (ms) => tick(ms / 20),
+    inPlaceStore: memoryInPlaceStore(),
+    bluetooth: device.bluetooth as BluetoothLike,
+    agentFetch: name === 'place-receive-lan' ? heldFetch(device.fetch) : device.fetch,
+    localNetworkPermission: async () => (name === 'place-lna-denied' ? 'denied' : 'granted'),
+    handOver: (p) => { standard = handOver?.(p); },
+    progress,
+    ...deps,
+  };
+  const image = new ImageSession(sessionDeps);
+  const done = { image, app, standard: () => standard };
+  image.pick(recipe.id);
+  if (name === 'place-choose') return done;
+  image.choose();
+  await app.pickApk(sim.apkName, sim.apk());
+  image.setWifi({ ssid: 'Home Net', password: 'not-a-real-password' }); // a made-up network (CLAUDE.md rule 2)
+  image.toFastboot();
+  await image.connectFastboot();
+  image.understand(true);
+  const staging = image.flash();
+  if (name === 'place-stage') { await new Promise((r) => setTimeout(r, 0)); return done; }
+  await staging;
+  if (name === 'place-receive-file') { image.receiveByHand(); return done; }
+  const receiving = image.receive();
+  if (name === 'place-receive-lan' || name === 'place-receive-ble' || name === 'place-lna-denied') { void receiving; return done; }
+  await receiving;
+  if (name === 'place-error-bundle' || name === 'place-fastboot-again') return done;
+  const second = image.connectFastboot();
+  if (name === 'place-working') { await new Promise((r) => setTimeout(r, fast ? 0 : 50)); }
+  await waitFor(() => image.state.screen === 'restore-point' && image.state.restorePoint?.status === 'ready' || name === 'place-working' && image.state.work?.step === 'flash-system');
+  await second;
+  if (name === 'place-restore-point' || name === 'place-working') {
+    if (name === 'place-working') void image.continueInstall();
+    return done;
+  }
+  await image.continueInstall();
+  if (name === 'place-error-lost') {
+    // the page reloads in a browser that has lost the bundle, after the system write: the way back, not a new stage
+    const again = new ImageSession({ ...sessionDeps, inPlaceStore: memoryInPlaceStore() });
+    await again.connectFastboot();
+    await waitFor(() => again.state.screen === 'error');
+    return { ...done, image: again };
+  }
+  if (name === 'place-undo') { await image.startUndo(); return done; }
+  await image.connectAdb();
+  // the read back after the restart stops it before the app's install: the way back is its one action
+  if (name === 'place-error-not-taken') return done;
+  await standardDemo(standard, 'done');
+  return done;
+}
+
+/** Waits (a few seconds at most) until `ok()`: a demo's step that runs in the background. */
+async function waitFor(ok: () => boolean): Promise<void> {
+  for (let i = 0; i < 400 && !ok(); i++) await new Promise((r) => setTimeout(r, 10));
 }

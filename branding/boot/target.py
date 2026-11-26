@@ -25,6 +25,10 @@ A target comes from a frame's design data (`frames/<id>/design/frame.json`):
                  1920x1080 panel stands portrait because Kiln's first boot locks its Android there
                  (user_rotation=3, auto-rotate off), which turns the UI but not the boot animation
                  (seen on the unit, 2026-11-16).
+    compactBudget
+                 Also build bootanimation-compact.zip (compact.py), no larger than this many bytes:
+                 the stock bootanimation.zip's size, for an install that writes over it in place
+                 (the Mirror's stock-in-place, 22,901 bytes on stock 1.24.0). Absent = not built.
 """
 import json
 import os
@@ -53,6 +57,7 @@ class Target:
     splash: Optional[str] = None
     zip_budget: Optional[int] = None
     rotate: Optional[int] = None
+    compact_budget: Optional[int] = None
 
     def __post_init__(self):
         if not self.name.strip():
@@ -69,6 +74,8 @@ class Target:
             raise ValueError(f"androidApi must be an API level of 21 or more, not {self.android_api!r}")
         if self.zip_budget is not None and (type(self.zip_budget) is not int or self.zip_budget <= 0):
             raise ValueError(f"zipBudget must be a positive number of bytes, not {self.zip_budget!r}")
+        if self.compact_budget is not None and (type(self.compact_budget) is not int or self.compact_budget <= 0):
+            raise ValueError(f"compactBudget must be a positive number of bytes, not {self.compact_budget!r}")
         if self.rotate is not None and self.rotate not in (90, 270):
             raise ValueError(f"rotate must be 90 or 270 (degrees counter-clockwise), not {self.rotate!r}")
         if self.rotate is not None and self.splash is not None:
@@ -97,11 +104,12 @@ def from_frame(frame_id, repo=REPO):
     if not disp:
         raise ValueError(f"{os.path.relpath(path, repo)} has no \"display\": {{ \"width\", \"height\" }} in pixels")
     boot = d.get("boot") or {}
-    unknown = set(boot) - {"androidApi", "splash", "zipBudget", "rotate"}
+    unknown = set(boot) - {"androidApi", "splash", "zipBudget", "rotate", "compactBudget"}
     if unknown:
         raise ValueError(f"{os.path.relpath(path, repo)}: unknown boot field(s) {', '.join(sorted(unknown))}")
     return Target(d["name"], disp.get("width"), disp.get("height"),
-                  boot.get("androidApi"), boot.get("splash"), boot.get("zipBudget"), boot.get("rotate"))
+                  boot.get("androidApi"), boot.get("splash"), boot.get("zipBudget"), boot.get("rotate"),
+                  boot.get("compactBudget"))
 
 
 @dataclass(frozen=True)

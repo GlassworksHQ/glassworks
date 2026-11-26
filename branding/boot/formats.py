@@ -238,8 +238,8 @@ def list_bootlogo(bmp, name):
 # checks the S1's files against it, so a generator change without a rebuild fails CI.
 MANIFEST = "outputs.json"
 HERE = os.path.dirname(os.path.abspath(__file__))
-INPUTS = ("generate.py", "stack.py", "formats.py", "target.py")
-OUTPUTS = ("bootlogo.bmp", "bootanimation.zip", "splash-landscape.png", "preview.webp")
+INPUTS = ("generate.py", "stack.py", "formats.py", "target.py", "compact.py")
+OUTPUTS = ("bootlogo.bmp", "bootanimation.zip", "bootanimation-compact.zip", "splash-landscape.png", "preview.webp")
 
 
 def write_manifest(target, out):
@@ -259,12 +259,14 @@ def write_manifest(target, out):
         f.write(json.dumps(doc, indent=2) + "\n")
 
 
-def build(target, out, render, n_intro, n_loop, splash_name):
+def build(target, out, render, n_intro, n_loop, splash_name, extra=None):
     """render(T) -> screen-sized RGB array, T = global frame index. Frames [0, n_intro) are part0
     and the next n_loop part1, which must be periodic: render(n_intro + n_loop) == render(n_intro).
     Builds and checks everything in a temporary folder inside `out`, and only then moves the files
     into place and lists the splash as `splash_name` (bootlogos.json). A failed build leaves the
     published files as they were, and its folder (.boot-build-*) for inspection.
+    extra(stage), if given, writes more outputs into the stage and returns their problems
+    (generate.py: the compact animation, compact.py).
     Returns the list of problems (empty = all good)."""
     os.makedirs(out, exist_ok=True)
     # inside `out`, so on its filesystem even when `out` is a mount or a symlink: each file is
@@ -306,6 +308,8 @@ def build(target, out, render, n_intro, n_loop, splash_name):
         write_bmp(target, splash, os.path.join(stage, "bootlogo.bmp"))
     write_preview(os.path.join(stage, "preview.webp"), small)
     problems = validate(target, stage)
+    if extra:
+        problems += extra(stage)
     size = os.path.getsize(os.path.join(stage, "bootanimation.zip"))
     budget = f" (budget {target.zip_budget / 1e6:.2f} MB)" if target.zip_budget else ""
     print(f"  bootanimation.zip {size / 1e6:.2f} MB{budget}")

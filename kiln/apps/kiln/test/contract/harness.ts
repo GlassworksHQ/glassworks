@@ -54,6 +54,11 @@ export interface Knobs {
   stall?: boolean;
   /** Nobody touches the device's screen beyond the taps its flow declares. */
   noTouch?: boolean;
+  /**
+   * An agent's transfer over the local network drops halfway (a flow with a `transport: agent` step): Kiln carries on
+   * over Bluetooth by itself.
+   */
+  channelDrop?: boolean;
 }
 
 /** A write that reached the device, and the step it belongs to. */
@@ -88,7 +93,7 @@ export interface World {
   /** Set by the fake when the flow reached the reload point (the device call there never answers). */
   reloadNow: boolean;
   /** Which injections fired, for the harness checks. */
-  fired: { refused: number; dropped: boolean; stalled: boolean; reloaded: boolean };
+  fired: { refused: number; dropped: boolean; stalled: boolean; reloaded: boolean; channelDropped?: boolean };
 }
 
 export interface Driver {

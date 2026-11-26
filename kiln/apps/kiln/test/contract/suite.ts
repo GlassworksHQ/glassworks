@@ -3,12 +3,12 @@
 import marks from './expected-failures.json';
 import { android } from './android';
 import { flowData, type Driver, type Knobs } from './harness';
-import { mirrorApp, mirrorFastboot } from './mirror';
+import { mirrorApp, mirrorFastboot, mirrorInPlace } from './mirror';
 import { s1 } from './s1';
 
-export const DRIVERS: Driver[] = [s1, mirrorFastboot, mirrorApp, android];
+export const DRIVERS: Driver[] = [s1, mirrorFastboot, mirrorInPlace, mirrorApp, android];
 
-export type CaseKind = 'clean' | 'auth-refused-while-booting' | 'usb-drop' | 'reload' | 'stalled-download' | 'no-touch';
+export type CaseKind = 'clean' | 'auth-refused-while-booting' | 'usb-drop' | 'reload' | 'stalled-download' | 'no-touch' | 'channel-drop';
 export interface Case { id: string; kind: CaseKind; knobs: Knobs; what: string; step?: string }
 
 /** The cases a flow runs, from its installer.json: a reload in each step, a drop in its first write, a stall if it downloads. */
@@ -16,6 +16,7 @@ export function cases(d: Driver): Case[] {
   const f = flowData(d.frame, d.flow);
   const write = f.steps.find((s) => s.writes);
   const download = f.steps.find((s) => s.downloads?.length);
+  const agent = f.steps.find((s) => s.transport === 'agent');
   const out: Case[] = [
     { id: 'clean', kind: 'clean', knobs: {}, what: 'nothing goes wrong: it reaches Done' },
     { id: 'auth-refused-while-booting', kind: 'auth-refused-while-booting', knobs: { refuseAuth: 3 },
@@ -26,6 +27,8 @@ export function cases(d: Driver): Case[] {
       what: `the page reloads during ${s.id}: it knows a write may have happened, and reaches Done without redoing a finished step's writes` })),
     ...(download ? [{ id: 'stalled-download', kind: 'stalled-download' as const, knobs: { stall: true }, step: download.id,
       what: `the first download (in ${download.id}) stops sending: a watchdog ends it, and it resumes by itself or ends with an error whose Try again is on that step's screen (or the one before), then Done` }] : []),
+    ...(agent ? [{ id: 'channel-drop', kind: 'channel-drop' as const, knobs: { channelDrop: true }, step: agent.id,
+      what: `the local network drops halfway through ${agent.id}'s transfer: Kiln carries on over Bluetooth by itself and reaches Done, with no error screen` }] : []),
     { id: 'no-touch', kind: 'no-touch', knobs: { noTouch: true },
       what: `nobody touches the device beyond the taps the flow declares (${f.steps.flatMap((s) => s.taps ?? []).join(', ') || 'none'}): it reaches Done` },
   ];

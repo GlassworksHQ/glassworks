@@ -24,13 +24,32 @@ line of each version is what Home Assistant shows on the update card. A change o
   over WebRTC (through go2rtc, Nest and other integrations) plays that way, with low delay and hardware decoding
   where the device has it. Cameras without WebRTC, or where it doesn't connect, play HLS or MJPEG as before, and a
   camera goes back to WebRTC once Home Assistant is back after a restart. Nothing changes in Home Assistant.
+- **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
+  page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
+  with a mute switch. It is Android's media volume, so the device's volume buttons move it too. Home Assistant's
+  *Speaker* volume and mute now control the same thing, so turning the panel down in Home Assistant quiets all of
+  it, not only announcements. The Music page's slider is now called
+  **Music volume** and sets Music Assistant's level under it. On the few devices whose volume Android keeps fixed,
+  such as some TV boxes, it still sets everything but the dashboard's own sound.
+- **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
+  when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
 ### Fixed
+- **App updates fail fast when "Install unknown apps" is turned off.** On Android 8 and newer (unless Glassworks is a system app or device owner), starting a Home Assistant update without "Install unknown apps" allowed used to download the APK, open Android's refusal dialog, and wait 10 minutes before reporting a timeout. Glassworks now stops right away and tells you to enable "Install unknown apps" in Android's settings.
+- **Wi-Fi setup over Bluetooth finishes on the Mirror.** When Home Assistant or its phone app sent the Wi-Fi
+  details over Bluetooth, the Mirror joined the network, but the phone or Home Assistant kept saying it was
+  connecting because the Mirror dropped the Bluetooth connection before it could report back. It now stays
+  connected and reports the join, so the setup finishes. In the legacy build.
 - **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
   you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in
   in progress across the restart.
+- **The first sign-in no longer fails with "Can't reach Home Assistant" when you enter a `.local` address.**
+  Android 11 and older can't look up names like `homeassistant.local`, so the panel reaches Home Assistant through
+  the address it finds on your network. A sign-in started before the panel had found that address kept the name and
+  failed, and it only worked when you tried again. The panel now finishes the sign-in through the address it has
+  found by then, waiting a few seconds for it if needed.
 - **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
   dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
   running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
@@ -43,8 +62,9 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
   every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
   secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
-  is refused, and the panel's log says so, unless your dashboard explicitly shares a permission with that frame (an
-  `allow` attribute). Permissions an older version saved for other sites are forgotten when the app starts.
+  is refused, and the panel's log says so. An `allow` attribute on the frame doesn't change that: a site framed in
+  your dashboard needs to be one of the secure hosts too. Permissions an older version saved for other sites, including
+  framed ones, are forgotten when the app starts.
 - **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
   your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
   (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so once Home Assistant has

@@ -20,12 +20,26 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   over WebRTC (through go2rtc, Nest and other integrations) plays that way, with low delay and hardware decoding.
   Cameras without WebRTC, or where it doesn't connect, play HLS or MJPEG as before, and a camera goes back to WebRTC
   once Home Assistant is back after a restart. Nothing changes in Home Assistant.
+- **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
+  page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
+  with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel
+  down in Home Assistant quiets all of it, not only announcements. The Music page's slider is now called
+  **Music volume** and sets Music Assistant's level under it.
+- **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
+  when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
 ### Fixed
+- **App updates fail fast when Android blocks unknown-source installs, and S1 Plus setup allows them for fallback updates.** On a panel without the root update service, starting an update when "Install unknown apps" is off used to open a dead-end Android dialog and wait 10 minutes to time out. Glassworks now reports the missing permission right away, and both Kiln and `install.sh` allow "Install unknown apps" on the S1 Plus so fallback updates can show Android's confirmation screen.
+- **Radio firmware sensor says `none` instead of `v1` when no root helper is installed.** Panels without a root helper previously showed `(installed: v1)` in the Radio firmware sensor alongside the Radio helper sensor saying no helper was installed.
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
   you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in
   in progress across the restart.
+- **The first sign-in no longer fails with "Can't reach Home Assistant" when you enter a `.local` address.**
+  Android 11 and older can't look up names like `homeassistant.local`, so the panel reaches Home Assistant through
+  the address it finds on your network. A sign-in started before the panel had found that address kept the name and
+  failed, and it only worked when you tried again. The panel now finishes the sign-in through the address it has
+  found by then, waiting a few seconds for it if needed.
 - **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
   dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
   running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
@@ -37,8 +51,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
   every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
   secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
-  is refused, and the panel's log says so, unless your dashboard explicitly shares a permission with that frame (an
-  `allow` attribute). Permissions an older version saved for other sites are forgotten when the app starts.
+  is refused, and the panel's log says so. An `allow` attribute on the frame doesn't change that: a site framed in
+  your dashboard needs to be one of the secure hosts too. Permissions an older version saved for other sites, including
+  framed ones, are forgotten when the app starts.
 - **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
   your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
   (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so once Home Assistant has

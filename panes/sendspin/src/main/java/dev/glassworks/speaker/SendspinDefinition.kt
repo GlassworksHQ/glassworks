@@ -43,7 +43,7 @@ class SendspinDefinition(
         return listOf(SettingsSection(id, "Music", covers = emptySet(), status = { PaneState(PaneState.Kind.RUNNING, "Sendspin · Music Assistant") }, items = listOfNotNull(
             SettingsItem.Status(text = { status(player.status, player.serverUrl) }, ok = { connected(player.status.phase) }),
             SettingsItem.Info({ "Now playing" }, { player.nowPlayingText ?: "Nothing" }),
-            SettingsItem.Slider("Volume", { player.volume.toFloat() }, 0f, 100f, 1f, { "${it.toInt()} %" }) { v, done ->
+            SettingsItem.Slider(MUSIC_VOLUME, { player.volume.toFloat() }, 0f, 100f, 1f, { "${it.toInt()} %" }) { v, done ->
                 background { player.setVolume(v.toInt()); done(null) }
             },
             SettingsItem.Info({ "Audio" }, { audio(player.status) }),
@@ -51,6 +51,9 @@ class SendspinDefinition(
     }
 
     companion object {
+        /** Music Assistant's volume for this player, under the panel's master volume (the Sound page). */
+        const val MUSIC_VOLUME = "Music volume"
+
         private fun connected(phase: SendspinPlayer.Phase) = phase == SendspinPlayer.Phase.READY || phase == SendspinPlayer.Phase.PLAYING
 
         /** The line under the heading: how the player is connected, and to where. */
