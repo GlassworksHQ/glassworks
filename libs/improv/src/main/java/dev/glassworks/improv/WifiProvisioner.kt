@@ -409,8 +409,15 @@ public class WifiProvisioner(
             // the ids saved before this attempt: whether it made the entry addNetwork returns. Only a list Android gives in
             // full counts (from Android 10 an app that isn't the device owner gets an empty or filtered one)
             val idsBefore = runCatching { wm.configuredNetworks?.map { it.networkId }?.toSet() }.getOrNull()
+            // Android 7 and earlier: record that a change is coming, durably, before addNetwork makes it; a change that
+            // can't be recorded isn't made, so a later save can never keep a credential nothing tested
+            if (Compat.mustSaveNetworks && !saveGate.beginChange()) {
+                finish(Outcome.Failed("couldn't record the Wi-Fi change, so nothing was changed", null))
+                return true
+            }
             netId = wm.addNetwork(conf)
             if (netId == -1) {
+                if (Compat.mustSaveNetworks) saveGate.changeRefused()
                 Log.w(TAG, "addNetwork refused (not device owner / no SYSTEM_ALERT_WINDOW?); trying a suggestion")
                 return false
             }
@@ -609,18 +616,46 @@ internal object SavedNetworks {
  * running, failed, or another network came up instead, and no save runs while any is. Joining that network confirms it;
  * removing an entry the attempt made clears it. A network joined meanwhile lasts until the next restart, as before.
  */
-internal class SaveGate(private val store: Store, private val bootId: () -> String) {
+internal class SaveGate(private val store: Store, private val bootId: () -> String?, private val elapsedMs: () -> Long) {
 
-    /** Where the unconfirmed ids outlive this provisioner and the app's process; [bootId] names the boot they belong to. */
+    /** What a gate keeps: the boot it belongs to ([bootId] null when unknown, [elapsedMs] then tells), and the ids. */
+    data class Kept(val bootId: String?, val elapsedMs: Long, val ids: Set<Int>)
+
+    /** Where the unconfirmed ids outlive this provisioner and the app's process. [write] says whether it was kept. */
     interface Store {
-        fun read(): Pair<String, Set<Int>>?
-        fun write(bootId: String, ids: Set<Int>)
+        fun read(): Kept?
+        fun write(kept: Kept): Boolean
     }
 
     // only this boot's: a restart put every saved credential back, so an older boot's ids mean nothing now
-    private val unconfirmed: MutableSet<Int> = store.read()?.takeIf { it.first == bootId() }?.second.orEmpty().toMutableSet()
+    private val unconfirmed: MutableSet<Int> = store.read()?.takeIf { sameBoot(it) }?.ids.orEmpty().toMutableSet()
 
-    @Synchronized fun unconfirmed(netId: Int) { if (unconfirmed.add(netId)) keep() }
+    /** Same boot: the kernel's boot ids agree, or, with one unknown, the clock since boot hasn't gone back (no wall clock). */
+    private fun sameBoot(k: Kept): Boolean {
+        val now = bootId()
+        return if (now != null && k.bootId != null) now == k.bootId else elapsedMs() >= k.elapsedMs
+    }
+
+    /**
+     * Records, durably, that an attempt is about to change a network, before it does: false when that can't be kept,
+     * and then the attempt mustn't change anything. Until [unconfirmed] or [changeRefused] names the outcome, every save
+     * is held, also after the app's process restarts in the same boot.
+     */
+    @Synchronized fun beginChange(): Boolean {
+        unconfirmed += CHANGING
+        if (keep()) return true
+        unconfirmed -= CHANGING
+        return false
+    }
+
+    /** addNetwork refused: nothing changed. */
+    @Synchronized fun changeRefused() { if (unconfirmed.remove(CHANGING)) keep() }
+
+    @Synchronized fun unconfirmed(netId: Int) {
+        unconfirmed -= CHANGING
+        unconfirmed += netId
+        keep()
+    }
 
     /** The entry is gone (Android confirmed its removal): nothing of it is left to save. */
     @Synchronized fun removed(netId: Int) { if (unconfirmed.remove(netId)) keep() }
@@ -631,30 +666,39 @@ internal class SaveGate(private val store: Store, private val bootId: () -> Stri
         return unconfirmed.isEmpty()
     }
 
-    private fun keep() { runCatching { store.write(bootId(), unconfirmed.toSet()) } }
+    private fun keep(): Boolean = runCatching { store.write(Kept(bootId(), elapsedMs(), unconfirmed.toSet())) }.getOrDefault(false)
 
     companion object {
+        /** A change recorded before addNetwork returned its id. */
+        private const val CHANGING = Int.MIN_VALUE
+
         /** One gate per process, kept in the app's own preferences, so a new provisioner or a restarted app still holds. */
         @Volatile private var shared: SaveGate? = null
 
         fun of(ctx: Context): SaveGate = shared ?: synchronized(this) {
-            shared ?: SaveGate(PrefsStore(ctx.applicationContext), ::currentBootId).also { shared = it }
+            shared ?: SaveGate(PrefsStore(ctx.applicationContext), ::currentBootId, SystemClock::elapsedRealtime).also { shared = it }
         }
 
-        /** The kernel's id for this boot; without it, when the device started (to the minute, so clock drift doesn't move it). */
-        private fun currentBootId(): String = runCatching { java.io.File("/proc/sys/kernel/random/boot_id").readText().trim() }
-            .getOrNull()?.takeIf { it.isNotEmpty() }
-            ?: ((System.currentTimeMillis() - SystemClock.elapsedRealtime()) / 60_000).toString()
+        /** This boot's id: the kernel's, else the wall time system_server noted at boot (fixed for the boot), else unknown. */
+        private fun currentBootId(): String? =
+            runCatching { java.io.File("/proc/sys/kernel/random/boot_id").readText().trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
+                ?: runCatching {
+                    @SuppressLint("PrivateApi")
+                    val sp = Class.forName("android.os.SystemProperties")
+                    sp.getMethod("get", String::class.java).invoke(null, "ro.runtime.firstboot") as String
+                }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { "firstboot:$it" }
     }
 
     private class PrefsStore(ctx: Context) : Store {
         private val prefs = ctx.getSharedPreferences("glassworks_improv_save_gate", Context.MODE_PRIVATE)
-        override fun read(): Pair<String, Set<Int>>? {
-            val boot = prefs.getString("boot", null) ?: return null
-            return boot to prefs.getStringSet("ids", emptySet()).orEmpty().mapNotNull { it.toIntOrNull() }.toSet()
+        override fun read(): Kept? {
+            if (!prefs.contains("elapsed")) return null
+            return Kept(
+                prefs.getString("boot", null), prefs.getLong("elapsed", 0),
+                prefs.getStringSet("ids", emptySet()).orEmpty().mapNotNull { it.toIntOrNull() }.toSet(),
+            )
         }
-        override fun write(bootId: String, ids: Set<Int>) {
-            prefs.edit().putString("boot", bootId).putStringSet("ids", ids.map { it.toString() }.toSet()).commit()
-        }
+        override fun write(kept: Kept): Boolean = prefs.edit().putString("boot", kept.bootId).putLong("elapsed", kept.elapsedMs)
+            .putStringSet("ids", kept.ids.map { it.toString() }.toSet()).commit()
     }
 }
