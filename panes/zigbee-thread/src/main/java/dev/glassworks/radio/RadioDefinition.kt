@@ -25,7 +25,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import dev.glassworks.auth.HaAuth
 import dev.glassworks.auth.ThreadJoin
-import dev.glassworks.discovery.HaUrls
 import dev.glassworks.radio.ui.RadioFollowUp
 import dev.glassworks.radio.ui.RadioSettingsView
 import dev.glassworks.radio.ui.RadioTwin
@@ -445,6 +444,7 @@ class RadioDefinition(
         private val running: RunningRadio,
         private val prefs: RadioPrefs,
         private val haBase: () -> String?,
+        private val panelIp: () -> String?,
     ) : RadioReadout {
         override fun controller() = running.controller
         override fun mode() = running.controller?.mode ?: RadioMode.parse(prefs.mode)
@@ -460,14 +460,17 @@ class RadioDefinition(
         }
 
         override fun haBase() = haBase.invoke()
-        override fun panelIp() = HaUrls.localIpv4()
+        override fun panelIp() = panelIp.invoke()
     }
 
     companion object {
-        /** The app's definition: its step and section read the controller of the running [RadioPane]. */
-        fun app(prefs: RadioPrefs, setUpBefore: () -> Boolean, agent: FrameAgent, haBase: () -> String?): RadioDefinition {
+        /**
+         * The app's definition: its step and section read the controller of the running [RadioPane]. [panelIp]: the
+         * panel's LAN address ([dev.glassworks.platform.PanelAddress]), null while it has none.
+         */
+        fun app(prefs: RadioPrefs, setUpBefore: () -> Boolean, agent: FrameAgent, panelIp: () -> String?, haBase: () -> String?): RadioDefinition {
             val running = RunningRadio()
-            return RadioDefinition(prefs, setUpBefore, AppReadout(running, prefs, haBase), running, agent = agent)
+            return RadioDefinition(prefs, setUpBefore, AppReadout(running, prefs, haBase, panelIp), running, agent = agent)
         }
 
         private const val TAG = "Glassworks.SetupChannel"

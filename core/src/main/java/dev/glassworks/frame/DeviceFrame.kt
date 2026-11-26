@@ -22,6 +22,8 @@ class DeviceFrame(
     val cameraMaxPixels: Int? = null,
     /** How the frame's screen stands ([Frame.orientation]), or null to turn as Android says ([Orientation.ANY]). */
     val orientation: Orientation? = null,
+    /** How the frame's screen sleeps ([Frame.sleepMode]). */
+    val sleepMode: SleepMode = SleepMode.LOCK,
 ) {
     /**
      * frame.json's `name`: [brand], a space, then [modelName], the product's model as Home Assistant's device info gives
@@ -50,6 +52,10 @@ class DeviceFrame(
             // Android 6 turns auto-rotate on and rotation to 0 on every update of the app (#686), so the app asks
             // for portrait itself.
             orientation = Orientation.PORTRAIT_FIXED,
+            // Android's display off leaves the TC358775 LVDS bridge out of sync, with lines across the screen until
+            // the power is cut; lululemon's own app only ever turns the backlight to 0
+            // (frames/lululemon-mirror/research/display-sleep-lines.md).
+            sleepMode = SleepMode.BACKLIGHT_OFF,
         )
 
         /**

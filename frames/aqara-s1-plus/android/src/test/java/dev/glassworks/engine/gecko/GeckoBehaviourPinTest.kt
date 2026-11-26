@@ -484,6 +484,35 @@ class GeckoBehaviourPinTest {
     }
 
     @Test
+    fun `at startup, a storage grant saved on Home Assistant for a frame of another site is forgotten`() {
+        // How Gecko hands a storage-access grant back: the top-level page as uri, the frame (from the type's
+        // 3rdPartyStorage^<origin>) as thirdPartyOrigin. Gecko answers it itself, so the delegate never sees it again.
+        fun saved(frame: String) = GeckoShadows.allocate(ContentPermission::class.java).also {
+            GeckoShadows.setField(it, ContentPermission::class.java, "uri", dash)
+            GeckoShadows.setField(it, ContentPermission::class.java, "thirdPartyOrigin", frame)
+            GeckoShadows.setField(it, ContentPermission::class.java, "permission", PermissionDelegate.PERMISSION_STORAGE_ACCESS)
+            GeckoShadows.setField(it, ContentPermission::class.java, "value", ContentPermission.VALUE_ALLOW)
+        }
+        val away = "http://192.0.2.66"
+        harness(prefs = { p ->
+            configured(p)
+            GeckoShadows.savedPermissions += listOf(
+                saved("$away^firstPartyDomain=x"), // another site's frame: forgotten
+                saved(base), // Home Assistant's own frame: kept
+                saved("$base^geckoViewSessionContextId=x"), // the same, with Gecko's ^attributes: kept
+            )
+        }).use { h ->
+            assertEquals(
+                listOf("$dash ${PermissionDelegate.PERMISSION_STORAGE_ACCESS} ${ContentPermission.VALUE_PROMPT}"),
+                GeckoShadows.permissionsSet,
+            )
+            assertTrue(h.logs("Glassworks").contains(
+                "Forgetting content permission ${PermissionDelegate.PERMISSION_STORAGE_ACCESS} for $away: not Home Assistant or a secure host",
+            ))
+        }
+    }
+
+    @Test
     fun `a failed read of the saved permissions is tried again with the next page`() {
         val away = "http://192.0.2.66/"
         harness(prefs = { p ->

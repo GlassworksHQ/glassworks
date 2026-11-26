@@ -44,6 +44,11 @@ class FramesTest(unittest.TestCase):
         self.assertIsNone(from_frame("aqara-s1-plus").rotate)
         self.assertEqual(from_frame("aqara-s1-plus").panel, (1440, 720))
 
+    def test_only_the_mirror_builds_a_compact_animation(self):
+        # stock 1.24.0's /system/media/bootanimation.zip is 22,901 bytes (read 2026-11-24)
+        self.assertEqual(from_frame("lululemon-mirror").compact_budget, 22901)
+        self.assertIsNone(from_frame("aqara-s1-plus").compact_budget)
+
 
 class TargetTest(unittest.TestCase):
     def test_trim_needs_android_7_1(self):
@@ -56,7 +61,8 @@ class TargetTest(unittest.TestCase):
                    {"android_api": 9}, {"zip_budget": 0},
                    {"zip_budget": True}, {"android_api": True}, {"width": True}, {"name": " "},
                    {"splash": "allwinner-boot-resource", "height": 722}, {"rotate": 180}, {"rotate": "90"},
-                   {"rotate": 90, "splash": "allwinner-boot-resource"}):
+                   {"rotate": 90, "splash": "allwinner-boot-resource"},
+                   {"compact_budget": 0}, {"compact_budget": True}, {"compact_budget": "22901"}):
             with self.subTest(**kw), self.assertRaises(ValueError):
                 Target(**{"name": "X", "width": 1440, "height": 720, **kw})
 

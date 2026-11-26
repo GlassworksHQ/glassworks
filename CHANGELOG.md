@@ -13,18 +13,25 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
   you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in
   in progress across the restart.
+- **The first sign-in no longer fails with "Can't reach Home Assistant" when you enter a `.local` address.**
+  Android 11 and older can't look up names like `homeassistant.local`, so the panel reaches Home Assistant through
+  the address it finds on your network. A sign-in started before the panel had found that address kept the name and
+  failed, and it only worked when you tried again. The panel now finishes the sign-in through the address it has
+  found by then, waiting a few seconds for it if needed.
 - **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
   dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
   running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
   before Android closed it.
+- **The panel's address never comes from a hotspot.** The address the panel shows and hands to Home Assistant (setup page, sign-in code, Thread join, the radio's ZHA and Thread addresses, *IP address*) now comes only from the Wi-Fi network Android is connected to. While the setup Wi-Fi or Android's tethering was up, it could show the hotspot's own address instead.
 - **Kiln installs the newest S1 release.** A fresh install from Kiln's S1 page now downloads the app from the newest
   release at the moment you install, so a panel no longer starts out one version behind and offers an update right
   away.
 - **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
   every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
   secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
-  is refused, and the panel's log says so, unless your dashboard explicitly shares a permission with that frame (an
-  `allow` attribute). Permissions an older version saved for other sites are forgotten when the app starts.
+  is refused, and the panel's log says so. An `allow` attribute on the frame doesn't change that: a site framed in
+  your dashboard needs to be one of the secure hosts too. Permissions an older version saved for other sites, including
+  framed ones, are forgotten when the app starts.
 - **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
   your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
   (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so once Home Assistant has

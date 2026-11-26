@@ -51,6 +51,7 @@ class DeviceFrameTest {
         assertEquals("the mDNS board record names its frame", "lululemon-mirror", frame.board)
         assertEquals("its camera is capped at 720p (#679)", 1280 * 720, frame.cameraMaxPixels)
         assertEquals("it asks for portrait itself, whatever auto-rotate says (#686)", Orientation.PORTRAIT_FIXED, frame.orientation)
+        assertEquals("its display comes back from Android's display off with lines across it", SleepMode.BACKLIGHT_OFF, frame.sleepMode)
     }
 
     @Test fun anotherMsm8916DeviceWithTheSameSystemImageIsNotAMirror() {
@@ -60,6 +61,7 @@ class DeviceFrameTest {
         assertEquals("Android", frame.hardware.manufacturer)
         assertEquals("generic-android", frame.board)
         assertEquals(Orientation.ANY, frame.orientation)
+        assertEquals(SleepMode.LOCK, frame.sleepMode)
     }
 
     @Test fun aMirrorBootImageOnAnotherBoardIsNotAMirror() {
@@ -78,6 +80,7 @@ class DeviceFrameTest {
         assertEquals("Google", frame.hardware.manufacturer)
         assertEquals("generic-android", frame.board)
         assertEquals("as its KNOWN row", Orientation.LANDSCAPE, frame.orientation)
+        assertEquals(SleepMode.LOCK, frame.sleepMode)
     }
 
     @Test fun anUnknownDeviceWithNoPropertiesKeepsItsOwnName() {

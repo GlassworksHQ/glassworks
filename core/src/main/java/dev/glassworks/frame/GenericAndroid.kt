@@ -53,6 +53,9 @@ class GenericAndroid(
 
     override val cameraMaxPixels = deviceFrame?.cameraMaxPixels
 
+    /** A device frame's own ([SleepMode.BACKLIGHT_OFF] on the lululemon Mirror); Android's screen off on any other device. */
+    override val sleepMode: SleepMode = deviceFrame?.sleepMode ?: SleepMode.LOCK
+
     override val provides: Set<Capability> by lazy { Capability.ofDevice(context.packageManager::hasSystemFeature) }
 
     /**
@@ -94,11 +97,12 @@ class GenericAndroid(
             SettingsItem.Info({ HOME_TITLE }, { if (Platform.isHomeApp(context)) HOME_YES else HOME_NO }, fixable = { !Platform.isHomeApp(context) }),
             SettingsItem.Info({ SCREEN_OFF_TITLE }, {
                 when {
+                    sleepMode == SleepMode.BACKLIGHT_OFF -> SCREEN_OFF_BACKLIGHT
                     !adminActive(context) -> SCREEN_OFF_NO
                     SilentUpdates.deviceOwner(context) -> SCREEN_OFF_YES_OWNER
                     else -> SCREEN_OFF_YES
                 }
-            }, fixable = { !adminActive(context) }),
+            }, fixable = { sleepMode == SleepMode.LOCK && !adminActive(context) }),
             SettingsItem.Info({ OWNER_TITLE }, { if (SilentUpdates.deviceOwner(context)) "Yes: Glassworks can restart the device and turn the screen off when idle" else "No" }),
             SettingsItem.Info({ MODEL_TITLE }, { "${hardware.manufacturer} ${hardware.model}".trim() }),
             *frameRelease?.let { frameVersionItems(context, it, FrameUpdateModel.installs(it, agent)) }.orEmpty().toTypedArray(),
@@ -142,6 +146,9 @@ class GenericAndroid(
         /** A device owner is also a device admin, and Android won't let Settings turn that off: undo device owner first. */
         const val SCREEN_OFF_YES_OWNER = "Yes: Glassworks is set as device owner, so it can turn the screen off when idle. " +
             "Undo device owner in Kiln before uninstalling."
+        /** A [SleepMode.BACKLIGHT_OFF] frame sleeps without Android's screen off, so without device admin too. */
+        const val SCREEN_OFF_BACKLIGHT = "Yes: when idle, Glassworks turns the backlight off and leaves the screen black. " +
+            "Anything that wakes the screen turns it back on."
         const val SCREEN_OFF_NO = "No: Glassworks can't turn the screen off automatically. Enable it in setup's This device " +
             "step, or search Android's settings for “Device admin”"
 

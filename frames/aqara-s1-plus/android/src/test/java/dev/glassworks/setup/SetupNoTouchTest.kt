@@ -160,6 +160,32 @@ class SetupNoTouchTest {
         assertEquals(emptyList<String>(), taps(s))
     }
 
+    /**
+     * The Mirror in its stock setup mode (2026-11-25): its own access point up on `wlan0_ap` (192.168.43.1), the Wi-Fi
+     * client on but not connected, Android listing no network. The panel has no LAN address then, so the Wi-Fi step
+     * waits for Wi-Fi with the setup hotspot's reason, and never sends a computer to the access point's address.
+     */
+    @Test fun theMirrorsOwnAccessPointIsNoAddressToSetUpFrom() {
+        val app = RuntimeEnvironment.getApplication()
+        org.robolectric.Shadows.shadowOf(app.getSystemService(android.net.ConnectivityManager::class.java)).apply {
+            clearAllNetworks()
+            setActiveNetworkInfo(null)
+        }
+        val tethering = HotspotStep.card(
+            SetupHotspot.View.Off(null, dev.glassworks.platform.HotspotFailure.TETHERING_ON), HotspotPermission.Step.Ready, null,
+        )
+        val a = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val s = SetupOverlay(a, theMirror())
+        a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
+        s.render(SetupOverlay.Model(step = SetupFlow.WIFI, done = emptySet(), wifi = offline, haUrl = null, haSource = "",
+            panelIp = dev.glassworks.platform.PanelAddress.now(app), signedIn = false, hotspot = tethering))
+        val texts = shown(s).map { it.first }
+        assertTrue(texts.toString(), "Waiting for Wi-Fi" in texts)
+        assertTrue(texts.toString(), dev.glassworks.platform.HotspotFailure.TETHERING_ON.text in texts)
+        assertTrue(texts.toString(), texts.none { "192.168.43.1" in it || "Scan to set it up" in it })
+        assertEquals(emptyList<String>(), taps(s))
+    }
+
     @Test fun signInKeepsItsPhoneCodeWithoutTheOnPanelWay() {
         // Home Assistant added it first (a reinstall it remembers): the sign-in's own code.
         val s = screen(SetupFlow.SIGNIN, theMirror(), done = setOf(SetupFlow.WIFI, SetupFlow.HA))

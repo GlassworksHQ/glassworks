@@ -9,8 +9,8 @@ any frame, from its name and display size.
 The S1's committed files are rebuilt with
     generate.py --frame aqara-s1-plus --out branding/glass-tile
 
-Writes into <dir>: bootanimation.zip, splash-landscape.png, preview.webp, and bootlogo.bmp when the
-frame has a splash format. Exits 1 when a check fails (README: "What the build checks").
+Writes into <dir>: bootanimation.zip, splash-landscape.png, preview.webp, bootlogo.bmp when the
+frame has a splash format, and bootanimation-compact.zip when it has a compactBudget (compact.py). Exits 1 when a check fails (README: "What the build checks").
 Also writes outputs.json (the target and the SHA-256 of the generator, the font and each output).
 Needs Pillow, numpy, uharfbuzz and pyoxipng at the versions in README.md. Inter (SIL OFL 1.1) is
 fetched from a pinned google/fonts commit and checked by SHA-256.
@@ -31,11 +31,12 @@ def target_from_args(a):
         t = from_frame(a.frame)
         over = {k: v for k, v in (("name", a.name), ("width", a.width), ("height", a.height),
                                   ("android_api", a.android_api), ("splash", a.splash),
-                                  ("zip_budget", a.zip_budget), ("rotate", a.rotate)) if v is not None}
+                                  ("zip_budget", a.zip_budget), ("rotate", a.rotate),
+                                  ("compact_budget", a.compact_budget)) if v is not None}
         return dataclasses.replace(t, **over)
     if a.name is None or a.width is None or a.height is None:
         raise SystemExit("give --frame <id>, or --name, --width and --height")
-    return Target(a.name, a.width, a.height, a.android_api, a.splash, a.zip_budget, a.rotate)
+    return Target(a.name, a.width, a.height, a.android_api, a.splash, a.zip_budget, a.rotate, a.compact_budget)
 
 
 def main():
@@ -49,6 +50,8 @@ def main():
     ap.add_argument("--zip-budget", type=int, help="the largest bootanimation.zip allowed, in bytes")
     ap.add_argument("--rotate", type=int, choices=(90, 270),
                     help="turn each frame this many degrees counter-clockwise into the panel's framebuffer")
+    ap.add_argument("--compact-budget", type=int,
+                    help="also build bootanimation-compact.zip, no larger than this many bytes")
     ap.add_argument("--out", metavar="DIR", help="where to write the files")
     ap.add_argument("--stills", metavar="DIR", help="write the comparison stills here instead of building")
     a = ap.parse_args()
@@ -68,7 +71,12 @@ def main():
         for t in STILLS:
             Image.fromarray(stack.render(t, scene)).save(os.path.join(a.stills, f"t{t:04.1f}.png"))
         return 0
-    problems = build(target, a.out, lambda T: stack.render(T / stack.FPS, scene), stack.N_INTRO, stack.N_LOOP, stack.NAME)
+    extra = None
+    if target.compact_budget:
+        import compact
+        extra = lambda stage: compact.build(target, stage)   # noqa: E731
+    problems = build(target, a.out, lambda T: stack.render(T / stack.FPS, scene), stack.N_INTRO, stack.N_LOOP, stack.NAME,
+                     extra)
     return 1 if problems else 0
 
 
