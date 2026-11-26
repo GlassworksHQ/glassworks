@@ -173,6 +173,7 @@ Deep engineering notes from bringing up the Mirror (see [all research notes](../
 - [community-root-and-network-adb.md](research/community-root-and-network-adb.md) — Review of community root and network-adb methods
 - [display-sleep-lines.md](research/display-sleep-lines.md) — Why Android's screen off leaves lines across the display, and the backlight-only sleep that avoids it
 - [stock-firmware-probe.md](research/stock-firmware-probe.md) — Live probe of untouched stock 1.24.0 firmware via userdata-only HTTP app, `FS_IOC_FIEMAP`, and reversible surgical USB ADB
+- [stock-wifi-boot.md](research/stock-wifi-boot.md) — Why stock Wi-Fi switches itself off after a fast boot, and how the app turns it back on
 
 ## Files
 

@@ -9,7 +9,8 @@ import {
   BundleRefused, DEFAULT_PROBE_APP_UID, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildStageUserdata, installInPlace, mirrorInPlace,
 } from '../src';
 import { ADB_KEYS } from '../src/image';
-import { factoryUserdata, keptBundleFits } from '../src/inplace';
+import { factoryUserdata, keepWifiOn, keptBundleFits } from '../src/inplace';
+import type { PanelShell } from '@glassworks/adb';
 import { GLASSWORKS } from '../src/app';
 import { simInPlace } from '../src/sim';
 import { SYSTEM_BYTES } from '../src/flash';
@@ -170,6 +171,31 @@ describe('the app\'s install', () => {
     expect(m.cmds.filter((c) => c.startsWith('pm hide co.mirror') || c.startsWith('pm hide com.mirror'))).toHaveLength(8);
     expect(r.updates.state).toBe('on');
     expect(lines.join('\n')).toContain('Device Owner: set');
+    expect(lines).toContain('  Wi-Fi: on');
+    expect(m.cmds).not.toContain('settings put global wifi_on 1'); // on already: left alone
+    expect(m.cmds).not.toContain('svc wifi enable'); // stock's shell lacks CHANGE_WIFI_STATE, and is killed for it
+  });
+
+  it('puts Wi-Fi\'s switch back on when a fast start left it off, for the next start', async () => {
+    const m = new FakeMirror({ kiosk: 'none', wifiOn: '0' });
+    const lines: string[] = [];
+    await installInPlace(m, { apk: fakeMirrorApk(), onStep: (s, d) => lines.push(s || `  ${d}`), sleep: async () => {} });
+    expect(m.cmds).toContain('settings put global wifi_on 1');
+    expect(m.wifiOn).toBe('1');
+    expect(lines).toContain('  Wi-Fi: was off, on from the next start');
+  });
+
+  it('says what it found about Wi-Fi, and changes nothing else', async () => {
+    const said = async (o: Partial<{ out: string; code: number }>, put?: { out: string; code: number }) => {
+      const cmds: string[] = [];
+      const p = { run: async (c: string) => { cmds.push(c); return c.startsWith('settings put') ? put ?? { out: '', code: 0 } : { out: '', code: 0, ...o }; } } as unknown as PanelShell;
+      return { line: await keepWifiOn(p), cmds };
+    };
+    expect(await said({ out: '3\n' })).toEqual({ line: 'Wi-Fi: off for airplane mode, left as it is', cmds: ['settings get global wifi_on'] });
+    expect(await said({ out: '2\n' })).toMatchObject({ line: 'Wi-Fi: on' });
+    expect(await said({ out: 'Killed\n', code: 137 })).toEqual({ line: 'Wi-Fi: switch not read (Killed), left as it is', cmds: ['settings get global wifi_on'] });
+    expect(await said({ out: 'null\n' })).toMatchObject({ line: 'Wi-Fi: switch not read (null), left as it is' });
+    expect((await said({ out: '0\n' }, { out: 'Killed\n', code: 137 })).line).toBe('Wi-Fi: off, and not set (Killed)');
   });
 });
 
