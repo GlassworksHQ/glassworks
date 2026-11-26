@@ -151,6 +151,16 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         }
     }
 
+    /**
+     * The [HaCommandChannel]'s connection to Home Assistant is back after a drop: a player waiting to reconnect tries
+     * now ([HaWebRtcStream.connectionRestored]). Main thread.
+     */
+    @MainThread
+    public fun connectionRestored() {
+        if (closed) return
+        worker?.post { stream?.connectionRestored() }
+    }
+
     /** Ends playback and frees everything. Idempotent. Main thread. */
     @MainThread
     public fun close() {

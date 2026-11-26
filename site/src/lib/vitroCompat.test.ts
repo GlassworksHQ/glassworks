@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { SAMPLE_DASHBOARD, VITRO_COMPAT, auditDashboard, parseYaml } from "./vitroCompat";
+import { SAMPLE_DASHBOARD, VITRO_COMPAT, auditDashboard, parseYaml, stripCssComments, topLevelAtRules } from "./vitroCompat";
 import { kotlin, kotlinCardModSheets, kotlinNestedMap, kotlinSet, kotlinSetMap, kotlinStringMap } from "./vitroSupportSource";
 
 const repo = join(import.meta.dirname, "../../..");
@@ -121,6 +121,19 @@ describe("auditDashboard and custom:button-card", () => {
     expect(js.triggers[0].reasons.join()).toMatch(/JavaScript templates/);
     // Four brackets are an escape for text, not JavaScript.
     expect(audit([{ type: "custom:button-card", name: "[[[[x]]]]" }]).totals.tier3).toBe(0);
+  });
+
+  it("sends a timer's countdown to an island, as the engine does", () => {
+    const timer = audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: true }]);
+    expect(timer.totals.tier3).toBe(1);
+    expect(timer.triggers[0].reasons.join()).toMatch(/timer/);
+    expect(audit([{ type: "custom:button-card", entity: "timer.laundry" }]).totals.tier3).toBe(0);
+    // `show_state` as button-card reads it: the string "0" is on; false and 0 are off.
+    expect(audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: "0" }]).totals.tier3).toBe(1);
+    expect(audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: false }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: 0 }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "custom:button-card", entity: "timer.laundry", show_state: true, state_display: "Running" }]).totals.tier3).toBe(0);
+    expect(audit([{ type: "custom:button-card", entity: "light.timer", show_state: true }]).totals.tier3).toBe(0);
   });
 
   it("merges the dashboard's button_card_templates before it checks", () => {
@@ -331,9 +344,8 @@ views:
     // A conditional at-rule isn't evaluated natively, even around the card's own rule.
     expect(map("@media (min-width: 1px) { ha-card { opacity: .5; } }").warnings).toHaveLength(1);
     expect(style("@supports (display: grid) { ha-card { opacity: .5; } }").warnings).toHaveLength(1);
-    // The engine's at-rule scan (CardCompat.topLevelAtRules) doesn't skip quoted strings yet, so an @ inside an
-    // attribute value reads as an at-rule there, and the checker follows it.
-    expect(map('ha-card[data-label="@media"] { opacity: .5; }').warnings).toHaveLength(1);
+    // An @ inside a quoted attribute value isn't an at-rule, in the engine's scan (CardCompat.topLevelAtRules) either.
+    expect(map('ha-card[data-label="@media"] { opacity: .5; }').warnings).toHaveLength(0);
   });
 
   it("refuses a key: value pair inside a flow list instead of reading it as text", () => {
@@ -578,6 +590,35 @@ describe("auditDashboard routes cards as the engine's CompatCheckerTest does", (
       ),
     ).toEqual([]);
     expect(native(style("ha-card { font-family: Lobster, cursive }"))).toEqual([]);
+  });
+
+  // CompatCheckerTest.aQuotedCommentOpenerDoesNotHideTheRulesAfterIt and ThemeResolverTest.aQuotedCommentOpenerIsTextNotAComment.
+  it("doesn't let a quoted comment opener hide the rules after it", () => {
+    const mushroom = (css: string) => ({ type: "custom:mushroom-template-card", primary: "x", card_mod: { style: css } });
+    island(mushroom('ha-card { --label: "/*"; } @media (max-width: 1px) { ha-card { padding: 0 } } /* note */'), "`@media`");
+    island(mushroom("ha-card { --label: '/*'; } ha-card .primary { font-size: 20px } /* note */"), "reaches inside the card");
+    expect(native(mushroom("/* @media (max-width: 1px) { } */ ha-card { opacity: 0.5 }"))).toEqual([]);
+    // Native, and the rule is read (its custom property is noted): the quoted brace doesn't swallow it.
+    expect(native(mushroom('ha-card { --label: "/* { */"; opacity: 0.5 }')).join(" | ")).toContain("`--label`");
+    expect(native(mushroom('ha-card[data-label="a;b{"] { opacity: 0.5 }'))).toEqual([]);
+    island(mushroom('ha-card { --label: "{"; } ha-card .primary { font-size: 20px }'), "reaches inside the card");
+    expect(stripCssComments('a { content: "/*" } /* x */ b { c: d }')).toBe('a { content: "/*" }   b { c: d }');
+    expect(stripCssComments("a { content: '*/ /*' } /* never closed")).toBe("a { content: '*/ /*' }  ");
+    expect(stripCssComments('a { content: "\\" /*" }')).toBe('a { content: "\\" /*" }');
+    expect(stripCssComments('a { content: "x\n /**/ b { c: d }')).toBe('a { content: "x\n   b { c: d }');
+  });
+
+  // CompatCheckerTest.anAtSignCountsOnlyWhereARuleCanStart.
+  it("counts an @ as an at-rule only where a rule can start", () => {
+    const mushroom = (css: string) => ({ type: "custom:mushroom-template-card", primary: "x", card_mod: { style: css } });
+    expect(native(mushroom('ha-card[data-label="@media"] { opacity: 0.5 }'))).toEqual([]);
+    expect(native(mushroom("ha-card[data-label='@supports'] { opacity: 0.5 }"))).toEqual([]);
+    expect(native(mushroom("--art: url(/local/a@home.png); ha-card { opacity: 0.5 }"))).toEqual([]);
+    island(mushroom("@media (max-width: 1px) { ha-card { padding: 0 } }"), "`@media`");
+    island(mushroom("ha-card { opacity: 0.5 }\n  @supports (display: grid) { ha-card { padding: 0 } }"), "`@supports`");
+    island(mushroom('@charset "utf-8"; @layer base { ha-card { padding: 0 } }'), "`@layer`");
+    expect(native(mushroom('@charset "utf-8"; ha-card { opacity: 0.5 }'))).toEqual([]);
+    expect(topLevelAtRules("a { b: url(x@y) } @media x { @supports y { } } c[d='@e'] { }")).toEqual(["media"]);
   });
 
   it("falls back for unknown cards and for card_mod Vitro can't draw on a custom card", () => {

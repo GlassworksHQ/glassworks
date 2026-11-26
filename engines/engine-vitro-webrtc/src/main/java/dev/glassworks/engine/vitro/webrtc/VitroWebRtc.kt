@@ -48,18 +48,26 @@ object VitroWebRtc {
     }
 }
 
-/** Vitro's Home Assistant connection ([CameraStreamHost]: the dashboard's own WebSocket) as a [HaCommandChannel]. */
+/**
+ * Vitro's Home Assistant connection ([CameraStreamHost]: the dashboard's own WebSocket) as a [HaCommandChannel]. A
+ * request that failed for want of a connection is [HaError.NOT_CONNECTED], whatever code Vitro's client gave it, so
+ * the stream waits for HA rather than give up on the camera.
+ */
 internal class HostChannel(private val host: CameraStreamHost) : HaCommandChannel {
     override fun call(command: JSONObject, onResult: (Any?) -> Unit, onError: (HaError) -> Unit) {
         host.callWs(command) { success, result, error ->
-            if (success) onResult(result.takeUnless { it == JSONObject.NULL }) else onError(HaError.fromJson(error))
+            if (success) onResult(result.takeUnless { it == JSONObject.NULL }) else onError(errorOf(error))
         }
     }
 
     override fun subscribe(command: JSONObject, onEvent: (JSONObject) -> Unit, onError: (HaError) -> Unit): HaCommandChannel.Subscription {
-        val cancel = host.subscribeWs(command, onEvent) { error -> onError(HaError.fromJson(error)) }
+        val cancel = host.subscribeWs(command, onEvent) { error -> onError(errorOf(error)) }
         return HaCommandChannel.Subscription { cancel() }
     }
+
+    private fun errorOf(error: JSONObject?): HaError =
+        if (CameraStreamHost.isNotConnected(error)) HaError(HaError.NOT_CONNECTED, error?.optString("message").orEmpty())
+        else HaError.fromJson(error)
 }
 
 /**
@@ -95,6 +103,8 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
     override fun start() = player.start()
 
     override fun setActive(active: Boolean) = player.setActive(active)
+
+    override fun connectionRestored() = player.connectionRestored()
 
     override fun close() {
         if (closed) return

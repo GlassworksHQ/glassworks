@@ -145,6 +145,17 @@ class FakeHaServer {
     @Volatile var failHistory: Boolean = false
     @Volatile var templateResult: Any = "21.5 °C"
 
+    /** `weather/subscribe_forecast`'s first event: the forecast list (HA's `forecast` array). */
+    @Volatile var forecast: org.json.JSONArray = org.json.JSONArray(
+        """[{"datetime": "2026-11-25T12:00:00+00:00", "condition": "sunny", "temperature": 14.0, "templow": 6.0}]""",
+    )
+
+    /**
+     * False: a `ping` goes unanswered, as on a half-open connection (HA's host lost power, a router dropped it) where
+     * nothing reaches the panel and nothing says so.
+     */
+    @Volatile var answerPings: Boolean = true
+
     /**
      * `auth/current_user`'s answer, the signed-in user: an administrator unless a test says otherwise; null refuses it
      * (`unknown_command`).
@@ -227,6 +238,9 @@ class FakeHaServer {
     fun eventSubscriptionId(eventType: String): Int? =
         sockets.lastOrNull()?.received?.firstOrNull { it.optString("type") == "subscribe_events" && it.optString("event_type") == eventType }
             ?.optInt("id")
+
+    /** The id of the newest connection's last command of [type] (a subscription's, for [pushEvent]). */
+    fun lastId(type: String): Int? = sockets.lastOrNull()?.received?.lastOrNull { it.optString("type") == type }?.optInt("id")
 
     /** Pushes an `event` message for subscription [subscriptionId] over the newest connection. */
     fun pushEvent(subscriptionId: Int, event: JSONObject) {
@@ -316,7 +330,15 @@ class FakeHaServer {
                 event(sock, id, JSONObject().put("a", initial))
             }
             "call_service" -> ok(sock, id, JSONObject().put("context", JSONObject().put("id", "ctx-1")))
-            "ping" -> sock.push(JSONObject().put("id", id).put("type", "pong"))
+            "ping" -> if (answerPings) sock.push(JSONObject().put("id", id).put("type", "pong"))
+            "weather/subscribe_forecast" -> {
+                ok(sock, id, JSONObject.NULL)
+                event(sock, id, JSONObject().put("type", m.optString("forecast_type")).put("forecast", forecast))
+            }
+            "todo/item/subscribe" -> {
+                ok(sock, id, JSONObject.NULL)
+                event(sock, id, JSONObject().put("items", org.json.JSONArray()))
+            }
             "history/history_during_period" ->
                 if (failHistory) fail(sock, id, "unknown_error") else ok(sock, id, history.optJSONObject("states") ?: JSONObject())
             "render_template" -> {

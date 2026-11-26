@@ -43,6 +43,8 @@ class HaFrontendTest {
     }
 
     @After fun tearDown() {
+        // Nothing queued runs on into the next test.
+        HaFrontend.awaitIdle()
         HaFrontend.reset()
         HaFrontend.cacheDir = null
         HaText.reset()
@@ -193,6 +195,57 @@ class HaFrontendTest {
         val second = java.util.concurrent.CountDownLatch(1)
         HaFrontend.ensure(client, origin, "de", revalidate = true) { second.countDown() }
         await(second)
+        assertEquals("Nicht erreichbar", HaText.ui("state.default.unavailable"))
+    }
+
+    @Test
+    fun aReconnectToAnUnchangedFrontendInstallsNothingAndTellsNobody() {
+        // A start installs the cached strings, then HA's own a moment later; every reconnect reads HA's again. The same
+        // files each time are no change: HaText's version stays, so the dashboard isn't built again (A §3, G L1).
+        val client = Any()
+        HaFrontend.claim(client, origin)
+        val first = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.ensure(client, origin, "de", revalidate = true) { first.countDown() }
+        await(first)
+        val version = HaText.version
+        // The next start of the same HA: the cache first, then HA itself, then two reconnects.
+        val next = Any()
+        HaFrontend.claim(next, origin)
+        val told = java.util.concurrent.atomic.AtomicInteger(0)
+        HaFrontend.ensureCached(next, origin, "de") { told.incrementAndGet() }
+        asked.clear()
+        assertTrue(HaFrontend.awaitIdle())
+        repeat(3) { n ->
+            HaFrontend.ensure(next, origin, "de", revalidate = true) { told.incrementAndGet() }
+            // Each reconnect's work done, the install (or not) included, before anything is read.
+            assertTrue(HaFrontend.awaitIdle())
+            assertEquals("HA's index read again", n + 1, asked.count { it == "$origin/" })
+        }
+        assertEquals("nobody is told of unchanged strings", 0, told.get())
+        assertEquals("HaText keeps its version", version, HaText.version)
+        assertEquals("Nicht verfügbar", HaText.ui("state.default.unavailable"))
+    }
+
+    @Test
+    fun anUpgradedFrontendStillInstallsAfterAnUnchangedReconnect() {
+        val client = Any()
+        HaFrontend.claim(client, origin)
+        val first = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.ensure(client, origin, "de", revalidate = true) { first.countDown() }
+        await(first)
+        served["$origin/static/translations/de-d2.json"] = """{"state":{"default":{"unavailable":"Nicht erreichbar"}}}"""
+        served["$origin/static/translations/lovelace/de-d2.json"] = "{}"
+        served["$origin/"] = """<script type="module" src="/frontend_latest/app.def456.js"></script>"""
+        served["$origin/frontend_latest/app.def456.js"] = """JSON.parse('{"fragments":[],"translations":{"en":{"nativeName":"English","hash":"e2"},"de":{"nativeName":"Deutsch","hash":"d2"}}}')"""
+        val second = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.ensure(client, origin, "de", revalidate = true) { second.countDown() }
+        await(second)
+        assertEquals("Nicht erreichbar", HaText.ui("state.default.unavailable"))
+        // Strings someone else put in HaText (a test's, a reset) since: the same files go in again.
+        HaText.reset()
+        val third = java.util.concurrent.CountDownLatch(1)
+        HaFrontend.ensure(client, origin, "de", revalidate = true) { third.countDown() }
+        await(third)
         assertEquals("Nicht erreichbar", HaText.ui("state.default.unavailable"))
     }
 
