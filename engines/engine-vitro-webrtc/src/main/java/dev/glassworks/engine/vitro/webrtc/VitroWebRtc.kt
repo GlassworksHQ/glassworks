@@ -16,6 +16,7 @@ import dev.glassworks.hawebrtc.HaError
 import dev.glassworks.hawebrtc.HaWebRtcPlayer
 import dev.glassworks.hawebrtc.HaWebRtcStream
 import dev.glassworks.hawebrtc.VideoScaling
+import dev.glassworks.hawebrtc.VideoViewKind
 import org.json.JSONObject
 
 /**
@@ -40,6 +41,10 @@ object VitroWebRtc {
     internal val OPTIONS = HaWebRtcPlayer.Options(
         stream = HaWebRtcStream.Options(audio = false, idleTeardownMs = 0),
         scaling = VideoScaling.STRETCH,
+        // A SurfaceView from Android 7: a video frame doesn't make the dashboard draw again (the TextureView's did, so
+        // four cameras kept the S1's render thread busy). Android 6 (the Mirror) keeps the TextureView: its surface
+        // would lag a frame behind as the view scrolls.
+        view = VideoViewKind.AUTO,
     )
 
     internal class Factory(private val host: CameraStreamHost) : CameraStreamFactory {

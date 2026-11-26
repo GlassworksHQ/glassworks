@@ -32,11 +32,13 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
     private val options: Options = Options(),
 ) {
     /** How the player behaves. */
-    public class Options(
+    public class Options @JvmOverloads public constructor(
         /** The connection's behaviour: audio, timeout, reconnecting, pausing. */
         public val stream: HaWebRtcStream.Options = HaWebRtcStream.Options(),
         /** How the picture fills [view]. */
         public val scaling: VideoScaling = VideoScaling.FIT,
+        /** The view the picture draws into: a TextureView unless asked ([VideoViewKind]). */
+        public val view: VideoViewKind = VideoViewKind.TEXTURE_VIEW,
     )
 
     /** What the player reports, on the main thread. */
@@ -56,7 +58,10 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
 
     private val appContext: Context = context.applicationContext ?: context
     private val main = Handler(Looper.getMainLooper())
-    private val video = VideoTextureView(context, options.scaling)
+    private val video: VideoOutput = when (options.view.resolved()) {
+        VideoViewKind.SURFACE_VIEW -> VideoSurfaceView(context, options.scaling)
+        else -> VideoTextureView(context, options.scaling)
+    }
     private var thread: HandlerThread? = null
     private var worker: Handler? = null
     private var started = false
@@ -82,7 +87,7 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         private set
 
     /** The picture. Place it before [start]; it stays usable until [close]. */
-    public val view: View get() = video
+    public val view: View get() = video.view
 
     /** How the picture fills [view]. Main thread. */
     public var scaling: VideoScaling

@@ -36,6 +36,20 @@ class HaWebRtcPlayerTest {
     }
 
     @Test
+    fun `a SurfaceView when asked, clear until its first frame, and AUTO picks it from API 24`() {
+        val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door", HaWebRtcPlayer.Options(view = VideoViewKind.SURFACE_VIEW))
+        val view = player.view
+        assertTrue(view is android.view.SurfaceView)
+        // Alpha 0 draws nothing, the hole in the window included: what's behind it shows until a frame is there.
+        assertEquals(0f, view.alpha)
+        player.close()
+        assertEquals(VideoViewKind.SURFACE_VIEW, VideoViewKind.AUTO.resolved(24))
+        assertEquals(VideoViewKind.TEXTURE_VIEW, VideoViewKind.AUTO.resolved(23))
+        assertEquals(VideoViewKind.TEXTURE_VIEW, VideoViewKind.TEXTURE_VIEW.resolved(34))
+        assertEquals("the library's default stays a TextureView", VideoViewKind.TEXTURE_VIEW, HaWebRtcPlayer.Options().view)
+    }
+
+    @Test
     fun `without libwebrtc's native library the player reports start_failed on the main thread`() {
         val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
         val done = CountDownLatch(1)

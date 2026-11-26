@@ -73,6 +73,9 @@ class HlsCameraStreamTest {
     private val sources = ArrayList<String>()
     private val wsCalls = ArrayList<JSONObject>()
 
+    /** What the player was told about its output, in order: "attach" and "detach". */
+    private val outputs = ArrayList<String>()
+
     private fun stream(
         answer: (JSONObject) -> Triple<Boolean, Any?, JSONObject?> = { Triple(true, JSONObject().put("url", "/api/hls/t0k3n/master_playlist.m3u8"), null) },
         source: () -> MediaSource = { FakeMediaSource(FakeTimeline(), ExoPlayerTestRunner.VIDEO_FORMAT) },
@@ -85,7 +88,8 @@ class HlsCameraStreamTest {
         },
         newPlayer = { ctx -> TestExoPlayerBuilder(ctx).build().also { players += it } },
         newSource = { url -> sources += url; source() },
-        attachOutput = { p, _ -> p.setVideoSurface(Surface(SurfaceTexture(1))) },
+        attachOutput = { p, _ -> outputs += "attach"; p.setVideoSurface(Surface(SurfaceTexture(1))) },
+        detachOutput = { p, _ -> outputs += "detach"; p.clearVideoSurface() },
     )
 
     @Test
@@ -110,6 +114,38 @@ class HlsCameraStreamTest {
         s.close()
         ShadowLooper.idleMainLooper()
         assertTrue(p.isReleased)
+    }
+
+    @Test
+    fun offScreenAfterItsFirstFrameItLetsGoOfTheViewAndTakesItBackOnScreen() {
+        val s = stream()
+        val events = Events()
+        s.listener = events
+        s.start()
+        RobolectricUtil.runMainLooperUntil { events.log.isNotEmpty() }
+        assertEquals(listOf("attach"), outputs)
+        s.setRendering(false)
+        assertEquals("off screen it draws nothing", listOf("attach", "detach"), outputs)
+        s.setRendering(false)
+        assertEquals(listOf("attach", "detach"), outputs)
+        s.setRendering(true)
+        assertEquals("back on screen it draws again", listOf("attach", "detach", "attach"), outputs)
+        assertEquals("one first frame for the stream", listOf("first"), events.log)
+        s.close()
+    }
+
+    @Test
+    fun offScreenBeforeItsFirstFrameItKeepsTheViewUntilThatFrame() {
+        val s = stream()
+        val events = Events()
+        s.listener = events
+        s.setRendering(false)
+        s.start()
+        RobolectricUtil.runMainLooperUntil { events.log.isNotEmpty() }
+        // The first frame is drawn anyway: it's what says the stream plays. Then the view goes.
+        assertEquals(listOf("first"), events.log)
+        assertEquals(listOf("attach", "detach"), outputs)
+        s.close()
     }
 
     @Test
