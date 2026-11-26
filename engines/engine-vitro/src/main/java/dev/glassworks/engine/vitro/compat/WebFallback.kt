@@ -10,6 +10,7 @@ import dev.glassworks.engine.vitro.model.DashboardConfig
 import dev.glassworks.engine.vitro.model.EntityFilterConfig
 import dev.glassworks.engine.vitro.model.NATIVE_VIEW_TYPES
 import dev.glassworks.engine.vitro.model.ViewConfig
+import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -73,7 +74,7 @@ object WebFallback {
         if (type == "shortcut") shortcutReason(card)?.let { return it }
         // An iframe of HA's own pages (a relative or root-relative `url`) needs HA's origin: HA sends
         // `X-Frame-Options: SAMEORIGIN`, so a frame in a loopback island page is refused. HA's frontend draws it.
-        if (type == "iframe" && sameOriginIframe(card.raw.optString("url", ""))) return "an `iframe` card of a Home Assistant page"
+        if (type == "iframe" && sameOriginIframe(card.raw.optString("url", ""))) return HA_IFRAME
         // The island can't draw this card (it's built in, or holds built-in cards): what its native card doesn't draw
         // as HA does goes to HA's frontend.
         if (options && card.nativeOnly) card.unsupportedOptions.firstOrNull()?.let { return it }
@@ -100,10 +101,35 @@ object WebFallback {
         return null
     }
 
-    /** An iframe `url` HA resolves on its own origin: anything but an absolute address with a scheme. */
-    internal fun sameOriginIframe(url: String): Boolean {
+    private const val HA_IFRAME = "an `iframe` card of a Home Assistant page"
+
+    /**
+     * Why [view] goes to HA's page for an `iframe` card (in it, or in a card it builds) whose absolute `url` is on Home
+     * Assistant's own origin [haBase]: HA's `X-Frame-Options: SAMEORIGIN` refuses it in a loopback island page, as it
+     * does a relative one ([cardReason]). Null when there is none, or [haBase] isn't known. Apart from [viewReason]:
+     * that one is the view's own, kept with its config, and it can't know the server.
+     */
+    fun haIframeReason(view: ViewConfig, haBase: String?): String? {
+        if (haBase.isNullOrEmpty()) return null
+        fun holds(card: CardConfig): Boolean =
+            (card.type == "iframe" && sameOriginIframe(card.raw.optString("url", ""), haBase)) ||
+                CardRouter.producedCards(card).any { holds(it.value) } ||
+                (card.type == "entity-filter" && holds(EntityFilterConfig.innerCard(card)))
+        return if (CardRouter.viewRoots(view).any { holds(it.card) }) HA_IFRAME else null
+    }
+
+    private val ABSOLUTE = Regex("""^[A-Za-z][A-Za-z0-9+.\-]*://""")
+
+    /**
+     * An iframe `url` HA resolves on its own origin: a relative or root-relative one, and, with [haBase] (HA's origin),
+     * an absolute one on that origin. A scheme-relative one (`//host/...`) takes HA's scheme; without [haBase] it
+     * counts as HA's, and an absolute one never does.
+     */
+    internal fun sameOriginIframe(url: String, haBase: String? = null): Boolean {
         val u = url.trim()
-        return !Regex("""^[A-Za-z][A-Za-z0-9+.\-]*://""").containsMatchIn(u)
+        if (u.startsWith("//")) return haBase == null || VitroCardContext.sameOrigin(haBase.substringBefore("//") + u, haBase)
+        if (!ABSOLUTE.containsMatchIn(u)) return true
+        return haBase != null && VitroCardContext.sameOrigin(u, haBase)
     }
 
     /**

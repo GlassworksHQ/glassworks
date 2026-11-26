@@ -78,6 +78,18 @@ data class DashboardConfig(
         path.toIntOrNull()?.takeIf { it in views.indices }?.let { return it }
         return 0
     }
+
+    /**
+     * [viewIndex] for the signed-in user [userId] (null: not known): with no path HA's `hui-root` opens the first view
+     * [ViewConfig.visibleTo] them (`views.findIndex(_isVisible)`), not the first one. A path opens its view, hidden or not.
+     */
+    fun viewIndex(path: String?, userId: String?): Int {
+        if (views.isEmpty()) return 0
+        if (path.isNullOrBlank()) return views.indexOfFirst { it.visibleTo(userId) }.coerceAtLeast(0)
+        views.indexOfFirst { it.path == path }.takeIf { it >= 0 }?.let { return it }
+        path.toIntOrNull()?.takeIf { it in views.indices }?.let { return it }
+        return 0
+    }
 }
 
 data class ViewConfig(
@@ -104,6 +116,42 @@ data class ViewConfig(
 
     /** Why this view goes to HA's own frontend instead of being drawn ([WebFallback.viewReason]), or null. */
     val webFallbackReason: String? by lazy { WebFallback.viewReason(this) }
+
+    /**
+     * HA's `hui-root` `_isVisible` (outside edit mode): a view with no `visible`, `visible: true`, or a list of
+     * `{user: id}` that holds [userId]. Which view a dashboard opens on reads it ([DashboardConfig.viewIndex]).
+     */
+    fun visibleTo(userId: String?): Boolean {
+        if (!raw.has("visible")) return true
+        return when (val v = raw.opt("visible")) {
+            true -> true
+            is JSONArray -> listedFor(v, userId)
+            else -> false
+        }
+    }
+
+    /**
+     * HA's `hui-root` `_isTabHiddenForUser`: `visible: false`, or a list of `{user: id}` without [userId]. Such a
+     * view, as a subview, has no tab unless it's the view on screen.
+     */
+    fun tabHiddenFor(userId: String?): Boolean {
+        if (!raw.has("visible")) return false
+        return when (val v = raw.opt("visible")) {
+            false -> true
+            is JSONArray -> !listedFor(v, userId)
+            else -> false
+        }
+    }
+
+    /**
+     * `visible.some((e) => e.user === hass.user?.id)`, strictly: an entry with no `user` matches only when no user is
+     * known (`undefined === undefined`), and a `user: null` never does.
+     */
+    private fun listedFor(list: JSONArray, userId: String?): Boolean = (0 until list.length()).any { i ->
+        val entry = list.opt(i)
+        val user: Any? = if (entry is JSONObject && entry.has("user")) entry.opt("user") else null
+        if (userId == null) user == null else user == userId
+    }
 }
 
 /** The view types layout-card registers (`masonry-layout`, ...), as a view's `type`. */
@@ -134,6 +182,8 @@ data class ActionConfig(
     val confirmation: String? = null,
     /** A `more-info` action's own `entity`, which HA's `handleAction` opens before the card's. */
     val entity: String? = null,
+    /** A `navigate` action's `navigation_replace`: HA's `navigate(path, {replace: true})`, no step in the history. */
+    val replace: Boolean = false,
 ) {
     companion object {
         private const val DEFAULT_CONFIRMATION = "Are you sure?"
@@ -178,6 +228,7 @@ data class ActionConfig(
                 urlPath = raw.optString("url_path", "").ifEmpty { null },
                 confirmation = parseConfirmation(raw),
                 entity = (raw.opt("entity") as? String)?.trim()?.ifEmpty { null },
+                replace = raw.optBoolean("navigation_replace", false),
             )
         }
     }

@@ -195,6 +195,11 @@ class VitroCardContext(
      * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
      */
     val pageStorage: () -> JSONObject? = { null },
+    /**
+     * [navigate] for a `navigate` action with `navigation_replace: true` (HA's `navigate(path, {replace: true})`): the
+     * page it leaves is no step in the history. The default (tests, no engine) is [navigate].
+     */
+    val navigateReplace: (path: String) -> Unit = navigate,
 ) {
     val dp: Float = context.resources.displayMetrics.density
     /** The main thread, for the card's own updates: one that throws is logged and dropped ([GuardedHandler]). */
@@ -263,6 +268,7 @@ class VitroCardContext(
         watchConnection = watchConnection,
         watchConfig = watchConfig,
         pageStorage = pageStorage,
+        navigateReplace = navigateReplace,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout
@@ -317,7 +323,7 @@ class VitroCardContext(
             "toggle" -> defaultEntityId?.let(::toggleEntity)
             // HA's handleAction: the action's own `entity`, else the card's.
             "more-info" -> (action.entity ?: defaultEntityId)?.let(openMoreInfo)
-            "navigate" -> action.navigationPath?.let(navigate)
+            "navigate" -> action.navigationPath?.let(if (action.replace) navigateReplace else navigate)
             "call-service", "perform-action" -> {
                 val svc = action.service ?: return
                 val domain = svc.substringBefore('.', "")

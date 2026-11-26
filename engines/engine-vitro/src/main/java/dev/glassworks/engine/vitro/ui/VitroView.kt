@@ -196,7 +196,7 @@ class VitroView(
     }
 
     /** One top-bar tab and the dashboard view it opens. */
-    private class TabEntry(val viewIndex: Int, val label: TextView, val icon: MdiIconView?, val indicator: View)
+    private class TabEntry(val viewIndex: Int, val label: TextView, val icon: MdiIconView?, val indicator: View, val tab: View)
 
     private val tabs = ArrayList<TabEntry>()
     private var moreInfo: MoreInfoSheet? = null
@@ -341,14 +341,22 @@ class VitroView(
 
     /**
      * Why [view] goes to HA's frontend now: its own reason ([ViewConfig.webFallbackReason]), a card in it that an
-     * island found drawing with Home Assistant's own elements this session ([IslandFrontend]), or more island pages
-     * than this device runs in one view ([islandBudget]). Null: Vitro draws it.
+     * island found drawing with Home Assistant's own elements this session ([IslandFrontend]), an `iframe` card of a
+     * page on this Home Assistant at its full address ([haOrigin]), or more island pages than this device runs in one
+     * view ([islandBudget]). Null: Vitro draws it.
      */
     fun fallbackReason(view: ViewConfig): String? =
         view.webFallbackReason ?: (if (gaveUpViews.isEmpty()) null else gaveUpViews[viewKey(view)])
             ?: (if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resourcesList) })
+            ?: WebFallback.haIframeReason(view, haOrigin())
             ?: IslandBudget.reason(view, IslandScripts.of(resourcesList), islandBudget)
             ?: BubbleFallback.reason(view, IslandScripts.of(resourcesList))
+
+    /**
+     * The origin of the Home Assistant this dashboard is from, or null while none: an `iframe` card of a page on it goes
+     * to HA's frontend ([WebFallback.haIframeReason]). The engine sets it.
+     */
+    var haOrigin: () -> String? = { null }
 
     /**
      * The most island pages one view opens on this device ([IslandBudget]): a view with more goes to HA's frontend.
@@ -824,14 +832,38 @@ class VitroView(
         addView(sheet, LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
 
-    private fun resolveViewIndex(config: DashboardConfig, path: String?): Int = config.viewIndex(path)
+    private fun resolveViewIndex(config: DashboardConfig, path: String?): Int = config.viewIndex(path, currentUserId())
+
+    /**
+     * The signed-in Home Assistant user's id (`auth/current_user`), or null while it isn't known. A view's `visible`
+     * reads it: which tabs show ([applyTabVisibility]) and which view a dashboard opens on ([resolveViewIndex]).
+     */
+    var currentUserId: () -> String? = { null }
+
+    /** The signed-in user changed (it arrived, or another one signed in): the tabs follow their views' `visible`. */
+    fun userChanged() = applyTabVisibility(currentViewIndex)
+
+    /**
+     * HA's `hui-root` tab rules, outside edit mode: a view hidden from the signed-in user ([ViewConfig.tabHiddenFor]:
+     * `visible: false`, or a `visible` list of other users) has no tab, unless it's the view on screen (reached by its
+     * path). Subviews have none at all ([rebuildTabs]).
+     */
+    private fun applyTabVisibility(selected: Int) {
+        val views = dashboard?.views ?: return
+        val userId = currentUserId()
+        for (t in tabs) {
+            val hidden = t.viewIndex != selected && views.getOrNull(t.viewIndex)?.tabHiddenFor(userId) == true
+            t.tab.visibility = if (hidden) GONE else VISIBLE
+        }
+    }
 
     private fun rebuildTabs(config: DashboardConfig) {
         tabBar.removeAllViews()
         tabs.clear()
         val theme = ThemeResolver.resolve(themeCatalog, darkMode)
         tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
-        // Like HA, subviews have no tab: they are reached by navigation and come back with their back arrow.
+        // Like HA, subviews have no tab: they are reached by navigation and come back with their back arrow. A view
+        // hidden from this user gets one, shown only while it's on screen ([applyTabVisibility]).
         config.views.forEachIndexed { idx, v ->
             if (v.subview) return@forEachIndexed
             val tab = LinearLayout(context).apply {
@@ -865,8 +897,9 @@ class VitroView(
             val indicator = View(context).apply { visibility = INVISIBLE }
             tab.addView(indicator, LinearLayout.LayoutParams(MATCH_PARENT, (2.5f * dp).toInt().coerceAtLeast(1)))
             tabBar.addView(tab, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
-            tabs += TabEntry(idx, label, icon, indicator)
+            tabs += TabEntry(idx, label, icon, indicator, tab)
         }
+        applyTabVisibility(currentViewIndex)
         updateTabVisibility()
     }
 
@@ -878,6 +911,7 @@ class VitroView(
     private fun highlightTab(selected: Int, theme: ResolvedTheme) {
         // The strip itself follows the theme too (a light/dark switch, a cached view's own theme).
         tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
+        applyTabVisibility(selected)
         for (t in tabs) {
             val active = t.viewIndex == selected
             val color = if (active) theme.primaryColor else theme.secondaryTextColor

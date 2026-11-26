@@ -127,6 +127,48 @@ class WebFallbackTest {
         assertTrue("Vitro signals no ready of its own: the fallback page does", host.messages("ready").isEmpty())
     }
 
+    @Test fun anIframeOfAHomeAssistantPageAtItsFullAddressShowsInHomeAssistantsFrontend() {
+        // #799 review: HA's X-Frame-Options: SAMEORIGIN refuses its own page in a loopback island, whether the card
+        // names it by path or by its full address.
+        server.dashboardConfig = views(living, """{"title": "Plan", "path": "plan", "cards": [
+            {"type": "vertical-stack", "cards": [{"type": "iframe", "url": "$base/local/plan.html"}]}]}""")
+        val p = page()
+        p.load("$base/wall-test/living")
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertNull("the native view needs no fallback", pageFallback())
+
+        p.load("$base/wall-test/plan")
+        idle()
+        assertEquals(listOf("$base/wall-test/plan"), pageFallback()!!.loads)
+        assertEquals(View.GONE, vitroView(p).visibility)
+        assertEquals("no island for the frame HA would refuse", 0, islandOpens())
+    }
+
+    @Test fun anIframeUrlIsHomeAssistantsWhenItIsOnItsOrigin() {
+        val ha = "https://homeassistant.local:8123"
+        assertTrue(WebFallback.sameOriginIframe("/local/plan.html", ha))
+        assertTrue(WebFallback.sameOriginIframe("plan.html", ha))
+        assertTrue(WebFallback.sameOriginIframe("https://homeassistant.local:8123/local/plan.html", ha))
+        assertTrue("the scheme and host are case-insensitive", WebFallback.sameOriginIframe("HTTPS://HomeAssistant.local:8123/x", ha))
+        assertTrue("scheme-relative takes HA's scheme", WebFallback.sameOriginIframe("//homeassistant.local:8123/x", ha))
+        assertTrue("the default port is the same origin", WebFallback.sameOriginIframe("https://192.0.2.10/x", "https://192.0.2.10:443"))
+        assertFalse("another port", WebFallback.sameOriginIframe("https://homeassistant.local/x", ha))
+        assertFalse("another scheme", WebFallback.sameOriginIframe("http://homeassistant.local:8123/x", ha))
+        assertFalse("another host", WebFallback.sameOriginIframe("https://example.com/", ha))
+        assertFalse(WebFallback.sameOriginIframe("//example.com/x", ha))
+        // Without HA's origin, only what HA resolves itself is its own (as the view's own reason reads it).
+        assertTrue(WebFallback.sameOriginIframe("/local/plan.html"))
+        assertFalse(WebFallback.sameOriginIframe("https://homeassistant.local:8123/local/plan.html"))
+
+        fun reason(card: String) = WebFallback.haIframeReason(LovelaceParser.parseView(0, JSONObject("""{"cards": [$card]}""")), ha)
+        assertEquals("an `iframe` card of a Home Assistant page", reason("""{"type": "iframe", "url": "$ha/local/plan.html"}"""))
+        assertEquals("inside a stack too", "an `iframe` card of a Home Assistant page",
+            reason("""{"type": "horizontal-stack", "cards": [{"type": "iframe", "url": "$ha/local/plan.html"}]}"""))
+        assertNull(reason("""{"type": "iframe", "url": "https://example.com/"}"""))
+        assertNull("no origin known: nothing to compare", WebFallback.haIframeReason(
+            LovelaceParser.parseView(0, JSONObject("""{"cards": [{"type": "iframe", "url": "$ha/x"}]}""")), null))
+    }
+
     @Test fun aDashboardWithAStrategyIgnoresItsViews() {
         // HA generates a dashboard from its strategy whatever else the config holds.
         server.dashboardConfig = JSONObject("""{"strategy": {"type": "custom:my-strategy"}, "views": [$living]}""")
