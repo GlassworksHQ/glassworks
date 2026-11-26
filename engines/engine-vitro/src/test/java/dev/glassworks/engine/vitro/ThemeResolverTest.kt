@@ -839,4 +839,17 @@ class ThemeResolverTest {
         assertEquals(ThemeResolver.INITIAL_FONT_FAMILY, ThemeResolver.parseCardMod("ha-card { font-family: initial; }").fontFamily)
         assertEquals("Pacifico, cursive", ThemeResolver.parseCardMod("ha-card { font-family: Pacifico, cursive; color: red }").fontFamily)
     }
+
+    @Test
+    fun aQuotedCommentOpenerIsTextNotAComment() {
+        // As the browser reads it: the string holds a slash-star, and the rule after it still applies.
+        assertEquals("""a { content: "/*" }   b { c: d }""", ThemeResolver.stripCssComments("""a { content: "/*" } /* x */ b { c: d }"""))
+        assertEquals("a { content: '*/ /*' }  ", ThemeResolver.stripCssComments("a { content: '*/ /*' } /* never closed"))
+        // An escaped quote doesn't end the string; a newline does.
+        assertEquals("""a { content: "\" /*" }""", ThemeResolver.stripCssComments("""a { content: "\" /*" }"""))
+        assertEquals("a { content: \"x\n   b { c: d }", ThemeResolver.stripCssComments("a { content: \"x\n /**/ b { c: d }"))
+        val rules = ThemeResolver.cssRules("""ha-card { --label: "/*" } ha-card .x { color: red } /* note */""")
+        assertEquals(listOf("ha-card", "ha-card .x"), rules.map { it.first })
+        assertEquals(listOf("--label" to "\"/*\""), rules.first().second)
+    }
 }

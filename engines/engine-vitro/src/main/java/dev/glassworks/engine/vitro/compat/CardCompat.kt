@@ -363,7 +363,6 @@ object CardCompat {
     private const val TPL = "__vitro_tpl__"
     private val JINJA_BLOCK = Regex("""\{%.*?%\}|\{#.*?#\}""", RegexOption.DOT_MATCHES_ALL)
     private val JINJA_EXPR = Regex("""\{\{.*?\}\}""", RegexOption.DOT_MATCHES_ALL)
-    private val COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
     private val AT_RULE = Regex("""@([a-zA-Z-]+)""")
 
     /** At-rules a card sheet may hold without changing the look on its own. */
@@ -426,7 +425,7 @@ object CardCompat {
         notes: MutableSet<String>,
     ) {
         // Template blocks go; expressions become a placeholder so the shape around them still parses.
-        val css = JINJA_EXPR.replace(JINJA_BLOCK.replace(COMMENT.replace(rawCss, " "), " "), TPL)
+        val css = JINJA_EXPR.replace(JINJA_BLOCK.replace(ThemeResolver.stripCssComments(rawCss), " "), TPL)
         topLevelAtRules(css).forEach { at ->
             if (at !in HARMLESS_AT_RULES) reasons += "card_mod `@$at` rules aren't evaluated natively"
         }
@@ -465,17 +464,34 @@ object CardCompat {
         }
     }
 
-    /** The names of at-rules at the top level of [css] (`@media`, `@keyframes`, ...). */
+    /**
+     * The names of at-rules at the top level of [css] (`@media`, `@keyframes`, ...). An `@` counts only where a rule
+     * can start (the start of the sheet, or after a `}` or `;`, whitespace aside) and outside quoted strings and
+     * parentheses, so `url(/local/a@home.png)` or `[data-label="@media"]` isn't one. The site's checker
+     * (`topLevelAtRules` in `site/src/lib/vitroCompat.ts`) and the audit script (`top_level_at_rules`) scan the same way.
+     */
     private fun topLevelAtRules(css: String): List<String> {
         val out = ArrayList<String>()
         var depth = 0
+        var parens = 0
+        var quote = '\u0000'
+        var ruleStart = true
         var i = 0
         while (i < css.length) {
-            when (css[i]) {
-                '{' -> depth++
-                '}' -> if (depth > 0) depth--
-                '@' -> if (depth == 0) AT_RULE.matchAt(css, i)?.let { out += it.groupValues[1].lowercase(Locale.ROOT) }
+            val c = css[i]
+            when {
+                c == '\\' -> i++
+                quote != '\u0000' -> if (c == quote || c == '\n') quote = '\u0000'
+                c == '"' || c == '\'' -> quote = c
+                c == '(' -> parens++
+                c == ')' -> if (parens > 0) parens--
+                c == '{' -> depth++
+                c == '}' -> if (depth > 0) depth--
+                c == '@' -> if (depth == 0 && parens == 0 && ruleStart) {
+                    AT_RULE.matchAt(css, i)?.let { out += it.groupValues[1].lowercase(Locale.ROOT) }
+                }
             }
+            if (!c.isWhitespace()) ruleStart = quote == '\u0000' && (c == '{' || c == '}' || c == ';')
             i++
         }
         return out

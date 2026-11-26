@@ -299,7 +299,43 @@ object ThemeResolver {
     }
 
     private val JINJA_PATTERN = Regex("""\{%.*?%\}|\{\{.*?\}\}|\{#.*?#\}""", RegexOption.DOT_MATCHES_ALL)
-    private val CSS_COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
+
+    /**
+     * [css] with each comment replaced by a space, as the browser reads it: a slash-star inside a quoted string (a
+     * `content:` value, an attribute selector's value) doesn't open one, so it can't hide the rules after it. A string ends
+     * at its closing quote or at a newline, a backslash and the character after it are copied as they are, and a
+     * comment that is never closed runs to the end. The site's checker (`stripCssComments` in
+     * `site/src/lib/vitroCompat.ts`) and the audit script (`strip_css_comments`) do the same.
+     */
+    fun stripCssComments(css: String): String {
+        if (!css.contains("/*")) return css
+        val out = StringBuilder(css.length)
+        var quote = NO_QUOTE
+        var i = 0
+        while (i < css.length) {
+            val c = css[i]
+            when {
+                c == '\\' && i + 1 < css.length -> {
+                    out.append(c).append(css[i + 1])
+                    i += 2
+                    continue
+                }
+                quote != NO_QUOTE -> if (c == quote || c == '\n') quote = NO_QUOTE
+                c == '"' || c == '\'' -> quote = c
+                c == '/' && css.startsWith("/*", i) -> {
+                    val end = css.indexOf("*/", i + 2)
+                    out.append(' ')
+                    i = if (end < 0) css.length else end + 2
+                    continue
+                }
+            }
+            out.append(c)
+            i++
+        }
+        return out.toString()
+    }
+
+    private const val NO_QUOTE = '\u0000'
     private val TIME_PATTERN = Regex("""([\d.]+)(ms|s)""")
     private val DIM_PX = Regex("""([\d.]+)\s*(px|rem|em)?""", RegexOption.IGNORE_CASE)
     private val SHADOW_COLOR = Regex("""(?:rgba?|hsla?)\([^)]*\)""", RegexOption.IGNORE_CASE)
@@ -848,7 +884,7 @@ object ThemeResolver {
     }
 
     private fun parseCardModUncached(css: String, vars: Map<String, String>): CardModStyle {
-        val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
+        val cleaned = JINJA_PATTERN.replace(stripCssComments(css), " ")
         if (cleaned.isBlank()) return CardModStyle()
         val (decls, otherRules) = hostDeclarations(cleaned)
         // Custom properties cascade like any other: per name, the last `!important` declaration wins, else the last.
@@ -1040,7 +1076,7 @@ object ThemeResolver {
 
     /** [cssRules] with each declaration's `!important` flag kept, for code that resolves the cascade. */
     fun cssRulesImportant(css: String): List<Pair<String, List<Triple<String, String, Boolean>>>> {
-        val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
+        val cleaned = JINJA_PATTERN.replace(stripCssComments(css), " ")
         val out = ArrayList<Pair<String, List<Triple<String, String, Boolean>>>>()
         var depth = 0
         var segStart = 0
