@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.BrightnessDialView
+import dev.glassworks.engine.vitro.cards.GaugeCardView
 import dev.glassworks.engine.vitro.cards.LightCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
@@ -47,11 +48,15 @@ class StateControlCardsTest {
         context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
         accessToken = { FakeHaServer.TOKEN }, callService = { d, sv, data, _ -> calls += Call("$d.$sv", data) }, navigate = {},
         openMoreInfo = { moreInfo += it }, fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+        haUser = { JSONObject().put("is_admin", true) },
     )
 
     private fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
 
-    private fun visibleTexts(v: View) = all(v).filterIsInstance<TextView>().filter { it.visibility == View.VISIBLE && it.text.isNotEmpty() }.map { it.text.toString() }
+    /** The texts shown: each one and every view above it up to [root] visible. */
+    private fun visibleTexts(root: View) = all(root).filterIsInstance<TextView>().filter { tv ->
+        tv.text.isNotEmpty() && generateSequence<View>(tv) { if (it === root) null else it.parent as? View }.all { it.visibility == View.VISIBLE }
+    }.map { it.text.toString() }
 
     private fun light(state: String, attrs: Map<String, Any?>, card: String = """{"type": "light", "entity": "light.desk"}"""): Pair<LightCardView, BrightnessDialView> {
         val store = EntityStore()
@@ -132,5 +137,32 @@ class StateControlCardsTest {
         assertFalse(LightCardView.lightSupportsBrightness(EntityState("light.a", "on", mapOf("supported_color_modes" to listOf("onoff")))))
         assertTrue(LightCardView.lightSupportsBrightness(EntityState("light.a", "on", mapOf("supported_color_modes" to listOf("white")))))
         assertNull(LightCardView.rgbColor(EntityState("light.a", "on", mapOf("rgb_color" to listOf(1, 2)))))
+    }
+
+    private fun gauge(state: String, attrs: Map<String, Any?> = emptyMap(), card: String = """{"type": "gauge", "entity": "sensor.ink"}"""): GaugeCardView {
+        val store = EntityStore()
+        if (state != "-") store.putLocal(EntityState("sensor.ink", state, attrs))
+        return GaugeCardView(context(store), LovelaceParser.parseCard(JSONObject(card)))
+    }
+
+    @Test
+    fun theGaugeShowsHasWarningWhereItsValueIsntANumber() {
+        // HA's isNaN(value): unknown, a word, a missing attribute; unavailable and a missing entity have their own.
+        assertEquals(listOf("Entity is non-numeric: sensor.ink"), visibleTexts(gauge("unknown")))
+        assertEquals(listOf("Entity is non-numeric: sensor.ink"), visibleTexts(gauge("low")))
+        assertEquals(listOf("Entity is currently unavailable: sensor.ink"), visibleTexts(gauge("unavailable")))
+        assertEquals(listOf("Entity not found"), visibleTexts(gauge("-")))
+        assertEquals(listOf("Attribute level is non-numeric"),
+            visibleTexts(gauge("on", card = """{"type": "gauge", "entity": "sensor.ink", "attribute": "level"}""")))
+        // The warning takes no action.
+        val warned = gauge("unknown")
+        assertFalse(warned.isClickable)
+        // A number draws the gauge, and the name under it; the card acts again.
+        val ok = gauge("42", mapOf("unit_of_measurement" to "%", "friendly_name" to "Ink"))
+        assertEquals(listOf("Ink"), visibleTexts(ok))
+        assertTrue(ok.isClickable)
+        // JavaScript's Number(): an attribute that is a number, or a numeric string, is a value.
+        assertEquals(listOf("Ink"), visibleTexts(gauge("on", mapOf("level" to 3, "friendly_name" to "Ink"),
+            """{"type": "gauge", "entity": "sensor.ink", "attribute": "level"}""")))
     }
 }

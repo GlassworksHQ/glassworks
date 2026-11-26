@@ -60,5 +60,8 @@
  "ui.panel.lovelace.cards.todo-list.no_unchecked_items": "Vous n'avez aucune tâche à faire !",
  "ui.panel.lovelace.cards.todo-list.today": "Aujourd'hui",
  "ui.panel.lovelace.cards.todo-list.unchecked_items": "Actifs",
- "ui.panel.lovelace.editor.action-editor.actions.more-info": "Plus d'infos"
+ "ui.panel.lovelace.editor.action-editor.actions.more-info": "Plus d'infos",
+ "ui.panel.lovelace.warning.attribute_not_numeric": "L'attribut {attribute} n'est pas numérique",
+ "ui.panel.lovelace.warning.entity_non_numeric": "L'entité n'est pas numérique : {entity}",
+ "ui.panel.lovelace.warning.entity_unavailable": "L'entité est actuellement indisponible : {entity}"
 }

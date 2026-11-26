@@ -164,14 +164,6 @@
   "owner": "#928",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
  },
- "s1/m-gauge-sensor-power": {
-  "owner": "#799",
-  "reason": "Gauge: the value ('1,235 W', '21.4 °C') is drawn ~10 % larger and wider than HA's, which sizes it to the arc (canvas text, so only the region check sees it)"
- },
- "s1/m-gauge-sensor-temperature": {
-  "owner": "#799",
-  "reason": "Gauge: the value ('1,235 W', '21.4 °C') is drawn ~10 % larger and wider than HA's, which sizes it to the arc (canvas text, so only the region check sees it)"
- },
  "s1/m-gauge-sensor-unknown": {
   "owner": "#799",
   "reason": "Gauge on an unknown state: HA replaces it with the 'Entity is non-numeric' warning; Vitro draws an empty gauge (as the baselined gauge-non-numeric)"

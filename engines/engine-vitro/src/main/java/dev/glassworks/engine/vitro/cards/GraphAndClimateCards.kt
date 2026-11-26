@@ -39,6 +39,8 @@ import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.HaErrorSeverity
+import dev.glassworks.engine.vitro.ui.errorCardContent
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
@@ -403,7 +405,8 @@ private class SparklineCanvasView(
  * 250 px wide) over the name on a 28 px line. The gauge is a half ring of radius 40 and stroke 12 in a 100 x 55 box:
  * the track in `--primary-background-color`, the value arc in the severity color (`--info-color` without one), or,
  * with `needle: true`, the severity levels as arcs under a needle. The value is fitted into 55% of the gauge's width
- * and 40% of its height, its box ending 10% above the bottom.
+ * and 40% of its height, its box ending 10% above the bottom. In place of the card, HA's `hui-warning` when the
+ * entity is missing, unavailable, or its value isn't a number (`isNaN`: unknown, a word, a missing attribute).
  */
 class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
     private val raw = config.raw
@@ -428,6 +431,8 @@ class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
     }
+    private var warning: View? = null
+    private var warningTitle: String? = null
 
     init {
         // `ha-card { padding: var(--ha-space-3); justify-content: center }`.
@@ -453,18 +458,53 @@ class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         } else {
             Int.MAX_VALUE
         }
+        // The warning covers the card's border too (its margins undo the card's padding): hui-error-card has none.
+        (warning?.layoutParams as? MarginLayoutParams)?.let { lp ->
+            if (lp.leftMargin != -paddingLeft || lp.topMargin != -paddingTop || lp.rightMargin != -paddingRight || lp.bottomMargin != -paddingBottom) {
+                lp.setMargins(-paddingLeft, -paddingTop, -paddingRight, -paddingBottom)
+            }
+        }
         super.measureCard(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    /**
+     * HA's `hui-warning` in place of the gauge, titled [title] for an administrator (the icon alone for anyone
+     * else), or the gauge again for null. The card shrinks to it, and it takes no action.
+     */
+    private fun showWarning(title: String?) {
+        if (title == warningTitle) return
+        warningTitle = title
+        warning?.let { removeView(it) }
+        warning = null
+        col.visibility = if (title == null) VISIBLE else GONE
+        isClickable = title == null && config.entity != null
+        isLongClickable = isClickable
+        if (title == null) return
+        val w = errorCardContent(ctx, HaErrorSeverity.WARNING, title, over = ctx.theme.cardBackgroundColor)
+        addView(w, LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { setMargins(-paddingLeft, -paddingTop, -paddingRight, -paddingBottom) })
+        warning = w
     }
 
     private fun render(s: EntityState?) {
         nameView.text = config.name ?: s?.displayName ?: config.entity
         val attribute = raw.optString("attribute", "").ifEmpty { null }
+        val eid = config.entity.orEmpty()
         val rawValue = if (attribute != null) s?.attributes?.get(attribute) else s?.state
-        val value = (rawValue as? Number)?.toDouble() ?: rawValue?.toString()?.toDoubleOrNull()
-        if (s == null || value == null) {
-            dial.update(minVal, s?.formattedState() ?: "–", info, null)
-            return
+        // HA's isNaN(value): a missing attribute is undefined, so NaN too.
+        val value = when {
+            s == null -> null
+            attribute != null && !s.attributes.containsKey(attribute) -> null
+            else -> jsNumberOf(rawValue)
         }
+        // hui-gauge-card's warnings, in its order.
+        showWarning(when {
+            s == null -> HaText.ui("ui.card.common.entity_not_found")
+            s.state == "unavailable" -> HaText.ui("ui.panel.lovelace.warning.entity_unavailable", "entity" to eid)
+            value != null -> null
+            attribute != null -> HaText.ui("ui.panel.lovelace.warning.attribute_not_numeric", "entity" to eid, "attribute" to attribute)
+            else -> HaText.ui("ui.panel.lovelace.warning.entity_non_numeric", "entity" to eid)
+        })
+        if (s == null || value == null || warningTitle != null) return
         val customUnit = raw.optString("unit", "").ifEmpty { null }
         val text = when {
             // A custom unit can't keep a locale's position: the number, then the unit (HA's ha-gauge `label`).
@@ -474,6 +514,15 @@ class GaugeCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         }
         val segmentLabel = if (needle) segmentLabel(value) else null
         dial.update(value, segmentLabel ?: text, if (needle) info else severityOf(value), segmentLabel)
+    }
+
+    /** JavaScript's `Number(v)` as `isNaN` reads it: null for NaN (a word, unknown, an object), 0 for null. */
+    private fun jsNumberOf(v: Any?): Double? = when (v) {
+        null -> 0.0
+        is Number -> v.toDouble().takeIf { !it.isNaN() }
+        is Boolean -> if (v) 1.0 else 0.0
+        is String -> HaFormat.jsNumber(v)?.takeIf { !it.isNaN() }
+        else -> null
     }
 
     private fun numberText(v: Any?): String {
@@ -706,10 +755,13 @@ private class GaugeCanvasView(
             canvas.drawPath(needlePath, needleLine)
             canvas.restore()
         }
-        // The value: HA measures it at 16 px and scales that box into 55% x 40% of the gauge, its bottom at 90%.
+        // The value: HA measures it at 16 px and scales that box into 55% x 40% of the gauge, its bottom at 90%. The
+        // box (getBBox) holds the space ha-gauge's template leaves on each side of the value (its line breaks, and
+        // the " ${label}" after it, collapse to one space each), so the glyphs fill less than the 55%.
         val h = height.toFloat()
         textPaint.textSize = 16f * dp
-        val w16 = textPaint.measureText(text)
+        if (text.isBlank()) return
+        val w16 = textPaint.measureText(" $text ")
         if (w16 <= 0f) return
         val h16 = BOX_EM * 16f * dp
         val k = minOf(0.55f * gw / w16, 0.4f * h / h16)
