@@ -526,6 +526,7 @@ open class MainActivity : Activity() {
         // Up again (the screen's own latch takes over) or nothing left: the login page's pause is over.
         if (d.show || d.step == SetupFlow.DONE) setupHidForLogin = false
         if (d.show) {
+            VitroSentinel.setupShown() // no dashboard on this start: its end isn't a Vitro failure
             setupOverlay.render(setupModel(d, d.step, d.done, preview = false))
         } else if (setupOverlay.isShowing && setupOverlay.model?.step != SetupFlow.DONE) {
             Log.i(TAG, "Setup complete; loading the dashboard")
@@ -1143,7 +1144,7 @@ open class MainActivity : Activity() {
             return
         }
         restartWaitingSince = 0L
-        VitroSentinel.checkStable() // the app's own restart isn't a crash: a start that stayed up clears its strikes
+        VitroSentinel.restarting() // the app's own restart isn't a failed start: a start that stayed up clears its strikes
         val pi = PendingIntent.getActivity(
             this, 0,
             Intent(this, glassworks.components.mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -1384,6 +1385,8 @@ open class MainActivity : Activity() {
             frontendLoading = false
             handler.removeCallbacks(hideLoading)
             hideConnecting("ready, ${why.ifEmpty { "page" }}")
+            // Vitro's dashboard is drawn, or a page it handed to the web engine: this start got going.
+            VitroSentinel.pageDrawn()
         }
     }
 

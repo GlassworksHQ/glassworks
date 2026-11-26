@@ -236,7 +236,7 @@ class VitroSentinelTest {
             Thread.setDefaultUncaughtExceptionHandler(android)
             val s = VitroSentinel(prefs(), clock = { now }, wallClock = { wall })
             assertTrue(s.start())
-            s.install(main)
+            s.install(main, watchFreezes = false)
             Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), vitroCrash())
         }
         assertEquals("first: one strike, still on; second: off", listOf(1 to true, 0 to false), seen)
@@ -249,7 +249,7 @@ class VitroSentinelTest {
         Thread.setDefaultUncaughtExceptionHandler(null)
         val s = VitroSentinel(prefs(), clock = { now }, wallClock = { wall })
         s.start()
-        s.install(Handler(Looper.getMainLooper()))
+        s.install(Handler(Looper.getMainLooper()), watchFreezes = false)
         val worker = Thread { throw IllegalStateException("background boom") }
         worker.start()
         worker.join(5_000)
@@ -264,7 +264,7 @@ class VitroSentinelTest {
         prefs().vitroCrashStrikes = 1
         val s = VitroSentinel(prefs(), clock = { now })
         s.start()
-        s.install(Handler(Looper.getMainLooper()))
+        s.install(Handler(Looper.getMainLooper()), watchFreezes = false)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(VitroSentinel.WINDOW_MS - 1))
         assertEquals(1, prefs().vitroCrashStrikes)
         now += VitroSentinel.WINDOW_MS // the elapsed clock, which the timer's uptime never runs ahead of
