@@ -2171,7 +2171,7 @@ class LayoutCardView(
                         if (length[k] < length[pick]) pick = k
                     }
                     cols[pick] += v
-                    length[pick] += HaCardSize.of(c)
+                    length[pick] += HaCardSize.of(c) { it.entity?.let { id -> ctx.store[id] } }
                 }
             }
         }

@@ -820,7 +820,8 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     }
 
     private fun render(s: EntityState?) {
-        titleView.text = config.name(s) ?: s?.friendlyName ?: "Alarm"
+        // HA's hui-alarm-panel-card: formatEntityName, the device and entity names when no `name` is set.
+        titleView.text = config.name(s) ?: s?.displayName ?: "Alarm"
         val state = s?.state ?: "unknown"
         chipLabel.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it != state } ?: stateLabel(state)
         chipIcon.setIcon(stateIcon(state), 0xFFFFFFFF.toInt())

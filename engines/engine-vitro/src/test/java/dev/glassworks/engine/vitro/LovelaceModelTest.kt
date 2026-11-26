@@ -398,6 +398,27 @@ class LovelaceModelTest {
     }
 
     @Test
+    fun actionTargetsAreTrimmedAndFoundInNestedRows() {
+        // ActionConfig.parse trims the action's `entity`, so the subscription does too; a conditional row's `row` and a
+        // buttons row's buttons carry their own actions.
+        val v = view(
+            """{"cards": [
+                 {"type": "tile", "entity": "light.desk", "tap_action": {"action": "more-info", "entity": " light.hall "}},
+                 {"type": "entities", "entities": [
+                   {"type": "conditional", "conditions": [{"entity": "sun.sun", "state": "below_horizon"}],
+                    "row": {"entity": "switch.porch", "hold_action": {"action": "more-info", "entity": "sensor.porch_power"}}},
+                   {"type": "buttons", "entities": [{"entity": "scene.movie", "tap_action": {"action": "more-info", "entity": "media_player.tv"}}]}
+                 ]}
+               ]}""",
+        )
+        val refs = CardRouter.referencedEntities(v)
+        assertTrue(refs.toString(), "light.hall" in refs)
+        assertFalse(refs.toString(), " light.hall " in refs)
+        assertTrue(refs.toString(), "sensor.porch_power" in refs)
+        assertTrue(refs.toString(), "media_player.tv" in refs)
+    }
+
+    @Test
     fun referencedEntitiesReachCustomCardsInsideStacks() {
         val v = view(
             """{"cards": [{"type": "horizontal-stack", "cards": [

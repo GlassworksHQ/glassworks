@@ -1766,7 +1766,7 @@ class VitroView(
     private fun buildMasonryLayout(cards: List<CardConfig>, ctx: VitroCardContext, widthDp: Int): View {
         // A pinned card (card-mod `position: fixed`) goes to the overlay first: it takes no column and no weight.
         val placed = cards.withIndex().filter { (_, card) -> !pinIfFixed(card, ctx) }
-        val (placement, count) = HaMasonry.place(placed.map { it.value }, widthDp)
+        val (placement, count) = HaMasonry.place(placed.map { it.value }, widthDp, ::stateForBuild)
         val row = MasonryColumnsLayout(context, px(if (widthDp < 600) 600f else 500f)).apply { applyViewPadding(this, ctx) }
         val columns = (0 until count).map { cardColumn(ctx) }
         columns.forEach { row.addView(it, LinearLayout.LayoutParams(0, WRAP_CONTENT)) }
@@ -2412,7 +2412,7 @@ class VitroView(
         /** A badge's text: `name · state` when the name shows, else the formatted state (`21.5 °C`, `Closed`). */
         fun badgeText(badge: CardConfig, s: EntityState?): String {
             val raw = badge.raw
-            val name = badge.name(s) ?: s?.friendlyName ?: badge.entity.orEmpty()
+            val name = badge.name(s) ?: s?.displayName ?: badge.entity.orEmpty()
             val showName = raw.optBoolean("show_name", badge.name(s) != null)
             val showState = raw.optBoolean("show_state", true)
             val state = s?.formattedState() ?: "…"
@@ -2431,7 +2431,7 @@ class VitroView(
             val raw = badge.raw
             val showName = raw.optBoolean("show_name", badge.name(s) != null)
             val showState = raw.optBoolean("show_state", true)
-            val name = if (showName) badge.name(s) ?: s?.friendlyName ?: badge.entity.orEmpty() else null
+            val name = if (showName) badge.name(s) ?: s?.displayName ?: badge.entity.orEmpty() else null
             // `show_state: false` hides the state even when no name shows (an icon-only badge).
             val state = if (showState) s?.formattedState() ?: "…" else null
             return name to state

@@ -8,6 +8,7 @@ import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.HaCardSize
 import kotlin.math.max
@@ -27,7 +28,7 @@ object HaMasonry {
     fun columns(widthDp: Int): Int = max(1, listOf(300, 600, 900, 1200).count { widthDp >= it })
 
     /** Each card's column (an index into the columns that keep a card), and how many columns that is. */
-    fun place(cards: List<CardConfig>, widthDp: Int): Pair<IntArray, Int> {
+    fun place(cards: List<CardConfig>, widthDp: Int, state: (CardConfig) -> EntityState? = { null }): Pair<IntArray, Int> {
         val n = min(columns(widthDp), cards.size)
         if (n == 0) return IntArray(0) to 0
         val sizes = DoubleArray(n)
@@ -38,7 +39,7 @@ object HaMasonry {
                 if (sizes[k] < 5) { pick = k; break }
                 if (sizes[k] < sizes[pick]) pick = k
             }
-            sizes[pick] += HaCardSize.of(c)
+            sizes[pick] += HaCardSize.of(c, state)
             raw[i] = pick
         }
         // Empty columns go; the rest keep their order.
