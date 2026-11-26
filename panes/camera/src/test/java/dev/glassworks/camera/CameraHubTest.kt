@@ -55,9 +55,11 @@ class CameraHubTest {
 
     /** Each hub's thread ends with its test, so none touches Robolectric's camera (its callbacks are static) in the next. */
     @After fun release() {
+        // Taken before release: a HandlerThread that has ended has no looper.
+        val threads = hubs.map { it.looper.thread }
         hubs.forEach { it.release() }
         // A hub thread still running here would keep its availability callback registered into the next test.
-        val stuck = hubs.map { it.looper.thread }.onEach { it.join(5_000) }.filter { it.isAlive }
+        val stuck = threads.onEach { it.join(5_000) }.filter { it.isAlive }
         ShadowMediaCodecList.reset()
         check(stuck.isEmpty()) { "${stuck.size} hub thread(s) didn't end within 5 s of release()" }
     }
@@ -478,8 +480,7 @@ class CameraHubTest {
             advance(hub, ConnectBackoff.FIRST_MS) // a second failure: the wait is now 10 s
             assertEquals(0, opens())
             advance(hub, ConnectBackoff.MIN_GAP_MS)
-            camera("0", CameraCharacteristics.LENS_FACING_FRONT)
-            settled(hub)
+            onHubThread(hub) { camera("0", CameraCharacteristics.LENS_FACING_FRONT) }
             opened()
             assertTrue(synchronized(logs) { "camera: 0 is free again; opening now" in logs })
         }
