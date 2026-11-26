@@ -1069,12 +1069,19 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             }
             if (showForecast) {
                 val type = config.raw.optString("forecast_type", "daily").ifEmpty { "daily" }
-                ctx.fetchForecast(eid, type) { days ->
-                    ctx.main.post {
-                        if (days.isEmpty()) return@post
-                        forecastFromSocket = true
-                        val u = (ctx.store[eid]?.attributes?.get("temperature_unit") as? String) ?: "°C"
-                        renderForecast(days, u, hourly = type == "hourly")
+                // Held open while the card shows, as HA's card holds `subscribeForecast`: each list the integration
+                // pushes (most do every half hour or hour) is drawn, so the first column follows the clock. Ended on
+                // detach, asked for again on attach, and sent again by the client on a new connection.
+                renewing {
+                    ctx.subscribeForecast(eid, type) { days ->
+                        ctx.main.post {
+                            // An empty push keeps what shows: before the first list, the legacy `forecast` attribute;
+                            // after it, the last list the integration sent.
+                            if (days.isEmpty()) return@post
+                            forecastFromSocket = true
+                            val u = (ctx.store[eid]?.attributes?.get("temperature_unit") as? String) ?: "°C"
+                            renderForecast(days, u, hourly = type == "hourly")
+                        }
                     }
                 }
             }

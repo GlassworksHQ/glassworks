@@ -12,17 +12,20 @@ import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.WeatherCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.data.ForecastDay
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLooper
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -58,6 +61,36 @@ class WeatherCardTest {
             fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
         )
         return WeatherCardView(ctx, LovelaceParser.parseCard(JSONObject(config)))
+    }
+
+    @Test
+    fun theForecastFollowsEveryPushAndAnEmptyOneKeepsTheLast() {
+        val store = EntityStore()
+        store.putLocal(EntityState("weather.home", "sunny", mapOf("temperature" to 12.2, "temperature_unit" to "°C", "humidity" to 76)))
+        var push: ((List<ForecastDay>) -> Unit)? = null
+        var ended = false
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = store,
+            theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
+            accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            subscribeForecast = { _, _, onForecast -> push = onForecast; { ended = true } },
+        )
+        val card = WeatherCardView(ctx, LovelaceParser.parseCard(JSONObject("""{"type": "weather-forecast", "entity": "weather.home"}""")))
+        fun day(n: Int, high: Double, low: Double) = ForecastDay(iso(n), "sunny", high, low, null, null)
+        push!!(listOf(day(0, 15.2, 8.1), day(1, 16.4, 9.3)))
+        ShadowLooper.idleMainLooper()
+        assertTrue(texts(card).toString(), texts(card).any { "16.4" in it })
+        // The integration's next list (a new hour or day): drawn, the subscription stays.
+        push!!(listOf(day(0, 11.7, 4.6), day(1, 13.9, 5.5)))
+        ShadowLooper.idleMainLooper()
+        assertTrue(texts(card).toString(), texts(card).any { "13.9" in it })
+        assertFalse(texts(card).any { "16.4" in it })
+        // An empty push keeps the last list on screen.
+        push!!(emptyList())
+        ShadowLooper.idleMainLooper()
+        assertTrue(texts(card).toString(), texts(card).any { "13.9" in it })
+        assertFalse(ended)
     }
 
     private fun iso(daysFromNow: Int): String {
