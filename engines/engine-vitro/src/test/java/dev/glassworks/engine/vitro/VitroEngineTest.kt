@@ -1148,9 +1148,9 @@ class VitroEngineTest {
         assertTrue(html.contains("window.addEventListener('hass-navigate'"))
         assertTrue(html.contains("window.addEventListener('hass-action'"))
         assertTrue(html.contains("sendBridge({ type: 'navigate', path })"))
-        // Resizes are debounced, and a 0 px first measurement is never sent.
+        // Resizes are debounced, and a 0 px measurement is sent only once the card rendered (island-hass.test.mjs).
         assertTrue(html.contains("timer = setTimeout(reportSize, 50);"))
-        assertTrue(html.contains("if (h <= 0 || h === lastH) return;"))
+        assertTrue(html.contains("if ((h === 0 && !cardSettled) || h === lastH) return;"))
     }
 
     @Test
@@ -1172,7 +1172,7 @@ class VitroEngineTest {
         // createCardElement shows its error card. The page reports it, and the card becomes that error card.
         val html = WebIslandCardView.buildIslandHtml(cardContext(), islandCard())
         assertTrue(html.contains("if (!customElements.get(tag)) {"))
-        assertTrue(html.contains("sendBridge({ type: 'cardError', message: \"Custom element doesn't exist: \" + tag + '.' });"))
+        assertTrue(html.contains("sendBridge({ type: 'cardError', message: \"Custom element doesn't exist: \" + tag + '.', waiting: true });"))
         assertTrue("a setConfig that throws is reported too", html.contains("sendBridge({ type: 'cardError', message: String((e && e.message) || e) });"))
 
         // An administrator: HA's error card is titled for one.
@@ -1192,6 +1192,67 @@ class VitroEngineTest {
         }
         walk(island)
         assertTrue("HA's error card is in place: $texts", dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE in texts)
+    }
+
+    @Test
+    fun anIslandWhoseScriptIsLateIsHasErrorCardUntilItComesAndTheCardAfter() {
+        // #799 D6: HA's createCardElement shows its error card and rebuilds the card when the script defines it. The
+        // island used to close its page at the first 4 s, so a slow first load stayed an error card.
+        val island = WebIslandCardView(cardContext(user = JSONObject().put("id", "u1").put("is_admin", true)), islandCard())
+        activity.setContentView(island)
+        val noReply: (JSONObject) -> Unit = { throw AssertionError("no reply") }
+        island.handleIslandMessage(
+            JSONObject().put("type", "cardError").put("message", "Custom element doesn't exist: acme-floorplan-card.").put("waiting", true), noReply,
+        )
+        idle()
+        assertNull("not failed: the page waits for the script", island.failure)
+        assertTrue(island.waitingForScript)
+        assertTrue("HA's error card shows meanwhile", dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE in texts(island))
+
+        island.handleIslandMessage(JSONObject().put("type", "cardDefined"), noReply)
+        idle()
+        assertFalse(island.waitingForScript)
+        assertFalse("the error card went", dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE in texts(island))
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(WebIslandCardView.SCRIPT_WAIT_MS + 1000))
+        assertNull("the card it became stays", island.failure)
+    }
+
+    @Test
+    fun anIslandWhoseScriptNeverComesIsHasErrorCardForGood() {
+        val island = WebIslandCardView(cardContext(), islandCard())
+        activity.setContentView(island)
+        island.handleIslandMessage(
+            JSONObject().put("type", "cardError").put("message", "Custom element doesn't exist: acme-floorplan-card.").put("waiting", true),
+        ) { throw AssertionError("no reply") }
+        idle()
+        assertNull(island.failure)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(WebIslandCardView.SCRIPT_WAIT_MS + 1000))
+        val failure = island.failure
+        assertTrue("given up: $failure", failure is dev.glassworks.engine.vitro.cards.IslandCardError)
+        assertEquals("Custom element doesn't exist: acme-floorplan-card.", failure?.message)
+    }
+
+    @Test
+    fun anEmptyIslandCardHasNoHeightAndALongOneGrowsToThreeScreens() {
+        // #799 D8: a card that drew nothing kept 48 px (160 before it reported), and a long one was cut at 1200 CSS px.
+        val ctx = cardContext()
+        val island = WebIslandCardView(ctx, islandCard())
+        assertEquals("nothing drawn: one pixel, so the page still reports", 1, island.islandHeightPx(0))
+        assertEquals(ctx.px(10f), island.islandHeightPx(10))
+        val screenCss = activity.resources.displayMetrics.heightPixels / ctx.dp
+        val cap = maxOf(WebIslandCardView.MIN_CAP_CSS.toFloat(), screenCss * WebIslandCardView.MAX_SCREENS).toInt()
+        assertEquals(ctx.px(cap.toFloat()), island.islandHeightPx(100_000))
+        assertTrue("past the old 1200 px cap where the screen allows", island.islandHeightPx(cap) >= ctx.px(1200f))
+    }
+
+    private fun texts(root: View): List<String> {
+        val out = ArrayList<String>()
+        fun walk(v: View) {
+            if (v is TextView) out += v.text.toString()
+            if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(root)
+        return out
     }
 
     @Test

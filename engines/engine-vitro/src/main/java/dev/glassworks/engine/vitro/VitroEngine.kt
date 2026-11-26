@@ -206,6 +206,19 @@ class VitroEngine(
             override fun onFirstPaint() {}
             override fun onLocationChange(url: String?) {}
             override fun redirect(url: String): String? = null
+            // The island's page stays the island's: a card's link or `window.open` (a calendar event's link, an `<a
+            // href>`) would load that site at card size with no way back. It opens as a native card's `url` action
+            // does instead ([navigateInPlace]: the panel's page, with back).
+            override fun allowsLoad(url: String): Boolean {
+                if (url == "about:blank" || islandPageUrl(url)) return true
+                if (url.startsWith("http://") || url.startsWith("https://")) main.post { if (!disposed) navigateInPlace(url) }
+                return false
+            }
+            /** A page of the island server: its origin and a path under it (never `http://127.0.0.1:<port>.evil`). */
+            private fun islandPageUrl(url: String): Boolean {
+                val origin = islandServer.origin ?: return false
+                return url.startsWith("$origin/")
+            }
             // The activity's host decides, as for every page (#847). An island's own page is on loopback, not Home
             // Assistant, so its card gets no microphone or camera without a prompt.
             override fun trusts(url: String): Boolean = host.trusts(url)
