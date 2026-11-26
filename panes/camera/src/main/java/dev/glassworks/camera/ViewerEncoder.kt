@@ -40,7 +40,7 @@ fun interface EncoderInput {
  * The stream's encoder for one RTSP server's life: started when someone watches, stopped when nobody
  * does, replaced when it fails while someone still watches, at most once every [RESTART_MS] (a later
  * attempt is posted, not dropped). An encoder that can't be made while someone watches (the GPU's input fails to set
- * up) is tried again, paced as the camera's reconnects are ([ConnectBackoff]). Each running encoder holds the privacy indicator on through
+ * up) is tried again, paced as the camera's reconnects are ([ConnectBackoff]); viewers who come meanwhile wait for that try. Each running encoder holds the privacy indicator on through
  * [egress]. After [close], nothing more happens, so a stopped server's late reports change nothing. A camera
  * that can't stream ([StreamFit.Refused]) gets no encoder, and the indicator stays off.
  *
@@ -72,7 +72,8 @@ internal class ViewerEncoder(
         synchronized(lock) {
             if (closed) return
             when {
-                count > 0 && current == null -> start()
+                // A pending retry keeps its wait: more viewers don't make more tries at a failing encoder.
+                count > 0 && current == null -> if (!retryPosted) start()
                 count == 0 -> stop()
                 else -> current?.requestKeyFrame()
             }

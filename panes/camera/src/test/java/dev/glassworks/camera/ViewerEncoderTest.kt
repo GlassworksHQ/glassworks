@@ -148,6 +148,21 @@ class ViewerEncoderTest {
         assertTrue("nothing more is posted once one runs", r.posted.isEmpty())
     }
 
+    /** Greptile on #924: viewers who come while an encoder can't be made wait for the posted try, not a try each. */
+    @Test fun viewersWhoComeDuringTheRetryWaitMakeNoExtraTries() {
+        val r = Rig()
+        r.throwsLeft = 5
+        r.ve.viewers(1)
+        assertEquals("one try, failed", 4, r.throwsLeft)
+        r.ve.viewers(2); r.ve.viewers(1); r.ve.viewers(3)
+        assertEquals("no extra tries", 4, r.throwsLeft)
+        assertEquals(1, r.posted.size)
+        r.throwsLeft = 0
+        r.runPosted(r.posted[0].first)
+        assertEquals("the posted try makes it", 1, r.made.size)
+        assertTrue(r.egress.leaving)
+    }
+
     @Test fun aPostedTryAfterStopMakesNoEncoder() {
         val r = Rig()
         r.throwsLeft = 1
