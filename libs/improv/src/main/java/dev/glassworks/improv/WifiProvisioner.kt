@@ -275,7 +275,7 @@ public class WifiProvisioner(
      * a failure is logged and the join still counts, since the network works until the next restart.
      */
     /** Entries holding an attempt's untested credential (still running, failed, or another network came up): no save yet. */
-    private val saveGate = SaveGate()
+    private val saveGate = SaveGate.of(ctx)
 
     @Suppress("DEPRECATION")
     private fun saveNetworks(joined: Int?): Boolean {
@@ -609,17 +609,52 @@ internal object SavedNetworks {
  * running, failed, or another network came up instead, and no save runs while any is. Joining that network confirms it;
  * removing an entry the attempt made clears it. A network joined meanwhile lasts until the next restart, as before.
  */
-internal class SaveGate {
-    private val unconfirmed = mutableSetOf<Int>()
+internal class SaveGate(private val store: Store, private val bootId: () -> String) {
 
-    @Synchronized fun unconfirmed(netId: Int) { unconfirmed += netId }
+    /** Where the unconfirmed ids outlive this provisioner and the app's process; [bootId] names the boot they belong to. */
+    interface Store {
+        fun read(): Pair<String, Set<Int>>?
+        fun write(bootId: String, ids: Set<Int>)
+    }
+
+    // only this boot's: a restart put every saved credential back, so an older boot's ids mean nothing now
+    private val unconfirmed: MutableSet<Int> = store.read()?.takeIf { it.first == bootId() }?.second.orEmpty().toMutableSet()
+
+    @Synchronized fun unconfirmed(netId: Int) { if (unconfirmed.add(netId)) keep() }
 
     /** The entry is gone (Android confirmed its removal): nothing of it is left to save. */
-    @Synchronized fun removed(netId: Int) { unconfirmed -= netId }
+    @Synchronized fun removed(netId: Int) { if (unconfirmed.remove(netId)) keep() }
 
     /** Whether saving is safe now; [joined] is the network just joined, which that confirms. */
     @Synchronized fun maySave(joined: Int?): Boolean {
-        joined?.let { unconfirmed -= it }
+        if (joined != null && unconfirmed.remove(joined)) keep()
         return unconfirmed.isEmpty()
+    }
+
+    private fun keep() { runCatching { store.write(bootId(), unconfirmed.toSet()) } }
+
+    companion object {
+        /** One gate per process, kept in the app's own preferences, so a new provisioner or a restarted app still holds. */
+        @Volatile private var shared: SaveGate? = null
+
+        fun of(ctx: Context): SaveGate = shared ?: synchronized(this) {
+            shared ?: SaveGate(PrefsStore(ctx.applicationContext), ::currentBootId).also { shared = it }
+        }
+
+        /** The kernel's id for this boot; without it, when the device started (to the minute, so clock drift doesn't move it). */
+        private fun currentBootId(): String = runCatching { java.io.File("/proc/sys/kernel/random/boot_id").readText().trim() }
+            .getOrNull()?.takeIf { it.isNotEmpty() }
+            ?: ((System.currentTimeMillis() - SystemClock.elapsedRealtime()) / 60_000).toString()
+    }
+
+    private class PrefsStore(ctx: Context) : Store {
+        private val prefs = ctx.getSharedPreferences("glassworks_improv_save_gate", Context.MODE_PRIVATE)
+        override fun read(): Pair<String, Set<Int>>? {
+            val boot = prefs.getString("boot", null) ?: return null
+            return boot to prefs.getStringSet("ids", emptySet()).orEmpty().mapNotNull { it.toIntOrNull() }.toSet()
+        }
+        override fun write(bootId: String, ids: Set<Int>) {
+            prefs.edit().putString("boot", bootId).putStringSet("ids", ids.map { it.toString() }.toSet()).commit()
+        }
     }
 }

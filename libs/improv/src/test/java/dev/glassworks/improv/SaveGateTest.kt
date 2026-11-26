@@ -7,6 +7,31 @@ import org.junit.Test
 /** An untested credential is never saved: not while its attempt runs, not after it failed or another network came up. */
 class SaveGateTest {
 
+    /** The app's preferences, in memory: what outlives a provisioner and the app's process, but not a reboot. */
+    private class MemStore : SaveGate.Store {
+        var kept: Pair<String, Set<Int>>? = null
+        override fun read() = kept
+        override fun write(bootId: String, ids: Set<Int>) { kept = bootId to ids }
+    }
+
+    private fun SaveGate() = SaveGate(MemStore()) { "boot-1" }
+
+    @Test fun aNewProvisionerInTheSameBootStillHoldsAnUnconfirmedEntry() {
+        val store = MemStore()
+        SaveGate(store) { "boot-1" }.unconfirmed(6)
+        // ImprovController restarted, or the app's process did: a new gate reads what the old one kept
+        val again = SaveGate(store) { "boot-1" }
+        assertFalse(again.maySave(4))
+        assertTrue(again.maySave(6))
+    }
+
+    @Test fun aRebootForgetsThem() {
+        // the restart put every saved credential back, so nothing untested is left to keep out of a save
+        val store = MemStore()
+        SaveGate(store) { "boot-1" }.unconfirmed(6)
+        assertTrue(SaveGate(store) { "boot-2" }.maySave(4))
+    }
+
     @Test fun nothingUnconfirmedSaves() = assertTrue(SaveGate().maySave(4))
 
     @Test fun anAttemptStillRunningHoldsEverySave() {
