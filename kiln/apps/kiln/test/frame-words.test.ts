@@ -27,6 +27,24 @@ describe('installer.json words', () => {
     expect(() => frameWords({ ...w, silent: { ...w.silent, on: { word: 'On', tone: 'green', line: 'x' } } }, states)).toThrow('words.silent.on.tone');
   });
 
+  it('times and recovery steps are optional, but an empty one fails, naming it', () => {
+    const [id, states] = FRAMES[0];
+    const { time: _, recoverySteps: __, ...w } = words(id);
+    expect(() => frameWords(w, states)).not.toThrow();
+    expect(() => frameWords({ ...w, time: { total: '' } }, states)).toThrow('words.time.total: missing');
+    expect(() => frameWords({ ...w, time: { steps: { 'first-boot': '' } } }, states)).toThrow('words.time.steps.first-boot: missing');
+    expect(() => frameWords({ ...w, recoverySteps: [] }, states)).toThrow('words.recoverySteps');
+    expect(() => frameWords({ ...w, recoverySteps: ['**Unplug it**', ''] }, states)).toThrow('words.recoverySteps');
+  });
+
+  it('a time a step names is a step of the frame\'s install flow', () => {
+    for (const [id] of FRAMES) {
+      const json = JSON.parse(readFileSync(join(REPO, 'frames', id, 'design', 'installer.json'), 'utf8'));
+      const ids = json.flows.install.steps.map((x: { id: string }) => x.id);
+      for (const k of Object.keys(json.words.time?.steps ?? {})) expect(ids, `${id} words.time.steps.${k}`).toContain(k);
+    }
+  });
+
   it('the frame Kiln installs carries no simulated device: only the demo frame beside it does', () => {
     expect(frame).not.toHaveProperty('sim');
     expect(demoFrame.frame).toBe(frame);

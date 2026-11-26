@@ -10,7 +10,7 @@ import * as RadioGroup from '@radix-ui/react-radio-group';
 import type { FileCheck, ImageSession, ImageState } from '../imageSession';
 import { TestOnly } from '../ReleaseApk';
 import { Foot } from '../../components/Nav';
-import { ClockGlyph } from '../../components/Kit';
+import { Usually } from '../../components/Kit';
 import { totalTime } from '../words';
 import c from './choice.module.css';
 
@@ -53,7 +53,7 @@ function Card({ r, picked, time }: { r: ImageRecipe; picked: boolean; time?: str
       <span className={c.summary} id={`${id}-sum`}>{r.summary}</span>
       {r.advice && <span className={c.trade} id={`${id}-trade`}>{r.advice.trade}</span>}
       {/* how long it usually takes, from the frame's words (time.total.<recipe id>): only where the frame gives one */}
-      {time && <span className={c.time} id={`${id}-time`}><ClockGlyph />{`Usually ${time}`}</span>}
+      <Usually time={time} id={`${id}-time`} />
       {/* who makes it, its licence, where questions go, its project: one quiet line (community-images.md keeps all four) */}
       <p className={c.facts}>
         <span>{`By ${r.by.name}`}</span>

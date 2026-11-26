@@ -163,6 +163,15 @@ describe('the picker, calm for a first visit and a returning one (#672)', () => 
     expect(within(group('needs')).getByText('A micro-USB data cable')).toBeTruthy();
   });
 
+  it('the S1\'s time on the picker is its install\'s own words, said once', () => {
+    render(<Picker />);
+    const needs = document.querySelector<HTMLElement>('[aria-labelledby="needs"]')!;
+    expect(within(needs).getAllByText('About 10 minutes')).toHaveLength(1);
+    // one source: the picker's list has no time of its own, the line comes from words.time.total
+    expect(INSTALLERS['aqara-s1-plus']!.picker!.needs.join(' ')).not.toMatch(/minute/);
+    expect(INSTALLERS['aqara-s1-plus']!.words?.time?.total).toBe('about 10 minutes');
+  });
+
   it('every frame Kiln installs says what it needs and its way back (installer.json picker)', () => {
     const ready = FRAMES.filter((f) => ships(f.status) && kilnRoute(f));
     expect(ready.length).toBeGreaterThan(0);

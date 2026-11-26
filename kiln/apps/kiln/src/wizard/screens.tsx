@@ -21,7 +21,8 @@ import { HomeAssistant, Panes, Radio, RadioNext, Wifi } from '../setup/steps';
 import { eta, firingSteps, type Setup, type WizardState } from './state';
 import x from './screens.module.css';
 import { Foot } from '../components/Nav';
-import { BrowserAsk, Hands, Note, Progress, Wait, type ProgressRow } from '../components/Kit';
+import { BrowserAsk, Hands, Instructions, Note, Progress, Usually, Wait, type ProgressRow } from '../components/Kit';
+import { rich } from '../device/rich';
 
 type P = { s: WizardState; session: Session; frame: KilnFrame };
 /** The standard flow's screens (every frame's steps after its install): any frame's session, the frame as the flow reads it. */
@@ -32,16 +33,27 @@ function os(): 'win' | 'linux' | 'other' {
   return /Android/.test(ua) ? 'other' : /Windows/.test(ua) ? 'win' : /Linux/.test(ua) ? 'linux' : 'other';
 }
 
-/** 2 · Connect: the animation is the instruction. The picker opens inside the click. */
+/**
+ * 2 · Connect: the drawing, and beside it the frame's numbered steps to tick off (its `recoverySteps`), so both fit the
+ * first screen. The picker opens inside the click.
+ */
 export function Connect({ s, session, frame }: P) {
   const driver = useMemo(() => { const o = os(); return o === 'other' ? undefined : frame.drivers[o]; }, [frame]);
+  const steps = frame.recoverySteps;
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Put the panel in recovery mode</h2>
       <p className="lede">{s.flow === 'undo'
         ? 'Put the panel into recovery mode so Kiln can restore your saved backup.'
         : `Nothing changes on ${frame.the} yet. Kiln backs up your original software first, before writing anything.`}</p>
-      <Recovery data={frame.recovery} />
+      {/* how long the whole install takes, from the frame's words, in the same line as a choice card's */}
+      {s.flow !== 'undo' && <Usually time={frame.time?.total} />}
+      {steps?.length
+        ? <div className="howto">
+            <div className="howto-art"><Recovery data={frame.recovery} /></div>
+            <Instructions steps={steps.map((x) => rich(x))} label="Recovery mode, by hand" />
+          </div>
+        : <Recovery data={frame.recovery} />}
       {s.flow !== 'undo' && s.changed && <Note tone="info">{s.changed === 'unknown' ? 'Kiln can’t tell whether an earlier attempt in this tab changed the panel.' : 'An earlier attempt already changed the panel.'}</Note>}
       <BrowserAsk listed={frame.felPick} short={frame.short} the={frame.the ?? `the ${frame.short}`}>
         It shows a list of devices. Pick <code>{frame.felPick}</code>, which is your panel in recovery mode, then click Connect.
@@ -126,8 +138,10 @@ export function Firing({ s, frame }: P) {
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const steps = firingSteps(s, frame.short);
   const at = steps.findIndex((m) => !m.done);
-  const rows: ProgressRow[] = steps.map((m, i) => ({ id: m.text, label: m.text, state: m.done ? 'done' : i === at ? 'now' : 'next' }));
   const undo = s.flow === 'undo';
+  // how long a step usually takes, where the frame's words say: the restart is the install's first boot
+  const time = (m: (typeof steps)[number]) => (!undo && m.step ? frame.time?.steps?.[m.step] : undefined);
+  const rows: ProgressRow[] = steps.map((m, i) => ({ id: m.text, label: m.text, state: m.done ? 'done' : i === at ? 'now' : 'next', ...(time(m) ? { time: time(m) } : {}) }));
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{undo ? 'Putting your original software back' : 'Installing Glassworks'}</h2>
@@ -271,7 +285,7 @@ export function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }>
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{connecting ? 'Connecting to the panel' : 'Starting the panel'}</h2>
-      <Wait what={setup.note} note="Nothing to do. Kiln goes on by itself when it’s ready." />
+      <Wait what={setup.note} typical={setup.typical} note="Nothing to do. Kiln goes on by itself when it’s ready." />
     </section>
   );
 }

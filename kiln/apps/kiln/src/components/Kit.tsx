@@ -36,6 +36,15 @@ export function typicalSeconds(t?: string): number | undefined {
   return n === undefined ? undefined : Math.round(n * unit);
 }
 
+/**
+ * How long a whole install usually takes, as one quiet line with a clock: "Usually about 10 minutes". The time is the
+ * frame's words; a frame that gives none shows nothing here.
+ */
+export function Usually({ time, id }: { time?: string; id?: string }) {
+  if (!time) return null;
+  return <span className="usual" id={id}><ClockGlyph />{`Usually ${time.charAt(0).toLowerCase()}${time.slice(1)}`}</span>;
+}
+
 /** m:ss, as a person reads a timer. */
 export const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 

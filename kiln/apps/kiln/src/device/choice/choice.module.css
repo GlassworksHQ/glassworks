@@ -21,8 +21,6 @@
 /* the frame's advice: the recommended way in ink (never a status color), and its trade in plain text */
 .rec { color: var(--ink); background: color-mix(in srgb, var(--ink) 10%, transparent); }
 .trade { font-size: 14px; color: var(--fg); }
-.time { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--fg); }
-.time :global(svg) { width: 14px; height: 14px; flex: none; color: var(--muted); }
 .facts { display: flex; flex-wrap: wrap; gap: 2px 0; margin: 0; font-size: 13px; color: var(--muted); }
 .facts > span:not(:last-child)::after { content: "·"; margin: 0 8px; color: var(--faint); }
 .facts :global(.link) { font-size: inherit; }
