@@ -186,9 +186,14 @@ describe('the app\'s install', () => {
   });
 
   it('says what it found about Wi-Fi, and changes nothing else', async () => {
-    const said = async (o: Partial<{ out: string; code: number }>, put?: { out: string; code: number }) => {
+    const said = async (o: Partial<{ out: string; code: number }>, put?: { out: string; code: number }, after?: string) => {
       const cmds: string[] = [];
-      const p = { run: async (c: string) => { cmds.push(c); return c.startsWith('settings put') ? put ?? { out: '', code: 0 } : { out: '', code: 0, ...o }; } } as unknown as PanelShell;
+      let wrote = false;
+      const p = { run: async (c: string) => {
+        cmds.push(c);
+        if (c.startsWith('settings put')) { wrote = true; return put ?? { out: '', code: 0 }; }
+        return wrote ? { out: after ?? '1\n', code: 0 } : { out: '', code: 0, ...o };
+      } } as unknown as PanelShell;
       return { line: await keepWifiOn(p), cmds };
     };
     expect(await said({ out: '3\n' })).toEqual({ line: 'Wi-Fi: off for airplane mode, left as it is', cmds: ['settings get global wifi_on'] });
@@ -196,6 +201,9 @@ describe('the app\'s install', () => {
     expect(await said({ out: 'Killed\n', code: 137 })).toEqual({ line: 'Wi-Fi: switch not read (Killed), left as it is', cmds: ['settings get global wifi_on'] });
     expect(await said({ out: 'null\n' })).toMatchObject({ line: 'Wi-Fi: switch not read (null), left as it is' });
     expect((await said({ out: '0\n' }, { out: 'Killed\n', code: 137 })).line).toBe('Wi-Fi: off, and not set (Killed)');
+    // a write that exits 0 but didn't take: the read-back says so
+    expect((await said({ out: '0\n' }, { out: '', code: 0 }, '0\n')).line).toBe('Wi-Fi: off, and not set (it reads 0 after the write)');
+    expect(await said({ out: '0\n' })).toEqual({ line: 'Wi-Fi: was off, on from the next start', cmds: ['settings get global wifi_on', 'settings put global wifi_on 1', 'settings get global wifi_on'] });
   });
 });
 

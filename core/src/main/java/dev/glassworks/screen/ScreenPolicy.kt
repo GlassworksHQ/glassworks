@@ -242,6 +242,9 @@ class ScreenPolicy(
         watchSystemBrightness()
         // The light sensor reports only on change, so auto brightness off can't wait for a reading.
         updateBrightness()
+        // A hook attached before start got the window brightness without the system value (no context yet): on a
+        // backlight-off frame following a system value of 0 that was the system's own, i.e. dark. Send it again now.
+        if (windowBrightness != sentBrightness) sendBrightness()
         presence?.start(ctx, ::onPresence)
         light?.start(ctx, ::onLux)
         ctx.registerReceiver(screenReceiver, IntentFilter().apply {

@@ -208,6 +208,9 @@ export async function keepWifiOn(p: PanelShell): Promise<string> {
   if (v === '3') return 'Wi-Fi: off for airplane mode, left as it is';
   const put = await p.run('settings put global wifi_on 1');
   if (put.code !== 0) return `Wi-Fi: off, and not set (${put.out.trim().split('\n')[0] || `exit ${put.code}`})`;
+  // Android 6's `settings` can exit 0 after a refused write: only a read-back says it took
+  const back = await p.run('settings get global wifi_on');
+  if (back.code !== 0 || back.out.trim() !== '1') return `Wi-Fi: off, and not set (it reads ${back.out.trim().split('\n')[0] || `exit ${back.code}`} after the write)`;
   return 'Wi-Fi: was off, on from the next start';
 }
 

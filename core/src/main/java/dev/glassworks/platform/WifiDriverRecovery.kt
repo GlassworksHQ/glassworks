@@ -46,6 +46,14 @@ class WifiDriverRecovery(
             state == WifiManager.WIFI_STATE_UNKNOWN ||
                 (state == WifiManager.WIFI_STATE_DISABLED && previous == WifiManager.WIFI_STATE_UNKNOWN)
 
+        /**
+         * A switch-off from on or coming on (a person, or another app), not the driver failing: a failed load goes
+         * through [WifiManager.WIFI_STATE_UNKNOWN] first ([isDriverFailure]).
+         */
+        fun isSwitchOff(state: Int, previous: Int): Boolean =
+            (state == WifiManager.WIFI_STATE_DISABLING || state == WifiManager.WIFI_STATE_DISABLED) &&
+                (previous == WifiManager.WIFI_STATE_ENABLED || previous == WifiManager.WIFI_STATE_ENABLING)
+
         /** Wi-Fi is on or coming on: nothing to do. */
         fun isOnOrComing(state: Int): Boolean =
             state == WifiManager.WIFI_STATE_ENABLED || state == WifiManager.WIFI_STATE_ENABLING
@@ -64,6 +72,8 @@ class WifiDriverRecovery(
             isDriverFailure(state, previous) -> start()
             state == WifiManager.WIFI_STATE_ENABLED && running ->
                 finish(if (attempt == 0) "Wi-Fi came on by itself" else "Wi-Fi is on again after $attempt ${if (attempt == 1) "try" else "tries"}")
+            // someone switched Wi-Fi off while it was on or coming on: that's on purpose, so the recovery stops
+            running && isSwitchOff(state, previous) -> finish("Wi-Fi was switched off: not switching it back on")
         }
     }
 

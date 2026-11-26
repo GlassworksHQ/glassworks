@@ -991,6 +991,17 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
+    /** onBrightness attached before start(): the first value came without the system's, so start sends the floor. */
+    @Test fun backlightOffAHookAttachedBeforeStartGetsTheFloorAtStart() {
+        AndroidSettings.System.putInt(context.contentResolver, AndroidSettings.System.SCREEN_BRIGHTNESS, 0)
+        val screen = policy(settings = Settings(autoBrightness = false, manualBrightness = 0f), sleepMode = SleepMode.BACKLIGHT_OFF)
+        val brightness = mutableListOf<Float>()
+        screen.onBrightness = { brightness += it }
+        screen.start(context)
+        assertEquals("the floor once the system value is known", ScreenPolicy.VISIBLE_FLOOR, brightness.last(), 0f)
+        screen.stop()
+    }
+
     @Test fun backlightOffTheSystemValueIsFollowedAgainOnceItIsVisible() {
         AndroidSettings.System.putInt(context.contentResolver, AndroidSettings.System.SCREEN_BRIGHTNESS, 200)
         val screen = policy(settings = Settings(autoBrightness = false, manualBrightness = -1f), sleepMode = SleepMode.BACKLIGHT_OFF)

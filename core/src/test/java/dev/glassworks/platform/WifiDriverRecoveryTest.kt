@@ -153,4 +153,24 @@ class WifiDriverRecoveryTest {
         advance(10 * 60_000L)
         assertEquals(0, enables)
     }
+
+    @Test fun `switching Wi-Fi off during a recovery stops it`() {
+        driverLoads = true
+        driverFails()
+        advance(WifiDriverRecovery.DELAYS_MS[0])
+        assertEquals(1, enables)
+        // the switch-on is under way, and someone switches Wi-Fi off
+        recovery.onState(WIFI_STATE_DISABLING, WIFI_STATE_ENABLING)
+        state = WIFI_STATE_DISABLED
+        recovery.onState(WIFI_STATE_DISABLED, WIFI_STATE_DISABLING)
+        assertFalse(recovery.running)
+        advance(WifiDriverRecovery.DELAYS_MS.sum())
+        assertEquals(1, enables)
+    }
+
+    @Test fun `a switch-off is told from the failure`() {
+        assertTrue(WifiDriverRecovery.isSwitchOff(WIFI_STATE_DISABLING, WIFI_STATE_ENABLED))
+        assertTrue(WifiDriverRecovery.isSwitchOff(WIFI_STATE_DISABLED, WIFI_STATE_ENABLING))
+        assertFalse(WifiDriverRecovery.isSwitchOff(WIFI_STATE_DISABLED, WIFI_STATE_UNKNOWN))
+    }
 }

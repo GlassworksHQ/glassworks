@@ -83,7 +83,9 @@ lines.
 
 From a Mirror on stock with Glassworks installed in place, on adb. Read-only apart from the reboot.
 
-1. Reboot two or three times after the install, so the apps are compiled and the boot is fast.
+1. Reboot two or three times after the install, so the apps are compiled and the boot is fast. Before each
+   repeat, switch Wi-Fi back on for the next start (`adb shell settings put global wifi_on 1`): after a lost race
+   the switch stays off, and a boot that starts with it off never tries the driver, so it can't fail again.
 2. `adb shell settings get global wifi_on`: `0` after a lost race.
 3. `adb logcat -d | grep -E "Failed to load driver|Wi-Fi state is failed|Glassworks.Wifi"` and
    `adb shell dmesg | grep -E "WCNSS driver not ready|wcnss_wlan triggered"`: the order above.
