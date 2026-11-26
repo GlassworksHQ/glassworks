@@ -4,6 +4,8 @@
 
 package dev.glassworks.engine.vitro.compat
 
+import dev.glassworks.engine.vitro.cards.AutoEntitiesFilter
+import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.DashboardConfig
@@ -36,6 +38,11 @@ import org.json.JSONObject
  * that wraps a built-in card Vitro doesn't draw (the reason walks every card a card builds, [CardRouter.producedCards]),
  * and one whose island found it drawing with elements of HA's own frontend that an island page doesn't have
  * ([IslandFrontend], the `learned` reasons of [viewReason]). No card is named here: the island finds them itself.
+ *
+ * - **auto-entities' matches** ([matchedReason], [matchedRowsReason]): auto-entities picks its rows (or cards) at run
+ *   time, so its config can't say whether Vitro draws every one. Vitro draws it natively, and when what it matched
+ *   includes a row the strict rule doesn't claim (a row of a domain whose control Vitro doesn't draw, say), the view
+ *   goes to HA's page, as it would with that row in its config. It's checked again whenever the matches change.
  */
 object WebFallback {
     /** Why the whole [dashboard] goes to HA's page, or null when Vitro draws it. */
@@ -99,6 +106,48 @@ object WebFallback {
         if (type == "entity-filter") cardReason(EntityFilterConfig.innerCard(card), learned, false)?.let { return it }
         return null
     }
+
+    /**
+     * What the checkers say about a native `custom:auto-entities` card: they can't know which rows it matches, so the
+     * view is native only if those are ([matchedRowsReason]). The site checker and the audit script say the same.
+     */
+    const val MATCHED_ROWS_NOTE =
+        "auto-entities picks its rows at run time: the view is native if the rows it matches are, and a row Vitro " +
+            "doesn't draw natively opens the view in Home Assistant's frontend"
+
+    /**
+     * Why [inner], the card auto-entities built from what it matched ([AutoEntitiesFilter.innerCard]), needs HA's
+     * frontend, or null when Vitro (or an island) draws all of it. The whole card is the user's now, the rows Vitro
+     * wrote in its `card_param` field included, so every option of it is checked, the matches' own `options` too.
+     */
+    fun matchedReason(inner: CardConfig): String? =
+        cardReason(inner, null, true)?.let { "a row `custom:auto-entities` matched: $it" }
+
+    /**
+     * [matchedReason] for every `custom:auto-entities` card Vitro draws natively in [view], over [states] now (an
+     * island runs the real card, which draws its own matches). Null when [view] has none, or each one's matches are
+     * drawn natively. Read whenever the view is shown, so a view whose matches changed is decided again.
+     */
+    fun matchedRowsReason(
+        view: ViewConfig,
+        scripts: IslandScripts,
+        states: Collection<EntityState>,
+        lookup: (String) -> EntityState?,
+    ): String? {
+        if (!view.hasAutoEntities) return null
+        fun walk(card: CardConfig): String? {
+            if (card.inIsland(scripts)) return null
+            if (card.type == AUTO_ENTITIES) {
+                return matchedReason(AutoEntitiesFilter.innerCard(card.raw, AutoEntitiesFilter.evaluate(card.raw, states, lookup)))
+            }
+            for (child in CardRouter.producedCards(card, perEntity = false)) walk(child.value)?.let { return it }
+            return null
+        }
+        for (root in CardRouter.viewRoots(view)) walk(root.card)?.let { return it }
+        return null
+    }
+
+    internal const val AUTO_ENTITIES = "custom:auto-entities"
 
     /** An iframe `url` HA resolves on its own origin: anything but an absolute address with a scheme. */
     internal fun sameOriginIframe(url: String): Boolean {

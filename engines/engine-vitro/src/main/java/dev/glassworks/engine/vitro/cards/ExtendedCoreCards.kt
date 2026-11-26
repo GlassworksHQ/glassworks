@@ -138,9 +138,16 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         }
         lineBox(valueView, 28f)
         lineBox(unitView, 16f)
+        // `ha-card`: a column with `justify-content: space-between` over the header, `.info` and `.footer` (an empty
+        // div without one), so a card taller than its content (a sections slot, `height: 100%`) splits the rest into
+        // the two gaps: the value line sits lower than right under the header. With a pinned footer
+        // (`.with-fixed-footer`) it's `flex-start`. The gaps only grow when the card has an exact height.
+        val spaced = !fixedFooter
+        if (spaced) col.addView(View(ctx.context), LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
         col.addView(info, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = -ctx.px(4f) })
+        if (spaced) col.addView(View(ctx.context), LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
         if (footer != null && !fixedFooter) col.addView(footer, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        addView(col, LayoutParams(MATCH_PARENT, if (spaced) MATCH_PARENT else WRAP_CONTENT))
         if (footer != null && fixedFooter) addView(footer, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
 
         val eid = config.entity
@@ -820,7 +827,8 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
     }
 
     private fun render(s: EntityState?) {
-        titleView.text = config.name(s) ?: s?.friendlyName ?: "Alarm"
+        // HA's hui-alarm-panel-card: formatEntityName, the device and entity names when no `name` is set.
+        titleView.text = config.name(s) ?: s?.displayName ?: "Alarm"
         val state = s?.state ?: "unknown"
         chipLabel.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it != state } ?: stateLabel(state)
         chipIcon.setIcon(stateIcon(state), 0xFFFFFFFF.toInt())

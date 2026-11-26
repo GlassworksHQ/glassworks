@@ -5,7 +5,6 @@
 package dev.glassworks.engine.vitro
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.Application
 import android.os.Looper
 import android.os.SystemClock
@@ -15,6 +14,7 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.TextView
+import dev.glassworks.engine.vitro.cards.HaCodeDialog
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
 import dev.glassworks.engine.vitro.cards.EntityRowControls
 import dev.glassworks.engine.vitro.data.EntityState
@@ -38,7 +38,6 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowAlertDialog
 import org.robolectric.shadows.ShadowPopupMenu
 
 /**
@@ -427,10 +426,13 @@ class EntityRowControlsTest {
         assertEquals(listOf("lock.unlock", "lock.lock"), calls())
         all(c).filterIsInstance<TextView>().filter { it.text == "Unlock" }.last().performClick()
         idle()
-        val dialog = ShadowAlertDialog.getLatestAlertDialog() as AlertDialog
-        assertEquals("the prompt reads HA's code label", "Code", all(dialog.window!!.decorView).filterIsInstance<EditText>().single().hint)
-        all(dialog.window!!.decorView).filterIsInstance<EditText>().single().setText("1234")
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        // HA's code dialog for a lock: its text version (a lock's code_format is a pattern), titled and confirmed "Unlock".
+        val dialog = HaCodeDialog.lastView!!
+        assertFalse(dialog.numeric)
+        assertTrue("the prompt reads HA's code label", "Code" in all(dialog).filterIsInstance<TextView>().map { it.text.toString() })
+        assertEquals("Unlock", dialog.submitButton!!.contentDescription)
+        dialog.codeInput.setText("1234")
+        dialog.submitButton!!.performClick()
         idle()
         assertEquals("lock.unlock", calls().last())
         assertEquals("1234", calls.last().third!!.getString("code"))
@@ -438,10 +440,10 @@ class EntityRowControlsTest {
         assertEquals("the registry entry was read first", "config/entity_registry/get", ws.last().getString("type"))
         // A default code in the lock's registry options: no prompt, and no code sent (HA's lock uses its own).
         services = JSONObject("""{"options": {"lock": {"default_code": "9999"}}}""")
-        val shownBefore = ShadowAlertDialog.getShownDialogs().size
+        HaCodeDialog.lastView = null
         all(c).filterIsInstance<TextView>().filter { it.text == "Unlock" }.last().performClick()
         idle()
-        assertEquals(shownBefore, ShadowAlertDialog.getShownDialogs().size)
+        assertNull("no prompt", HaCodeDialog.lastView)
         assertEquals("lock.unlock", calls().last())
         assertFalse(calls.last().third!!.has("code"))
     }

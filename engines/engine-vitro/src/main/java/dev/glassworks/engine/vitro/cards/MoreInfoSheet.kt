@@ -823,7 +823,12 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
                 }
                 // A lock with a `code_format` asks for its code first, as HA's more-info does. Cancelled, the pill
                 // (which already moved) goes back to the lock's state.
-                if (ctx.store[id]?.attributes?.get("code_format") != null) askCode(send, reset) else send(null)
+                if (ctx.store[id]?.attributes?.get("code_format") != null) {
+                    val label = if (locked) HaText.ui("ui.card.lock.lock") else HaText.ui("ui.card.lock.unlock")
+                    HaCodeDialog.ask(ctx, "text", label, label, onCancel = reset) { send(it) }
+                } else {
+                    send(null)
+                }
             }
         }
         addPill(pill)
@@ -832,24 +837,6 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
             pill.setOn(s?.state == "locked" || s?.state == "locking")
             timeLabel.text = relativeTime(s)
         }
-    }
-
-    /** A masked code prompt; [onCode] runs on OK only, so Cancel sends nothing. The pill re-reads the store either way. */
-    private fun askCode(onCode: (String) -> Unit, onCancel: () -> Unit) {
-        val field = android.widget.EditText(ctx.context).apply {
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setSingleLine(true)
-            hint = HaText.ui("ui.card.alarm_control_panel.code")
-        }
-        val shown = runCatching {
-            android.app.AlertDialog.Builder(ctx.context)
-                .setView(field)
-                .setNegativeButton(HaText.ui("ui.common.cancel")) { _, _ -> onCancel() }
-                .setOnCancelListener { onCancel() }
-                .setPositiveButton("OK") { _, _ -> onCode(field.text?.toString().orEmpty()) }
-                .show()
-        }
-        if (shown.isFailure) onCancel()
     }
 
     private fun buildCover(id: String, initial: EntityState?): (EntityState?) -> Unit {
@@ -1145,87 +1132,112 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         menu.show()
     }
 
-    /** HA's alarm panel: a status badge, the arm / disarm buttons and, when the panel takes a code, a keypad. */
+    /**
+     * HA's `more-info-alarm_control_panel`: the state header, then `ha-state-control-alarm_control_panel-modes`, the
+     * alarm's modes in a vertical `ha-control-select` ([AlarmModesSelect]) with the current one filled in the state's
+     * color. While the alarm is triggered, arming or pending, a pulsing 144 px status icon takes its place, with a
+     * Disarm `ha-control-button` under it. A mode that needs a code ([AlarmModes.needsCode]) and has no default code
+     * in the entity registry asks for it in HA's code dialog ([HaCodeDialog]); cancelled, the select goes back.
+     */
     private fun buildAlarm(id: String, initial: EntityState?): (EntityState?) -> Unit {
-        val badgeIcon = MdiIconView(ctx.context)
-        val badge = FrameLayout(ctx.context).apply {
-            addView(badgeIcon, LayoutParams(ctx.px(40f), ctx.px(40f), Gravity.CENTER))
-        }
-        addCentered(badge, topDp = 8f, widthDp = 88f, heightDp = 88f)
-        val stateLabel = text(24f, theme.primaryTextColor, Inter.REGULAR).apply { gravity = Gravity.CENTER }
-        val timeLabel = timeLabel()
-        addCentered(stateLabel, topDp = 12f)
-        addCentered(timeLabel, topDp = 4f)
+        // Inside HA's `.content` (24 px all round, [CONTENT_DOMAINS]): `ha-more-info-state-header` heads it.
+        val header = MoreInfoStateHeader(ctx)
+        body.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
-        val needsCode = initial?.attributes?.get("code_format") != null
-        // HA's text codes get a masked field; the keypad is for `number` codes.
-        val textCode = initial?.attributes?.get("code_format")?.toString() == "text"
-        val codeField = android.widget.EditText(ctx.context).apply {
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setSingleLine(true)
-            hint = HaText.ui("ui.card.alarm_control_panel.code")
-            setTextColor(theme.primaryTextColor)
-            setHintTextColor(theme.secondaryTextColor)
+        val select = AlarmModesSelect(ctx) { mode, revert -> setAlarmMode(id, mode, revert) }
+        val n = AlarmModes.supported(initial).size
+        // `height: 45vh` between `max(200px, n * 80px)` and `max(320px, n * 80px)`, 130 px thick.
+        val screenH = ctx.context.resources.configuration.screenHeightDp.toFloat()
+        val selectH = (screenH * 0.45f).coerceIn(maxOf(200f, n * 80f), maxOf(320f, n * 80f))
+        addCentered(select, widthDp = 130f, heightDp = selectH)
+        // `.controls:not(:last-child)`: the Disarm container always follows it (empty unless triggered, arming or
+        // pending), so the controls keep their 24 px under them.
+        (select.layoutParams as LinearLayout.LayoutParams).bottomMargin = ctx.px(24f)
+
+        // `.status .icon`: 144 px, the state's color at 20 % behind an 80 px icon, pulsing once a second.
+        val statusIcon = MdiIconView(ctx.context)
+        val status = FrameLayout(ctx.context).apply {
+            addView(statusIcon, LayoutParams(ctx.px(80f), ctx.px(80f), Gravity.CENTER))
+            visibility = GONE
         }
-        val code = StringBuilder()
-        val codeView = text(24f, theme.primaryTextColor, Inter.MEDIUM).apply {
+        addCentered(status, widthDp = 144f, heightDp = 144f)
+        (status.layoutParams as LinearLayout.LayoutParams).bottomMargin = ctx.px(24f)
+        val pulse = ValueAnimator.ofFloat(1f, 0f, 1f).apply {
+            duration = 1000L
+            repeatCount = ValueAnimator.INFINITE
+            addUpdateListener { status.alpha = it.animatedValue as Float }
+        }
+        releasers += { pulse.cancel() }
+        // `ha-control-button.disarm`: 60 px tall, 130 to 200 px wide, `--ha-border-radius-3xl`.
+        val disarm = text(14f, theme.primaryTextColor, Inter.MEDIUM).apply {
+            this.text = HaText.ui("ui.card.alarm_control_panel.disarm")
             gravity = Gravity.CENTER
-            letterSpacing = 0.3f
-        }
-        fun call(service: String) {
-            val data = JSONObject().put("entity_id", id)
-            val entered = if (textCode) codeField.text?.toString().orEmpty() else code.toString()
-            if (entered.isNotEmpty()) data.put("code", entered)
-            ctx.callService("alarm_control_panel", service, data, null)
-            code.setLength(0)
-            codeView.text = ""
-            codeField.setText("")
-        }
-
-        val actions = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        AlarmModes.actions(initial).forEachIndexed { i, (label, service) ->
-            actions.addView(pillLabel(label, false) { call(service) },
-                LinearLayout.LayoutParams(0, ctx.px(48f), 1f).apply { if (i > 0) marginStart = ctx.px(8f) })
-        }
-        body.addView(actions, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(20f) })
-
-        if (textCode) {
-            body.addView(codeField, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(20f) })
-        } else if (needsCode) {
-            addCentered(codeView, topDp = 20f, heightDp = 32f)
-            val pad = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
-            listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("Clear", "0", "⌫")).forEachIndexed { r, keys ->
-                val row = LinearLayout(ctx.context).apply { orientation = LinearLayout.HORIZONTAL }
-                keys.forEachIndexed { i, key ->
-                    val b = pillLabel(key, false) {
-                        when (key) {
-                            "Clear" -> code.setLength(0)
-                            "⌫" -> if (code.isNotEmpty()) code.setLength(code.length - 1)
-                            else -> if (code.length < MAX_CODE) code.append(key)
-                        }
-                        codeView.text = "•".repeat(code.length)
-                    }
-                    if (key == "⌫") b.contentDescription = "Backspace"
-                    row.addView(b, LinearLayout.LayoutParams(ctx.px(72f), ctx.px(52f)).apply { if (i > 0) marginStart = ctx.px(12f) })
-                }
-                pad.addView(row, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { if (r > 0) topMargin = ctx.px(10f) })
+            minWidth = ctx.px(130f)
+            maxWidth = ctx.px(200f)
+            setPadding(ctx.px(8f), 0, ctx.px(8f), 0)
+            background = GradientDrawable().apply {
+                cornerRadius = 24f * ctx.dp
+                setColor(CardSurface.withAlpha(disabledColor(), 0.2f))
             }
-            addCentered(pad, topDp = 12f)
+            isClickable = true
+            ripple(this, 24f * ctx.dp)
+            dev.glassworks.engine.vitro.ui.VitroAccess.role(this, dev.glassworks.engine.vitro.ui.A11yRole.BUTTON)
+            setOnClickListener { setAlarmMode(id, "disarmed") {} }
+            visibility = GONE
         }
+        addCentered(disarm, heightDp = 60f)
 
         return { s ->
             val st = s?.state.orEmpty()
+            header.bind(s, MoreInfoStateHeader.stateOf(s, ctx.now()))
             val color = alarmColor(st)
-            badge.background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(CardSurface.withAlpha(color, 0.2f))
+            val changing = st in AlarmModes.CHANGING
+            select.visibility = if (changing) GONE else VISIBLE
+            status.visibility = if (changing) VISIBLE else GONE
+            disarm.visibility = if (changing) VISIBLE else GONE
+            if (changing) {
+                status.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(CardSurface.withAlpha(color, 0.2f))
+                }
+                statusIcon.setIcon(MdiIcons.resolveIconName(null, s).takeIf { s != null } ?: alarmIcon(st), color)
+                if (!pulse.isStarted) pulse.start()
+            } else {
+                pulse.cancel()
+                status.alpha = 1f
+                select.bind(s, color, disabledColor())
             }
-            badgeIcon.setIcon(alarmIcon(st), color)
-            stateLabel.text = if (s == null) "Unknown" else humanize(st)
-            timeLabel.text = relativeTime(s)
+        }
+    }
+
+    /** `--disabled-color`: the control buttons' and the select's background, at 20 %. */
+    private fun disabledColor(): Int =
+        ThemeResolver.parseColor(theme.vars["disabled-color"]?.let { ThemeResolver.resolveValue(it, theme.vars, 0) })
+            ?: if (theme.dark) 0xFF464646.toInt() else 0xFFBDBDBD.toInt()
+
+    /**
+     * HA's `setProtectedAlarmControlPanelMode`: [mode]'s service, after the code when it needs one and the entity
+     * registry holds no default code. [revert] runs when the dialog is cancelled (HA's select goes back to the mode it
+     * showed).
+     */
+    private fun setAlarmMode(id: String, mode: String, revert: () -> Unit) {
+        val s = ctx.store[id] ?: return revert()
+        val service = AlarmModes.service(mode) ?: return revert()
+        fun send(code: String?) {
+            val data = JSONObject().put("entity_id", id)
+            if (code != null) data.put("code", code)
+            ctx.callService("alarm_control_panel", service, data, null)
+        }
+        if (!AlarmModes.needsCode(s, mode)) return send(null)
+        ctx.callWs(JSONObject().put("type", "config/entity_registry/get").put("entity_id", id)) { ok, result, _ ->
+            val defaultCode = (result as? JSONObject)?.takeIf { ok }?.optJSONObject("options")?.optJSONObject("alarm_control_panel")
+                ?.opt("default_code")?.takeIf { it != JSONObject.NULL && it.toString().isNotEmpty() }
+            ctx.main.post {
+                if (dismissed) return@post revert()
+                if (defaultCode != null) return@post send(null)
+                val title = if (mode == "disarmed") HaText.ui("ui.card.alarm_control_panel.disarm") else HaText.ui("ui.card.alarm_control_panel.arm")
+                HaCodeDialog.ask(ctx, s.attributes["code_format"]?.toString(), title, title, onCancel = revert) { send(it) }
+            }
         }
     }
 
@@ -1877,8 +1889,8 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         /** The domains whose state row is a slider or a box (`state-card-number`, `state-card-input_number`). */
         val NUMBER_DOMAINS = setOf("number", "input_number")
 
-        /** The domains drawn from HA's own parts ([MoreInfoVacuumView]), inside its 24 px `.content`. */
-        val CONTENT_DOMAINS = setOf("vacuum")
+        /** The domains drawn from HA's own parts ([MoreInfoVacuumView], the alarm's modes), inside its 24 px `.content`. */
+        val CONTENT_DOMAINS = setOf("vacuum", "alarm_control_panel")
 
         /** Below this viewport height (dp) the sheet uses its compact landscape sizes. */
         const val COMPACT_HEIGHT_DP = 580
@@ -1907,7 +1919,6 @@ class MoreInfoSheet(private val ctx: VitroCardContext, private val onDismiss: ()
         const val DOCK_LIGHT = 0xFFF2F2F2.toInt()
         const val DOCK_DARK = 0xFF2A2A2A.toInt()
         const val SELECTED_DARK = 0xFF212121.toInt()
-        const val MAX_CODE = 12
 
         /** HA 2026's favorite colors: warm whites, then colors. */
         val FAVORITES_WARM = listOf(
@@ -2915,24 +2926,150 @@ internal class VerticalCoverSliderView(context: Context) : View(context) {
     }
 }
 
-/** An alarm panel's more-info buttons. */
+/** HA's `ALARM_MODES` (data/alarm_control_panel.ts, frontend 20261028.5): the alarm's modes, as its More Info offers them. */
 internal object AlarmModes {
-    /** The arming modes in HA's order, with their `supported_features` bit. */
-    private val ARM_MODES = listOf(
-        Triple(1, "ui.card.alarm_control_panel.arm_home", "alarm_arm_home"),
-        Triple(2, "ui.card.alarm_control_panel.arm_away", "alarm_arm_away"),
-        Triple(4, "ui.card.alarm_control_panel.arm_night", "alarm_arm_night"),
-        Triple(32, "ui.card.alarm_control_panel.arm_vacation", "alarm_arm_vacation"),
-        Triple(16, "ui.card.alarm_control_panel.arm_custom_bypass", "alarm_arm_custom_bypass"),
+    private class Mode(val feature: Int?, val service: String, val icon: String, val label: () -> String)
+
+    /** In HA's order, with their `AlarmControlPanelEntityFeature` bit (Disarmed has none: always offered). */
+    private val MODES = linkedMapOf(
+        "armed_home" to Mode(1, "alarm_arm_home", "mdi:home") { HaText.ui("ui.card.alarm_control_panel.modes.armed_home") },
+        "armed_away" to Mode(2, "alarm_arm_away", "mdi:lock") { HaText.ui("ui.card.alarm_control_panel.modes.armed_away") },
+        "armed_night" to Mode(4, "alarm_arm_night", "mdi:moon-waning-crescent") { HaText.ui("ui.card.alarm_control_panel.modes.armed_night") },
+        "armed_vacation" to Mode(32, "alarm_arm_vacation", "mdi:airplane") { HaText.ui("ui.card.alarm_control_panel.modes.armed_vacation") },
+        "armed_custom_bypass" to Mode(16, "alarm_arm_custom_bypass", "mdi:shield") { HaText.ui("ui.card.alarm_control_panel.modes.armed_custom_bypass") },
+        "disarmed" to Mode(null, "alarm_disarm", "mdi:shield-off") { HaText.ui("ui.card.alarm_control_panel.modes.disarmed") },
     )
 
+    /** The states in which HA's More Info shows the pulsing status and Disarm instead of the modes. */
+    val CHANGING = setOf("triggered", "arming", "pending")
+
     /**
-     * The alarm's buttons: the arming modes its `supported_features` offers, then Disarm (always). Without the
-     * attribute, home and away, HA's defaults.
+     * `supportedAlarmModes`: the modes whose feature bit [s]'s `supported_features` has, and Disarmed. An alarm
+     * without the attribute supports no arming mode (HA's `supportsFeature`).
      */
-    fun actions(s: EntityState?): List<Pair<String, String>> {
-        val features = (s?.attributes?.get("supported_features") as? Number)?.toInt()
-        val arm = if (features == null) ARM_MODES.take(2) else ARM_MODES.filter { features and it.first != 0 }
-        return arm.map { HaText.ui(it.second) to it.third } + (HaText.ui("ui.card.alarm_control_panel.disarm") to "alarm_disarm")
+    fun supported(s: EntityState?): List<String> {
+        val features = (s?.attributes?.get("supported_features") as? Number)?.toInt() ?: 0
+        return MODES.filter { (_, m) -> m.feature == null || features and m.feature != 0 }.keys.toList()
+    }
+
+    fun service(mode: String): String? = MODES[mode]?.service
+    fun icon(mode: String): String = MODES[mode]?.icon ?: "mdi:shield"
+
+    /** `ui.card.alarm_control_panel.modes.<mode>`. */
+    fun label(mode: String): String = MODES[mode]?.label?.invoke().orEmpty().ifEmpty { mode }
+
+    /**
+     * Whether [mode] needs a code: arming with `code_arm_required` and a `code_format`, disarming with a `code_format`
+     * (HA's `setProtectedAlarmControlPanelMode`).
+     */
+    fun needsCode(s: EntityState, mode: String): Boolean {
+        val format = s.attributes["code_format"]
+        if (format == null || format == JSONObject.NULL) return false
+        return mode == "disarmed" || s.attributes["code_arm_required"] == true
+    }
+}
+
+/**
+ * `ha-state-control-alarm_control_panel-modes`: a vertical `ha-control-select` (`role="radiogroup"`) on
+ * `--disabled-color` at 20 % with `--ha-border-radius-6xl` corners and 4 px padding, one option per supported mode
+ * ([AlarmModes.supported]) 4 px apart, each a 20 px icon over its label (14 px / 500); the current mode is filled in
+ * the state's color, its content white. A tap selects at once and calls [onPick] with a way to go back.
+ */
+@SuppressLint("ViewConstructor")
+internal class AlarmModesSelect(
+    private val ctx: VitroCardContext,
+    private val onPick: (mode: String, revert: () -> Unit) -> Unit,
+) : LinearLayout(ctx.context) {
+    private var modes: List<String> = emptyList()
+    private var selected: String? = null
+    private var selectColor = ctx.theme.primaryColor
+    private var disabled = false
+    private val fill = GradientDrawable().apply { cornerRadius = 36f * ctx.dp }
+
+    /** The options by mode, for tests. */
+    val options = LinkedHashMap<String, FrameLayout>()
+
+    init {
+        orientation = VERTICAL
+        background = fill
+        val pad = ctx.px(4f)
+        setPadding(pad, pad, pad, pad)
+        contentDescription = HaText.ui("ui.card.alarm_control_panel.modes_label")
+    }
+
+    /** Shows [s]'s modes with its current one selected in [stateColor]; unavailable, it's disabled. */
+    fun bind(s: EntityState?, stateColor: Int, disabledColor: Int) {
+        val list = AlarmModes.supported(s)
+        if (list != modes) build(list)
+        selected = s?.state?.takeIf { it in list }
+        selectColor = stateColor
+        disabled = s == null || s.state == "unavailable"
+        fill.setColor(CardSurface.withAlpha(disabledColor, 0.2f))
+        paint(disabledColor)
+    }
+
+    private fun build(list: List<String>) {
+        modes = list
+        removeAllViews()
+        options.clear()
+        list.forEachIndexed { i, mode ->
+            val icon = MdiIconView(ctx.context)
+            val label = TextView(ctx.context).apply {
+                text = AlarmModes.label(mode)
+                textSize = ctx.scaledSp(14f)
+                typeface = VitroFonts.typeface(ctx.context, Inter.MEDIUM, ctx.scaledSp(14f))
+                includeFontPadding = false
+                gravity = Gravity.CENTER
+            }
+            val content = LinearLayout(ctx.context).apply {
+                orientation = VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(ctx.px(2f), ctx.px(2f), ctx.px(2f), ctx.px(2f))
+                addView(icon, LayoutParams(ctx.px(20f), ctx.px(20f)))
+                // The label's block line box: 14 px at `--ha-line-height-normal` (1.6).
+                addView(label, LayoutParams(LayoutParams.MATCH_PARENT, lineBoxPx(ctx, 14f, 1.6f)))
+            }
+            val option = FrameLayout(ctx.context).apply {
+                addView(content, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+                tag = icon to label
+                applyHaRipple(this, 32f * ctx.dp, ctx.theme.dark)
+                dev.glassworks.engine.vitro.ui.VitroAccess.role(this, dev.glassworks.engine.vitro.ui.A11yRole.RADIO, AlarmModes.label(mode)) { selected == mode }
+                setOnClickListener { pick(mode) }
+            }
+            addView(option, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply { if (i < list.size - 1) bottomMargin = ctx.px(4f) })
+            options[mode] = option
+        }
+    }
+
+    /** HA's `_valueChanged`: the same mode does nothing; another selects at once, and goes back if it's cancelled. */
+    private fun pick(mode: String) {
+        if (disabled || mode == selected) return
+        val old = selected
+        selected = mode
+        paint(null)
+        onPick(mode) {
+            selected = old
+            paint(null)
+        }
+    }
+
+    private var lastDisabledColor = 0
+
+    private fun paint(disabledColor: Int?) {
+        disabledColor?.let { lastDisabledColor = it }
+        val text = if (disabled) lastDisabledColor else ctx.theme.primaryTextColor
+        for ((mode, option) in options) {
+            @Suppress("UNCHECKED_CAST")
+            val (icon, label) = option.tag as Pair<MdiIconView, TextView>
+            val on = mode == selected
+            option.background = if (on) GradientDrawable().apply {
+                cornerRadius = 32f * ctx.dp
+                setColor(if (disabled) lastDisabledColor else selectColor)
+            } else null
+            val fg = if (on) Color.WHITE else text
+            icon.setIcon(AlarmModes.icon(mode), fg)
+            label.setTextColor(fg)
+            option.isEnabled = !disabled
+        }
     }
 }

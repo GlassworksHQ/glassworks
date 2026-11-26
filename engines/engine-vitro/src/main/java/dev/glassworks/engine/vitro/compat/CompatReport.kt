@@ -100,7 +100,10 @@ object CompatChecker {
     ) {
         val here = "$path (${card.type})"
         if (!(islandsOnly && card.nativeOnly)) {
-            val verdict = card.compat.effective(scripts)
+            // A native auto-entities card is native only if the rows it matches at run time are: the report says so.
+            val verdict = card.compat.effective(scripts).let { v ->
+                if (v.isNative && card.type == WebFallback.AUTO_ENTITIES) v.copy(notes = v.notes + WebFallback.MATCHED_ROWS_NOTE) else v
+            }
             if (!islandsOnly || !verdict.isNative) out += CompatEntry(here, verdict)
             if (!verdict.isNative) return
         }

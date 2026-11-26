@@ -1359,12 +1359,18 @@ function walkCard(card: Obj, loc: string, view: ViewAudit, holdsGenerated = -1) 
       // entries to check below, since one of them may still send the view there.
       if (gv.frontend) return;
     }
+    // Its rows are picked at run time, so no config check can claim them: the engine checks what it matched (WebFallback).
+    view.warnings.push(`${loc}: ${MATCHED_ROWS_NOTE}`);
   }
   for (const [i, child] of children) {
     const where = type === "custom:auto-entities" ? `${loc}.card` : `${loc}.${type}[${i}]`;
     walkCard(child, where, view, explicit);
   }
 }
+
+/** The engine's WebFallback.MATCHED_ROWS_NOTE: what a native auto-entities card is native on. */
+export const MATCHED_ROWS_NOTE =
+  "auto-entities picks its rows at run time: the view is native if the rows it matches are, and a row Vitro doesn't draw natively opens the view in Home Assistant's frontend";
 
 /** How a reason that sends the whole view to Home Assistant's frontend (WebFallback) starts. */
 const FRONTEND = "Home Assistant's frontend draws this view:";

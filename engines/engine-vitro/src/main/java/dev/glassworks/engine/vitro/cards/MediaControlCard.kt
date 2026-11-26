@@ -470,7 +470,8 @@ class MediaControlCardView(ctx: VitroCardContext, private val config: CardConfig
          */
         private val access = AdjustableAccess(
             min = { 0 }, max = { duration.toInt() }, step = { 1 },
-            value = { editSeconds ?: (fraction * duration).roundToInt() },
+            // Within the current length: a key edit held at 240 s reads 100 s once HA shortens the track to 100 s.
+            value = { (editSeconds ?: (fraction * duration).roundToInt()).coerceIn(0, duration.toInt().coerceAtLeast(0)) },
             preview = { v ->
                 editSeconds = v
                 fraction = fractionOfSeconds(v)

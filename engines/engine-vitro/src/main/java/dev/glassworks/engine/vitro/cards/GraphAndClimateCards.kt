@@ -1233,13 +1233,14 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
                 if (unavailable) {
                     unavailableText.text = HaText.ui(
                         "ui.panel.lovelace.warning.entity_unavailable",
-                        "entity" to "${config.name(s) ?: s?.friendlyName ?: eid} ($eid)",
+                        "entity" to "${config.name(s) ?: s?.displayName ?: eid} ($eid)",
                     )
                 }
                 icon.setCondition(state)
                 // HA's formatEntityState: the weather domain's own words, in the user's language.
                 condition.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it.isNotEmpty() && it != state } ?: conditionLabel(state)
-                name.text = config.name(s) ?: s?.friendlyName ?: eid
+                // HA's weather-forecast card: formatEntityName (device and entity names) when no `name` is set.
+                name.text = config.name(s) ?: s?.displayName ?: eid
                 val t = s?.attributes?.get("temperature")
                 val u = (s?.attributes?.get("temperature_unit") as? String) ?: "°C"
                 temp.text = if (t != null) "${(t as? Number)?.let { HaDisplay.formatValue(it.toDouble(), 1) } ?: t} " else "–"

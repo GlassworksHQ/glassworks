@@ -104,6 +104,16 @@ data class ViewConfig(
 
     /** Why this view goes to HA's own frontend instead of being drawn ([WebFallback.viewReason]), or null. */
     val webFallbackReason: String? by lazy { WebFallback.viewReason(this) }
+
+    /**
+     * True when a card the view builds is (or holds) `custom:auto-entities`, whose matches are checked at run time
+     * ([WebFallback.matchedRowsReason]).
+     */
+    internal val hasAutoEntities: Boolean by lazy {
+        fun walk(c: CardConfig): Boolean =
+            c.type == "custom:auto-entities" || CardRouter.producedCards(c, perEntity = false).any { walk(it.value) }
+        CardRouter.viewRoots(this).any { walk(it.card) }
+    }
 }
 
 /** The view types layout-card registers (`masonry-layout`, ...), as a view's `type`. */
@@ -1011,17 +1021,27 @@ object CardRouter {
         }
         // An action's own `entity` (HA's handleAction: a more-info or toggle of another entity than the card's): the
         // More Info sheet it opens reads that entity from the store.
+        // Trimmed as ActionConfig.parse reads it, so " light.hall " subscribes the entity the tap opens.
         fun actionTargets(raw: JSONObject?) {
             if (raw == null) return
             for (key in ACTION_KEYS) {
-                raw.optJSONObject(key)?.optString("entity", "")?.takeIf { isEntityId(it) }?.let { out += it }
+                (raw.optJSONObject(key)?.opt("entity") as? String)?.trim()?.takeIf { isEntityId(it) }?.let { out += it }
+            }
+        }
+        // A row's actions, and those of the rows inside it: a conditional row's `row`, a buttons row's `entities`.
+        fun rowTargets(row: JSONObject?, depth: Int = 0) {
+            if (row == null || depth > 8) return
+            actionTargets(row)
+            rowTargets(row.optJSONObject("row"), depth + 1)
+            if (row.optString("type", "") == "buttons") {
+                row.optJSONArray("entities")?.let { arr -> for (i in 0 until arr.length()) rowTargets(arr.optJSONObject(i), depth + 1) }
             }
         }
         fun walkCard(c: CardConfig) {
             c.entity?.let { out += it }
             c.entities().forEach { it.referencedEntities(out) }
             actionTargets(c.raw)
-            c.raw.optJSONArray("entities")?.let { rows -> for (i in 0 until rows.length()) actionTargets(rows.optJSONObject(i)) }
+            c.raw.optJSONArray("entities")?.let { rows -> for (i in 0 until rows.length()) rowTargets(rows.optJSONObject(i)) }
             c.visibility.forEach { it.referencedEntities(out) }
             VisibilityCondition.parseList(c.raw.optJSONArray("conditions")).forEach { it.referencedEntities(out) }
             // Deep-scan custom cards (e.g. room arrays, sleep/outside/camera objects) so the entity
@@ -1224,10 +1244,21 @@ object EntityFilterConfig {
  * A card's size in HA's `getCardSize` units (about 50 px each), as HA's masonry view and layout-card's masonry columns
  * weigh them: each built-in card's own `getCardSize` in frontend 20261028, else 1 (`computeCardSize`'s answer for a
  * card that has none or doesn't answer in time). Stacks add up (vertical) or take the largest (horizontal) of their
- * cards; a conditional card is its card's size, shown or not.
+ * cards; a conditional card is its card's size, shown or not. [state] is a card's entity state where its size depends
+ * on it (a Mushroom card's controls); null reads as Mushroom's "any option on".
  */
 object HaCardSize {
-    fun of(card: CardConfig): Double {
+    /** Mushroom's cards that extend `MushroomBaseCard` and keep its `getCardSize` (v5.3.0; the cover card says 1). */
+    private val MUSHROOM_BASE_CARDS = setOf(
+        "custom:mushroom-entity-card", "custom:mushroom-light-card", "custom:mushroom-fan-card",
+        "custom:mushroom-person-card", "custom:mushroom-update-card", "custom:mushroom-lock-card",
+        "custom:mushroom-media-player-card", "custom:mushroom-climate-card", "custom:mushroom-vacuum-card",
+        "custom:mushroom-humidifier-card", "custom:mushroom-number-card", "custom:mushroom-select-card",
+        "custom:mushroom-alarm-control-panel-card",
+    )
+
+    fun of(card: CardConfig, state: (CardConfig) -> EntityState? = { null }): Double {
+        fun of(c: CardConfig): Double = of(c, state)
         val raw = card.raw
         fun has(key: String) = raw.has(key) && !raw.isNull(key)
         fun titled() = card.title != null
@@ -1249,8 +1280,21 @@ object HaCardSize {
             }
             "iframe" -> 1 + (raw.optString("aspect_ratio", "").replace("%", "").ifEmpty { "50" }.toDoubleOrNull() ?: 50.0) / 25
             "entity-filter" -> of(EntityFilterConfig.innerCard(card))
+            in MUSHROOM_BASE_CARDS -> mushroomSize(card, state(card)).toDouble()
             else -> intSize(card).toDouble()
         }
+    }
+
+    /**
+     * `MushroomBaseCard.getCardSize`: 1, one more for the vertical layout, one more for a row of controls (not in the
+     * horizontal layout, nor when they collapse).
+     */
+    private fun mushroomSize(card: CardConfig, s: EntityState?): Int {
+        val raw = card.raw
+        val layout = raw.optString("layout", "").ifEmpty { if (raw.optBoolean("vertical", false)) "vertical" else "default" }
+        val controls = layout != "horizontal" && !raw.optBoolean("collapsible_controls", false) &&
+            dev.glassworks.engine.vitro.ui.HaGridSize.mushroomHasControls(card.type, raw, s)
+        return 1 + (if (layout == "vertical") 1 else 0) + (if (controls) 1 else 0)
     }
 
     private fun intSize(card: CardConfig): Int {

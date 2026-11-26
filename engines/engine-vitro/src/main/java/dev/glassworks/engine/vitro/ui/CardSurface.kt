@@ -167,6 +167,12 @@ class VitroCardContext(
      */
     val islandFailed: (card: CardConfig, reason: String) -> Unit = { _, _ -> },
     /**
+     * A native `custom:auto-entities` [card] matched a row (or card) Vitro doesn't draw natively ([reason] names it,
+     * [dev.glassworks.engine.vitro.compat.WebFallback.matchedReason]): its view goes to HA's frontend, as for
+     * [needsFrontend]. Main thread. The default (tests, no engine) does nothing.
+     */
+    val matchedNeedFrontend: (card: CardConfig, reason: String) -> Unit = { _, _ -> },
+    /**
      * Whether the page's connection to Home Assistant is up now: what a web island's `hass.connected` says. The
      * default (tests, no engine) is up.
      */
@@ -263,6 +269,7 @@ class VitroCardContext(
         touch = touch,
         needsFrontend = needsFrontend,
         islandFailed = islandFailed,
+        matchedNeedFrontend = matchedNeedFrontend,
         haConnected = haConnected,
         haConnectionEpoch = haConnectionEpoch,
         watchConnection = watchConnection,

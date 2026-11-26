@@ -5,13 +5,10 @@
 package dev.glassworks.engine.vitro
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.Application
-import android.content.DialogInterface
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
 import dev.glassworks.engine.vitro.cards.GlanceCardView
@@ -51,6 +48,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.TimeZone
+import kotlin.math.roundToInt
 
 /**
  * Plain configs, made only of options Vitro declares (`native-options.json`), that drew differently from HA
@@ -210,6 +208,29 @@ class PlainConfigParityTest {
         assertTrue("chip " + texts(chips), "On" in texts(chips))
     }
 
+    @Test fun anEntityCardTallerThanItsContentSpreadsItAsHaCardsSpaceBetween() {
+        // hui-entity-card's ha-card: height 100%, a column with justify-content: space-between over the header, .info
+        // and .footer. In a 2-row section slot (120 px) the value line sits half the spare height lower than right under
+        // the header (#928: it was ~12 px high); in a masonry column, at its own height, nothing moves.
+        put("sensor.ink", "74", "unit_of_measurement" to "%", "friendly_name" to "Ink")
+        val entity = dev.glassworks.engine.vitro.cards.EntityCardView(ctx(), card("""{"type": "entity", "entity": "sensor.ink"}"""))
+        idle()
+        val dp = activity.resources.displayMetrics.density
+        val w = View.MeasureSpec.makeMeasureSpec((246 * dp).roundToInt(), View.MeasureSpec.EXACTLY)
+        val value = all(entity).filterIsInstance<TextView>().single { it.text.toString() == "74" }
+        fun topIn(v: View): Int { var t = 0; var c: View = v; while (c !== entity) { t += c.top; c = c.parent as View }; return t }
+        entity.measure(w, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val natural = entity.measuredHeight
+        entity.layout(0, 0, entity.measuredWidth, natural)
+        val atNatural = topIn(value)
+        // A slot 40 px taller than the content (the corpus's 120 px slot is the parity harness's; this sandbox's fonts
+        // differ in height).
+        val tall = natural + (40 * dp).roundToInt()
+        entity.measure(w, View.MeasureSpec.makeMeasureSpec(tall, View.MeasureSpec.EXACTLY))
+        entity.layout(0, 0, entity.measuredWidth, tall)
+        assertEquals((tall - natural) / 2f, (topIn(value) - atNatural).toFloat(), 1.5f)
+    }
+
     @Test fun stateDisplayAddsAnAttributeThatIsSetAndNotZeroInAnyState() {
         // HA's state-display (the tile, view badges): `cover: [state, current_position]`, `fan: percentage`,
         // `light: brightness`, each attribute left out when it is null or 0.
@@ -298,20 +319,20 @@ class PlainConfigParityTest {
         idle()
         assertEquals("config/entity_registry/get", ws.single().getString("type"))
         assertTrue("no call before the code", calls.isEmpty())
-        val dialog = HaCodeDialog.lastShown
-        assertNotNull("the code dialog", dialog)
-        // No code typed: submit can't be pressed, and pressing it anyway sends nothing.
-        assertFalse(dialog!!.getButton(DialogInterface.BUTTON_POSITIVE).isEnabled)
-        dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
-        idle()
-        assertTrue("no empty code sent", calls.isEmpty())
-        all(dialog.window!!.decorView).filterIsInstance<EditText>().single().setText("1234")
-        assertTrue(dialog.getButton(DialogInterface.BUTTON_POSITIVE).isEnabled)
-        dialog.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        assertNotNull("the code dialog", HaCodeDialog.lastShown)
+        val dialog = HaCodeDialog.lastView!!
+        // HA's dialog-enter-code for a number code: the keypad, titled and submitted with "Arm".
+        assertTrue(dialog.numeric)
+        assertTrue("Arm" in texts(dialog))
+        assertEquals("Arm", dialog.keys.getValue("submit").contentDescription)
+        "1234".forEach { dialog.keys.getValue(it.toString()).performClick() }
+        assertEquals("1234", dialog.code)
+        dialog.keys.getValue("submit").performClick()
         idle()
         val (domain, service, data) = calls.single()
         assertEquals("alarm_control_panel" to "alarm_arm_away", domain to service)
         assertEquals("1234", data!!.getString("code"))
+        assertFalse("the dialog closed", HaCodeDialog.lastShown!!.isShowing)
     }
 
     @Test fun aDefaultCodeOrNoCodeRequiredSkipsTheDialog() {

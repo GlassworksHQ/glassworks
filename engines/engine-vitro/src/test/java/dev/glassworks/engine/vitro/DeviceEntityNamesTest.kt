@@ -9,7 +9,9 @@ import android.app.Application
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
 import dev.glassworks.engine.vitro.cards.GaugeCardView
+import dev.glassworks.engine.vitro.cards.WeatherCardView
 import dev.glassworks.engine.vitro.cards.EntityCardView
 import dev.glassworks.engine.vitro.cards.ThermostatCardView
 import dev.glassworks.engine.vitro.data.EntityState
@@ -19,6 +21,8 @@ import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroCardContext
+import dev.glassworks.engine.vitro.ui.VitroView
+import org.junit.Assert.assertEquals
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -42,11 +46,15 @@ class DeviceEntityNamesTest {
         HaDisplay.applyDevices(JSONArray("""[{"id": "d1", "name": "Hallway"}]"""))
         HaDisplay.applyRegistry(JSONObject().put("entities", JSONArray("""[
             {"ei": "climate.hall", "di": "d1", "en": "Thermostat"},
-            {"ei": "sensor.hall_t", "di": "d1", "en": "Temperature"}
+            {"ei": "sensor.hall_t", "di": "d1", "en": "Temperature"},
+            {"ei": "alarm_control_panel.hall", "di": "d1", "en": "Alarm"},
+            {"ei": "weather.hall", "di": "d1", "en": "Forecast"}
         ]""")))
         store.putLocal(EntityState("climate.hall", "heat", mapOf("friendly_name" to "Hall thermostat", "temperature" to 20.0,
             "current_temperature" to 19.5, "hvac_modes" to listOf("off", "heat"), "min_temp" to 7, "max_temp" to 35)))
         store.putLocal(EntityState("sensor.hall_t", "19.5", mapOf("friendly_name" to "Hall temperature", "unit_of_measurement" to "°C")))
+        store.putLocal(EntityState("alarm_control_panel.hall", "disarmed", mapOf("friendly_name" to "Hall alarm", "code_format" to "number")))
+        store.putLocal(EntityState("weather.hall", "sunny", mapOf("friendly_name" to "Hall forecast", "temperature" to 18.0, "temperature_unit" to "°C")))
     }
 
     @After
@@ -77,5 +85,20 @@ class DeviceEntityNamesTest {
         assertTrue(gauge.toString(), "Hallway Temperature" in gauge)
         // A configured name still wins.
         assertTrue("Hall" in texts(ThermostatCardView(ctx(), card("""{"type": "thermostat", "entity": "climate.hall", "name": "Hall"}"""))))
+    }
+
+    @Test
+    fun theAlarmPanelWeatherAndBadgesNameTheDeviceThenTheEntity() {
+        // HA's hui-alarm-panel-card, hui-weather-forecast-card and hui-entity-badge all call formatEntityName with the
+        // config's name, so with none they draw the device and entity names, not the friendly name.
+        val alarm = texts(AlarmPanelCardView(ctx(), card("""{"type": "alarm-panel", "entity": "alarm_control_panel.hall"}""")))
+        assertTrue(alarm.toString(), "Hallway Alarm" in alarm)
+        val weather = texts(WeatherCardView(ctx(), card("""{"type": "weather-forecast", "entity": "weather.hall", "show_forecast": false}""")))
+        assertTrue(weather.toString(), "Hallway Forecast" in weather)
+        val badge = card("""{"type": "entity", "entity": "sensor.hall_t", "show_name": true}""")
+        assertEquals("Hallway Temperature", VitroView.badgeLines(badge, store["sensor.hall_t"]).first)
+        assertTrue(VitroView.badgeText(badge, store["sensor.hall_t"]).startsWith("Hallway Temperature · "))
+        // A configured name still wins.
+        assertTrue("Hall" in texts(AlarmPanelCardView(ctx(), card("""{"type": "alarm-panel", "entity": "alarm_control_panel.hall", "name": "Hall"}"""))))
     }
 }
