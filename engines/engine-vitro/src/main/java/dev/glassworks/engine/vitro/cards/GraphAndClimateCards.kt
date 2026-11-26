@@ -18,7 +18,10 @@ import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.Rect
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
@@ -1143,9 +1146,26 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     /** Fills the line under the temperature from the entity's state and [forecast] (set by the init block). */
     private var updateMetric: () -> Unit = {}
 
+    /** HA's weather-forecast card warns while its entity is unavailable; clock-weather-card (same view) doesn't. */
+    private val warnsUnavailable = config.type == "weather-forecast"
+
+    /** The conditions and the forecast; hidden while [unavailable]. */
+    private val body = LinearLayout(ctx.context)
+
+    /**
+     * HA's `ha-card.unavailable`: "Entity is currently unavailable: <name> (<entity>)" in 16 px, centered in a
+     * 100 px card (`height: 100px; padding: 10px 20px`), whatever its grid slot's height ([UnavailableSurface]).
+     */
+    private val unavailableText = label(ctx, 16f, ctx.theme.primaryTextColor).apply {
+        gravity = Gravity.CENTER
+        visibility = GONE
+        setPadding(ctx.px(20f), ctx.px(10f), ctx.px(20f), ctx.px(10f))
+    }
+    private var unavailable = false
+
     init {
         // hui-weather-forecast-card: 16 px around; the current conditions centered in the card's height.
-        val col = LinearLayout(ctx.context).apply {
+        val col = body.apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ctx.px(16f), ctx.px(16f), ctx.px(16f), ctx.px(16f))
         }
@@ -1197,6 +1217,8 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             col.addView(forecastRow, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = ctx.px(12f) })
         }
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL))
+        // The 100 px box is the card's border box: the text centers in what's inside the border.
+        addView(unavailableText, LayoutParams(MATCH_PARENT, ctx.px(UNAVAILABLE_DP) - 2 * (ctx.theme.cardBorderWidthDp * ctx.dp).toInt(), Gravity.TOP))
 
         val eid = config.entity
         if (eid != null) {
@@ -1205,6 +1227,13 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             bindHoldAction(holdFor(config.raw, eid), eid)
             observe(eid) { s ->
                 val state = s?.state.orEmpty()
+                setUnavailable(warnsUnavailable && state == "unavailable")
+                if (unavailable) {
+                    unavailableText.text = HaText.ui(
+                        "ui.panel.lovelace.warning.entity_unavailable",
+                        "entity" to "${config.name ?: s?.friendlyName ?: eid} ($eid)",
+                    )
+                }
                 icon.setCondition(state)
                 // HA's formatEntityState: the weather domain's own words, in the user's language.
                 condition.text = s?.let { HaDisplay.stateLabel(it) }?.takeIf { it.isNotEmpty() && it != state } ?: conditionLabel(state)
@@ -1250,16 +1279,7 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
      * these two with their icon.
      */
     private fun showMetric(s: EntityState?, unit: String, metric: TextView, icon: MdiIconView, row: View) {
-        val today = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_MONTH)
-        var high: Double? = null
-        var low: Double? = null
-        for (day in forecast) {
-            val date = parseIso(day.datetime) ?: break
-            if (java.util.Calendar.getInstance().apply { time = date }.get(java.util.Calendar.DAY_OF_MONTH) != today) break
-            day.temperature?.let { t -> if (high == null || t > high!!) high = t }
-            val l = day.templow ?: day.temperature
-            if (l != null && (low == null || l < low!!)) low = l
-        }
+        val (high, low) = extrema(forecast, ctx.now())
         val text: String
         var iconName: String? = null
         // A humidity an integration reports as text ("55", or a word) is a number only if it reads as one: no cast
@@ -1328,7 +1348,50 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             tall = t
             applySize()
         }
+        if (unavailable && MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.EXACTLY) {
+            // Sized by its content (masonry): the 100 px card, as HA's.
+            super.measureCard(widthMeasureSpec, MeasureSpec.makeMeasureSpec(ctx.px(UNAVAILABLE_DP), MeasureSpec.EXACTLY))
+            return
+        }
         super.measureCard(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    override fun layoutCard(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.layoutCard(changed, left, top, right, bottom)
+        fitSurface()
+    }
+
+    private fun setUnavailable(on: Boolean) {
+        if (on == unavailable) return
+        unavailable = on
+        body.visibility = if (on) GONE else VISIBLE
+        unavailableText.visibility = if (on) VISIBLE else GONE
+        requestLayout()
+    }
+
+    /**
+     * A grid slot taller than 100 px keeps its height (HA's `hui-card` fills it), but the card's surface, border and
+     * outline end 100 px down, as `ha-card.unavailable`'s `height: 100px` does: the theme's (or card-mod's) surface
+     * drawn inset from the bottom. Back to the whole slot once the entity is available.
+     */
+    private fun fitSurface() {
+        val bg = background
+        val base = (bg as? UnavailableSurface)?.surface ?: bg
+        val inset = if (unavailable) height - ctx.px(UNAVAILABLE_DP) else 0
+        if (inset <= 0 || base == null) {
+            if (bg is UnavailableSurface) background = base
+            return
+        }
+        if (bg is UnavailableSurface && bg.inset == inset) return
+        background = UnavailableSurface(base, inset)
+    }
+
+    /** [surface] drawn [inset] px short of the bottom; adds no padding to the card (an [InsetDrawable] would). */
+    private class UnavailableSurface(val surface: Drawable, val inset: Int) : InsetDrawable(surface, 0, 0, 0, inset) {
+        override fun getPadding(padding: Rect): Boolean {
+            padding.set(0, 0, 0, 0)
+            return false
+        }
     }
 
     private fun applySize() {
@@ -1345,6 +1408,35 @@ class WeatherCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     }
 
     companion object {
+        /** `ha-card.unavailable`'s height. */
+        private const val UNAVAILABLE_DP = 100f
+
+        /**
+         * HA's `getWeatherExtrema` (`data/weather.ts`): today's high and low over the forecast's first entries that
+         * fall on today ([nowMs]'s day of the month, in the device's time zone as the browser's `getDate()`), stopping at
+         * the first that doesn't. JavaScript's falsy checks are kept: a 0 °C high or low counts as none, as in HA, and
+         * an entry without a `templow` (or with 0) offers its temperature as the low.
+         */
+        internal fun extrema(forecast: List<ForecastDay>, nowMs: Long): Pair<Double?, Double?> {
+            val cal = java.util.Calendar.getInstance()
+            cal.timeInMillis = nowMs
+            val today = cal.get(java.util.Calendar.DAY_OF_MONTH)
+            var high: Double? = null
+            var low: Double? = null
+            fun unset(v: Double?) = v == null || v == 0.0 || v.isNaN()
+            for (day in forecast) {
+                val date = parseIso(day.datetime) ?: break
+                cal.time = date
+                if (cal.get(java.util.Calendar.DAY_OF_MONTH) != today) break
+                val t = day.temperature
+                if (t != null && (unset(high) || t > high!!)) high = t
+                val tl = day.templow
+                if (tl != null && (unset(low) || tl < low!!)) low = tl
+                if (unset(tl) && t != null && (unset(low) || t < low!!)) low = t
+            }
+            return high.takeUnless { unset(it) } to low.takeUnless { unset(it) }
+        }
+
         /** HA's English condition names, until the weather domain's translations are in. */
         fun conditionLabel(state: String): String = when (state) {
             "clear-night" -> "Clear, night"

@@ -6,7 +6,7 @@
  },
  "mirror/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; weather high/low, glance lock color, tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
+  "reason": "Sections dashboard: placement matches; the tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
  },
  "mirror/entities-secondary-info": {
   "owner": "#799",
@@ -22,7 +22,7 @@
  },
  "mirror/markdown-cardmod": {
   "owner": "#799",
-  "reason": "Markdown with card-mod: the thin 21.4° is drawn larger and heavier than HA's (found by the region check)"
+  "reason": "Markdown with card-mod: HA's reference draws the 56 px weight-300 '21.4°' in Inter Thin, because the capture host's Chromium maps every weight under 400 of its installed static Inter 4 to Thin (measured 121.72 px wide at 100, 200 and 300); Vitro draws Inter Light, as a page with HA's fonts would. A capture-host artifact (the capture serves no Inter), not a Vitro bug: needs the capture to serve a pinned Inter"
  },
  "mirror/more-info-vacuum-cleaning": {
   "owner": "#799",
@@ -36,10 +36,6 @@
   "owner": "#799",
   "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
  },
- "mirror/todo-list": {
-  "owner": "#799",
-  "reason": "To-do list: a completed item's due date is orange in Vitro and grey in HA (found by the region check)"
- },
  "mirror/view-string-badges": {
   "owner": "#799",
   "reason": "Sections view: the badge row and the section under it sit about 5 px higher than HA's (hui-view-header's layout, listed in #928, not fixed there); the badges' names, states and icons match"
@@ -50,7 +46,7 @@
  },
  "s1/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; weather high/low, glance lock color, tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
+  "reason": "Sections dashboard: placement matches; the tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
  },
  "s1/entities-secondary-info": {
   "owner": "#799",
@@ -71,22 +67,6 @@
  "s1/m-alarm-panel-alarm-control-panel-unavailable": {
   "owner": "#799",
   "reason": "Alarm panel, unavailable: Disarm matches HA now; the 'Unavailable' chip is a lighter grey than HA's"
- },
- "s1/m-button-light-unavailable": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-button-lock-locked": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-button-lock-unlocked": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-button-state-light-unavailable": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
  },
  "s1/m-entities-alarm": {
   "owner": "#926",
@@ -175,18 +155,6 @@
  "s1/m-entity-weather-sunny": {
   "owner": "#928",
   "reason": "Entity card: the value line sits ~12 px higher than HA's, and a light shows the tile's '80%' where HA's formatEntityState says 'On'; icons of unavailable entities are blue where HA's are grey"
- },
- "s1/m-glance-light": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-glance-lock": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
- },
- "s1/m-glance-sensor": {
-  "owner": "#799",
-  "reason": "State colors on button and glance icons: HA colors a locked lock green, an unlocked or jammed one red and an unavailable entity grey (stateColorCss); Vitro draws them blue"
  },
  "s1/m-media-control-media-player-paused": {
   "owner": "#799",
@@ -288,37 +256,13 @@
   "owner": "#927",
   "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
  },
- "s1/m-weather-current-weather-unavailable": {
-  "owner": "#799",
-  "reason": "Weather forecast, unavailable: HA replaces the card with the 'Entity is currently unavailable' warning; Vitro draws an empty forecast"
- },
- "s1/m-weather-forecast-weather-clear-night": {
-  "owner": "#799",
-  "reason": "Weather forecast: HA shows today's high/low under the temperature; Vitro shows the precipitation (as the baselined weather-forecast)"
- },
- "s1/m-weather-forecast-weather-rainy": {
-  "owner": "#799",
-  "reason": "Weather forecast: HA shows today's high/low under the temperature; Vitro shows the precipitation (as the baselined weather-forecast)"
- },
- "s1/m-weather-forecast-weather-sunny": {
-  "owner": "#799",
-  "reason": "Weather forecast: HA shows today's high/low under the temperature; Vitro shows the precipitation (as the baselined weather-forecast)"
- },
- "s1/m-weather-forecast-weather-unavailable": {
-  "owner": "#799",
-  "reason": "Weather forecast, unavailable: HA replaces the card with the 'Entity is currently unavailable' warning; Vitro draws an empty forecast"
- },
  "s1/markdown-cardmod": {
   "owner": "#799",
-  "reason": "Markdown with card-mod: the thin 21.4° is drawn larger and heavier than HA's (found by the region check)"
+  "reason": "Markdown with card-mod: HA's reference draws the 56 px weight-300 '21.4°' in Inter Thin, because the capture host's Chromium maps every weight under 400 of its installed static Inter 4 to Thin (measured 121.72 px wide at 100, 200 and 300); Vitro draws Inter Light, as a page with HA's fonts would. A capture-host artifact (the capture serves no Inter), not a Vitro bug: needs the capture to serve a pinned Inter"
  },
  "s1/mushroom-light-horizontal": {
   "owner": "#799",
   "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
- },
- "s1/todo-list": {
-  "owner": "#799",
-  "reason": "To-do list: a completed item's due date is orange in Vitro and grey in HA (found by the region check)"
  },
  "s1/view-string-badges": {
   "owner": "#799",
@@ -334,7 +278,7 @@
  },
  "tablet/d-sections-home": {
   "owner": "#799",
-  "reason": "Sections dashboard: placement matches; weather high/low, glance lock color, tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
+  "reason": "Sections dashboard: placement matches; the tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
  },
  "tablet/entities-secondary-info": {
   "owner": "#799",
@@ -354,15 +298,11 @@
  },
  "tablet/markdown-cardmod": {
   "owner": "#799",
-  "reason": "Markdown with card-mod: the thin 21.4° is drawn larger and heavier than HA's (found by the region check)"
+  "reason": "Markdown with card-mod: HA's reference draws the 56 px weight-300 '21.4°' in Inter Thin, because the capture host's Chromium maps every weight under 400 of its installed static Inter 4 to Thin (measured 121.72 px wide at 100, 200 and 300); Vitro draws Inter Light, as a page with HA's fonts would. A capture-host artifact (the capture serves no Inter), not a Vitro bug: needs the capture to serve a pinned Inter"
  },
  "tablet/mushroom-light-horizontal": {
   "owner": "#799",
   "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
- },
- "tablet/todo-list": {
-  "owner": "#799",
-  "reason": "To-do list: a completed item's due date is orange in Vitro and grey in HA (found by the region check)"
  },
  "tablet/view-string-badges": {
   "owner": "#799",

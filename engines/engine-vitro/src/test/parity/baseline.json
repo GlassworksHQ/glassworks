@@ -183,13 +183,6 @@
   "missingText": 0,
   "reason": "the long name 'Hallway Ceiling Light Hallway Ceiling Ring' cut by an ellipsis in both; Vitro's text run sits 1 px higher and its cut lands 2 px earlier (s1/Mirror at 1.5x; the tablet matches) (2026-11-25, fake HA)"
  },
- "mirror/weather-forecast": {
-  "pixel": 0.0126,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 3,
-  "reason": "HA shows today's high/low ('14.7 °C / 9.1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation ('0.4 mm') there. The rest of the card matches (2026-11-25, fake HA)"
- },
  "s1/bar-card": {
   "pixel": 0.4149,
   "bounds": 44.1,
@@ -279,13 +272,6 @@
   "missingText": 1,
   "region": 0.13,
   "reason": "s1 only: Vitro ends 'Reading Lamp Reading' with an ellipsis in the 2-column tile where HA's 146 CSS px run just fits; one name, the rest matches (2026-11-25, fake HA)"
- },
- "s1/locale-de-weather-forecast": {
-  "pixel": 0.0133,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 3,
-  "reason": "as weather-forecast: HA shows today's high/low ('14,7 °C / 9,1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation there. The German condition ('Bewölkt'), weekday names and decimal-comma numbers match (2026-11-25, fake HA)"
  },
  "s1/locale-fr-clock": {
   "pixel": 0.0211,
@@ -465,13 +451,6 @@
   "missingText": 0,
   "reason": "the long name 'Hallway Ceiling Light Hallway Ceiling Ring' cut by an ellipsis in both; Vitro's text run sits 1 px higher and its cut lands 2 px earlier (s1/Mirror at 1.5x; the tablet matches) (2026-11-25, fake HA)"
  },
- "s1/weather-forecast": {
-  "pixel": 0.0126,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 3,
-  "reason": "HA shows today's high/low ('14.7 °C / 9.1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation ('0.4 mm') there. The rest of the card matches (2026-11-25, fake HA)"
- },
  "tablet/bar-card": {
   "pixel": 0.4161,
   "bounds": 43.8,
@@ -525,13 +504,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "tablet only (s1 and Mirror match): each badge's text run is about one device px wider than HA's and the 8 px gaps round up, so the three badges drift up to 3 px left of HA's; icons, colors, texts and the row's height match (2026-11-26, fake HA)"
- },
- "tablet/locale-de-weather-forecast": {
-  "pixel": 0.0145,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 3,
-  "reason": "as weather-forecast: HA shows today's high/low ('14,7 °C / 9,1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation there. The German condition ('Bewölkt'), weekday names and decimal-comma numbers match (2026-11-25, fake HA)"
  },
  "tablet/logbook-user": {
   "pixel": 0.007,
@@ -612,12 +584,5 @@
   "missingText": 0,
   "region": 0.48,
   "reason": "Mushroom's person card with use_entity_picture: HA draws the person's picture in the icon circle with the home badge; Vitro draws the plain account icon (the picture isn't loaded) (2026-11-25, fake HA)"
- },
- "tablet/weather-forecast": {
-  "pixel": 0.0137,
-  "bounds": 0,
-  "font": 0,
-  "missingText": 3,
-  "reason": "HA shows today's high/low ('14.7 °C / 9.1 °C') under the temperature when the forecast holds today; Vitro shows the precipitation ('0.4 mm') there. The rest of the card matches (2026-11-25, fake HA)"
  }
 }

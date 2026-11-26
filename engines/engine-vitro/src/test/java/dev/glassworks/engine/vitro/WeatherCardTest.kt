@@ -13,11 +13,13 @@ import dev.glassworks.engine.vitro.cards.WeatherCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.ForecastDay
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -51,14 +53,19 @@ class WeatherCardTest {
         return all(card).filterIsInstance<TextView>().filter(::shown).map { it.text.toString() }
     }
 
-    private fun card(attributes: Map<String, Any?>, config: String = """{"type": "weather-forecast", "entity": "weather.home"}"""): WeatherCardView {
+    private fun card(
+        attributes: Map<String, Any?>,
+        config: String = """{"type": "weather-forecast", "entity": "weather.home"}""",
+        state: String = "sunny",
+        now: () -> Long = System::currentTimeMillis,
+    ): WeatherCardView {
         val store = EntityStore()
-        store.putLocal(EntityState("weather.home", "sunny", mapOf("temperature" to 12.2, "temperature_unit" to "°C", "humidity" to 76) + attributes))
+        store.putLocal(EntityState("weather.home", state, mapOf("temperature" to 12.2, "temperature_unit" to "°C", "humidity" to 76) + attributes))
         val ctx = VitroCardContext(
             context = activity, haBase = FakeHaServer.BASE, store = store,
             theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
             accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
-            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} }, now = now,
         )
         return WeatherCardView(ctx, LovelaceParser.parseCard(JSONObject(config)))
     }
@@ -93,9 +100,66 @@ class WeatherCardTest {
         assertFalse(ended)
     }
 
-    private fun iso(daysFromNow: Int): String {
-        val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, daysFromNow); set(Calendar.HOUR_OF_DAY, 12) }
+    private fun iso(daysFromNow: Int, from: Long = System.currentTimeMillis()): String {
+        val c = Calendar.getInstance().apply { timeInMillis = from; add(Calendar.DAY_OF_MONTH, daysFromNow); set(Calendar.HOUR_OF_DAY, 12) }
         return SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US).format(c.time).let { it.substring(0, 22) + ":" + it.substring(22) }
+    }
+
+    @Test
+    fun todayIsTheCardsNowNotTheDevicesClock() {
+        // The card's clock (the harness's fixed instant; on a panel the same as the device's) decides which forecast
+        // entries are today's: a forecast for a day 40 days off still shows its high and low on that day.
+        val then = System.currentTimeMillis() + 40L * 86_400_000L
+        val forecast = listOf(
+            mapOf("datetime" to iso(0, then), "condition" to "sunny", "temperature" to 14.7, "templow" to 9.1, "precipitation" to 0.4),
+            mapOf("datetime" to iso(1, then), "condition" to "rainy", "temperature" to 12.5, "templow" to 8.7, "precipitation" to 6.1),
+        )
+        val shown = texts(card(mapOf("forecast" to forecast, "precipitation_unit" to "mm"), now = { then }))
+        assertTrue(shown.toString(), "14.7 °C / 9.1 °C" in shown)
+        assertTrue(shown.toString(), shown.none { "0.4" in it })
+    }
+
+    @Test
+    fun extremaKeepHasFalsyChecks() {
+        val now = System.currentTimeMillis()
+        fun day(n: Int, t: Double?, low: Double?) = ForecastDay(iso(n, now), "sunny", t, low, null, null)
+        // Today's entries only, up to the first that isn't today.
+        assertEquals(15.0 to 3.0, WeatherCardView.extrema(listOf(day(0, 12.0, 3.0), day(0, 15.0, 5.0), day(1, 30.0, -9.0)), now))
+        // No templow: the temperature is the low.
+        assertEquals(12.0 to 7.0, WeatherCardView.extrema(listOf(day(0, 12.0, null), day(0, 7.0, null)), now))
+        // A 0 °C high or low is "none" in HA's JavaScript (`!tempHigh`), so it never shows.
+        assertEquals(null to 4.0, WeatherCardView.extrema(listOf(day(0, 0.0, 4.0)), now))
+        // A forecast that starts tomorrow has no extrema at all.
+        assertEquals(null to null, WeatherCardView.extrema(listOf(day(1, 12.0, 3.0)), now))
+    }
+
+    @Test
+    fun anUnavailableForecastCardShowsHasWarningInA100pxCard() {
+        HaText.install("en", mapOf("ui.panel.lovelace.warning.entity_unavailable" to "Entity is currently unavailable: {entity}"))
+        try {
+            val card = card(mapOf("friendly_name" to "Home"), state = "unavailable")
+            ShadowLooper.idleMainLooper()
+            assertEquals(listOf("Entity is currently unavailable: Home (weather.home)"), texts(card))
+            // Sized by its content (masonry), the card is 100 px tall, as `ha-card.unavailable`.
+            val dp = activity.resources.displayMetrics.density
+            card.measure(View.MeasureSpec.makeMeasureSpec((500 * dp).toInt(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            assertEquals((100 * dp).toInt(), card.measuredHeight)
+            // In a taller grid slot it keeps the slot, but its surface ends 100 px down.
+            val tall = (248 * dp).toInt()
+            card.measure(View.MeasureSpec.makeMeasureSpec((500 * dp).toInt(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(tall, View.MeasureSpec.EXACTLY))
+            card.layout(0, 0, card.measuredWidth, card.measuredHeight)
+            assertEquals(tall, card.height)
+            // The view sets its background's bounds to its own size when it draws.
+            val bg = card.background as android.graphics.drawable.InsetDrawable
+            bg.setBounds(0, 0, card.width, card.height)
+            val bounds = bg.drawable!!.bounds
+            assertEquals((100 * dp).toInt(), bounds.height())
+            // clock-weather-card (drawn by the same view) has no such warning.
+            val clock = card(mapOf("friendly_name" to "Home"), """{"type": "custom:clock-weather-card", "entity": "weather.home"}""", state = "unavailable")
+            assertTrue(texts(clock).toString(), texts(clock).none { "unavailable:" in it })
+        } finally {
+            HaText.reset()
+        }
     }
 
     @Test
