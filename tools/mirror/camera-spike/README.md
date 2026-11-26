@@ -33,7 +33,7 @@ Each run is one fresh camera session. `run.sh <name>` passes `--es name <name>`;
 | `fps` | `lower,upper`, e.g. `15,15`, or `template` | Camera2's AE target fps range, instead of the highest-floor range that tops out at 30; `template` keeps the request template's own range (the log prints it either way) |
 | `fmt` | a color format | `c1enc`'s encoder input format, instead of YUV420SemiPlanar |
 
-The commands behind the note's table, in the order they ran on 2026-11-25. The spike grew during the session (the
+The commands behind the note's table, in the order they ran. The spike grew during the session (the
 first runs came before the `disp` extra, with the SurfaceTexture target it now defaults to); with this source, these
 commands give each run's settings:
 

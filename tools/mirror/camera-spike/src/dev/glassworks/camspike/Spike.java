@@ -231,6 +231,7 @@ public class Spike extends Activity {
         final Camera c = cam[0];
         final Enc[] encOut = {null};
         final SurfaceTexture[] stOut = {null};
+        final GlConsumer[] glOut = {null};
         try {
             c.setErrorCallback(new Camera.ErrorCallback() { public void onError(int e, Camera cc) { p("camera error " + e); }});
             Camera.Parameters prm = c.getParameters();
@@ -245,7 +246,8 @@ public class Spike extends Activity {
             String disp = previewTarget == null ? "st" : previewTarget;
             p("preview target: " + disp);
             if (disp.equals("gl")) {
-                st0 = GlConsumer.start(this);
+                glOut[0] = GlConsumer.start(this);
+                st0 = glOut[0].texture;
                 c.setPreviewTexture(st0);
             } else if (disp.equals("ir")) {
                 final ImageReader ir = ImageReader.newInstance(W, H, ImageFormat.YUV_420_888, 4);
@@ -265,7 +267,7 @@ public class Spike extends Activity {
                 c.setPreviewTexture(st0);
             }
             final SurfaceTexture st = st0;
-            stOut[0] = st;
+            if (glOut[0] == null) stOut[0] = st; // the GL consumer frees its own
 
             Enc enc0 = null;
             if (encode) {
@@ -319,6 +321,7 @@ public class Spike extends Activity {
             released.await(5, TimeUnit.SECONDS);
             if (encOut[0] != null) encOut[0].stop();
             if (stOut[0] != null) stOut[0].release();
+            if (glOut[0] != null) glOut[0].close();
             ht.quitSafely();
         }
     }
