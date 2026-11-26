@@ -10,6 +10,10 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const SOURCE = readFileSync(process.env.ISLAND_MODULE, 'utf8');
+// The same page made before the panel had Home Assistant's config (`hass.config` empty).
+const SOURCE_NO_CONFIG = process.env.ISLAND_MODULE_NO_CONFIG ? readFileSync(process.env.ISLAND_MODULE_NO_CONFIG, 'utf8') : null;
+// The states the panel's bridge sends when it opens (its snapshot), unless a test says otherwise.
+const LAMP = { 'light.lounge': { entity_id: 'light.lounge', state: 'on', attributes: { friendly_name: 'Lounge' } } };
 const TYPES = readFileSync(process.env.HASS_TYPES, 'utf8');
 const TAG = 'acme-island-card';
 const STRINGS = {
@@ -34,7 +38,7 @@ async function settle() { for (let i = 0; i < 5; i++) await tick(); }
  * One island page: the module run in its own context, with [card] as the custom element (a class-like factory:
  * (el) => void sets up el). Returns the bridge and the page's globals.
  */
-async function openPage({ card, strings = STRINGS, height = 40, mountHeight } = {}) {
+async function openPage({ card, strings = STRINGS, height = 40, mountHeight, snapshot = LAMP, source = SOURCE } = {}) {
   const listeners = {};
   const sockets = [];
   let cardEl = null;
@@ -51,7 +55,12 @@ async function openPage({ card, strings = STRINGS, height = 40, mountHeight } = 
       this.readyState = 0;
       this.sent = [];
       sockets.push(this);
-      setTimeout(() => { this.readyState = 1; this.onopen && this.onopen(); }, 0);
+      setTimeout(() => {
+        this.readyState = 1;
+        if (this.onopen) this.onopen();
+        // What the panel sends a page whose bridge opens: the states it has (null: none yet).
+        if (snapshot) this.push({ type: 'snapshot', states: snapshot });
+      }, 0);
     }
     send(line) { for (const l of String(line).split('\n').filter(Boolean)) this.sent.push(JSON.parse(l)); }
     push(obj) { this.onmessage({ data: JSON.stringify(obj) + '\n' }); }
@@ -73,9 +82,13 @@ async function openPage({ card, strings = STRINGS, height = 40, mountHeight } = 
       whenDefined: (t) => (t === TAG ? Promise.resolve() : new Promise(() => {})),
     },
     document: {
-      getElementById: (id) => (id === 'mount' ? mount : null),
+      getElementById: (id) => (id === 'mount' ? mount : mount.children.find((c) => c.id === id) || null),
       createElement: (t) => {
-        const el = { localName: t, isConnected: false, drawn: false };
+        const el = {
+          localName: t, isConnected: false, drawn: false, children: [], attributes: {},
+          setAttribute(k, v) { this.attributes[k] = v; },
+          remove() { mount.children = mount.children.filter((c) => c !== this); this.isConnected = false; },
+        };
         el.getBoundingClientRect = () => ({ height: el.drawn ? height : 0 });
         if (t === TAG) { cardEl = el; card(el); }
         return el;
@@ -95,7 +108,7 @@ async function openPage({ card, strings = STRINGS, height = 40, mountHeight } = 
     throwInPage(err) { for (const fn of listeners.error || []) fn({ error: err }); },
     rejectInPage(err) { for (const fn of listeners.unhandledrejection || []) fn({ reason: err }); },
   };
-  vm.runInContext(SOURCE, sandbox, { filename: 'island-module.js' });
+  vm.runInContext(source, sandbox, { filename: 'island-module.js' });
   await settle();
   return page;
 }
@@ -514,4 +527,65 @@ test('Gecko\'s and Chromium\'s messages name the member', async () => {
     await tick(1600);
     assert.deepEqual(page.sent('cardBroken').map((m) => m.member), [member], message);
   }
+});
+
+// ---- What the card is made with (the panel's states and config first) ----
+
+test('the card is made once the panel\'s states are here, and an honest notice waits in its place', async () => {
+  const page = await openPage({ card: plainCard, snapshot: null, mountHeight: 48 });
+  assert.equal(page.card(), null, 'no card drawn with no states (it would say "Entity not found")');
+  await tick(8200);
+  const mount = page.sandbox.document.getElementById('mount');
+  assert.ok(mount.children.some((c) => c.id === 'vitro-waiting'), 'a notice, not a blank card');
+  assert.ok(page.sent('resize').length > 0, 'the notice takes its room');
+  page.ws().push({ type: 'snapshot', states: LAMP });
+  await settle();
+  assert.ok(page.card(), 'made when the states come');
+  assert.equal(page.card().got[0].states['light.lounge'].state, 'on', 'its first hass has them');
+});
+
+test('a page made before the config waits for it, and a card that reads hass.config.version draws', async (t) => {
+  if (!SOURCE_NO_CONFIG) return t.skip('no page without a config');
+  // Mushroom 5.3 compares hass.config.version on every render with the entity (mg -> ge(t.config.version, ...)).
+  const card = (el) => {
+    el.setConfig = () => {};
+    el.got = [];
+    Object.defineProperty(el, 'hass', {
+      set(h) { el.got.push(h); const [major] = h.config.version.split('.'); el.text = major + ' ' + h.states['light.lounge'].state; el.drawn = true; },
+      get() { return el.got[el.got.length - 1]; },
+    });
+  };
+  const page = await openPage({ card, source: SOURCE_NO_CONFIG });
+  assert.equal(page.card(), null, 'waiting for the config');
+  page.ws().push({ type: 'config', config: { version: '2026.11.0', unit_system: { temperature: '°C' } } });
+  await settle();
+  assert.equal(page.card().text, '2026 on');
+  assert.equal(page.hass().connection.haVersion, '2026.11.0');
+});
+
+test('a card the config never reaches is still made (HA without one draws it too)', async (t) => {
+  if (!SOURCE_NO_CONFIG) return t.skip('no page without a config');
+  const page = await openPage({ card: plainCard, source: SOURCE_NO_CONFIG });
+  await tick(3200);
+  assert.ok(page.card());
+});
+
+test('a card whose host is inline but whose content drew is not blank', async () => {
+  const card = (el) => {
+    el.setConfig = () => {};
+    // An inline custom element around a block ha-card in its shadow root: the host measures 0 px.
+    el.shadowRoot = { children: [{ localName: 'style', getBoundingClientRect: () => ({ height: 0 }) }, { localName: 'ha-card', getBoundingClientRect: () => ({ height: 56 }) }] };
+    Object.defineProperty(el, 'hass', { set() {} });
+  };
+  const page = await openPage({ card });
+  page.throwInPage(new TypeError('e.hass.someNewMember is not a function'));
+  await tick(1700);
+  assert.deepEqual(page.sent('cardBroken'), []);
+});
+
+test('a card whose every update fails on a missing member goes to HA\'s frontend, drawn or not', async () => {
+  const page = await openPage({ card: plainCard });
+  for (let i = 0; i < 3; i++) page.rejectInPage(new TypeError("Cannot read properties of undefined (reading 'split')"));
+  await settle();
+  assert.deepEqual(page.sent('cardBroken'), [{ type: 'cardBroken', member: 'split' }]);
 });

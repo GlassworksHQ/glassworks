@@ -241,6 +241,9 @@ class VitroEngine(
         private val haConnected: Boolean get() = connectedGeneration == clientGeneration
         private val connectionWatchers = java.util.concurrent.CopyOnWriteArraySet<(Boolean) -> Unit>()
 
+        /** The islands to tell when Home Assistant's config arrives ([VitroCardContext.watchConfig]). Any thread. */
+        private val configWatchers = java.util.concurrent.CopyOnWriteArraySet<(JSONObject) -> Unit>()
+
         /** The client ([clientGeneration]) whose connection is up, -1 when none is: a new client starts down. */
         @Volatile private var connectedGeneration = -1
 
@@ -748,6 +751,10 @@ class VitroEngine(
                         connectionWatchers += onChange
                         ({ connectionWatchers -= onChange })
                     },
+                    watchConfig = { onChange ->
+                        configWatchers += onChange
+                        ({ configWatchers -= onChange })
+                    },
                     pageStorage = { HaPageStorage.of(activity).items(haBase.ifEmpty { null }) },
                 )
             }
@@ -825,13 +832,17 @@ class VitroEngine(
             vitroView.showStatus("Connecting to Home Assistant…")
             client?.close()
             val generation = retireClient()
+            // Said once per client: the client asks for its token again every 30 s.
+            val withheldLogged = java.util.concurrent.atomic.AtomicBoolean(false)
             val wsClient = HaDashboardClient(
                 haBase = origin,
                 tokenProvider = { force, done ->
                     // The panel's token is for the Home Assistant it is set to: never hand it to another origin.
                     val allowed = configuredOrigin()
                     if (allowed != null && !VitroCardContext.sameOrigin(allowed, origin)) {
-                        Log.w(logTag, "Not sending the Home Assistant token to a dashboard on another origin than the panel's")
+                        if (withheldLogged.compareAndSet(false, true)) {
+                            Log.w(logTag, "Not sending the Home Assistant token to a dashboard on another origin than the panel's")
+                        }
                         done(null)
                     } else {
                         tokenProvider(force) { tok ->
@@ -1173,6 +1184,11 @@ class VitroEngine(
             // The islands' hass.user follows it as it arrives, which may be after the token (and after their connect).
             override fun onCurrentUser(user: JSONObject) {
                 if (generation == clientGeneration) tokenWatchers.forEach { runCatching { it() } }
+            }
+
+            // The islands' hass.config follows it: a page made before it arrived has none.
+            override fun onConfig(config: JSONObject) {
+                if (generation == clientGeneration) configWatchers.forEach { runCatching { it(config) } }
             }
 
             override fun onUserTheme(themeName: String?, dark: Boolean?) {

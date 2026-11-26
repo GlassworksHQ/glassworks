@@ -177,7 +177,7 @@ class IslandSessionsTest {
         assertEquals("theme", sent.first().getString("type"))
         assertTrue(sent.first().getBoolean("dark"))
         assertTrue("night's primary color", sent.first().getString("css").contains("#123456"))
-        assertEquals(listOf("theme", "auth", "conn", "snapshot"), sent.take(4).map { it.getString("type") })
+        assertEquals(listOf("theme", "auth", "conn", "config", "snapshot"), sent.take(5).map { it.getString("type") })
         assertOnePagePerIsland(p)
     }
 

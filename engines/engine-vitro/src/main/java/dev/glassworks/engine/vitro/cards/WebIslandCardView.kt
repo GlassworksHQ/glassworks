@@ -141,6 +141,9 @@ class WebIslandCardView(
     /** The connection watcher's handle: on for as long as the island is this card's, a move in the layout included. */
     @Volatile private var connectionWatch: (() -> Unit)? = null
 
+    /** The config watcher's handle ([VitroCardContext.watchConfig]), with the same lifetime. */
+    @Volatile private var configWatch: (() -> Unit)? = null
+
     /**
      * Whether the card picks its entities at runtime (`auto-entities` filters, `button-card` JS templates, a card
      * that names none up front): such a card follows every entity in the store, not only the ones it read.
@@ -193,6 +196,8 @@ class WebIslandCardView(
                         val up = ctx.haConnected()
                         sentConnected[send] = up
                         send(connMessage(up))
+                        // HA's config as the panel has it now: a page made before it arrived has none.
+                        ctx.haConfig().takeIf { it.length() > 0 }?.let { send(configMessage(it)) }
                         seedInitialStates(send)
                         registries?.let { send(registriesMessage(it)) }
                         senders += send
@@ -266,6 +271,12 @@ class WebIslandCardView(
                 // A change between the bridge's seed and the watcher above went unheard: where it is now. Idempotent:
                 // live subscriptions stay, waiting ones start, and a bridge told this already hears nothing.
                 synchronized(seedLock) { connectionChanged(ctx.haConnected()) }
+                configWatch = ctx.watchConfig { config ->
+                    synchronized(seedLock) {
+                        val msg = configMessage(config)
+                        senders.forEach { it(msg) }
+                    }
+                }
             } else {
                 server.unregisterSlot(id)
                 slotId = null
@@ -696,6 +707,8 @@ class WebIslandCardView(
     private fun endPageSubs() {
         connectionWatch?.invoke()
         connectionWatch = null
+        configWatch?.invoke()
+        configWatch = null
         val all = synchronized(seedLock) {
             sentConnected.clear()
             pageSubs.values.flatMap { it.values }.also { pageSubs.clear() }
@@ -767,6 +780,9 @@ class WebIslandCardView(
         internal fun panelUrlOf(pageUrl: String?): String =
             pageUrl?.let { runCatching { java.net.URI(it).path }.getOrNull() }
                 ?.trim('/')?.substringBefore('/')?.takeIf { it.isNotEmpty() } ?: "lovelace"
+
+        /** The bridge message with Home Assistant's config (`hass.config`). */
+        internal fun configMessage(config: JSONObject): JSONObject = JSONObject().put("type", "config").put("config", config)
 
         /** The bridge message that says whether the connection to Home Assistant is up (`hass.connected`). */
         internal fun connMessage(up: Boolean): JSONObject = JSONObject().put("type", "conn").put("connected", up)
@@ -841,7 +857,13 @@ class WebIslandCardView(
          */
         internal fun themeCss(ctx: VitroCardContext, fillViewport: Boolean): String {
             val vars = ctx.theme.toCssRootBlock()
-            return if (fillViewport) vars + "html:root { background-color: ${ctx.theme.hex(ctx.theme.backgroundColor)}; }\n" else vars
+            if (fillViewport) return vars + "html:root { background-color: ${ctx.theme.hex(ctx.theme.backgroundColor)}; }\n"
+            // An inline island on a view of one opaque color paints that color itself: what it shows at its edges
+            // (a card's rounded corners and ends) is then drawn by the page, never left half transparent for the
+            // panel to blend. Translucent edges came out light on the panel (Bubble Card's slider ends). On a picture
+            // or a gradient it stays transparent, so the view's background shows through.
+            val solid = (ctx.theme.background as? dev.glassworks.engine.vitro.theme.ThemeBackground.Solid)?.color
+            return if (solid != null && (solid ushr 24) == 0xFF) vars + "html:root { background-color: ${ctx.theme.hex(solid)}; }\n" else vars
         }
 
         /** The bridge message that replaces an island's `hass.entities`, `devices`, `areas` and `floors`. */
@@ -1496,7 +1518,7 @@ $resourceScripts
 <div id="mount"></div>
 <script type="module">
 const rawStates = {};
-const haConfig = $haCfgJson;
+let haConfig = $haCfgJson;
 const haUser = $haUserJson;
 const haLocale = $haLocaleJson;
 let accessToken = $tokenJson;
@@ -2116,11 +2138,18 @@ function connectBridge() {
         if (style && typeof m.css === 'string') style.textContent = m.css;
         hassBase.themes = Object.assign({}, hassBase.themes, { darkMode: !!m.dark, default_theme: String(m.name || '') });
         if (cardEl) cardEl.hass = makeHass();
+      } else if (m.type === 'config' && m.config && typeof m.config === 'object') {
+        // HA's config as the panel has it now (a page made before it arrived had none): hass.config follows it.
+        haConfig = m.config;
+        hassBase.config = haConfig;
+        if (Object.keys(haConfig).length) configArrived();
+        if (cardEl) cardEl.hass = makeHass();
       } else if (m.type === 'snapshot' && m.states) {
         // A (re)connect: the whole store, replacing what the island had.
         for (const id of Object.keys(rawStates)) delete rawStates[id];
         Object.assign(rawStates, m.states);
         statesView = null;
+        statesArrived();
         if (cardEl) cardEl.hass = makeHass();
       } else if (m.type === 'patch' && m.states) {
         for (const id of Object.keys(m.states)) {
@@ -2180,14 +2209,31 @@ function vitroMissingMember(err) {
 }
 // The card drew nothing: it isn't in the page, or it takes no room. The card, not #mount, which a full-viewport
 // island holds at the screen's height even when it's empty.
+// What the card drew: its own box, or its content's (a custom element is inline unless it says otherwise, and an
+// inline host around a block card measures nothing).
 function vitroCardBlank() {
   if (!cardEl || !cardEl.isConnected) return true;
-  return Math.ceil(cardEl.getBoundingClientRect().height || 0) <= 0;
+  const boxes = [cardEl].concat(cardEl.shadowRoot ? Array.from(cardEl.shadowRoot.children || []) : [], Array.from(cardEl.children || []));
+  return !boxes.some((el) => el && el.localName !== 'style' && el.getBoundingClientRect && Math.ceil(el.getBoundingClientRect().height || 0) > 0);
 }
+// Every update failing on the same missing member: the card shows what it drew before (HA's "Entity not found" from
+// a first render, say), never what it should. Handed over too, drawn or not.
+const BROKEN_REPEATS = 3;
+const BROKEN_REPEAT_MS = 10000;
+let brokenThrows = [];
 function vitroOnCardThrow(err) {
-  if (brokenSent || brokenTimer || !cardEl) return;
+  if (brokenSent || !cardEl) return;
   const member = vitroMissingMember(err);
   if (member === null) return;
+  const now = Date.now();
+  brokenThrows = brokenThrows.filter((t) => now - t < BROKEN_REPEAT_MS).concat([now]);
+  if (brokenThrows.length >= BROKEN_REPEATS) {
+    brokenSent = true;
+    if (brokenTimer) { clearTimeout(brokenTimer); brokenTimer = null; }
+    sendBridge({ type: 'cardBroken', member });
+    return;
+  }
+  if (brokenTimer) return;
   brokenTimer = setTimeout(() => {
     brokenTimer = null;
     if (brokenSent || !vitroCardBlank()) return;
@@ -2197,6 +2243,32 @@ function vitroOnCardThrow(err) {
 }
 window.addEventListener('error', (ev) => vitroOnCardThrow(ev && ev.error));
 window.addEventListener('unhandledrejection', (ev) => vitroOnCardThrow(ev && ev.reason));
+
+// The first states and config from the panel: the card is made once they're here, as HA's frontend draws a card
+// once hass has them. A card that drew first with no states would show HA's "Entity not found" for every entity.
+let statesIn = false;
+let statesWaiters = [];
+function statesArrived() { statesIn = true; statesWaiters.splice(0).forEach((done) => done()); }
+let configIn = Object.keys(haConfig || {}).length > 0;
+let configWaiters = [];
+function configArrived() { configIn = true; configWaiters.splice(0).forEach((done) => done()); }
+const untilStates = () => (statesIn ? Promise.resolve() : new Promise((done) => statesWaiters.push(done)));
+const untilConfig = () => (configIn ? Promise.resolve() : new Promise((done) => configWaiters.push(done)));
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+// How long the page waits for its states before it says so (it keeps waiting), and for HA's config.
+const STATES_NOTICE_MS = 8000;
+const CONFIG_WAIT_MS = 3000;
+
+// An honest notice in the card's place while the panel's states don't reach it: never a blank card, never a card
+// drawn with no states. HA's own words for it when the page has them.
+function showWaiting() {
+  const note = document.createElement('ha-card');
+  note.className = 'vitro-fallback';
+  note.id = 'vitro-waiting';
+  note.setAttribute('role', 'status');
+  note.textContent = vitroLocalize('ui.notification_toast.connection_lost') || 'Connection lost. Reconnecting…';
+  document.getElementById('mount').appendChild(note);
+}
 
 async function boot() {
   connectBridge();
@@ -2209,6 +2281,17 @@ async function boot() {
     sendBridge({ type: 'cardError', message: "Custom element doesn't exist: " + tag + '.' });
     return;
   }
+  if (!statesIn) {
+    const shown = await Promise.race([untilStates().then(() => true), sleep(STATES_NOTICE_MS).then(() => false)]);
+    if (!shown) {
+      showWaiting();
+      wireResize();
+      await untilStates();
+      const note = document.getElementById('vitro-waiting');
+      if (note) note.remove();
+    }
+  }
+  await Promise.race([untilConfig(), sleep(CONFIG_WAIT_MS)]);
   const el = document.createElement(tag);
   try {
     if (typeof el.setConfig === 'function') el.setConfig(cfg);
@@ -2220,7 +2303,7 @@ async function boot() {
   cardEl.hass = makeHass();
   document.getElementById('mount').appendChild(cardEl);
   wireEvents();
-  wireResize();
+  if (!resizeWired) wireResize();
   // HA's own elements the card draws with that this page lacks (frontend-watch.js): its view goes to HA's frontend.
   vitroWatchFrontend(cardEl, { report: (tags, cards) => sendBridge({ type: 'needsFrontend', tags, cards }) });
 }
@@ -2282,7 +2365,9 @@ function wireEvents() {
   });
 }
 
+let resizeWired = false;
 function wireResize() {
+  resizeWired = true;
   const mount = document.getElementById('mount');
   let timer = null;
   let lastH = -1;

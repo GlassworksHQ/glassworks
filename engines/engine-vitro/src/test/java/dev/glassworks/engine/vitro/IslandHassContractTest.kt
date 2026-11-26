@@ -36,7 +36,7 @@ import java.io.File
 @Config(sdk = [34], application = Application::class)
 class IslandHassContractTest {
 
-    private fun page(): String {
+    private fun page(config: JSONObject = JSONObject().put("version", "2026.11.0").put("components", org.json.JSONArray())): String {
         val ctx = VitroCardContext(
             context = RuntimeEnvironment.getApplication(),
             haBase = "http://homeassistant.local:8123",
@@ -44,7 +44,7 @@ class IslandHassContractTest {
             theme = ThemeResolver.resolve(ThemeCatalog(), true),
             resources = emptyList(),
             accessToken = { "made-up-token" },
-            haConfig = { JSONObject().put("version", "2026.11.0").put("components", org.json.JSONArray()) },
+            haConfig = { config },
             callService = { _, _, _, _ -> },
             navigate = {},
             openMoreInfo = {},
@@ -69,13 +69,16 @@ class IslandHassContractTest {
         // Kept in the build folder: `ISLAND_MODULE=… HASS_TYPES=… node --test src/test/js/island-hass.test.mjs` runs it again.
         val module = File(RepoFiles.root, "engines/engine-vitro/build/vitro-island/island-module.js")
         module.parentFile.mkdirs()
+        // The same page made before the panel had HA's config: it waits for the bridge's.
+        val noConfig = File(module.parentFile, "island-module-no-config.js")
         run {
             module.writeText(bridgeModule(page()))
+            noConfig.writeText(bridgeModule(page(JSONObject())))
             val harness = File(RepoFiles.root, "engines/engine-vitro/src/test/js/island-hass.test.mjs")
             val types = File(RepoFiles.root, "engines/engine-vitro/src/test/ha-frontend/hass-types.ts")
             val (code, out) = IslandNode.run(
                 node, listOf("--test", harness.path),
-                env = mapOf("ISLAND_MODULE" to module.path, "HASS_TYPES" to types.path),
+                env = mapOf("ISLAND_MODULE" to module.path, "ISLAND_MODULE_NO_CONFIG" to noConfig.path, "HASS_TYPES" to types.path),
                 timeoutSeconds = 120,
             )
             assertEquals(out, 0, code)

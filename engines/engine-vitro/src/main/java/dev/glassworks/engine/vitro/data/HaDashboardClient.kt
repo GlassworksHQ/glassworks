@@ -118,6 +118,8 @@ class HaDashboardClient(
         fun onLocaleChanged() {}
         /** `auth/current_user` answered: [user] is now [currentUser]. */
         fun onCurrentUser(user: JSONObject) {}
+        /** `get_config` answered on this connection: [config] is now [haConfig]. */
+        fun onConfig(config: JSONObject) {}
         fun onDisconnected(reason: String) {}
     }
 
@@ -1084,7 +1086,11 @@ class HaDashboardClient(
         // `time_zone: server`)
         request(JSONObject().put("type", "get_config")) { res ->
             if (res.optBoolean("success", false)) {
-                res.optJSONObject("result")?.let { haConfig = it; applyLocale { HaLocale.applyConfig(it) } }
+                res.optJSONObject("result")?.let {
+                    haConfig = it
+                    applyLocale { HaLocale.applyConfig(it) }
+                    listener.onConfig(it)
+                }
             }
         }
         // 1. Themes

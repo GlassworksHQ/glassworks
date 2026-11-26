@@ -179,6 +179,12 @@ class VitroCardContext(
      */
     val watchConnection: (onChange: (connected: Boolean) -> Unit) -> () -> Unit = { { } },
     /**
+     * [onChange] gets Home Assistant's config ([haConfig], `get_config`) each time a connection reads it, on any
+     * thread, until the returned handle is called: a web island's `hass.config` follows it (a page made before it
+     * arrived has none, and HA's cards read its `version`). The default (tests, no engine) never calls it.
+     */
+    val watchConfig: (onChange: (JSONObject) -> Unit) -> () -> Unit = { { } },
+    /**
      * What Home Assistant's web UI keeps in `localStorage` on this panel ([dev.glassworks.web.HaPageStorage]), or null
      * when the panel has no copy for this Home Assistant: a web island starts its card's storage from it (#881).
      */
@@ -242,6 +248,7 @@ class VitroCardContext(
         islandFailed = islandFailed,
         haConnected = haConnected,
         watchConnection = watchConnection,
+        watchConfig = watchConfig,
         pageStorage = pageStorage,
     ).also {
         it.cardVars = cardVars

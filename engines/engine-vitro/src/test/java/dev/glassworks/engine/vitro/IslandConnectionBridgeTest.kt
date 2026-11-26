@@ -58,6 +58,8 @@ class IslandConnectionBridgeTest {
     private var connectionWatcher: ((Boolean) -> Unit)? = null
     private val failed = ArrayList<Pair<String, String>>()
     private var token = "first-token"
+    private var haConfig = JSONObject()
+    private var configWatcher: ((JSONObject) -> Unit)? = null
 
     @Before fun setUp() {
         activity = Robolectric.buildActivity(Activity::class.java).setup().get()
@@ -86,6 +88,8 @@ class IslandConnectionBridgeTest {
         haConnected = { connected },
         watchConnection = { onChange -> connectionWatcher = onChange; { connectionWatcher = null } },
         islandFailed = { card, reason -> failed += card.type to reason },
+        haConfig = { haConfig },
+        watchConfig = { onChange -> configWatcher = onChange; { configWatcher = null } },
     )
 
     private fun card(): CardConfig = LovelaceParser.parseCard(JSONObject("""{"type": "custom:scheduler-card"}"""))
@@ -240,6 +244,19 @@ class IslandConnectionBridgeTest {
         assertEquals(listOf(true, false), sent.ofType("conn").map { it.getBoolean("connected") })
         assertEquals(listOf(false), sent2.ofType("conn").map { it.getBoolean("connected") })
         island.release()
+    }
+
+    @Test fun hassConfigReachesThePageAsItArrives() {
+        // Made before the panel had HA's config: the bridge brings it when it arrives.
+        val (_, _, sent) = island()
+        assertTrue("nothing to say yet", sent.ofType("config").isEmpty())
+        haConfig = JSONObject().put("version", "2026.11.0")
+        configWatcher!!(haConfig)
+        assertEquals("2026.11.0", sent.ofType("config").single().getJSONObject("config").getString("version"))
+        // A bridge that opens later gets it with its states.
+        val sent2 = ArrayList<JSONObject>()
+        slot().onConnected { sent2 += it }
+        assertEquals(listOf("config", "snapshot"), sent2.map { it.getString("type") }.filter { it == "config" || it == "snapshot" })
     }
 
     @Test fun aRefusedSubscriptionIsTheCardsErrorAndALostOneWaits() {

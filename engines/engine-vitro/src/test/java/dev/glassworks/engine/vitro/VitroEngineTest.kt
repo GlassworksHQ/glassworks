@@ -995,7 +995,7 @@ class VitroEngineTest {
         assertTrue(html.contains("const tag = \"acme-floorplan-card\";"))
         assertTrue(html.contains("const cfg = {"))
         assertTrue(html.contains("\"rooms\""))
-        assertTrue(html.contains("const haConfig = {\"location_name\":\"Test Home\"};"))
+        assertTrue(html.contains("let haConfig = {\"location_name\":\"Test Home\"};"))
         assertTrue(html.contains("let accessToken = \"test-token\";"))
         assertTrue(html.contains("themes: { darkMode: true, default_theme: "))
         // The HA shims, instead of HA's frontend.
@@ -1091,7 +1091,11 @@ class VitroEngineTest {
         assertTrue(WebIslandCardView.buildIslandHtml(cardContext(dark = false), islandCard(), fillViewport = true)
             .contains("html:root { background-color: #fafafa; }"))
         val inline = WebIslandCardView.buildIslandHtml(cardContext(), islandCard(), fillViewport = false)
-        assertFalse("an inline island sits in a card", inline.contains("html:root { background-color"))
+        // An inline one on a plain view paints the view's color (never half-transparent edges), before the page's own
+        // transparent rule, which it outranks.
+        val inlineBg = inline.indexOf("html:root { background-color: #111111; }")
+        assertTrue("an inline island on a plain view paints its color", inlineBg > 0)
+        assertTrue(inlineBg < inline.indexOf("html, body { margin: 0; padding: 0; background: transparent;"))
     }
 
     @Test
@@ -1187,6 +1191,20 @@ class VitroEngineTest {
         }
         walk(island)
         assertTrue("HA's error card is in place: $texts", dev.glassworks.engine.vitro.ui.ErrorCardView.TITLE in texts)
+    }
+
+    @Test
+    fun anInlineIslandOnAPlainViewPaintsTheViewsColorAndOnAPictureStaysTransparent() {
+        // A transparent island's half-transparent edges came out light on the panel (Bubble Card's slider ends).
+        val plain = WebIslandCardView.themeCss(cardContext(), fillViewport = false)
+        assertTrue(plain, plain.contains("html:root { background-color: #111111; }"))
+        val picture = VitroCardContext(
+            context = activity, haBase = base, store = EntityStore(),
+            theme = ThemeResolver.resolve(ThemeCatalog(), true, viewBackground = "center / cover no-repeat url('/local/wall.jpg') fixed"),
+            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+        )
+        assertFalse(WebIslandCardView.themeCss(picture, fillViewport = false).contains("html:root { background-color"))
     }
 
     @Test
