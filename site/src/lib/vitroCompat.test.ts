@@ -492,7 +492,7 @@ describe("parseYaml", () => {
 });
 
 describe("auditDashboard and the cards built from a configuration", () => {
-  it("sends Bubble Card to its island, and an unknown layout to the island or HA's frontend by what it holds", () => {
+  it("draws Bubble Card's separator and plain buttons, sends the rest to its island, and an unknown layout to the island or HA's frontend by what it holds", () => {
     const r = auditDashboard(
       JSON.stringify({
         views: [{ cards: [
@@ -503,11 +503,9 @@ describe("auditDashboard and the cards built from a configuration", () => {
         ] }],
       }),
     );
-    // Vitro's Bubble Card doesn't match Bubble Card 3.4.3 in any configuration (a gap in native-options.json).
+    // Vitro draws Bubble Card 3.4.3's separator and its switch, state and name buttons; a pop-up goes to the island.
     expect(r.triggers.map((t) => [t.type, t.reasons[0].split(": ")[0]])).toEqual([
       ["custom:bubble-card", "`custom:bubble-card` `card_type"],
-      ["custom:bubble-card", "`custom:bubble-card` isn't drawn natively"],
-      ["custom:bubble-card", "`custom:bubble-card` isn't drawn natively"],
     ]);
     // An unknown layout with a built-in card inside sends the view to HA's frontend: the island would draw the tile as
     // a summary.

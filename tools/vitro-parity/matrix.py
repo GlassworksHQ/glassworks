@@ -306,6 +306,11 @@ def pick(domain, *variants):
 
 MUSH_LIGHT = {"show_brightness_control": True, "use_light_color": True}
 
+
+def _bubble(e, button_type, **options):
+    """A Bubble Card button (3.4.3) of [button_type] for entity [e]."""
+    return dict({"type": "custom:bubble-card", "card_type": "button", "button_type": button_type, "entity": e}, **options)
+
 # (card id, card config for an entity id, extra options per config, the states it's crossed with). One case per
 # state. The states are the ones the card's source reads: a Mushroom light reads brightness, color and its color mode;
 # HA's tile reads the state, brightness, position, percentage and unit; a gauge reads only a number.
@@ -368,6 +373,21 @@ SINGLE = [
      every("vacuum")),
     ("mushroom-number", lambda e: {"type": "custom:mushroom-number-card", "entity": e}, every("number")),
     ("mushroom-select", lambda e: {"type": "custom:mushroom-select-card", "entity": e}, every("select")),
+    # Bubble Card's buttons read the state's on-ness (its own list), a light's rgb_color, a digit or a degree unit in
+    # the state (the icon color), unavailable (the card's opacity) and, for the state line, the domain's default
+    # attribute. In a sections view they take Bubble's large layout.
+    ("bubble-switch", lambda e: _bubble(e, "switch"),
+     pick("light", "on-dimmed", "on-color", "on-ct", "off", "unavailable") + pick("switch", "on", "off")
+     + pick("lock", "unlocked", "locked") + pick("sensor", "temperature") + pick("binary_sensor", "door-open")),
+    ("bubble-state", lambda e: _bubble(e, "state"),
+     pick("light", "on-dimmed", "off") + pick("sensor", "temperature", "power", "no-unit", "unavailable")
+     + pick("cover", "open-position", "closed-position") + pick("fan", "on-speed")),
+    ("bubble-switch-details", lambda e: _bubble(e, "switch", show_state=True, show_last_changed=True),
+     pick("light", "on-dimmed") + pick("switch", "off")),
+    # Far past one line, so the case is about the wrap and not where a line happens to break.
+    ("bubble-state-wrap", lambda e: _bubble(e, "state", scrolling_effect=False,
+                                            name="Upstairs Guest Bedroom Reading Nook Temperature Next To The Window By The Big Old Oak Desk"),
+     pick("sensor", "long-name")),
 ]
 
 # Chips: one chip per case, each chip type Vitro draws natively (entity, weather, action, spacer, template,
@@ -551,6 +571,37 @@ def dashboard_cases():
                     M("entity", E("switch", "on"), layout="vertical"), M("entity", E("switch", "off"), layout="vertical")]},
                 {"type": "custom:mushroom-template-card", "primary": "Front door", "secondary": "{{ states('" + E("lock", "locked") + "') | title }}",
                  "icon": "mdi:lock", "icon_color": "green", "entity": E("lock", "locked")}]},
+        ]})
+    bubble = (pick("light", "on-dimmed", "on-color", "off") + pick("switch", "on", "off") + pick("sensor", "temperature")
+              + pick("lock", "unlocked") + pick("cover", "open-position"))
+    B = _bubble  # noqa: N806
+    sep = lambda name, icon: {"type": "custom:bubble-card", "card_type": "separator", "name": name, "icon": icon}  # noqa: E731
+    # Bubble Card picks its layout from the view: normal (50 px buttons, 40 px separators) in a masonry view, large
+    # (a 56 px row) in every other one.
+    add("d-bubble-masonry", "Whole dashboard: Bubble Card buttons and separators in a masonry view (normal layout)", bubble, {
+        "title": "Home",
+        "cards": [
+            sep("Lights", "mdi:lightbulb-group"),
+            B(E("light", "on-dimmed"), "switch"), B(E("light", "on-color"), "switch", use_accent_color=True),
+            B(E("light", "off"), "switch", show_state=True),
+            {"type": "custom:bubble-card", "card_type": "button", "button_type": "name", "name": "Scenes", "icon": "mdi:palette"},
+            sep("House", "mdi:home"),
+            B(E("switch", "on"), "switch", name="Patio heater"), B(E("lock", "unlocked"), "switch"),
+            B(E("sensor", "temperature"), "state"), B(E("cover", "open-position"), "state", show_icon=False),
+            B(E("switch", "off"), "state", show_name=False),
+        ]})
+    add("d-bubble-sections", "Whole dashboard: Bubble Card buttons and separators in a sections view (large layout)", bubble, {
+        "title": "Home", "type": "sections", "max_columns": 3,
+        "sections": [
+            {"type": "grid", "cards": [
+                sep("Lights", "mdi:lightbulb-group"),
+                B(E("light", "on-dimmed"), "switch"), B(E("light", "off"), "switch"),
+                dict(B(E("light", "on-color"), "state"), grid_options={"columns": 6}),
+                dict(B(E("switch", "on"), "switch", card_layout="normal"), grid_options={"columns": 6})]},
+            {"type": "grid", "cards": [
+                sep("House", ""),
+                B(E("sensor", "temperature"), "state"), B(E("lock", "unlocked"), "switch"),
+                dict(B(E("cover", "open-position"), "state"), grid_options={"rows": 2})]},
         ]})
     return out
 

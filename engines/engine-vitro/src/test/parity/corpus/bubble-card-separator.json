@@ -1,6 +1,5 @@
 {
  "title": "Bubble Card: a separator",
- "route": "island",
  "card": {
   "type": "custom:bubble-card",
   "card_type": "separator",

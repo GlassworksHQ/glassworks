@@ -269,9 +269,9 @@ class LovelaceModelTest {
         }
         // A fast path that doesn't match its card (the strict compat rule) goes to the island when a Lovelace resource
         // provides its script, and is drawn natively only when none does.
-        for (t in listOf("custom:bubble-card", "custom:mini-graph-card", "custom:clock-weather-card")) {
-            assertEquals("$t with its script", CardTier.WEB_ISLAND, CardRouter.tier(card("""{"type": "$t"}""")))
-            assertEquals("$t without one", CardTier.NATIVE_HACS, CardRouter.tier(card("""{"type": "$t"}"""), dev.glassworks.engine.vitro.compat.IslandScripts.of(emptyList())))
+        for (c in listOf("""{"type": "custom:bubble-card", "card_type": "pop-up"}""", """{"type": "custom:mini-graph-card"}""", """{"type": "custom:clock-weather-card"}""")) {
+            assertEquals("$c with its script", CardTier.WEB_ISLAND, CardRouter.tier(card(c)))
+            assertEquals("$c without one", CardTier.NATIVE_HACS, CardRouter.tier(card(c), dev.glassworks.engine.vitro.compat.IslandScripts.of(emptyList())))
         }
     }
 

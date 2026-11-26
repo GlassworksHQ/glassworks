@@ -1,0 +1,627 @@
+{
+ "case": "d-bubble-masonry",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 0,
+  "y": 0,
+  "width": 1280,
+  "height": 800
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 8,
+   "y": 8,
+   "w": 416,
+   "h": 40,
+   "type": "bubble-card"
+  },
+  {
+   "x": 8,
+   "y": 56,
+   "w": 416,
+   "h": 50,
+   "type": "bubble-card"
+  },
+  {
+   "x": 8,
+   "y": 114,
+   "w": 416,
+   "h": 50,
+   "type": "bubble-card"
+  },
+  {
+   "x": 8,
+   "y": 172,
+   "w": 416,
+   "h": 50,
+   "type": "bubble-card"
+  },
+  {
+   "x": 8,
+   "y": 230,
+   "w": 416,
+   "h": 50,
+   "type": "bubble-card"
+  },
+  {
+   "x": 432,
+   "y": 8,
+   "w": 416,
+   "h": 40,
+   "type": "bubble-card"
+  },
+  {
+   "x": 432,
+   "y": 56,
+   "w": 416,
+   "h": 50,
+   "type": "bubble-card"
+  },
+  {
+   "x": 432,
+   "y": 114,
+   "w": 416,
+   "h": 50,
+   "type": "bubble-card"
+  },
+  {
+   "x": 432,
+   "y": 172,
+   "w": 416,
+   "h": 50,
+   "type": "bubble-card"
+  },
+  {
+   "x": 432,
+   "y": 230,
+   "w": 416,
+   "h": 50,
+   "type": "bubble-card"
+  },
+  {
+   "x": 856,
+   "y": 8,
+   "w": 416,
+   "h": 50,
+   "type": "bubble-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Lights",
+   "x": 54,
+   "y": 10.2,
+   "w": 44.63,
+   "h": 19,
+   "size": 16,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 1,
+   "clipped": false,
+   "text": "Kitchen Pendant",
+   "x": 54,
+   "y": 17,
+   "w": 96.28,
+   "h": 15,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 2,
+   "clipped": false,
+   "text": "Kitchen Pendant",
+   "x": 54,
+   "y": 17,
+   "w": 96.28,
+   "h": 15,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 3,
+   "clipped": false,
+   "text": "Kitchen Pendant",
+   "x": 54,
+   "y": 8,
+   "w": 96.28,
+   "h": 15,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 3,
+   "clipped": false,
+   "text": "Off",
+   "x": 54,
+   "y": 27,
+   "w": 16.59,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 4,
+   "clipped": false,
+   "text": "Scenes",
+   "x": 54,
+   "y": 17,
+   "w": 42.8,
+   "h": 15,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 5,
+   "clipped": false,
+   "text": "House",
+   "x": 54,
+   "y": 10.2,
+   "w": 46.19,
+   "h": 19,
+   "size": 16,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 6,
+   "clipped": false,
+   "text": "Patio heater",
+   "x": 54,
+   "y": 17,
+   "w": 71.16,
+   "h": 15,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 7,
+   "clipped": false,
+   "text": "Front Door Lock",
+   "x": 54,
+   "y": 17,
+   "w": 92.98,
+   "h": 15,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 8,
+   "clipped": false,
+   "text": "Living Room Temperature",
+   "x": 54,
+   "y": 8,
+   "w": 150.5,
+   "h": 15,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 8,
+   "clipped": false,
+   "text": "21.4 °C",
+   "x": 54,
+   "y": 27,
+   "w": 38.64,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 9,
+   "clipped": false,
+   "text": "Office Blind",
+   "x": 16,
+   "y": 8,
+   "w": 67.89,
+   "h": 15,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 9,
+   "clipped": false,
+   "text": "Open • 40%",
+   "x": 16,
+   "y": 27,
+   "w": 60.22,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 10,
+   "clipped": false,
+   "text": "Off",
+   "x": 54,
+   "y": 17,
+   "w": 19.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "cover.cover_open_position": {
+   "s": "open",
+   "a": {
+    "current_position": 40,
+    "device_class": "blind",
+    "supported_features": 15,
+    "friendly_name": "Office Blind"
+   },
+   "lc": 1794496080,
+   "lu": 1794496080
+  },
+  "light.light_off": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "color_temp",
+     "hs"
+    ],
+    "min_color_temp_kelvin": 2000,
+    "max_color_temp_kelvin": 6535,
+    "min_mireds": 153,
+    "max_mireds": 500,
+    "supported_features": 40,
+    "friendly_name": "Kitchen Pendant"
+   },
+   "lc": 1794488880,
+   "lu": 1794488880
+  },
+  "light.light_on_color": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "color_temp",
+     "hs"
+    ],
+    "min_color_temp_kelvin": 2000,
+    "max_color_temp_kelvin": 6535,
+    "min_mireds": 153,
+    "max_mireds": 500,
+    "supported_features": 40,
+    "color_mode": "hs",
+    "brightness": 204,
+    "hs_color": [
+     24,
+     84
+    ],
+    "rgb_color": [
+     255,
+     129,
+     40
+    ],
+    "xy_color": [
+     0.594,
+     0.371
+    ],
+    "friendly_name": "Kitchen Pendant"
+   },
+   "lc": 1794498960,
+   "lu": 1794498960
+  },
+  "light.light_on_dimmed": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "supported_features": 40,
+    "color_mode": "brightness",
+    "brightness": 166,
+    "friendly_name": "Kitchen Pendant"
+   },
+   "lc": 1794497580,
+   "lu": 1794497580
+  },
+  "lock.lock_unlocked": {
+   "s": "unlocked",
+   "a": {
+    "supported_features": 0,
+    "friendly_name": "Front Door Lock"
+   },
+   "lc": 1794499380,
+   "lu": 1794499380
+  },
+  "sensor.sensor_temperature": {
+   "s": "21.42",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794499560,
+   "lu": 1794499560
+  },
+  "switch.switch_off": {
+   "s": "off",
+   "a": {
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "switch.switch_on": {
+   "s": "on",
+   "a": {
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "cover.cover_open_position",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Blind",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_off",
+    "pl": "demo",
+    "di": "device-2",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_color",
+    "pl": "demo",
+    "di": "device-2",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_dimmed",
+    "pl": "demo",
+    "di": "device-2",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "lock.lock_unlocked",
+    "pl": "demo",
+    "di": "device-3",
+    "en": "Door Lock",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-4",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_off",
+    "pl": "demo",
+    "di": "device-5",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_on",
+    "pl": "demo",
+    "di": "device-5",
+    "en": "Heater",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Office"
+   },
+   {
+    "id": "device-2",
+    "name": "Kitchen"
+   },
+   {
+    "id": "device-3",
+    "name": "Front"
+   },
+   {
+    "id": "device-4",
+    "name": "Living Room"
+   },
+   {
+    "id": "device-5",
+    "name": "Patio"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "cover",
+    "light",
+    "lock",
+    "sensor",
+    "switch"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "cover": {
+     "_": {
+      "default": "mdi:window-open",
+      "state": {
+       "closed": "mdi:window-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     },
+     "blind": {
+      "default": "mdi:blinds-horizontal",
+      "state": {
+       "closed": "mdi:blinds-horizontal-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     }
+    },
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "lock": {
+     "_": {
+      "default": "mdi:lock",
+      "state": {
+       "jammed": "mdi:lock-alert",
+       "locking": "mdi:lock-clock",
+       "open": "mdi:lock-open-variant",
+       "opening": "mdi:lock-clock",
+       "unlocked": "mdi:lock-open-variant",
+       "unlocking": "mdi:lock-clock"
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    },
+    "switch": {
+     "_": {
+      "default": "mdi:toggle-switch-variant",
+      "state": {
+       "off": "mdi:toggle-switch-variant-off"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.cover.entity_component._.state.closed": "Closed",
+    "component.cover.entity_component._.state.closing": "Closing",
+    "component.cover.entity_component._.state.open": "Open",
+    "component.cover.entity_component._.state.opening": "Opening",
+    "component.cover.entity_component._.state.stopped": "Stopped",
+    "component.cover.entity_component._.state_attributes.current_position.name": "Position",
+    "component.cover.entity_component._.state_attributes.current_tilt_position.name": "Tilt position",
+    "component.cover.entity_component._.state_attributes.speed.name": "Speed",
+    "component.cover.entity_component._.state_attributes.speed.state.fast": "Fast",
+    "component.cover.entity_component._.state_attributes.speed.state.medium": "Medium",
+    "component.cover.entity_component._.state_attributes.speed.state.slow": "Slow",
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.light.entity_component._.state_attributes.brightness.name": "Brightness",
+    "component.light.entity_component._.state_attributes.color_mode.name": "Color mode",
+    "component.light.entity_component._.state_attributes.color_mode.state.brightness": "Brightness only",
+    "component.light.entity_component._.state_attributes.color_mode.state.color_temp": "Color temperature",
+    "component.light.entity_component._.state_attributes.color_mode.state.hs": "HS",
+    "component.light.entity_component._.state_attributes.color_mode.state.onoff": "On/Off",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgb": "RGB",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgbw": "RGBW",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgbww": "RGBWW",
+    "component.light.entity_component._.state_attributes.color_mode.state.unknown": "Unknown",
+    "component.light.entity_component._.state_attributes.color_mode.state.white": "White",
+    "component.light.entity_component._.state_attributes.color_mode.state.xy": "XY",
+    "component.light.entity_component._.state_attributes.color_temp_kelvin.name": "Color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.effect.name": "Effect",
+    "component.light.entity_component._.state_attributes.effect.state.off": "Off",
+    "component.light.entity_component._.state_attributes.effect_list.name": "Available effects",
+    "component.light.entity_component._.state_attributes.max_color_temp_kelvin.name": "Maximum color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.min_color_temp_kelvin.name": "Minimum color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.supported_color_modes.name": "Available color modes",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.brightness": "Brightness only",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.color_temp": "Color temperature",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.hs": "HS",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.onoff": "On/Off",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgb": "RGB",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgbw": "RGBW",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgbww": "RGBWW",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.unknown": "Unknown",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.white": "White",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.xy": "XY",
+    "component.lock.entity_component._.state.jammed": "Jammed",
+    "component.lock.entity_component._.state.locked": "Locked",
+    "component.lock.entity_component._.state.locking": "Locking",
+    "component.lock.entity_component._.state.open": "Open",
+    "component.lock.entity_component._.state.opening": "Opening",
+    "component.lock.entity_component._.state.unlocked": "Unlocked",
+    "component.lock.entity_component._.state.unlocking": "Unlocking",
+    "component.lock.entity_component._.state_attributes.changed_by.name": "Changed by",
+    "component.lock.entity_component._.state_attributes.code_format.name": "Code format",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state_attributes.last_reset.name": "Last reset",
+    "component.sensor.entity_component._.state_attributes.options.name": "Possible states",
+    "component.sensor.entity_component._.state_attributes.state_class.name": "State class",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement": "Measurement",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement_angle": "Measurement angle",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total": "Total",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total_increasing": "Total increasing",
+    "component.switch.entity_component._.state.off": "Off",
+    "component.switch.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

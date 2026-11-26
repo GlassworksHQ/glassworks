@@ -1,0 +1,272 @@
+{
+ "title": "Whole dashboard: Bubble Card buttons and separators in a sections view (large layout)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "view_config": {
+  "title": "Home",
+  "type": "sections",
+  "max_columns": 3,
+  "sections": [
+   {
+    "type": "grid",
+    "cards": [
+     {
+      "type": "custom:bubble-card",
+      "card_type": "separator",
+      "name": "Lights",
+      "icon": "mdi:lightbulb-group"
+     },
+     {
+      "type": "custom:bubble-card",
+      "card_type": "button",
+      "button_type": "switch",
+      "entity": "light.light_on_dimmed"
+     },
+     {
+      "type": "custom:bubble-card",
+      "card_type": "button",
+      "button_type": "switch",
+      "entity": "light.light_off"
+     },
+     {
+      "type": "custom:bubble-card",
+      "card_type": "button",
+      "button_type": "state",
+      "entity": "light.light_on_color",
+      "grid_options": {
+       "columns": 6
+      }
+     },
+     {
+      "type": "custom:bubble-card",
+      "card_type": "button",
+      "button_type": "switch",
+      "entity": "switch.switch_on",
+      "card_layout": "normal",
+      "grid_options": {
+       "columns": 6
+      }
+     }
+    ]
+   },
+   {
+    "type": "grid",
+    "cards": [
+     {
+      "type": "custom:bubble-card",
+      "card_type": "separator",
+      "name": "House",
+      "icon": ""
+     },
+     {
+      "type": "custom:bubble-card",
+      "card_type": "button",
+      "button_type": "state",
+      "entity": "sensor.sensor_temperature"
+     },
+     {
+      "type": "custom:bubble-card",
+      "card_type": "button",
+      "button_type": "switch",
+      "entity": "lock.lock_unlocked"
+     },
+     {
+      "type": "custom:bubble-card",
+      "card_type": "button",
+      "button_type": "state",
+      "entity": "cover.cover_open_position",
+      "grid_options": {
+       "rows": 2
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.light_on_dimmed": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 40,
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_on_color": {
+    "state": "on",
+    "last_changed": "-12m",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "color_mode": "hs",
+     "brightness": 204,
+     "hs_color": [
+      24.0,
+      84.0
+     ],
+     "rgb_color": [
+      255,
+      129,
+      40
+     ],
+     "xy_color": [
+      0.594,
+      0.371
+     ],
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_off": {
+    "state": "off",
+    "last_changed": "-3h",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "switch.switch_on": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "friendly_name": "Patio Heater"
+    }
+   },
+   "switch.switch_off": {
+    "state": "off",
+    "last_changed": "-2h",
+    "attributes": {
+     "friendly_name": "Patio Heater"
+    }
+   },
+   "sensor.sensor_temperature": {
+    "state": "21.42",
+    "last_changed": "-2m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Temperature"
+    }
+   },
+   "lock.lock_unlocked": {
+    "state": "unlocked",
+    "last_changed": "-5m",
+    "attributes": {
+     "supported_features": 0,
+     "friendly_name": "Front Door Lock"
+    }
+   },
+   "cover.cover_open_position": {
+    "state": "open",
+    "last_changed": "-1h",
+    "attributes": {
+     "current_position": 40,
+     "device_class": "blind",
+     "supported_features": 15,
+     "friendly_name": "Office Blind"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.light_on_dimmed",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_color",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_off",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_on",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_off",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_temperature",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device",
+    "dp": 1
+   },
+   {
+    "ei": "lock.lock_unlocked",
+    "pl": "demo",
+    "di": "dev-front",
+    "en": "Door Lock",
+    "np": "device"
+   },
+   {
+    "ei": "cover.cover_open_position",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   },
+   {
+    "id": "dev-patio",
+    "name": "Patio"
+   },
+   {
+    "id": "dev-living-room",
+    "name": "Living Room"
+   },
+   {
+    "id": "dev-front",
+    "name": "Front"
+   },
+   {
+    "id": "dev-office",
+    "name": "Office"
+   }
+  ]
+ }
+}

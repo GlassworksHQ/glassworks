@@ -12,7 +12,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.AutoEntitiesCardView
 import dev.glassworks.engine.vitro.cards.AutoEntitiesFilter
-import dev.glassworks.engine.vitro.cards.BubbleCardView
 import dev.glassworks.engine.vitro.cards.LayoutCardView
 import dev.glassworks.engine.vitro.cards.MiniMediaPlayerCardView
 import dev.glassworks.engine.vitro.cards.MushroomAlarmControlPanelCardView
@@ -739,37 +738,5 @@ class HacsParityWaveTest {
         assertTrue(CardRouter.followsAllEntities(view))
         assertTrue("lock.a" in CardRouter.referencedEntities(view))
         assertEquals(30, CardRouter.NATIVE_HACS_TYPES.size)
-    }
-
-    // ---- Bubble Card sub_button ----
-
-    @Test
-    fun bubbleCardDrawsSubButtonsAndRunsTheirActions() {
-        val st = store(
-            entity("light.living", "on"),
-            entity("sensor.living_temp", "21.5", "unit_of_measurement" to "°C"),
-            entity("switch.fan", "off"),
-        )
-        val bubble = BubbleCardView(
-            context(st),
-            card(
-                """{"type": "custom:bubble-card", "card_type": "button", "entity": "light.living", "name": "Living",
-                   "sub_button": [
-                     {"entity": "sensor.living_temp", "name": "Temperature", "icon": "mdi:thermometer", "show_state": true},
-                     {"entity": "switch.fan", "name": "Fan", "icon": "mdi:fan", "tap_action": {"action": "toggle"}},
-                     {"name": "Scenes", "icon": "mdi:palette", "tap_action": {"action": "navigate", "navigation_path": "#scenes"}}
-                   ]}""",
-            ),
-        )
-        idle()
-        assertTrue("21.5 °C" in bubble.texts())
-        bubble.click("Fan")
-        assertEquals("switch.toggle", calls.last().service)
-        assertEquals("switch.fan", calls.last().entityId)
-        bubble.click("Temperature")
-        assertEquals("more-info:sensor.living_temp", actions.last())
-        bubble.click("Scenes")
-        assertEquals("navigate:#scenes", actions.last())
-        assertEquals(1, calls.size) // the sub-buttons didn't also fire the card's own toggle
     }
 }
