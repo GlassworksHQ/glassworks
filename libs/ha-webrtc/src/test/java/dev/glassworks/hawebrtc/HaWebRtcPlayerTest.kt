@@ -193,6 +193,17 @@ class FitScaleTest {
     }
 
     @Test
+    fun `fit draws over a letterbox of a pixel or two, as the browser shows none`() {
+        // 641 x 360 is 16:9 rounded to whole pixels: the picture would be 640 px wide, a sliver short.
+        assertEquals(1f to 1f, fitScale(VideoScaling.FIT, 1280, 720, 641, 360))
+        assertEquals(1f to 1f, fitScale(VideoScaling.FIT, 1280, 720, 640, 361))
+        // Five pixels short is a letterbox.
+        val (sx, sy) = fitScale(VideoScaling.FIT, 1280, 720, 645, 360)
+        assertEquals(1f, sy)
+        assertTrue(sx < 1f)
+    }
+
+    @Test
     fun `fill and stretch, and no frame yet, draw over the whole view`() {
         assertEquals(1f to 1f, fitScale(VideoScaling.FILL, 1920, 1080, 400, 400))
         assertEquals(1f to 1f, fitScale(VideoScaling.STRETCH, 1920, 1080, 400, 400))

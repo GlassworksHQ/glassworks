@@ -60,6 +60,20 @@ class HaLocaleTest {
         HaDisplay.reset()
     }
 
+    @Test fun theDeviceZoneIsReadOnceAndReplacedWhenTheDeviceSaysItChanged() {
+        HaLocale.deviceTimeZone = savedZone
+        HaLocale.deviceZoneChanged(null)
+        // TimeZone.getDefault() copies the zone every time: it's read once and kept.
+        val first = HaLocale.deviceTimeZone()
+        org.junit.Assert.assertSame(first, HaLocale.deviceTimeZone())
+        // The device's broadcast names the new zone.
+        HaLocale.deviceZoneChanged("Asia/Tokyo")
+        assertEquals("Asia/Tokyo", HaLocale.deviceTimeZone().id)
+        // One that doesn't: the device's default, read afresh.
+        HaLocale.deviceZoneChanged(null)
+        assertEquals(TimeZone.getDefault().id, HaLocale.deviceTimeZone().id)
+    }
+
     private fun locale(language: String = "en", number: String = "language", time: String = "language", date: String = "language", zone: String = "local", week: String = "language") =
         FrontendLocale(language, number, time, date, week, zone)
 

@@ -625,8 +625,42 @@ class VitroIslandServer(
             budget: java.util.concurrent.Semaphore? = null,
             held: IntArray? = null,
             waitMs: Long = PROXY_BUDGET_WAIT_MS,
+            /**
+             * The body's declared length (`Content-Length`), or -1. Within [max] and with no [budget], the body is read
+             * into one array of that size: no buffer grown and copied as it fills, and no copy at the end (a picture of
+             * a few hundred KiB made several large-object arrays of garbage each time). A body that ends sooner is
+             * trimmed to what came; one that goes on is read on as with no length, under [max].
+             */
+            expected: Long = -1L,
         ): ByteArray {
-            val out = ByteArrayOutputStream()
+            if (budget == null && expected in 1..max.toLong()) {
+                val exact = ByteArray(expected.toInt())
+                var got = 0
+                while (got < exact.size) {
+                    val n = input.read(exact, got, exact.size - got)
+                    if (n < 0) return exact.copyOf(got)
+                    got += n
+                }
+                val next = input.read()
+                if (next < 0) return exact
+                if (exact.size + 1 > max) throw IOException("response over ${max shr 20} MiB")
+                // Longer than it said: the rest as for a body of unknown length, after what came.
+                val rest = ByteArrayOutputStream(exact.size * 2)
+                rest.write(exact)
+                rest.write(next)
+                return readOn(input, max, rest)
+            }
+            return readOn(input, max, ByteArrayOutputStream(), budget, held, waitMs)
+        }
+
+        private fun readOn(
+            input: InputStream,
+            max: Int,
+            out: ByteArrayOutputStream,
+            budget: java.util.concurrent.Semaphore? = null,
+            held: IntArray? = null,
+            waitMs: Long = PROXY_BUDGET_WAIT_MS,
+        ): ByteArray {
             val buf = ByteArray(16 * 1024)
             // KiB taken from the budget so far: what the bytes buffered need, however the reads come in.
             var charged = 0

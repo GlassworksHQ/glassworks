@@ -512,7 +512,7 @@ class VitroCardContext(
                 }
                 try {
                     // Bounded before decoding: a huge asset (with or without a Content-Length) fails, not the heap.
-                    if (conn.responseCode in 200..299) decodeDownsampled(conn.inputStream.use { VitroIslandServer.readCapped(it, MAX_IMAGE_BYTES) }) else null
+                    if (conn.responseCode in 200..299) decodeDownsampled(conn.inputStream.use { VitroIslandServer.readCapped(it, MAX_IMAGE_BYTES, expected = conn.contentLength.toLong()) }) else null
                 } finally {
                     conn.disconnect()
                 }

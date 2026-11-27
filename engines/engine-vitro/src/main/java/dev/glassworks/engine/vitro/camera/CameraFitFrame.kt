@@ -106,19 +106,30 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
         }
     }
 
-    /** The child's size in a [w] × [h] frame. */
+    /**
+     * The child's size in a [w] × [h] frame. An axis that comes out within [SNAP_PX] of the frame takes the frame's
+     * size: a card sized to the video's shape rounds its height to whole pixels, so `contain` would leave a gap of a
+     * pixel or so, all of it on the right or bottom edge (the child is centred with integer offsets) where the card's
+     * background shows as a dark line. The browser lays HA's `<video>` out in fractions of a pixel and shows no gap;
+     * the stretch this costs is under 0.2% of a 720p picture.
+     */
     internal fun fitted(w: Int, h: Int): Pair<Int, Int> {
         if (videoW <= 0 || videoH <= 0 || w <= 0 || h <= 0 || fit == FILL) return w to h
         val scaleW = w.toFloat() / videoW
         val scaleH = h.toFloat() / videoH
         val scale = if (fit == COVER) maxOf(scaleW, scaleH) else minOf(scaleW, scaleH)
-        return Math.round(videoW * scale).coerceAtLeast(1) to Math.round(videoH * scale).coerceAtLeast(1)
+        val cw = Math.round(videoW * scale).coerceAtLeast(1)
+        val ch = Math.round(videoH * scale).coerceAtLeast(1)
+        return (if (Math.abs(cw - w) <= SNAP_PX) w else cw) to (if (Math.abs(ch - h) <= SNAP_PX) h else ch)
     }
 
     companion object {
         const val CONTAIN = "contain"
         const val COVER = "cover"
         const val FILL = "fill"
+
+        /** How close, in pixels, a fitted axis may come to the frame before it takes the frame's size ([fitted]). */
+        internal const val SNAP_PX = 2
 
         /** A card's `fit_mode` (`cover`, `contain`, `fill`), else what CSS gives a [kind]'s element by default. */
         fun fitFor(fitMode: String?, kind: CameraStreamKind): String = when (fitMode) {

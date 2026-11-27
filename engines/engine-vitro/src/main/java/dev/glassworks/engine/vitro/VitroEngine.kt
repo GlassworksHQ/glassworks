@@ -764,6 +764,8 @@ class VitroEngine(
 
         init {
             activity.application.registerActivityLifecycleCallbacks(lifecycle)
+            // The device's zone is read once and kept (HaLocale.deviceTimeZone): this hears it change.
+            HaLocale.watchDeviceZone(activity)
             container.addView(vitroView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             vitroView.onMetrics = { m ->
                 lastMetrics = m
