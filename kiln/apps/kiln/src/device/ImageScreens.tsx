@@ -22,7 +22,8 @@ import { InPlaceNotice, ReceiveScreen, RestorePointScreen, type InPlaceWords } f
 import { Foot, StartOverDialog } from '../components/Nav';
 import { BrowserAsk, ClockGlyph, Details, Hands, Instructions, Note, Problem, Progress, Wait, rowsAt, useForward, type ProgressRow } from '../components/Kit';
 import type { FlowActionSpec } from '../components/Shell';
-import { ManagePageRow, hostOs } from '../wizard/screens';
+import { ManagePageRow } from '../wizard/screens';
+import { hostOs } from '../wizard/explain';
 
 type P = { f: ImageSession; s: ImageState; m: AppSession; ms: AppState };
 

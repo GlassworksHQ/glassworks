@@ -27,14 +27,21 @@ export function usbRefusal(e: unknown): UsbRefusal | undefined {
   return undefined;
 }
 
+/** This computer's system, for a frame's one-time USB setup: Windows, Linux, or another that needs none (macOS, Android). */
+export function hostOs(): 'win' | 'linux' | 'other' {
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+  return /Android/.test(ua) ? 'other' : /Windows/.test(ua) ? 'win' : /Linux/.test(ua) ? 'linux' : 'other';
+}
+
 /**
  * A refusal in calm words, for a device screen's connect error (`the`: the frame's `the`). `shown`: the screen shows the
- * frame's one-time USB setup for this computer above it (installer.json `device.drivers`).
+ * frame's one-time USB setup for this computer above it (installer.json `device.drivers`, on Windows or Linux). It says
+ * only that this connection wrote nothing: an earlier step of the same install (a stage, a partial restore) may have.
  */
 export function usbRefusalText(r: UsbRefusal, the: string, shown = false): string {
   return r === 'denied'
-    ? `This computer didn’t let the browser open ${the} over USB, so nothing was written. ${shown ? 'Do the one-time USB setup above' : 'On Windows or Linux, set up its USB driver or permission once'}, then unplug ${the}, plug it back in and click Connect again.`
-    : `Another program is using ${the}’s USB connection, often adb, so nothing was written. Close it (or run "adb kill-server") and any other Kiln tab, then click Connect again.`;
+    ? `This computer didn’t let the browser open ${the} over USB, so Kiln couldn’t write anything this time. ${shown ? 'Do the one-time USB setup above' : 'On Windows or Linux, set up its USB driver or permission once'}, then unplug ${the}, plug it back in and click Connect again.`
+    : `Another program is using ${the}’s USB connection, often adb, so Kiln couldn’t write anything this time. Close it (or run "adb kill-server") and any other Kiln tab, then click Connect again.`;
 }
 
 const RULES: Rule[] = [

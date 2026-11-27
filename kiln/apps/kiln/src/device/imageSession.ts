@@ -10,7 +10,7 @@
 import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glassworks/adb';
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, q, readApiKey } from '@glassworks/app-adb';
 import { askAdb, nothingPicked } from './adbAsk';
-import { usbRefusal, usbRefusalText } from '../wizard/explain';
+import { hostOs, usbRefusal, usbRefusalText } from '../wizard/explain';
 import {
   ProxyError, RestoreRefused, WrongImage, adbKeyStep, cap, checkInPlace, checkRestorePoint, defaultImage, deviceFileState, imageFromLink, parseSparseWrites, pickInList, plan, readNamedBackupZip, recordRestoreFiles, sha256Hex, sourceFile, systemKeyStep, wifiStep,
   type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type InPlaceCode, type NamedPart, type ReadBackFile,
@@ -504,7 +504,9 @@ export class ImageSession {
     const raw = e instanceof Error ? e.message : String(e);
     if (!r) return raw;
     this.log('', `USB: ${raw}`);
-    return usbRefusalText(r, this.d.frame.the, fastboot && !!this.d.frame.drivers);
+    // the setup line is on screen only on a system that needs one (UsbSetup): otherwise the words don't point to it
+    const o = hostOs();
+    return usbRefusalText(r, this.d.frame.the, fastboot && o !== 'other' && !!this.d.frame.drivers?.[o]);
   }
 
   /** The picked image's recipe. */

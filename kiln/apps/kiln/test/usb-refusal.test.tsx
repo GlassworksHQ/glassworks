@@ -69,14 +69,27 @@ describe('the Mirror\'s fastboot screen', () => {
   });
 
   it.each([['denied', DENIED], ['claimed', CLAIMED]] as const)('a connection %s says what to do, with the browser\'s words in the log', async (r, e) => {
+    as('Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0');
     const image = fastbootFails(e());
     await image.connectFastboot();
     expect(image.state.connectError).toBe(usbRefusalText(r, mirrorFrame.the, true));
+    // this connection wrote nothing; an earlier step of the install may have, so it never says nothing was written
+    expect(image.state.connectError).toMatch(/couldn’t write anything this time/);
+    expect(image.state.connectError).not.toMatch(/nothing was written/i);
     expect(image.state.log.join('\n')).toContain(e().message);
     expect(image.state.screen).toBe('fastboot');
   });
 
+  it('on a Mac, which shows no setup line, a refusal doesn\'t point to one', async () => {
+    as('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/131.0');
+    const image = fastbootFails(DENIED());
+    await image.connectFastboot();
+    expect(image.state.connectError).toBe(usbRefusalText('denied', mirrorFrame.the, false));
+    expect(image.state.connectError).not.toMatch(/above/);
+  });
+
   it('?demo=flash-fastboot-denied shows it, for the screenshots', async () => {
+    as('Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0');
     const { image } = await imageDemo(mirrorEntry, 'flash-fastboot-denied', true);
     expect(image.state).toMatchObject({ screen: 'fastboot', connectError: usbRefusalText('denied', mirrorFrame.the, true) });
   });
