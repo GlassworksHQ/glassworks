@@ -33,7 +33,7 @@ const until = async (f: () => boolean, ms = 10_000) => {
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
 describe('the switch', () => {
-  it('is on for everyone, the release by default (beta), and demos only where demos run', () => {
+  it('is on for everyone, the release by default (stable), and demos only where demos run', () => {
     expect(deviceMode('', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' });
     expect(deviceMode('?apk=other', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' });
     expect(deviceMode('?apk=release', false, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' });
@@ -54,7 +54,7 @@ describe('the switch', () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('Choose what to install on the Mirror');
-    expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
+    expect(screen.queryByText('Test only')).toBeNull(); // stable (frame.json): open to everyone, not a test page
     expect(embers()).toEqual(['Continue with Glassworks on the stock software']);
     fireEvent.click(screen.getByRole('radio', { name: 'Glassworks' }));
     expect(embers()).toEqual(['Continue with Glassworks']);
@@ -67,7 +67,7 @@ describe('the switch', () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local&mode=app');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('Install a test build on the Mirror');
-    expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
+    expect(screen.queryByText('Test only')).toBeNull(); // stable (frame.json): open to everyone, not a test page
     expect(document.querySelector('input[type=file]')).not.toBeNull();
     expect(embers()).toEqual(['Connect']);
   });

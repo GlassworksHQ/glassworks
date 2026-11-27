@@ -16,10 +16,10 @@ and glassworks.dev read them from here.
 | Frame | Status | Installer | Design |
 |---|---|---|---|
 | [`aqara-s1-plus`](aqara-s1-plus) | Stable | yes (`/aqara-s1-plus`) | `frame.json`, `recovery.json` |
-| [`lululemon-mirror`](lululemon-mirror) | Beta | yes (`/lululemon-mirror`): over fastboot, with Glassworks or the community image, or the app alone over adb onto it | `frame.json`, `recovery.json` |
-| [`generic-android`](generic-android) | Beta | yes (`/android`): the app over adb (#403) | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
-| [`google-pixel-tablet`](google-pixel-tablet) | Beta | none of its own: it installs as `generic-android` | `frame.json` only. A tested device: the generic app as it is |
-| [`samsung-galaxy-tab-a-10-1-2016`](samsung-galaxy-tab-a-10-1-2016) | Beta | none of its own: it installs as `generic-android` | `frame.json` only. A tested device, tested by the community on LineageOS (#700) |
+| [`lululemon-mirror`](lululemon-mirror) | Stable | yes (`/lululemon-mirror`): over fastboot, with Glassworks or the community image, or the app alone over adb onto it | `frame.json`, `recovery.json` |
+| [`generic-android`](generic-android) | Stable | yes (`/android`): the app over adb (#403) | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
+| [`google-pixel-tablet`](google-pixel-tablet) | Stable | none of its own: it installs as `generic-android` | `frame.json` only. A tested device: the generic app as it is |
+| [`samsung-galaxy-tab-a-10-1-2016`](samsung-galaxy-tab-a-10-1-2016) | Stable | none of its own: it installs as `generic-android` | `frame.json` only. A tested device, tested by the community on LineageOS (#700) |
 
 ### Three kinds of device
 
@@ -365,7 +365,7 @@ Worked out from today's data (2026-11-24):
 |---|---|---|
 | `aqara-s1-plus` | Good | Everything that counts is ticked but hardware: the wall base sends no button presses over its UART, and the Ethernet base isn't supported ([base-protocol.md](aqara-s1-plus/research/base-protocol.md)) |
 | `lululemon-mirror` | Good | Install, silent updates, kiosk and setup come from the maintainer's end-to-end Kiln install from kiln.glassworks.dev on 2026-11-23 ([image-patch.md](lululemon-mirror/research/image-patch.md)) and the setup hotspot's run that day. Hardware isn't checked on the unit yet (`facts.hardware` is left out). Shown only: lululemon's bootloader logo stays (branding ✗), and no Clarity grade is published (proof ✗) |
-| `generic-android` | Good, unverified | Beta, in Kiln (`/android`). Install needs USB debugging turned on, and silent updates and hardware depend on the device. Its kiosk and setup facts aren't from a real unit yet |
+| `generic-android` | Good, unverified | Stable, in Kiln (`/android`). Install needs USB debugging turned on, and silent updates and hardware depend on the device. Its kiosk and setup facts aren't from a real unit yet |
 | `google-pixel-tablet` | Good | The root's run on 2026-11-17 (`run-node.ts --plan`, then `--install`, generic test build 9755076; Home Assistant added it and the QR sign-in loaded the dashboard) gives setup ✓. It installs through Generic Android in Kiln (`/android`), with USB debugging. Its *Silent updates* sensor, hardware and three kiosk checks aren't read yet |
 | `samsung-galaxy-tab-a-10-1-2016` | Good, unverified | Beta. Tested by the community on an unofficial 64-bit LineageOS build (#700), with no recorded run, so every item is what we expect. It installs through Generic Android in Kiln (`/android`), with USB debugging. Samsung's own Android 8.1 on it runs a 32-bit userspace and isn't tested |
 

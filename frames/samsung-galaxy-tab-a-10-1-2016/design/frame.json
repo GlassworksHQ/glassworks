@@ -5,7 +5,7 @@
   "name": "Samsung Galaxy Tab A 10.1 (2016)",
   "brand": "Samsung",
   "aka": "SM-T580",
-  "status": "beta",
+  "status": "stable",
   "summary": "A common 10-inch tablet from 2016 that runs Glassworks for generic Android on LineageOS.",
   "notice": "It was tested on an unofficial 64-bit LineageOS build. Samsung's own Android 8.1 on this tablet runs 32-bit apps only, and hasn't been tested with Glassworks.",
   "model": {

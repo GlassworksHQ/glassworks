@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // /android?apk=release: the APK from the newest generic-android-v* release (never the legacy build's line) through
 // Kiln's release route, checked against the release's .sha256. No release is an error, never the file picker.
-// Generic Android is beta (frame.json), so the page is open: without ?apk=…, the APK comes from the release. The
+// Generic Android is stable (frame.json), so the page is open: without ?apk=…, the APK comes from the release. The
 // locked page of a frame that isn't open: device-locked.test.tsx.
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { FakeAndroid, fakeGenericApk } from '@glassworks/generic-android-installer/fakes';
@@ -37,7 +37,7 @@ const until = async (f: () => boolean, ms = 5_000) => {
 };
 
 describe('the switch', () => {
-  it('opens to everyone: generic-android\'s frame.json makes it installable (beta, with its kiln route)', () => {
+  it('opens to everyone: generic-android\'s frame.json makes it installable (stable, with its kiln route)', () => {
     expect(ANDROID_OPEN).toBe(true);
     expect(androidMode('', false, [])).toEqual({ on: true, apk: 'release' });
     expect(androidMode('', false, [], false)).toEqual({ on: false }); // a frame that isn't open: only the test links
@@ -228,7 +228,7 @@ describe('the page', () => {
     history.replaceState(null, '', '/android?apk=release');
     render(<AndroidWizard />);
     await screen.findByText('Plug in the tablet');
-    expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
+    expect(screen.queryByText('Test only')).toBeNull(); // stable (frame.json): open to everyone, not a test page
     await screen.findByText('Glassworks 0.2.0');
     expect(screen.getByText(/Download verified/)).toBeTruthy();
     expect(screen.getByText(/^Needs Android 8 or newer\./)).toBeTruthy(); // the release is the generic build, not the legacy one for 6 and 7

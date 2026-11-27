@@ -28,8 +28,8 @@
     </picture>
   </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-beta-on-dark.svg">
-    <img alt="Status: beta" src="https://www.glassworks.dev/brand/badge-status-beta-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-stable-on-dark.svg">
+    <img alt="Status: stable" src="https://www.glassworks.dev/brand/badge-status-stable-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -49,7 +49,7 @@ This folder defines the **Generic Android** frame (`design/frame.json`, [format]
 
 ## Status
 
-**Status: beta.** You can install Glassworks on any Android 8+ tablet or phone straight from Chrome or Edge at [kiln.glassworks.dev/android](https://kiln.glassworks.dev/android), with a separate legacy build available for Android 6 and 7 devices (including the lululemon Studio Mirror). On a Google Pixel Tablet, dashboard loading, Home Assistant ESPHome adoption, automatic pane hiding, and in-place updates are all verified; hardware testing for wake words, Sendspin audio, and the ambient light sensor is still underway.
+**Status: stable.** You can install Glassworks on any Android 8+ tablet or phone straight from Chrome or Edge at [kiln.glassworks.dev/android](https://kiln.glassworks.dev/android), with a separate legacy build available for Android 6 and 7 devices (including the lululemon Studio Mirror). On a Google Pixel Tablet, dashboard loading, Home Assistant ESPHome adoption, automatic pane hiding, and in-place updates are all verified; hardware testing for wake words, Sendspin audio, and the ambient light sensor is still underway.
 
 **Tested devices:** the [Google Pixel Tablet](../google-pixel-tablet/README.md), tested by Glassworks on stock Android, and the [Samsung Galaxy Tab A 10.1 (2016)](../samsung-galaxy-tab-a-10-1-2016/README.md), tested by the community on LineageOS. Tried Glassworks on another device? Tell us how it went with a [device report](https://github.com/GlassworksHQ/glassworks/issues/new?template=device-report.yml), even if everything worked: it's how a device becomes a tested device. If you installed with Kiln, **Tell us how it goes** on its Done screen sends one for you, without a GitHub account.
 
@@ -201,7 +201,7 @@ Local release signing reads environment variables (if none are set, Gradle build
 | Time zone | Not supported | Aqara S1 Plus only |
 | Diagnostics | Stable | Included in both builds (no CPU temperature sensor without a frame-defined thermal zone) |
 | Bluetooth proxy | Depends on device | Requires Bluetooth LE; included in both builds |
-| Notifications | Beta | Included in both builds |
+| Notifications | Stable | Included in both builds |
 | Camera | Depends on device | Requires a camera; included in both builds |
 | Wall base | Not supported | Aqara S1 Plus only |
 

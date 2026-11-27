@@ -4,7 +4,7 @@
   "base": "generic-android",
   "name": "Google Pixel Tablet",
   "brand": "Google",
-  "status": "beta",
+  "status": "stable",
   "summary": "A common 11-inch tablet that runs Glassworks for generic Android as it is.",
   "model": {
     "body": {

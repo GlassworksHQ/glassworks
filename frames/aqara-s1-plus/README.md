@@ -319,11 +319,11 @@ Everything from FEL recovery and mainline U-Boot DRAM fixes to byte-exact browse
 | Assist | Stable | On-device wake word and Home Assistant Assist satellite |
 | Timers | Stable | On-screen voice timers and chimes |
 | Sendspin | Stable | Synchronized Music Assistant player |
-| Zigbee / Thread radio | Beta | Zigbee coordinator/repeater and Thread border router/repeater |
+| Zigbee / Thread radio | Stable | Zigbee coordinator/repeater and Thread border router/repeater |
 | Time zone | Stable | Automatically supported; persists time zone across reboots |
 | Diagnostics | Stable | System and app health sensors |
-| Bluetooth proxy | Beta | Passive BLE scanning and active GATT connections (single-device GATT verified; concurrent links untested) |
-| Notifications | Beta | Rich alerts, snapshots, buttons, and dashboard views |
+| Bluetooth proxy | Stable | Passive BLE scanning and active GATT connections (single-device GATT verified; concurrent links untested) |
+| Notifications | Stable | Rich alerts, snapshots, buttons, and dashboard views |
 | Camera | Not supported | The S1 Plus does not have a built-in camera |
 | Wall base | Alpha | Verified against emulator matching Aqara's `bracket_cli`; awaiting physical base test ([base-protocol.md](research/base-protocol.md), [bases.md](research/bases.md)) |
 

@@ -4,7 +4,7 @@
   "name": "lululemon Studio Mirror",
   "brand": "lululemon",
   "aka": "Originally sold as Mirror, by Mirror.co",
-  "status": "beta",
+  "status": "stable",
   "summary": "A full-length mirror with a 40-inch portrait screen behind it. The original version takes a new Android image over fastboot.",
   "tagline": "A 40-inch mirror with Android behind it.",
   "notice": "Installing will erase lululemon's software, with no backup. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target.",

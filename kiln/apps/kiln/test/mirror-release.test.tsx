@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // /lululemon-mirror?apk=release: the APK from the newest Mirror release through Kiln's release route, checked against
-// the release's .sha256. No release is an error, never the file picker. The Mirror is beta (frame.json), so the page is
+// the release's .sha256. No release is an error, never the file picker. The Mirror is stable (frame.json), so the page is
 // open: without ?apk=…, the APK comes from the release. The locked page of a frame that isn't open: device-locked.test.tsx.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
@@ -35,7 +35,7 @@ const session = (kind: FakeRelease | typeof fetch) =>
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
 describe('the switch', () => {
-  it('opens to everyone: frame.json makes the Mirror installable (beta, with its kiln route)', () => {
+  it('opens to everyone: frame.json makes the Mirror installable (stable, with its kiln route)', () => {
     expect(deviceOpen(mirrorFrame)).toBe(true);
     expect(deviceMode('', false, [], deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' });
   });
@@ -231,7 +231,7 @@ describe('the page', () => {
   const toImage = async () => {
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('Choose what to install on the Mirror');
-    expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
+    expect(screen.queryByText('Test only')).toBeNull(); // stable (frame.json): open to everyone, not a test page
     fireEvent.click(screen.getByRole('radio', { name: 'Glassworks' })); // the full image, not the recommended in-place way
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
     await screen.findByText('Install Glassworks on the Mirror');
