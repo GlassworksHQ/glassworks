@@ -887,6 +887,19 @@ class LiveCameraFeedTest {
         assertEquals(400 to 400, frame.fitted(400, 400))
     }
 
+    @Test
+    fun aVideoInACardOfItsOwnShapeFillsItToTheEdge() {
+        // A 641 px wide card sized to a 16:9 video rounds its height to 360. Contain alone gives 640 x 360, centred at
+        // left 0, so the card's background showed as a dark line down the right edge.
+        val frame = CameraFitFrame(activity, CameraFitFrame.CONTAIN)
+        frame.setVideoSize(1280, 720)
+        assertEquals(641 to 360, frame.fitted(641, 360))
+        assertEquals(1007 to 566, frame.fitted(1007, 566))
+        // A real letterbox stays one.
+        assertEquals(400 to 225, frame.fitted(400, 400))
+        assertEquals(636 to 358, frame.fitted(641, 358))
+    }
+
 
     // ---- Recovery after a drop (#799 C1): HA restarts, every kind fails, HA comes back.
 
