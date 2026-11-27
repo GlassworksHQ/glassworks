@@ -8,6 +8,27 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 
 ## [Unreleased]
 
+## [1.0.0] - YYYY-MM-DD
+
+**Glassworks 1.0 needs Home Assistant 2026.11 or newer for notifications and the radio controls. It's the first stable release for the Aqara S1 Plus, with everything from 0.9.0.**
+
+**Upgrading from 0.4.x.** First check the panel's *Radio helper* sensor in Home Assistant. If it says the boot image
+needs refreshing, run a full Kiln install once more: that installs 1.0.0, and the app's radio bundle can then add the
+frame loader, which lets Home Assistant update the rest of the panel ([the frame's
+notes](https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/FRAME-CHANGELOG.md) explain).
+Otherwise, on 0.4.4, Home Assistant offers 1.0.0 on the panel's update card, and
+Install takes it straight there. A panel on 0.4.1, 0.4.2 or 0.4.3 is offered 0.4.4 first: install it, and 1.0.0
+shows up next, so it's two updates and no reinstall. Panels on 0.4.0 or older can't install updates from Home
+Assistant, so update them once by hand with Kiln's [Finish setting
+up](https://kiln.glassworks.dev/aqara-s1-plus/set-up), and Home Assistant takes over from there. The panel keeps its
+Home Assistant device, entity IDs and settings. Most of what changed since 0.4.x arrived in 0.9.0, so read [its
+notes](https://github.com/GlassworksHQ/glassworks/blob/main/CHANGELOG.md#090---2026-11-24) too. Two of them ask you
+to do something. So that a room's "lights off" skips the panel's screen, reload the ESPHome integration once and turn
+off Expose for the panel's *Screen* light in *Settings → Voice assistants → Expose*. If you used the built-in night
+window, import the Panel night mode blueprint. 1.0.0 itself asks one more thing: run Home Assistant 2026.11 or newer,
+which gives the panel its encryption key. On an older Home Assistant, `notify` messages and the radio controls stop
+working, as the item on the encryption key below explains.
+
 ### Added
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,

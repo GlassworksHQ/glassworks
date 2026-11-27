@@ -37,7 +37,7 @@ def due(p):
 
 
 def s1_marked_latest():
-    """The committed S1 line's `latest` (false until 1.0.0, docs/releasing.md#tags)."""
+    """The committed S1 line's `latest` (false for now, 1.0.0 included, docs/releasing.md#tags)."""
     data = json.loads((ROOT / 'frames/aqara-s1-plus/design/frame.json').read_text())
     return bool(data['release']['lines']['aqara-s1-plus'].get('latest'))
 
@@ -167,7 +167,8 @@ class TheRepoFrames(unittest.TestCase):
 
     def test_no_line_is_releases_latest_while_v0_4_4_holds_it(self):
         # Panels on 0.4.3 read only releases/latest and only understand v1.2.3: v0.4.4 keeps it, and they reach
-        # anything newer through 0.4.4 until 1.0.0 marks the S1 line latest again (docs/releasing.md#tags). That PR
+        # anything newer through 0.4.4 until the maintainer marks the S1 line latest again, after 1.0.0
+        # (docs/releasing.md#tags). That PR
         # changes this test to expect ['aqara-s1-plus']; the others follow the data.
         self.assertEqual([], [n for n, l in self.lines.items() if l.get('latest')])
 

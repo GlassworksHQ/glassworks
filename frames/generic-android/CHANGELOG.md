@@ -11,6 +11,19 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+## [1.0.0] - YYYY-MM-DD
+
+**Glassworks 1.0 needs Home Assistant 2026.11 or newer for notifications. It's the first stable release for Android tablets and the lululemon Mirror, with everything from 0.9.0.**
+
+**Upgrading.** Home Assistant offers 1.0.0 on the update card to devices on 0.2.0 or newer, for both builds, and
+Install updates in place, keeping the sign-in and settings. Coming from 0.2.0, read the notes of
+[0.3.0](https://github.com/GlassworksHQ/glassworks/blob/main/frames/generic-android/CHANGELOG.md#030---2026-11-23) and
+[0.9.0](https://github.com/GlassworksHQ/glassworks/blob/main/frames/generic-android/CHANGELOG.md#090---2026-11-24) too: that's where themes, the Assist edge glow
+and the notifications and Bluetooth proxy panes arrived. On the Mirror, the app update is separate from the Mirror
+frame, which only changes when Kiln flashes the Mirror again. Run Home Assistant 2026.11 or newer, which gives the
+device its encryption key: on an older Home Assistant, `notify` messages stop working, as the item on the encryption key below
+explains.
+
 ### Added
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,

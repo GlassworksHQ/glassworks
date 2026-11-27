@@ -11,6 +11,14 @@ is the release notes, and its first line is what Home Assistant's Frame update c
 
 ## [Unreleased]
 
+## [1.0.0] - YYYY-MM-DD
+
+**The first lululemon Mirror frame: Kiln flashes Glass Panes' newest image with Glassworks built in, so the app updates itself from Home Assistant.**
+
+**Upgrading.** A Mirror that Kiln flashed before this release reports an older frame version, or none, and Home
+Assistant's Frame update card offers this one and says how to install it: flash the Mirror again with Kiln. The
+Glassworks app updates on its own card, with or without a new frame.
+
 ### Added
 
 - **The first Mirror frame.** Kiln flashes Glass Panes' newest image (image 3) with Glassworks built in as a system

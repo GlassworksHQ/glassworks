@@ -249,7 +249,7 @@ For 1.0.0, once every changelog has its `[1.0.0]` section:
 
 | Line or frame | Kind | Version | Tag | Plan |
 |---|---|---|---|---|
-| `aqara-s1-plus` | app line (s1-kiosk), for aqara-s1-plus | 1.0.0 | `aqara-s1-plus-v1.0.0` | **build, check; publish** (latest) |
+| `aqara-s1-plus` | app line (s1-kiosk), for aqara-s1-plus | 1.0.0 | `aqara-s1-plus-v1.0.0` | **build, check; publish** |
 | `generic-android` | app line (gradle), for generic-android, google-pixel-tablet | 1.0.0 | `generic-android-v1.0.0` | **build, check; publish** |
 | `generic-android-legacy` | app line (gradle), for generic-android, lululemon-mirror | 1.0.0 | `generic-android-legacy-v1.0.0` | **build, check; publish** |
 | `aqara-s1-plus` | frame release (signed) | 1.0.0 | `frames/aqara-s1-plus/v1.0.0` | **build, check, sign the bundle; publish** |
@@ -309,8 +309,8 @@ only the generic lines can run (`what: generic-android`).
    release or beta (another run may have published since), and a tag that exists already names this run's commit.
    Then, item by item, pushes the tag over SSH with the tag deploy key and creates the release with every file in one
    `gh release create`, so a release never has half its ABIs. A line marked `latest` in its frame's data gets
-   `--latest` on a stable; everything else is `--latest=false`. No line is marked until 1.0.0, so `releases/latest`
-   stays `v0.4.4`, the one release panels up to 0.4.3 can read ([Tags](#tags)).
+   `--latest` on a stable; everything else is `--latest=false`. No line is marked yet, 1.0.0 included, so
+   `releases/latest` stays `v0.4.4`, the one release panels up to 0.4.3 can read ([Tags](#tags)).
 
 The radio bundle and the frame bundle are not published on their own (the Silicon Labs libcpc may only be
 distributed inside the product): the radio bundle is inside the `armeabi-v7a` APK, the frame bundle only in its zip.
@@ -407,23 +407,23 @@ after it. Apps up to **0.4.3** only read `releases/latest` and only understand `
 
 - `v0.4.4` is the last plain tag. Every S1 release after it is tagged `aqara-s1-plus-v1.2.3` (maintainer,
   2026-11-19).
-- **`v0.4.4` stays `releases/latest` until 1.0.0** (maintainer, 2026-11-23): the S1 line's `latest` is `false`
-  in `frames/aqara-s1-plus/design/frame.json`, so the releases before 1.0.0 don't take it. A panel on 0.4.3 is
-  offered 0.4.4, and once on 0.4.4 it reads the whole list and is offered the newest S1 release: two updates from
-  Home Assistant, no reinstall. 0.4.3 doesn't update by itself, so this gives its owners until 1.0.0 to press
+- **`v0.4.4` stays `releases/latest`, past 1.0.0 too** (maintainer, 2026-11-23 and 2026-11-24): the S1 line's
+  `latest` is `false` in `frames/aqara-s1-plus/design/frame.json`, so no release takes it, 1.0.0 included. A panel
+  on 0.4.3 is offered 0.4.4, and once on 0.4.4 it reads the whole list and is offered the newest S1 release: two
+  updates from Home Assistant, no reinstall. 0.4.3 doesn't update by itself, so this gives its owners time to press
   Install. GitHub's page shows 0.4.4 as *Latest* meanwhile; nothing else reads it (Kiln, the site and the apps from
   0.4.4 on pick from the list).
-- **1.0.0 sets `latest` back to `true`**, in the same PR as its changelog sections, and is published as
-  `releases/latest`. That PR also changes `test_no_line_is_releases_latest_while_v0_4_4_holds_it` in
-  `tools/release/test/test_release_plan.py` to expect the S1 line (the other tests read the flag from the data). A panel still on 0.4.3 after that sees no update, and needs Kiln or `adb install -r`.
+- **The maintainer sets `latest` back to `true` later**, after 1.0.0, in a PR of its own, and the next S1 release
+  after it is published as `releases/latest`. That PR also changes
+  `test_no_line_is_releases_latest_while_v0_4_4_holds_it` in `tools/release/test/test_release_plan.py` to expect
+  the S1 line (the other tests read the flag from the data). A panel still on 0.4.3 after that sees no update, and
+  needs Kiln or `adb install -r`.
 - The app's blueprint links point at its own release's tag, which `ReleaseLine.tag` builds
   (`aqara-s1-plus-v1.2.3` on the S1). A release tagged any other way gets links to files that aren't
   there ([Blueprints](blueprints.md#which-version-you-get)). The generic app and its legacy build do
   the same with their own tags.
 - Every other frame's or library's release is published with `--latest=false`, so `releases/latest` stays an S1
   release.
-
-First add a `## [1.0.0] - <date>` section to [CHANGELOG.md](../CHANGELOG.md) (move the
 
 ## The S1 frame bundle
 
@@ -467,7 +467,7 @@ Write the version's changelog section as for any release (its notes are the upda
 `channel: beta`:
 
 ```sh
-gh workflow run release.yml --repo GlassworksHQ/glassworks --ref main -f version=0.6.0 -f channel=beta -f what=aqara-s1-plus:app
+gh workflow run release.yml --repo GlassworksHQ/glassworks --ref main -f version=1.1.0 -f channel=beta -f what=aqara-s1-plus:app
 ```
 
 The workflow builds and checks everything as usual, and publishes each app line with `--prerelease` and
@@ -476,21 +476,20 @@ stable releases only, doesn't offer it. **Frame releases have no betas** (the ap
 a beta run skips them, and fails if you name one.
 
 Versions keep going up across both channels: `tools/release/check-newer-than-released.sh` compares a new version with
-the line's releases **and** pre-releases, so a stable can't go out below a published beta. After beta 0.6.0, the next
-stable is 0.6.0 promoted, or 0.6.1 and up.
+the line's releases **and** pre-releases, so a stable can't go out below a published beta. After beta 1.1.0, the next
+stable is 1.1.0 promoted, or 1.1.1 and up.
 
 ### Promote a beta
 
 ```sh
-gh release edit aqara-s1-plus-v0.6.0 --repo GlassworksHQ/glassworks --prerelease=false --latest=false \
-  --title "Glassworks for the Aqara S1 Plus 0.6.0"
-gh release edit generic-android-legacy-v0.3.0 --repo GlassworksHQ/glassworks --prerelease=false --latest=false \
-  --title "Glassworks for generic Android, legacy build 0.3.0"
+gh release edit aqara-s1-plus-v1.1.0 --repo GlassworksHQ/glassworks --prerelease=false --latest=false \
+  --title "Glassworks for the Aqara S1 Plus 1.1.0"
+gh release edit generic-android-legacy-v1.1.0 --repo GlassworksHQ/glassworks --prerelease=false --latest=false \
+  --title "Glassworks for generic Android, legacy build 1.1.0"
 ```
 
-`--latest=false` for every line while `v0.4.4` holds `releases/latest` (until 1.0.0, [Tags](#tags)); after that,
-`--latest` for the S1 app only, as when it is published. Panels on Stable
-see it at their next check. A beta with a bug is fixed by a higher version, beta or stable: panels that run it are
+`--latest=false` for every line while `v0.4.4` holds `releases/latest` (for now, 1.0.0 included, [Tags](#tags));
+after that, `--latest` for the S1 app only, as when it is published. Panels on Stable see it at their next check. A beta with a bug is fixed by a higher version, beta or stable: panels that run it are
 never offered anything lower.
 
 ## Glassworks for generic Android and its legacy build
