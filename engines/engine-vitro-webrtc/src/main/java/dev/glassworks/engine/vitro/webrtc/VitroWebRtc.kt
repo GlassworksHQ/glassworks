@@ -6,6 +6,7 @@ package dev.glassworks.engine.vitro.webrtc
 
 import android.view.View
 import dev.glassworks.engine.vitro.camera.CameraStream
+import dev.glassworks.engine.vitro.camera.CameraStreamCrop
 import dev.glassworks.engine.vitro.camera.CameraStreamFactories
 import dev.glassworks.engine.vitro.camera.CameraStreamFactory
 import dev.glassworks.engine.vitro.camera.CameraStreamHost
@@ -53,9 +54,24 @@ object VitroWebRtc {
     /** The most window redraws a second the dashboard's TextureView cameras cause between them ([OPTIONS]). */
     internal const val PACED_MAX_FPS = 30
 
+    /**
+     * The view's one overlay camera ([dev.glassworks.engine.vitro.camera.CameraOverlay]: its largest on screen, and More
+     * Info's): a SurfaceView, the one video layer the S1's composer overlays. Its frames don't redraw the window.
+     */
+    internal val OVERLAY_OPTIONS = HaWebRtcPlayer.Options(
+        stream = OPTIONS.stream,
+        scaling = VideoScaling.STRETCH,
+        view = VideoViewKind.SURFACE_VIEW,
+    )
+
     internal class Factory(private val host: CameraStreamHost) : CameraStreamFactory {
-        override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
-            if (kind == CameraStreamKind.WEB_RTC) WebRtcCameraStream(HaWebRtcPlayer(host.context, HostChannel(host), entityId, OPTIONS)) else null
+        override fun create(entityId: String, kind: CameraStreamKind): CameraStream? = create(entityId, kind, false)
+
+        override fun create(entityId: String, kind: CameraStreamKind, overlay: Boolean): CameraStream? =
+            if (kind != CameraStreamKind.WEB_RTC) null
+            else WebRtcCameraStream(HaWebRtcPlayer(host.context, HostChannel(host), entityId, if (overlay) OVERLAY_OPTIONS else OPTIONS))
+
+        override fun supportsOverlay(kind: CameraStreamKind): Boolean = kind == CameraStreamKind.WEB_RTC
 
         /** libwebrtc's factory and EGL get made off the main thread while the view builds. */
         override fun prewarm() = HaWebRtcPlayer.prewarm(host.context)
@@ -94,7 +110,7 @@ internal class HostChannel(private val host: CameraStreamHost) : HaCommandChanne
  * surface: so it's [closeWhenHidden], and the card opens a new one when it shows again (libwebrtc's shared parts
  * linger meanwhile, so that costs a new session, as a resume does).
  */
-internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraStream, CameraStreamVideoSize {
+internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraStream, CameraStreamVideoSize, CameraStreamCrop {
     override val view: View get() = player.view
     override var listener: CameraStream.Listener? = null
     override val videoWidth: Int get() = player.videoWidth
@@ -128,6 +144,13 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
     override fun setRendering(rendering: Boolean) = player.setRendering(rendering)
 
     override val closeWhenHidden: Boolean get() = true
+
+    /** A SurfaceView's picture crops itself (`cover`): the renderer draws the middle of the frame at the view's shape. */
+    override fun cropToView(crop: Boolean): Boolean {
+        if (player.view !is android.view.SurfaceView) return false
+        player.scaling = if (crop) VideoScaling.FILL else VideoScaling.STRETCH
+        return true
+    }
 
     override val surfaceReady: Boolean get() = player.surfaceReady
 

@@ -54,6 +54,9 @@ class LiveCameraFeedTest {
         var closed = false
         var throwOnStart = false
 
+        /** Made as its view's overlay ([CameraStreamFactory.create]'s `overlay`). */
+        var overlay = false
+
         /** setActive with this value throws. */
         var throwOnActive: Boolean? = null
 
@@ -143,14 +146,64 @@ class LiveCameraFeedTest {
     fun setUp() = CameraVideoBudget.reset()
 
     @After
-    fun tearDown() = CameraVideoBudget.reset()
+    fun tearDown() {
+        CameraVideoBudget.reset()
+        dev.glassworks.engine.vitro.camera.CameraOverlay.reset()
+    }
+
+    /**
+     * The view's largest camera on screen plays WebRTC into its one overlay (a SurfaceView), the others into
+     * TextureViews: known once the view lays its cards out, so their WebRTC opens then. More Info's camera is an
+     * overlay at once, laid out or not.
+     */
+    @Test
+    fun theLargestCardOnScreenGetsTheOverlayOnceLaidOutAndMoreInfoAlways() {
+        overlayFor += WEB_RTC
+        val ctx = context(store())
+        val column = android.widget.LinearLayout(activity).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        val small = FrameLayout(activity)
+        val big = FrameLayout(activity)
+        column.addView(small, android.widget.LinearLayout.LayoutParams(300, 120))
+        column.addView(big, android.widget.LinearLayout.LayoutParams(640, 300))
+        val scroll = android.widget.ScrollView(activity).apply { addView(column) }
+        val a = feed(ctx, small)
+        val b = feed(ctx, big)
+        a.start()
+        b.start()
+        idle()
+        assertTrue("not laid out yet: no WebRTC player yet", made.none { it.kind == WEB_RTC })
+        activity.setContentView(scroll)
+        val root = scroll.rootView
+        root.measure(View.MeasureSpec.makeMeasureSpec(960, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(480, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, 960, 480)
+        idle()
+        val players = made.filter { it.kind == WEB_RTC && !it.closed }
+        assertEquals(2, players.size)
+        assertEquals("only the larger card is the overlay", listOf(true), players.filter { it.overlay }.map { big.indexOfChild(it.view.parent as View) >= 0 })
+        assertEquals(1, players.count { !it.overlay })
+        val sheet = LiveCameraFeed(ctx, "camera.porch", { null }, host = FrameLayout(activity), foreground = true) {}
+        sheet.start()
+        idle()
+        assertTrue("More Info's camera: an overlay at once", made.last { it.kind == WEB_RTC }.overlay)
+        sheet.stop()
+        a.stop()
+        b.stop()
+    }
+
+    /** Kinds whose factory can make an overlay player ([CameraStreamFactory.supportsOverlay]). */
+    private val overlayFor = HashSet<CameraStreamKind>()
 
     private fun factory(kinds: Set<CameraStreamKind>) = CameraPlayers(
         kinds.associateWith {
             object : CameraStreamFactory {
-                override fun create(entityId: String, kind: CameraStreamKind): CameraStream? {
+                override fun supportsOverlay(kind: CameraStreamKind): Boolean = kind in overlayFor
+
+                override fun create(entityId: String, kind: CameraStreamKind): CameraStream? = create(entityId, kind, false)
+
+                override fun create(entityId: String, kind: CameraStreamKind, overlay: Boolean): CameraStream? {
                     if (kind in nullFor) return null
                     return FakeStream(kind, activity).also {
+                        it.overlay = overlay
                         it.hasSurface = kind !in noSurfaceFor
                         it.throwOnStart = kind in throwFor
                         it.closesWhenHidden = kind in closesWhenHiddenFor

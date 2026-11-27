@@ -90,6 +90,33 @@ class VitroWebRtcTest {
         }
     }
 
+    /**
+     * The view's one overlay camera (its largest on screen, More Info's) draws into a SurfaceView, the one video layer
+     * the S1's composer overlays; asked for any other kind, the factory makes its usual player. Through Clarity's
+     * wrapper, a SurfaceView's picture crops itself for `cover`, and a TextureView's says it can't.
+     */
+    @Test
+    @Config(sdk = [29])
+    fun `the overlay camera's WebRTC draws into a SurfaceView, which crops itself for cover`() {
+        VitroWebRtc.register()
+        val players = CameraPlayers.forHost(host) { null }
+        assertTrue(players.supportsOverlay(CameraStreamKind.WEB_RTC))
+        assertFalse(players.supportsOverlay(CameraStreamKind.HLS))
+        val overlay = players.create("camera.front_door", CameraStreamKind.WEB_RTC, overlay = true)!!
+        assertTrue(overlay.view.javaClass.name, overlay.view is android.view.SurfaceView)
+        assertTrue((overlay as dev.glassworks.engine.vitro.camera.CameraStreamCrop).cropToView(true))
+        overlay.close()
+        val card = players.create("camera.front_door", CameraStreamKind.WEB_RTC, overlay = false)!!
+        assertTrue(card.view is TextureView)
+        assertFalse((card as dev.glassworks.engine.vitro.camera.CameraStreamCrop).cropToView(true))
+        card.close()
+        val hls = players.create("camera.front_door", CameraStreamKind.HLS, overlay = true)!!
+        assertTrue("HLS has no overlay player: its usual TextureView", hls.view is TextureView)
+        hls.close()
+        assertEquals(dev.glassworks.hawebrtc.VideoViewKind.SURFACE_VIEW, VitroWebRtc.OVERLAY_OPTIONS.view)
+        assertEquals(VitroWebRtc.OPTIONS.stream, VitroWebRtc.OVERLAY_OPTIONS.stream)
+    }
+
     @Test
     fun `the card's frame does the fitting, so the picture fills the view it gets (fit_mode fill stretches)`() {
         assertEquals(dev.glassworks.hawebrtc.VideoScaling.STRETCH, VitroWebRtc.OPTIONS.scaling)

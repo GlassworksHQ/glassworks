@@ -19,7 +19,8 @@ import dev.glassworks.platform.Platform
  * `contain` (letterboxed, the video's default), `cover` (cropped) or `fill` (stretched, the image's default). Until
  * the picture's size is known ([setVideoSize]) the view fills the frame. The frame clips what `cover` puts outside.
  *
- * Its player draws into a TextureView, so the video fades, clips and filters with its card as HA's `<video>` does.
+ * Its player draws into a TextureView, so the video fades, clips and filters with its card as HA's `<video>` does;
+ * the view's one overlay camera ([CameraOverlay]) into a SurfaceView, whose hole in the window the frame's clip shapes.
  */
 class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
     var fit: String = fit
@@ -32,6 +33,18 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
 
     private var videoW = 0
     private var videoH = 0
+
+    /**
+     * Its picture crops itself to its view for `cover` ([CameraStreamCrop]: a SurfaceView's): the view then gets the
+     * frame's size, not a larger one the frame clips. Main thread.
+     */
+    var childCrops: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            requestLayout()
+            coverMayHaveChanged()
+        }
 
     /**
      * The picture fills the whole frame, no letterbox: `cover`, `fill`, a video whose shape is the frame's (within
@@ -132,7 +145,7 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
      * the stretch this costs is under 0.2% of a 720p picture.
      */
     internal fun fitted(w: Int, h: Int): Pair<Int, Int> {
-        if (videoW <= 0 || videoH <= 0 || w <= 0 || h <= 0 || fit == FILL) return w to h
+        if (videoW <= 0 || videoH <= 0 || w <= 0 || h <= 0 || fit == FILL || (fit == COVER && childCrops)) return w to h
         val scaleW = w.toFloat() / videoW
         val scaleH = h.toFloat() / videoH
         val scale = if (fit == COVER) maxOf(scaleW, scaleH) else minOf(scaleW, scaleH)

@@ -6,6 +6,7 @@ package dev.glassworks.engine.vitro.clarity
 
 import android.view.View
 import dev.glassworks.engine.vitro.camera.CameraStream
+import dev.glassworks.engine.vitro.camera.CameraStreamCrop
 import dev.glassworks.engine.vitro.camera.CameraStreamFactory
 import dev.glassworks.engine.vitro.camera.CameraStreamKind
 import dev.glassworks.engine.vitro.camera.CameraStreamVideoSize
@@ -253,9 +254,13 @@ internal class ClarityCameras(private val now: () -> Double) {
         }
 
         private class Measured(private val inner: CameraStreamFactory) : CameraStreamFactory {
-            override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
-                inner.create(entityId, kind)?.let { MeasuredCameraStream(it, entityId, kind) }
+            override fun create(entityId: String, kind: CameraStreamKind): CameraStream? = create(entityId, kind, false)
+
+            override fun create(entityId: String, kind: CameraStreamKind, overlay: Boolean): CameraStream? =
+                inner.create(entityId, kind, overlay)?.let { MeasuredCameraStream(it, entityId, kind) }
                     ?.also { ClarityCameras.current?.opened(it) }
+
+            override fun supportsOverlay(kind: CameraStreamKind): Boolean = inner.supportsOverlay(kind)
 
             override fun prewarm() = inner.prewarm()
         }
@@ -296,8 +301,10 @@ internal class MeasuredCameraStream(
     private val inner: CameraStream,
     val entityId: String,
     val kind: CameraStreamKind,
-) : CameraStream, CameraStreamVideoSize {
+) : CameraStream, CameraStreamVideoSize, CameraStreamCrop {
     override val view: View get() = inner.view
+
+    override fun cropToView(crop: Boolean): Boolean = (inner as? CameraStreamCrop)?.cropToView(crop) == true
 
     override val videoWidth: Int get() = (inner as? CameraStreamVideoSize)?.videoWidth ?: 0
 
