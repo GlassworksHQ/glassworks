@@ -75,7 +75,7 @@ object BubbleModules {
 
     /** A block mapping's first key: a quoted or plain key, then `:` and a space or the line's end; or `? `. */
     private val BLOCK_KEY = Regex("""^(?:\?\s|(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s#\-?:,\[\]{}&*!|>'"%@`][^#]*?|-[^\s#][^#]*?)\s*:(?:\s|$))""")
-    private val FLOW_EMPTY = Regex("""^\{\s*}\s*(?:#.*)?$""")
+    private val FLOW_EMPTY = Regex("""^\{\s*\}\s*(?:#.*)?$""")
 
     /**
      * YAML node properties in front of a node: an anchor (`&modules`) or a tag (`!!map`, `!local`, `!<uri>`), each followed
