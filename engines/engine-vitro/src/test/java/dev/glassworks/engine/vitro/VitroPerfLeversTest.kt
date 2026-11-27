@@ -323,6 +323,67 @@ class VitroPerfLeversTest {
         }
     }
 
+    // A view's card layers stay within its budget: on the S1, heavy's masonry made 39 entities cards big, and their 36 MB
+    // of layers filled HWUI's GPU cache, so Skia purged its path masks and issued every scrolling frame three times slower.
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun aViewsCardLayersStayWithinItsBudgetFirstLaidOutFirst() {
+        val store = EntityStore()
+        val big = """{"type": "markdown", "content": "# Big\n\nA\n\nB\n\nC\n\nD\n\nE\n\nF\n\nG\n\nH\n\nI"}"""
+        for (mode in VitroView.CardLayers.values()) for (type in listOf("masonry", "sections")) {
+            val vv = vitroView(store, """{"views": []}""")
+            vv.cardLayers = mode
+            val cards = List(80) { big }.joinToString()
+            val body = if (type == "sections") """"sections": [{"type": "grid", "cards": [$cards]}]""" else """"cards": [$cards]"""
+            vv.setDashboard(LovelaceParser.parseDashboard(JSONObject("""{"views": [{"title": "Home", "type": "$type", $body}]}""")), null)
+            vv.measure(View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY))
+            vv.layout(0, 0, 1280, 800)
+            // Each card as its column or grid holds it: the view that gets the layer.
+            val held = all(vv).filterIsInstance<MarkdownCardView>().map { md ->
+                generateSequence(md as View) { it.parent as? View }.first { it.parent?.javaClass?.simpleName in setOf("CardColumn", "HaGridLayout") }
+            }
+            assertEquals("$mode $type", 80, held.size)
+            assertTrue("$mode $type: every card is big", held.all { VitroView.isBigCard(it.width, it.height, 1280, 800) })
+            val layered = held.filter { it.layerType == View.LAYER_TYPE_HARDWARE }
+            val limit = if (mode == VitroView.CardLayers.BIG) VitroView.BIG_LAYER_BUDGET_BYTES else 1280L * 800 * VitroView.HWUI_CACHE_BYTES_PER_PIXEL / 2
+            val used = layered.sumOf { VitroView.layerBytes(it.width, it.height) }
+            assertTrue("$mode $type: some cards have their layer", layered.size >= 4)
+            assertTrue("$mode $type: not all of them (${held.sumOf { VitroView.layerBytes(it.width, it.height) }} bytes wanted)", layered.size < held.size)
+            assertTrue("$mode $type: $used bytes of layers within $limit", used <= limit)
+            assertTrue("$mode $type: the next card wouldn't have fit", used + VitroView.layerBytes(held[0].width, held[0].height) > limit)
+        }
+    }
+
+    @Test
+    fun aLayerCountsAtTheSizeSkiaAllocatesIt() {
+        assertEquals(512L * 512 * 4, VitroView.layerBytes(348, 314))
+        assertEquals(16L * 64 * 4, VitroView.layerBytes(3, 64))
+        assertEquals(listOf(16, 256, 256, 512, 1024, 1536, 1536, 2048), listOf(1, 129, 256, 257, 1000, 1025, 1536, 1537).map(VitroView::approxSide))
+    }
+
+    @Test
+    fun aCardThatLeavesTheViewOrLosesItsLayerGivesItsShareBack() {
+        val root = android.widget.FrameLayout(activity)
+        val cards = List(3) { View(activity).also(root::addView) }
+        // Sides of 16 and 32 px, which Skia allocates as they are.
+        val budget = VitroView.CardLayerBudget(limit = VitroView.layerBytes(32, 32))
+        budget.roots += root
+        fun claim(i: Int, w: Int, h: Int) = budget.claim(cards[i], w, h).also { if (it) cards[i].setLayerType(View.LAYER_TYPE_HARDWARE, null) }
+        assertTrue(claim(0, 32, 16))
+        assertTrue(claim(1, 32, 16))
+        assertFalse("full", claim(2, 16, 16))
+        assertTrue("a card's new size replaces its old share", claim(1, 16, 16))
+        assertTrue(claim(2, 16, 16))
+        assertEquals(VitroView.layerBytes(32, 32), budget.used)
+
+        root.removeView(cards[0])
+        assertTrue("a card that left the view freed its share", claim(2, 32, 16))
+        cards[1].setLayerType(View.LAYER_TYPE_NONE, null)   // an island lifted it (liftLayersAbove)
+        assertEquals("a lifted card holds nothing", VitroView.layerBytes(32, 16), budget.run { claim(cards[2], 32, 16); used })
+        budget.release(cards[2])
+        assertEquals(0L, budget.used)
+    }
+
     // An island is a browser's SurfaceView: under a layer its picture never shows (every masonry island was blank on the
     // S1 at 2bdca2e31, its page drawing and sizing the card behind the layer's pixels).
     @Test

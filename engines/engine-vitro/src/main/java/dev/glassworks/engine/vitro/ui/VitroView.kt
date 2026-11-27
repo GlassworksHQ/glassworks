@@ -354,6 +354,9 @@ class VitroView(
 
     /** The view whose cards [buildViewTree] is building (Clarity's card registry). */
     private var buildingIndex = -1
+
+    /** The card layers of the view being built ([cacheCardAsLayer]); null outside a build. */
+    private var buildingLayers: CardLayerBudget? = null
     var onViewSelected: ((ViewConfig) -> Unit)? = null
 
     /**
@@ -1295,13 +1298,17 @@ class VitroView(
             dropView(index, keepIslands = true)
             staleViews -= index
             buildingIndex = index
+            val layers = CardLayerBudget(cardLayerBudgetBytes())
+            buildingLayers = layers
             clarity?.buildStarted(index)
             val built = try {
                 buildViewTree(viewCfg, cardCtx)
             } finally {
                 pendingPinned = null
                 buildingIndex = -1
+                buildingLayers = null
             }
+            layers.roots += built
             rebuildWhenStatesLand(index, guessedStates.toSet())
             viewCache[index] = built
             builtScripts[index] = IslandScripts.of(cardCtx.resources)
@@ -1312,6 +1319,7 @@ class VitroView(
                     clipToPadding = false
                 }
                 pinned.forEach { (v, lp) -> frame.addView(v, lp) }
+                layers.roots += frame
                 overlayFrames[index] = frame
                 overlayLayer.addView(frame, LayoutParams(MATCH_PARENT, MATCH_PARENT))
             }
@@ -2081,14 +2089,20 @@ class VitroView(
      * browser's SurfaceView, whose picture shows through the hole its window leaves for it, and a layer draws that
      * hole as its own pixels. The island then stays blank while its page draws and sizes the card. The 160 px an island
      * holds before its page reports a size is already big on the S1, so every masonry island was blank there.
+     *
+     * And only while the view's layers fit its budget ([CardLayerBudget], [cardLayerBudgetBytes]), first laid out first:
+     * the layers stay in HWUI's GPU cache, and once they fill it, Skia purges the masks and atlases every card draws
+     * with and makes them again each frame. On the S1, heavy's masonry columns made 39 entities cards big (36 MB of
+     * layers): the path-mask cache went and issuing a scrolling frame's draw commands took 18 ms instead of 6.7.
      */
     private fun cacheCardAsLayer(cardView: View, card: CardConfig, ctx: VitroCardContext) {
         if (!cardLayerWanted(ctx.theme.cardElevationDp, cardView.elevation) || playsLiveVideo(card)) return
+        val budget = buildingLayers ?: CardLayerBudget(cardLayerBudgetBytes())
         fun want(v: View, w: Int, h: Int): Int = when {
             islandsIn(v).isNotEmpty() -> LAYER_TYPE_NONE
-            cardLayers == CardLayers.ALL || isBigCard(w, h, width, height) -> LAYER_TYPE_HARDWARE
+            (cardLayers == CardLayers.ALL || isBigCard(w, h, width, height)) && budget.claim(v, w, h) -> LAYER_TYPE_HARDWARE
             else -> LAYER_TYPE_NONE
-        }
+        }.also { if (it == LAYER_TYPE_NONE) budget.release(v) }
         if (cardLayers == CardLayers.ALL) cardView.setLayerType(want(cardView, 0, 0), null)
         // Again when the card's size changes: a big card by its new size, and an island a card made later (an
         // auto-entities child, a conditional's) takes the card off its layer. A card whose size can't change (a fixed
@@ -2128,6 +2142,48 @@ class VitroView(
                 forTotalMem(total).also { deviceMode = it }
             }
         }
+    }
+
+    /**
+     * The bytes a view's card layers may take: [BIG_LAYER_BUDGET_BYTES] on a 2 GB panel ([CardLayers.BIG]), and half of
+     * HWUI's GPU cache with [CardLayers.ALL], so Skia keeps room for what every card draws with.
+     */
+    private fun cardLayerBudgetBytes(): Long = when (cardLayers) {
+        CardLayers.BIG -> BIG_LAYER_BUDGET_BYTES
+        CardLayers.ALL -> resources.displayMetrics.let { it.widthPixels.toLong() * it.heightPixels } * HWUI_CACHE_BYTES_PER_PIXEL / 2
+    }
+
+    /**
+     * One built view's card layers and the bytes they take ([layerBytes]), against [limit] ([cacheCardAsLayer]). A card claims its
+     * layer's bytes when it's laid out at a size that wants one, and gets it only if every layer of the view still fits.
+     * A card that leaves the view ([roots]: its tree and its pinned cards) or loses its layer ([liftLayersAbove]) gives
+     * its share back. Main thread.
+     */
+    internal class CardLayerBudget(val limit: Long) {
+        private val held = LinkedHashMap<View, Long>()
+
+        /** The view's tree and its pinned cards' frame, once built: a card under neither has left the view. */
+        val roots = ArrayList<View>(2)
+
+        /** The bytes the view's layers take now. */
+        val used: Long get() = held.values.sum()
+
+        /** [card] wants a layer of [w] x [h] px ([layerBytes]): true when it fits beside the others (its own earlier share replaced). */
+        fun claim(card: View, w: Int, h: Int): Boolean {
+            held.remove(card)
+            held.keys.retainAll { it.layerType == View.LAYER_TYPE_HARDWARE && (roots.isEmpty() || inView(it)) }
+            val bytes = layerBytes(w, h)
+            if (used + bytes > limit) return false
+            held[card] = bytes
+            return true
+        }
+
+        /** [card] draws without a layer: its share is free. */
+        fun release(card: View) {
+            held.remove(card)
+        }
+
+        private fun inView(v: View): Boolean = generateSequence(v) { it.parent as? View }.any { p -> roots.any { it === p } }
     }
 
     /** [layout] is HA's `layout` for this card ([VitroCardContext.cardLayout]): `"grid"` straight in a section. */
@@ -2651,6 +2707,35 @@ class VitroView(
 
         internal fun isBigCard(w: Int, h: Int, rootW: Int, rootH: Int): Boolean =
             rootW > 0 && rootH > 0 && w.toLong() * h >= BIG_CARD_SHARE * rootW.toLong() * rootH
+
+        /**
+         * A card layer's GPU memory: RGBA 8888 at the size Skia allocates it, each side rounded up as its approximate fit
+         * does (`GrResourceProvider::MakeApprox`). A 348 x 314 entities card takes 512 x 512, 1 MB: measured on Android 10,
+         * 16 layers held 16.3 MB.
+         */
+        internal fun layerBytes(w: Int, h: Int): Long = approxSide(w).toLong() * approxSide(h) * 4
+
+        /** Skia's approximate fit: at least 16, the next power of two up to 1024, then the next half step of one. */
+        internal fun approxSide(px: Int): Int {
+            val v = maxOf(16, px)
+            if (v and (v - 1) == 0) return v
+            val ceil = Integer.highestOneBit(v) shl 1
+            if (v <= 1024) return ceil
+            val mid = (ceil shr 1) + (ceil shr 2)
+            return if (v <= mid) mid else ceil
+        }
+
+        /**
+         * What a view's card layers may take on a 2 GB panel ([CardLayers.BIG]): the S1 may give layers about 8 MB
+         * (816b3b4de measured every card's layer at 17 MB of GPU memory there, too much).
+         */
+        internal const val BIG_LAYER_BUDGET_BYTES = 8L * 1024 * 1024
+
+        /**
+         * HWUI's GPU cache per pixel of the display (Android 10's `SURFACE_SIZE_MULTIPLIER`, 12 x 4 bytes; later versions
+         * allow more): about 50 MB at 1440 x 720, shared by every layer, mask, glyph atlas and image the app draws.
+         */
+        internal const val HWUI_CACHE_BYTES_PER_PIXEL = 48L
 
         private const val TAG = "Glassworks.Vitro"
         private const val PERIODIC_CHECK_MS = 60_000L
