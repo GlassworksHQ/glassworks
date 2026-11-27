@@ -1042,6 +1042,13 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
     ) else emptyList()
     private val switchButtons = LinkedHashMap<String, View>()
 
+    /**
+     * The state the controls were last chosen for ([available]). Declared before `init`: `start()` renders the stored
+     * state there, and an initializer after it would reset what that render set (Greptile on #799: switching controls
+     * then found no state, and hid every control).
+     */
+    private var lastState: EntityState? = null
+
     init {
         buttons.forEach { (_, b) -> addCell(row, b) }
         slider?.let { addCell(row, it, fill = true) }
@@ -1054,8 +1061,6 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
         showActive()
         start()
     }
-
-    private var lastState: EntityState? = null
 
     /**
      * Mushroom's `_controls` for [s]: the configured controls the cover supports (buttons with OPEN, CLOSE or STOP;

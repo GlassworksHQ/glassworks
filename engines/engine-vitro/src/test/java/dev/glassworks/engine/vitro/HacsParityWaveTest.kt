@@ -267,6 +267,25 @@ class HacsParityWaveTest {
     }
 
     @Test
+    fun aMushroomCoverBuiltOnAStoredStateKeepsItsControlsWhenSwitching() {
+        // Greptile on #799: the state the first render (in init's start()) chose the controls for was reset by a property
+        // initializer declared after init, so switching to the slider found no state and hid every control.
+        val st = store(entity("cover.blind", "open", "current_position" to 40, "supported_features" to 15))
+        val card = dev.glassworks.engine.vitro.cards.MushroomCoverCardView(context(st),
+            card("""{"type": "custom:mushroom-cover-card", "entity": "cover.blind", "show_buttons_control": true, "show_position_control": true}"""))
+        idle()
+        fun shown(d: String) = card.all().any { it.contentDescription?.toString() == d && it.visibility == View.VISIBLE }
+        fun sliderShown() = card.all().any { it is dev.glassworks.engine.vitro.cards.HaHorizontalSliderView && it.visibility == View.VISIBLE }
+        // Before any update: the buttons, and the switch to the slider.
+        assertTrue(shown("Open")); assertTrue(shown("position_control")); assertFalse(sliderShown())
+        card.click("position_control")
+        assertTrue("the slider, after switching with no update since", sliderShown())
+        assertTrue(shown("buttons_control")); assertFalse(shown("Open"))
+        card.click("buttons_control")
+        assertTrue(shown("Open")); assertFalse(sliderShown())
+    }
+
+    @Test
     fun mushroomFanShowsItsPercentageAndOscillates() {
         val st = store(entity("fan.purifier", "on", "percentage" to 20, "oscillating" to false, "supported_features" to 3))
         val card = dev.glassworks.engine.vitro.cards.MushroomFanCardView(context(st),
