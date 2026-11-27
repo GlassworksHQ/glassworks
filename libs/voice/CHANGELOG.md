@@ -5,7 +5,7 @@ What changed in each release of `dev.glassworks:voice` on Maven Central. Version
 cut from `libs/voice/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.2.0] - 2026-11-26
 
 ### Changed
 - **LiteRT 1.4.1 replaces TensorFlow Lite 2.16.1 for the wake word.** LiteRT is TensorFlow Lite under its new

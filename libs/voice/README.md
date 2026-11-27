@@ -99,7 +99,7 @@ repositories {
     google()
 }
 dependencies {
-    implementation("dev.glassworks:voice:0.1.0")
+    implementation("dev.glassworks:voice:0.2.0")
 }
 ```
 

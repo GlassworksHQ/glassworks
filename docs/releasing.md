@@ -727,7 +727,8 @@ The libraries in `libs/` go to Maven Central as `dev.glassworks:<name>` (#153): 
 `libs/<name>/gradle.properties`, and its own `libs/<name>/CHANGELOG.md`, apart from the app's. Each
 release ships the jar or AAR, a sources jar, a KDoc jar (Dokka), the POM (MIT, the GlassworksHQ org as
 developer) and a `.asc` signature for each. The licence is in the jar as `META-INF/LICENSE`. Their
-dependencies come from Maven Central with their own licences.
+dependencies come from Maven Central with their own licences, except `voice`'s LiteRT, which is on
+Google's Maven repository.
 
 Ported code keeps its own licence. `voice`'s `MicroFrontend.kt` is a port of TensorFlow Lite Micro's
 audio frontend (Apache-2.0) and kissfft (BSD-3-Clause). A library lists such licences in its
