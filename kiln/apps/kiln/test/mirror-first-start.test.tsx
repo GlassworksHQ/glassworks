@@ -32,7 +32,7 @@ const REFUSED = 'No authenticator can handle the request';
 let handed: PanelShell[] = [];
 afterEach(() => { handed = []; });
 
-function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) => Promise<PanelShell>; reopen?: (o?: { authMs?: number }) => Promise<PanelShell>; tries?: number; picked?: () => boolean; windowMs?: number; fastboot?: () => Promise<FastbootLike> }) {
+function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) => Promise<PanelShell>; reopen?: (o?: { authMs?: number }) => Promise<PanelShell>; tries?: number; picked?: () => boolean; windowMs?: number; fastboot?: () => Promise<FastbootLike>; readMs?: number }) {
   const images: ImageMaker = {
     async fetch(_, onProgress) { onProgress(1); },
     async download() {},
@@ -51,12 +51,14 @@ function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) 
     async reboot() {},
   };
   const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
-  const f = new ImageSession({ frame: mirrorFrame, simulated: true,
+  const frame = adb.readMs ? { ...mirrorFrame, timings: { ...mirrorFrame.timings, readMs: adb.readMs } } : mirrorFrame;
+  const f = new ImageSession({ frame, simulated: true,
     images, refract: 'https://proxy.test', requestFastboot: adb.fastboot ?? (async () => fb), requestAdb: adb.request,
     ...(adb.reopen ? { reopenAdb: adb.reopen } : {}), ...(adb.tries !== undefined ? { adbTries: adb.tries } : {}), ...(adb.picked ? { adbPicked: adb.picked } : {}), ...(adb.windowMs !== undefined ? { adbWindowMs: adb.windowMs } : {}),
     adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
     handOver: (p) => { handed.push(p); },
   });
+  f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
   f.choose();
   return { f, mirror };
 }
@@ -84,6 +86,67 @@ describe('connecting while the Mirror is still starting', () => {
     expect(handed).toEqual([adb]); // the first start is through: the standard flow has the Mirror
     expect(adb.cmds.some((c) => c.startsWith(`am start -n ${GLASSWORKS.activity}`))).toBe(true);
     expect(f.state.log.filter((l) => l.includes('still starting. Asking again in 5 s.'))).toHaveLength(4);
+  });
+
+  it('a USB reset partway through the start (after Kiln is in) connects again on its own, with no Try again', async () => {
+    // Android 6 resets the Mirror's USB while it starts: the poll's next call fails (a real run, 2026-11-25)
+    const LOST = "Failed to execute 'transferOut' on 'USBDevice': A transfer error has occurred.";
+    const dropped = new FirstBootMirror();
+    const closed = vi.fn(async () => {});
+    const first: PanelShell = { run: async () => { throw new Error(LOST); }, push: async () => {}, close: closed };
+    const again = new FirstBootMirror();
+    let refusals = 1; // still coming back from the reset: refused once, then in
+    const reopen = vi.fn(async () => { if (refusals-- > 0) throw new Error(REFUSED); return again; });
+    const { f, mirror } = setup({ request: async () => first, reopen });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(closed).toHaveBeenCalled(); // let go of the dropped connection
+    expect(reopen).toHaveBeenCalledTimes(2);
+    expect(f.state).toMatchObject({ screen: 'choose', firstBoot: expect.anything() });
+    expect(handed).toEqual([again]); // the standard flow gets the connection that works
+    expect(dropped.cmds).toEqual([]);
+    expect(f.state.log.some((l) => l.includes(`dropped the USB connection while it starts (${LOST}). Connecting again.`))).toBe(true);
+  });
+
+  it('the 6 minutes are one deadline for the polls and the reconnects: a device that keeps dropping ends there', async () => {
+    const LOST = "Failed to execute 'transferOut' on 'USBDevice': A transfer error has occurred.";
+    const dropping = (): PanelShell => ({ run: async () => { throw new Error(LOST); }, push: async () => {} });
+    let refused = 0;
+    // it comes back each time, after refusing a few times, and drops again on the next poll
+    const reopen = vi.fn(async (): Promise<PanelShell> => { if (refused++ % 4 < 3) throw new Error(REFUSED); return dropping(); });
+    const { f, mirror } = setup({ request: async () => dropping(), reopen, tries: 1000 });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(f.state).toMatchObject({ screen: 'error', error: expect.stringMatching(/didn't finish starting in 6 minutes/) });
+    // every reconnect waits 5 s first: 6 minutes hold at most 72 of them, however many tries a reconnect may take
+    expect(reopen.mock.calls.length).toBeLessThanOrEqual(72);
+    expect(handed).toEqual([]);
+  });
+
+  it('a poll the device never answers is a stall: the frame\'s read watchdog ends it, and Kiln connects again', async () => {
+    // the shell takes the command and never finishes it (no signal of its own): only the watchdog's abort ends it
+    const stalled: PanelShell = { run: (_cmd, signal) => new Promise((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true })), push: async () => {} };
+    const again = new FirstBootMirror();
+    const reopen = vi.fn(async () => again);
+    const { f, mirror } = setup({ request: async () => stalled, reopen, readMs: 50 });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(reopen).toHaveBeenCalledTimes(1);
+    expect(f.state).toMatchObject({ screen: 'choose', firstBoot: expect.anything() });
+    expect(handed).toEqual([again]);
+    expect(f.state.log.some((l) => /didn't answer `getprop sys.boot_completed`/.test(l))).toBe(true);
+  });
+
+  it('a USB reset Kiln can\'t connect back from ends on the error screen, as before', async () => {
+    const LOST = "Failed to execute 'transferOut' on 'USBDevice': A transfer error has occurred.";
+    const first: PanelShell = { run: async () => { throw new Error(LOST); }, push: async () => {} };
+    const reopen = vi.fn(async (): Promise<PanelShell> => { throw new Error(REFUSED); });
+    const { f, mirror } = setup({ request: async () => first, reopen, tries: 2 });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(reopen).toHaveBeenCalledTimes(2);
+    expect(f.state).toMatchObject({ screen: 'error', error: REFUSED });
+    expect(handed).toEqual([]);
   });
 
   it('a Mirror that never lets in ends with a clear message, and Connect works again', async () => {
@@ -161,7 +224,7 @@ describe('connecting while the Mirror is still starting', () => {
     const { f, mirror } = setup({ request: async () => new FirstBootMirror() });
     await flashed(f, mirror);
     render(<ImageFlow image={f} app={mirror} />);
-    expect(screen.getByText(/The screen stays dark for a few minutes on first boot/)).toBeTruthy();
+    expect(screen.getByText(/Its first start takes a few minutes, and the screen stays dark until it’s ready/)).toBeTruthy();
   });
 
   it('says it waits for the Mirror from the moment it is picked, before the Mirror answers or refuses', async () => {
@@ -170,8 +233,16 @@ describe('connecting while the Mirror is still starting', () => {
     await flashed(f, mirror);
     render(<ImageFlow image={f} app={mirror} />);
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
-    expect(await screen.findByText('Waiting for the Mirror to finish starting…')).toBeTruthy();
+    // the wait is said up front: how long it usually takes, how long so far, and that it's normal
+    expect(await screen.findByText('Waiting for it to finish starting')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'The Mirror is starting for the first time' })).toBeTruthy();
+    expect(screen.getByText('Usually 4–5 minutes')).toBeTruthy();
+    expect(screen.getByText('0:00 so far')).toBeTruthy();
     expect(screen.queryByText('Pick the Mirror, listed as “Android”, in the browser\'s list…')).toBeNull();
+    // the list stays: the click is done, the first start runs now
+    expect(document.querySelector('.prow.now .plabel')!.textContent).toBe('Let it finish its first start');
+    expect(document.querySelector('.prow.done:nth-last-child(2) .plabel, .prow.done .plabel')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull(); // nothing to click while it waits
     expect(f.state).toMatchObject({ screen: 'adb', connecting: true, adbWaiting: true });
     answer(withAppStreams(new FirstBootMirror(), { online: true, radio: false }));
     await vi.waitFor(() => expect(handed).toHaveLength(1)); // the first start, then the standard flow has the Mirror

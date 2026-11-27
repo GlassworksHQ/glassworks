@@ -27,7 +27,6 @@ import dev.glassworks.pane.forEachPane
 import dev.glassworks.pane.stopAll
 import dev.glassworks.screen.ScreenHardware
 import java.io.IOException
-import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.URI
 import java.security.SecureRandom
@@ -101,6 +100,13 @@ class PanelDevice(
          * reflash, which wipes the app's data, keeps the same device in Home Assistant (#523).
          */
         const val IMAGE_MAC_PROP = "ro.glassworks.device.mac"
+
+        /**
+         * The same identity as [IMAGE_MAC_PROP], from an installer that can't write build.prop: Kiln's in-place install
+         * on a stock framework writes this global setting over adb, with the MAC its image install would write, so a
+         * device keeps one Home Assistant device whichever way Kiln installs it.
+         */
+        const val INSTALLER_MAC_SETTING = "glassworks_device_mac"
 
         /**
          * The Home Assistant device identity, and where it came from. It must survive a reinstall or a reflash, or HA
@@ -192,6 +198,8 @@ class PanelDevice(
     private val voicePlayer = ExoAudioPlayer(context, "voice", AudioAttributes.USAGE_ASSISTANT)
     private val mediaPlayer = ExoAudioPlayer(context, "media", AudioAttributes.USAGE_MEDIA)
     private var chimePlayer: TtsPlayer? = null
+    /** The master volume: Home Assistant's *Speaker* volume and mute set it, whichever panes are on. */
+    private val volume = runtime.volume(ctx)
     /** The features that add entities and react to the panel (Sendspin, voice, timers, ...); built in [initEntities]. */
     @Volatile private var panes: List<Pane> = emptyList()
     /**
@@ -207,6 +215,8 @@ class PanelDevice(
         exec.execute { onPrefChanged(key) }
     }
     private val screenListener: () -> Unit = { exec.execute { server?.publishStates() } }
+    /** The master volume changed (here, on the Sound page, or by the volume keys): Home Assistant hears it. runCatching: after [stop]. */
+    private val volumeListener: () -> Unit = { runCatching { exec.execute { applyVolume(); server?.publishStates() } } }
     private val authListener: (Boolean) -> Unit = { exec.execute { server?.publishStates() } }
     private val dashboardsListener: (List<Dashboard>) -> Unit = { exec.execute { checkDashboards() } }
 
@@ -231,6 +241,8 @@ class PanelDevice(
     fun stop() {
         synchronized(lifecycle) { stopped = true }
         prefs.unregisterListener(prefListener)
+        // A newer device may have set its own already.
+        if (volume.onChange === volumeListener) volume.onChange = null
         screen.removeListener(screenListener)
         HaAuth.removeListener(authListener)
         Dashboards.removeListener(dashboardsListener)
@@ -289,6 +301,7 @@ class PanelDevice(
         EspHomeLog.i("ESPHome device '${id.name}' mac ${id.macAddress}, voice=${id.voiceFeatures != 0}")
         if (!unlessStopped { initEntities(id); acquireLocks() }) return
         applyVolume()
+        if (!unlessStopped { volume.onChange = volumeListener }) return
         mediaPlayer.onStateChanged = { exec.execute { server?.publishStates() } }
         voicePlayer.onStateChanged = {
             host?.onVoicePlaying?.invoke(voicePlayer.isPlaying)
@@ -507,10 +520,7 @@ class PanelDevice(
 
     /** esphome-main thread. */
     private fun onPrefChanged(key: String?) {
-        when (key) {
-            "api_encryption", "api_key" -> onApiKeyPrefChanged()
-            "speaker_volume", "speaker_muted" -> applyVolume()
-        }
+        if (key == "api_encryption" || key == "api_key") onApiKeyPrefChanged()
         // Before the event, so a pane that hears its own switch is already started or stopped.
         if (switches.values.any { it.key == key }) applySwitches()
         emit(PanelEvent.SettingChanged(key))
@@ -553,7 +563,7 @@ class PanelDevice(
     }
 
     /** The chime player, made on first use (from the ESPHome, voice or main thread). */
-    private fun chimes(): TtsPlayer = synchronized(this) { chimePlayer ?: TtsPlayer().also { chimePlayer = it } }
+    private fun chimes(): TtsPlayer = synchronized(this) { chimePlayer ?: TtsPlayer { volume.gain }.also { chimePlayer = it } }
 
     /** Home Assistant is connected and listening to the panel's states now. */
     fun homeAssistantConnected(): Boolean = server?.hasSubscriber == true
@@ -669,10 +679,13 @@ class PanelDevice(
             get = { prefs.presenceRangeM }, set = { prefs.presenceRangeM = it; ui { screen.applyPresenceRange() } },
         ),
         // --- kiosk
+        // authOnly (#847) here and on open_settings, improv_ble and sign_out: on a panel with no ESPHome key yet anyone
+        // on the LAN can talk plaintext to the API. The dashboard's host becomes a secure context that gets the
+        // microphone and the camera, so only Home Assistant with the key may set it. The panel and Manage still can.
         TextEntity(
             "dashboard_url", "Dashboard URL", "mdi:web", disabledByDefault = true, minLength = 1, maxLength = 255,
             get = { prefs.urlSetting }, set = { url -> toActivity { putExtra("url", url) } },
-        ),
+        ).apply { authOnly = true },
         NumberEntity(
             "zoom", "Zoom", "mdi:magnify-plus-outline", disabledByDefault = true, min = 0f, max = 3f, step = 0.05f, mode = 1,
             get = { prefs.zoom },
@@ -680,7 +693,7 @@ class PanelDevice(
         ),
         ButtonEntity("reload_dashboard", "Reload dashboard", "mdi:refresh", press = { toActivity { putExtra("reload", true) } }),
         ButtonEntity("open_settings", "Open device settings", "mdi:cog", EntityCategory.CONFIG,
-            disabledByDefault = true, press = { toActivity { putExtra("open_settings", true) } }),
+            disabledByDefault = true, press = { toActivity { putExtra("open_settings", true) } }).apply { authOnly = true },
         ButtonEntity(
             "restart_app", "Restart app", "mdi:restart", EntityCategory.CONFIG, deviceClass = "restart",
             press = { toActivity { putExtra("restart", true) } },
@@ -688,7 +701,7 @@ class PanelDevice(
         ButtonEntity(
             "improv_ble", "Start Wi-Fi setup (Bluetooth)", "mdi:bluetooth-settings", EntityCategory.CONFIG,
             disabledByDefault = true, press = { ui { dev.glassworks.provisioning.ImprovController.startOnDemand("Home Assistant button") } },
-        ),
+        ).apply { authOnly = true },
         // Pairing over the LAN closes once Home Assistant has added the panel; this opens it for a while (#34).
         ButtonEntity(
             "lan_setup", "Allow setup over the network", "mdi:lan-connect", EntityCategory.CONFIG,
@@ -717,8 +730,8 @@ class PanelDevice(
                         mediaPlayer.isPaused -> MediaState.PAUSED
                         else -> MediaState.IDLE
                     },
-                    volume = prefs.speakerVolume,
-                    muted = prefs.speakerMuted,
+                    volume = volume.level,
+                    muted = volume.muted,
                 )
             },
             handle = ::onMediaCommand,
@@ -762,11 +775,11 @@ class PanelDevice(
                 // The activity shows the sign-in screen through its HaAuth listener.
                 HaAuth.signOut("Home Assistant button") { exec.execute { server?.publishStates() } }
             },
-        ),
+        ).apply { authOnly = true },
     )
 
     private fun onMediaCommand(c: MediaPlayerCommandData) {
-        c.volume?.let { prefs.speakerVolume = it.coerceIn(0f, 1f) }
+        c.volume?.let { volume.set(it) }
         c.mediaUrl?.takeIf { it.isNotEmpty() }?.let { raw ->
             val url = resolveUrl(raw)
             when {
@@ -781,10 +794,10 @@ class PanelDevice(
             MediaCommand.PAUSE -> mediaPlayer.pause()
             MediaCommand.STOP, MediaCommand.CLEAR_PLAYLIST -> mediaPlayer.stop()
             MediaCommand.TOGGLE -> if (mediaPlayer.isPlaying) mediaPlayer.pause() else mediaPlayer.resume()
-            MediaCommand.MUTE -> prefs.speakerMuted = true
-            MediaCommand.UNMUTE -> prefs.speakerMuted = false
-            MediaCommand.VOLUME_UP -> prefs.speakerVolume = (prefs.speakerVolume + 0.1f).coerceAtMost(1f)
-            MediaCommand.VOLUME_DOWN -> prefs.speakerVolume = (prefs.speakerVolume - 0.1f).coerceAtLeast(0f)
+            MediaCommand.MUTE -> volume.mute(true)
+            MediaCommand.UNMUTE -> volume.mute(false)
+            MediaCommand.VOLUME_UP -> volume.step(up = true)
+            MediaCommand.VOLUME_DOWN -> volume.step(up = false)
         }
     }
 
@@ -802,10 +815,18 @@ class PanelDevice(
         }
     }
 
+    /**
+     * Android's media volume is the master ([volume]): the players play at full under it. Only where the device keeps
+     * its volume fixed do they scale themselves ([dev.glassworks.audio.MasterVolume.gain]): the voice and media
+     * players, the chimes and notification sounds, and the panes' own players ([PanelEvent.VolumeGain]). The
+     * dashboard's audio can't be reached there.
+     */
     private fun applyVolume() {
-        val v = if (prefs.speakerMuted) 0f else prefs.speakerVolume
-        voicePlayer.setVolume(v)
-        mediaPlayer.setVolume(v)
+        val g = volume.gain
+        voicePlayer.setVolume(g)
+        mediaPlayer.setVolume(g)
+        synchronized(this) { chimePlayer }?.setVolume(g)
+        emit(PanelEvent.VolumeGain(g))
     }
 
     /**
@@ -829,10 +850,14 @@ class PanelDevice(
     private fun stableMac(): String {
         val hw = try { NetworkInterface.getByName("wlan0")?.hardwareAddress } catch (_: Exception) { null }
         val androidId = try { Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) } catch (_: Exception) { null }
-        val image = systemProperty(IMAGE_MAC_PROP)
-        val (mac, source) = pickMac(prefs.deviceMac, image, hw, systemProperty("ro.serialno"), androidId) {
+        val prop = systemProperty(IMAGE_MAC_PROP)
+        val installer = if (prop.isNotEmpty()) "" else try { Settings.Global.getString(ctx.contentResolver, INSTALLER_MAC_SETTING) ?: "" } catch (_: Exception) { "" }
+        val image = prop.ifEmpty { installer }
+        val (mac, picked) = pickMac(prefs.deviceMac, image, hw, systemProperty("ro.serialno"), androidId) {
             ByteArray(6).also { SecureRandom().nextBytes(it) }
         }
+        // the identity from the global setting reads as such in the log, not as build.prop
+        val source = if (picked == "build.prop" && prop.isEmpty()) "installer setting" else picked
         if (source != "saved") prefs.deviceMac = mac
         EspHomeLog.i(macLine(mac, source, image))
         return mac
@@ -842,15 +867,8 @@ class PanelDevice(
         Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, name) as? String ?: ""
     } catch (_: Exception) { "" }
 
-    private fun ipAddress(): String? = try {
-        NetworkInterface.getNetworkInterfaces().toList()
-            .filter { it.isUp && !it.isLoopback }
-            .sortedByDescending { it.name == "wlan0" }
-            .flatMap { it.inetAddresses.toList() }
-            .firstOrNull { it is Inet4Address }?.hostAddress
-    } catch (_: Exception) {
-        null
-    }
+    /** The panel's LAN address ([dev.glassworks.platform.PanelAddress]): never an access point's, nor link-local. */
+    private fun ipAddress(): String? = dev.glassworks.platform.PanelAddress.now(ctx)
 
     @SuppressLint("WakelockTimeout")
     private fun acquireLocks() {

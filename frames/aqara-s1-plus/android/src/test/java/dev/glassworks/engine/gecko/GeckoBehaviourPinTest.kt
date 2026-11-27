@@ -39,6 +39,7 @@ import dev.glassworks.s1.BuildConfig
     shadows = [
         GeckoShadows.ShadowRuntime::class, GeckoShadows.ShadowExtensionController::class,
         GeckoShadows.ShadowSessionController::class, GeckoShadows.ShadowSession::class, GeckoShadows.ShadowView::class,
+        GeckoShadows.ShadowStorageController::class,
     ],
 )
 class GeckoBehaviourPinTest {
@@ -55,7 +56,9 @@ class GeckoBehaviourPinTest {
             listOf(
                 "runtime.create",
                 "s1.open",
+                "permissions.read", // saved grants for pages it doesn't trust go, before the first load (#847)
                 "extension resource://android/assets/extension/ helper@s1kiosk.edm.sh",
+                "s1.active false",
                 "view.setSession s1",
                 "view.cover #ff0a0b0f",
                 "s1.load $dash",
@@ -98,7 +101,6 @@ class GeckoBehaviourPinTest {
               dom.securecontext.allowlist: "192.0.2.10"
               media.devices.insecure.enabled: true
               media.getusermedia.insecure.enabled: true
-              media.navigator.permission.disabled: true
               media.autoplay.default: 0
               media.autoplay.blocking_policy: 0
               media.autoplay.block-webaudio: false
@@ -366,7 +368,7 @@ class GeckoBehaviourPinTest {
     fun `a crashed content process gets a new session that loads the dashboard`() = harness().use { h ->
         val ev = h.eventsDuring { h.content.onCrash(h.session) }
         assertEquals(
-            listOf("view.releaseSession", "s1.close", "s2.open", "view.setSession s2", "view.cover #ff0a0b0f", "s2.load $dash", "messageDelegate glassworks"),
+            listOf("view.releaseSession", "s1.close", "s2.open", "s2.active false", "view.setSession s2", "view.cover #ff0a0b0f", "s2.load $dash", "messageDelegate glassworks"),
             ev,
         )
         assertTrue(h.errors("Glassworks").contains("Content process crashed; restarting session"))
@@ -380,13 +382,155 @@ class GeckoBehaviourPinTest {
         assertTrue(h.errors("Glassworks").contains("Content process killed; restarting session"))
     }
 
-    // ---- permissions
+    @Test
+    fun `a session opened behind another app starts hidden, and only the view's surface shows it`() = harness().use { h ->
+        // Android's low-memory killer takes the content process while another app is in front: the new session
+        // must not count as shown (no surface makes GeckoView show it), or the page draws for nobody and Home
+        // Assistant never sees it hidden (the S1, 2026-11-24: the tab grew to 1.4 GB behind another app).
+        h.controller.pause().stop()
+        val ev = h.eventsDuring { h.content.onKill(h.session) }
+        assertTrue(ev.indexOf("s2.active false") in 0 until ev.indexOf("view.setSession s2"))
+        assertTrue("s2.active true" !in ev)
+    }
+
+    // ---- permissions: Home Assistant and the secure hosts get them with no prompt, any other page none (#847)
+
+    /** The top-level page is at [url], as GeckoView reports a committed load. */
+    private fun GeckoPinHarness.at(url: String) = navigation.onLocationChange(session, url, mutableListOf(), false)
+
+    private fun GeckoPinHarness.content(uri: String) =
+        value(permission.onContentPermissionRequest(session, contentPermission(uri, PermissionDelegate.PERMISSION_PERSISTENT_STORAGE)))
 
     @Test
-    fun `every content permission is allowed`() = harness().use { h ->
-        val p = h.contentPermission(dash, PermissionDelegate.PERMISSION_PERSISTENT_STORAGE)
-        assertEquals(ContentPermission.VALUE_ALLOW, h.value(h.permission.onContentPermissionRequest(h.session, p)))
-        assertTrue(h.logs("Glassworks").contains("Granting content permission ${PermissionDelegate.PERMISSION_PERSISTENT_STORAGE} for $dash"))
+    fun `every content permission Home Assistant asks for is allowed`() = harness().use { h ->
+        h.at(dash)
+        assertEquals(ContentPermission.VALUE_ALLOW, h.content(dash))
+        // The log names the origin only, never a path or a query (#847).
+        assertTrue(h.logs("Glassworks").contains("Granting content permission ${PermissionDelegate.PERMISSION_PERSISTENT_STORAGE} for $base"))
+    }
+
+    @Test
+    fun `a page off Home Assistant gets no content permission`() = harness().use { h ->
+        val away = "http://192.0.2.66/page?token=not-for-the-log"
+        h.at(away)
+        // PROMPT, not DENY: nothing is granted, and nothing is saved that would answer for the page later.
+        assertEquals(ContentPermission.VALUE_PROMPT, h.content(away))
+        assertTrue(h.logs("Glassworks").contains(
+            "Refusing content permission ${PermissionDelegate.PERMISSION_PERSISTENT_STORAGE} for http://192.0.2.66 on http://192.0.2.66: not Home Assistant or a secure host",
+        ))
+        assertFalse(h.logs("Glassworks").any { "not-for-the-log" in it })
+    }
+
+    /** Gecko sends the top-level page as uri and the frame that asks as thirdPartyOrigin (GeckoViewPermission.sys.mjs). */
+    private fun GeckoPinHarness.contentFrom(frame: String?): Int? {
+        val p = contentPermission(dash, PermissionDelegate.PERMISSION_GEOLOCATION)
+        GeckoShadows.setField(p, ContentPermission::class.java, "thirdPartyOrigin", frame)
+        return value(permission.onContentPermissionRequest(session, p))
+    }
+
+    @Test
+    fun `a frame of another site inside the dashboard gets no content permission`() = harness().use { h ->
+        h.at(dash)
+        assertEquals(ContentPermission.VALUE_PROMPT, h.contentFrom("http://192.0.2.66"))
+        assertTrue(h.logs("Glassworks").contains(
+            "Refusing content permission ${PermissionDelegate.PERMISSION_GEOLOCATION} for http://192.0.2.66 on $base: not Home Assistant or a secure host",
+        ))
+        // Home Assistant's own document asks: its origin, with or without Gecko's ^attributes, or none sent.
+        assertEquals(ContentPermission.VALUE_ALLOW, h.contentFrom(base))
+        assertEquals(ContentPermission.VALUE_ALLOW, h.contentFrom("$base^geckoViewSessionContextId=x"))
+        assertEquals(ContentPermission.VALUE_ALLOW, h.contentFrom(null))
+        assertEquals(ContentPermission.VALUE_ALLOW, h.contentFrom(""))
+        assertEquals(ContentPermission.VALUE_PROMPT, h.contentFrom("moz-nullprincipal:{00000000-0000-0000-0000-000000000000}"))
+    }
+
+    @Test
+    fun `before a page is shown nothing gets a permission`() = harness().use { h ->
+        assertEquals(ContentPermission.VALUE_PROMPT, h.content(dash))
+        // A new session after a crash starts with no page again.
+        h.at(dash)
+        h.eventsDuring { h.content.onCrash(h.session) }
+        assertEquals(ContentPermission.VALUE_PROMPT, h.content(dash))
+    }
+
+    @Test
+    fun `at startup, permissions saved for a page off Home Assistant are forgotten`() {
+        fun saved(uri: String, permission: Int, value: Int) = GeckoShadows.allocate(ContentPermission::class.java).also {
+            GeckoShadows.setField(it, ContentPermission::class.java, "uri", uri)
+            GeckoShadows.setField(it, ContentPermission::class.java, "permission", permission)
+            GeckoShadows.setField(it, ContentPermission::class.java, "value", value)
+        }
+        val away = "http://192.0.2.66/?token=not-for-the-log"
+        harness(prefs = { p ->
+            configured(p)
+            GeckoShadows.savedPermissions += listOf(
+                saved(dash, PermissionDelegate.PERMISSION_PERSISTENT_STORAGE, ContentPermission.VALUE_ALLOW), // kept
+                saved(away, PermissionDelegate.PERMISSION_GEOLOCATION, ContentPermission.VALUE_ALLOW), // an earlier build's grant
+                saved(away, PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION, ContentPermission.VALUE_DENY), // already no
+            )
+        }).use { h ->
+            assertEquals(
+                listOf("$away ${PermissionDelegate.PERMISSION_GEOLOCATION} ${ContentPermission.VALUE_PROMPT}"),
+                GeckoShadows.permissionsSet,
+            )
+            assertTrue(h.logs("Glassworks").contains(
+                "Forgetting content permission ${PermissionDelegate.PERMISSION_GEOLOCATION} for http://192.0.2.66: not Home Assistant or a secure host",
+            ))
+            assertFalse(h.logs("Glassworks").any { "not-for-the-log" in it })
+            // Once per process: a new session after a crash doesn't read them again.
+            GeckoShadows.permissionsSet.clear()
+            h.eventsDuring { h.content.onCrash(h.session) }
+            assertEquals(emptyList<String>(), GeckoShadows.permissionsSet)
+        }
+    }
+
+    @Test
+    fun `at startup, a storage grant saved on Home Assistant for a frame of another site is forgotten`() {
+        // How Gecko hands a storage-access grant back: the top-level page as uri, the frame (from the type's
+        // 3rdPartyStorage^<origin>) as thirdPartyOrigin. Gecko answers it itself, so the delegate never sees it again.
+        fun saved(frame: String) = GeckoShadows.allocate(ContentPermission::class.java).also {
+            GeckoShadows.setField(it, ContentPermission::class.java, "uri", dash)
+            GeckoShadows.setField(it, ContentPermission::class.java, "thirdPartyOrigin", frame)
+            GeckoShadows.setField(it, ContentPermission::class.java, "permission", PermissionDelegate.PERMISSION_STORAGE_ACCESS)
+            GeckoShadows.setField(it, ContentPermission::class.java, "value", ContentPermission.VALUE_ALLOW)
+        }
+        val away = "http://192.0.2.66"
+        harness(prefs = { p ->
+            configured(p)
+            GeckoShadows.savedPermissions += listOf(
+                saved("$away^firstPartyDomain=x"), // another site's frame: forgotten
+                saved(base), // Home Assistant's own frame: kept
+                saved("$base^geckoViewSessionContextId=x"), // the same, with Gecko's ^attributes: kept
+            )
+        }).use { h ->
+            assertEquals(
+                listOf("$dash ${PermissionDelegate.PERMISSION_STORAGE_ACCESS} ${ContentPermission.VALUE_PROMPT}"),
+                GeckoShadows.permissionsSet,
+            )
+            assertTrue(h.logs("Glassworks").contains(
+                "Forgetting content permission ${PermissionDelegate.PERMISSION_STORAGE_ACCESS} for $away: not Home Assistant or a secure host",
+            ))
+        }
+    }
+
+    @Test
+    fun `a failed read of the saved permissions is tried again with the next page`() {
+        val away = "http://192.0.2.66/"
+        harness(prefs = { p ->
+            configured(p)
+            GeckoShadows.permissionReadsFailing = 1
+            GeckoShadows.savedPermissions += GeckoShadows.allocate(ContentPermission::class.java).also {
+                GeckoShadows.setField(it, ContentPermission::class.java, "uri", away)
+                GeckoShadows.setField(it, ContentPermission::class.java, "permission", PermissionDelegate.PERMISSION_GEOLOCATION)
+                GeckoShadows.setField(it, ContentPermission::class.java, "value", ContentPermission.VALUE_ALLOW)
+            }
+        }).use { h ->
+            h.idle()
+            assertTrue(h.events.contains("permissions.read failed"))
+            assertEquals(emptyList<String>(), GeckoShadows.permissionsSet)
+            assertTrue(h.logs("Glassworks").contains("Couldn't read saved content permissions; trying again with the next page"))
+            h.eventsDuring { h.content.onCrash(h.session) }
+            assertEquals(listOf("$away ${PermissionDelegate.PERMISSION_GEOLOCATION} ${ContentPermission.VALUE_PROMPT}"), GeckoShadows.permissionsSet)
+        }
     }
 
     private class Media : PermissionDelegate.MediaCallback {
@@ -398,6 +542,7 @@ class GeckoBehaviourPinTest {
 
     @Test
     fun `getUserMedia gets the microphone and the camera, else the first of each`() = harness().use { h ->
+        h.at(dash)
         val screen = h.mediaSource(MediaSource.SOURCE_SCREEN, "Screen")
         val camera = h.mediaSource(MediaSource.SOURCE_CAMERA, "Back camera")
         val other = h.mediaSource(MediaSource.SOURCE_OTHER, "Line in")
@@ -410,7 +555,41 @@ class GeckoBehaviourPinTest {
             listOf("grant video=Back camera audio=Mic", "grant video=Screen audio=Line in", "grant video=null audio=null"),
             m.calls,
         )
-        assertTrue(h.logs("Glassworks").contains("Granting media for $dash: audio=Mic video=Back camera"))
+        assertTrue(h.logs("Glassworks").contains("Granting media for $base: audio=Mic video=Back camera"))
+    }
+
+    @Test
+    fun `a page off Home Assistant gets no microphone and no camera`() = harness().use { h ->
+        val mic = h.mediaSource(MediaSource.SOURCE_MICROPHONE, "Mic")
+        val camera = h.mediaSource(MediaSource.SOURCE_CAMERA, "Back camera")
+        val away = "http://192.0.2.66/listen"
+        val m = Media()
+        h.at(away) // a link tapped on the dashboard, or a dashboard URL set to another site
+        h.permission.onMediaPermissionRequest(h.session, away, arrayOf(camera), arrayOf(mic), m)
+        h.at(dash) // a frame of another site inside the dashboard
+        h.permission.onMediaPermissionRequest(h.session, away, arrayOf(camera), arrayOf(mic), m)
+        h.at(away) // a Home Assistant frame inside another site
+        h.permission.onMediaPermissionRequest(h.session, dash, arrayOf(camera), arrayOf(mic), m)
+        assertEquals(listOf("reject", "reject", "reject"), m.calls)
+        assertTrue(h.logs("Glassworks").contains("Refusing media for http://192.0.2.66 on http://192.0.2.66: not Home Assistant or a secure host"))
+        assertTrue(h.logs("Glassworks").contains("Refusing media for http://192.0.2.66 on $base: not Home Assistant or a secure host"))
+        assertFalse(h.logs("Glassworks").any { it.startsWith("Granting media") })
+    }
+
+    @Test
+    fun `the signed-in Home Assistant and the extra secure hosts get the microphone`() = harness(prefs = { p ->
+        configured(p)
+        p.extraSecureHosts = "cams.example"
+    }).use { h ->
+        val signedIn = "https://ha.example"
+        h.signIn(signedIn)
+        val mic = h.mediaSource(MediaSource.SOURCE_MICROPHONE, "Mic")
+        val m = Media()
+        h.at("$signedIn/lovelace/0")
+        h.permission.onMediaPermissionRequest(h.session, "$signedIn/lovelace/0", null, arrayOf(mic), m)
+        h.at("$dash?external_auth=1")
+        h.permission.onMediaPermissionRequest(h.session, "http://cams.example:1984/webrtc.html", null, arrayOf(mic), m)
+        assertEquals(listOf("grant video=null audio=Mic", "grant video=null audio=Mic"), m.calls)
     }
 
     private class Grant : PermissionDelegate.Callback {

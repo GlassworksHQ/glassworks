@@ -12,13 +12,13 @@ import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, type PaneCard, type SetupState } from '@glassworks/setup-channel';
 import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from '@glassworks/improv-serial';
 import { explain, type Written } from './explain';
-import type { Changed } from './state';
+import { firstStart, type Changed } from './state';
 import type { AppPhase, DemoFrame } from '@glassworks/kiln-core';
 import { Session, type SessionDeps } from './session';
 
-export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'panes', 'panes-busy', 'panes-refused', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
+export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'first-boot', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'panes', 'panes-busy', 'panes-refused', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
   'done', 'done-old-boot', 'undo', 'undo-refused', 'undo-refused-splash', 'undo-apps-back', 'undo-still-on', 'undo-unreadable', 'undo-connect', 'restore', 'undo-done', 'error', 'error-written',
-  'error-no-recovery', 'error-secure-boot', 'error-not-this-panel', 'error-usb-unreliable', 'error-download', 'error-not-started', 'error-adb-held',
+  'error-no-recovery', 'error-secure-boot', 'error-not-this-panel', 'error-usb-unreliable', 'error-download', 'error-release', 'error-no-release', 'error-not-started', 'error-adb-held',
   'error-backup-refused', 'error-nothing-picked', 'error-earlier', 'error-unknown', 'error-unknown-written'] as const;
 export type Demo = (typeof DEMOS)[number];
 
@@ -141,6 +141,7 @@ export function withAppStreams(p: PanelShell, o: { online: boolean; wifiFails?: 
       return r;
     },
     push: (path, data, mode) => p.push(path, data, mode),
+    ...(p.pull ? { pull: (path: string, x?: { signal?: AbortSignal; maxBytes?: number }) => p.pull!(path, x) } : {}),
     openStream: async (svc) => (svc === SETUP_SOCKET ? setupStream(net, o.radio ?? true, o.panes) : svc === IMPROV_SOCKET ? improvStream(!!o.wifiFails, net) : p.openStream!(svc)),
   };
 }
@@ -301,8 +302,11 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
       progress(0.68, 'flash', 'Writing the new software', 'Writing boot');
       return;
     case 'ask-adb':
-      dispatch({ type: 'setup', setup: { phase: 'waiting', note: 'The panel is starting its new software. The first start takes a minute or two.' } });
+      dispatch({ type: 'setup', setup: firstStart(frame) });
       void session.asks.open('adb', () => new Promise(() => {}), never);
+      return;
+    case 'first-boot': // picked: waiting for the panel's first start
+      dispatch({ type: 'setup', setup: firstStart(frame) });
       return;
     case 'app': // a first install: the panel has no Glassworks yet
     case 'app-update': // Glassworks is on the panel: installing replaces it
@@ -416,6 +420,9 @@ const ERRORS: Partial<Record<Demo, { error: unknown; at: number; written?: Writt
   'error-not-this-panel': { error: new Error('this does not look like the expected device (product sunxi, boot 0, super 0). Nothing was changed.'), at: 2 },
   'error-usb-unreliable': { error: new Error('the two reads of boot differ'), at: 2 },
   'error-download': { error: new Error('could not download magisk: HTTP 503'), at: 2 },
+  // the app from its newest release (wizard/assets.ts), after the new software is in place
+  'error-release': { error: new Error('Couldn\'t download Glassworks 1.0.0 (the download proxy sent nothing for 30 s)'), at: 3, installed: true },
+  'error-no-release': { error: new Error('There\'s no Glassworks release to install yet'), at: 3, installed: true },
   'error-not-started': { error: new Error('the panel did not finish starting in 5 minutes'), at: 3, installed: true },
   'error-adb-held': { error: new Error('another program holds the panel\'s adb connection: run "adb kill-server" on this computer and try again'), at: 3, installed: true },
   'error-backup-refused': { error: new BackupRefused('this backup has no super partition'), at: 1, earlier: 'written' },

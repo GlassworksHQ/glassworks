@@ -5,7 +5,7 @@ evidence: verified
 
 # Mirror images: what Kiln changes in the community system image, and what a fresh userdata needs
 
-**Status (2026-11-17): flashed on a real Mirror end to end, with image 1 (2026-11-16) and image 2 (2026-11-17).**
+**Status (2026-11-23): flashed on a real Mirror end to end, with image 1 (2026-11-16), image 2 (2026-11-17) and image 3 from kiln.glassworks.dev (2026-11-23).**
 Image 2's fully dark sleep is still to check. Kiln patches the Glass Panes
 `system.img` and builds a new `userdata` (`frames/lululemon-mirror/installer/src/image.ts`). The
 root's first real flash (below) booted it. Its adb came up, but **not through the key Kiln wrote**: the
@@ -23,11 +23,19 @@ Glassworks for generic Android instead ([The app](#the-app-the-legacy-build-of-g
 the only home screen, upright, with no crashes (2026-11-17, #443's run).
 
 **2026-11-22: Kiln pins image 3 (`mirror-android-3`)** ([Image 3](#image-3-mirror-android-3-2026-11-22)).
-Read from its files and checked offline against the real image; **untested on a unit**.
+Read from its files and checked offline against the real image.
+
+**2026-11-23: image 3 installed end to end on the Mirror from kiln.glassworks.dev (verified; the maintainer's
+run, reported in the V1 status pass).** The deployed Kiln (main) took the Mirror through the whole install and the
+standard setup to Done, with nothing done on the Mirror's own screen. Seen with Glassworks after it: the Glassworks
+boot animation (after lululemon's bootloader logo, which stays), Glassworks as the only home screen with no vendor
+screens, back after a reboot, the screen sleeping and waking, and an app update installed from Home Assistant with
+no click on the Mirror. The setup hotspot had passed on the same unit that day (#197 part M). The run's step-by-step
+log wasn't recorded here; `frame.json`'s `facts` now come from it (`panelRuns`, nothing `unverified`).
 
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (the real flash
 below), and since 2026-11-16 `mirror-android-2` (below; on the unit since 2026-11-17), and since
-2026-11-22 `mirror-android-3` in Kiln (below; not on a unit yet) (Android 6.0.1,
+2026-11-22 `mirror-android-3` in Kiln (below; flashed on the unit from Kiln on 2026-11-23) (Android 6.0.1,
 `userdebug`, `test-keys`), stock signed `boot` (`IFC-6309-2.0-MIR.S22Q401`). Tools:
 `@glassworks/ext4` (#353), e2fsprogs 1.47.4.
 
@@ -87,14 +95,14 @@ comes up as Glassworks and lets Kiln in over adb with its own key, with no share
 |---|---|---|
 | `/priv-app/Glassworks/Glassworks.apk` (until 2026-11-16 `/priv-app/S1Kiosk/S1Kiosk.apk`, which the probe still uses), `root:root` 0644, `system_file`; its directory 0755 | A privileged system app: Android 6 grants privileged permissions (`WRITE_SECURE_SETTINGS`, `CHANGE_CONFIGURATION`) to `/system/priv-app` apps with no whitelist (that came in Android 8). It survives a factory reset, and the app's own updates install over it in `/data/app` | Read (AOSP 6 `PackageManagerService`). On the unit (2026-11-16) the APK was in `/system/priv-app/S1Kiosk`; the probe there got its privileged permissions ([privileged-app.md](privileged-app.md)) |
 | Its native libraries in `/priv-app/Glassworks/lib/arm64/` (or `lib/arm/`) | Android 6 doesn't unpack a bundled app's libraries: it looks for `lib/<abi>` next to the APK, as the image's own priv-apps have them. Only the primary ABI the APK has is unpacked (arm64-v8a first) | Read (the image's layout, AOSP 6 `setBundledAppAbisAndRoots`); untested |
-| `/media/bootanimation.zip` (PR 5 makes it) | `bootanimation` reads `/system/media/bootanimation.zip` when there's no `/oem/media` or `/data/local` one, and the Mirror has neither | Read |
+| `/media/bootanimation.zip` (PR 5 makes it) | `bootanimation` reads `/system/media/bootanimation.zip` when there's no `/oem/media` one, and the Mirror has none. **Corrected 2026-11-25:** an earlier version also named `/data/local`; stock 1.24.0's `bootanimation` has no such path (`strings` over its system image, [stock-inplace-parity.md](stock-inplace-parity.md)) | Read |
 | `build.prop`: `ro.glassworks.frame.id=lululemon-mirror` and `ro.glassworks.frame.version` (`MIRROR_FRAME` in `installer/src/image.ts`) | The frame version the app shows on the Device page and compares with the newest `frames/lululemon-mirror/v*` release (#139; the tags are in docs/releasing.md, *Frame releases*). A Mirror flashed before has neither, and the app names its image from `ro.build.fingerprint` | Off-device test (2026-11-18); not yet on a Mirror |
 | `build.prop`: `ro.glassworks.device.mac` (#523), from `fastboot getvar serialno` with the app's own formula (`macFromSerial` in `installer/src/image.ts`, `PanelDevice.macFromSerial` in the core) | The app's Home Assistant identity when its data is new. A flash wipes userdata, and with it the MAC the app had saved, so before this every reflash made a new HA device | Off-device tests (2026-11-18). That LK answers `serialno`: read (Qualcomm LK publishes it), untested on this unit. Panel run pending |
 | `build.prop`: `ro.glassworks.api_key.handover=1` (#574), only when the headless flash read an ESPHome API key from the running app before the flash. A flag, never the key | The flash wipes the key Home Assistant set, and HA, which still holds it, opens a re-authentication when the fresh app answers with no key (the root's run on 2026-11-18). On the flag the fresh app keeps its API server shut until the flash hands the key back at the first boot (up to 15 minutes), so HA never meets it keyless ([esphome.md](../../../docs/esphome.md#identity-across-reinstalls)). A rebuild without a key drops the flag | Off-device tests (2026-11-19). Panel run pending: one reflash with an app that has the key socket |
 | ~~`build.prop`: `ro.sf.hwrotation=270`~~ **Dropped 2026-11-17**: nothing on the image reads it, and the UI stayed landscape with it ([below](#the-rotation-2026-11-17)). The first boot sets `user_rotation=3` over adb instead (`setPortrait`) | The panel is landscape (1920×1080), and the Mirror stands portrait. The stock portrait comes from `user_rotation=3`, locked, which lives in `userdata`, so a fresh `userdata` comes up landscape. The property was meant to turn Android's UI; on this image it turns nothing. The boot animation draws straight to the panel, so its frames are turned themselves (`boot.rotate`) | **Corrected 2026-11-17.** The property turns neither the boot animation (sideways on the first real flash, 2026-11-16, the maintainer's photo) nor the UI (landscape with the real app, 2026-11-17). An earlier version said the UI was portrait with it: that was the probe app asking for portrait itself. The turned boot animation is upright on the glass (2026-11-16, photo). The UI upright at `user_rotation=3`, set by Kiln's first boot: **verified** 2026-11-17 (the maintainer, on the glass) |
-| `/framework/services.jar`: `UsbDebuggingManager` lets in the installer's key (the first `adbKey` line) in place of the key the image names (`IMAGE_OWNER_FINGERPRINT`); same mode, owner and label | The image's own way in over adb is a constant. Image 2's named the published project key, and its adbd ignored `adb_keys` ([below](#who-the-image-lets-in-over-adb)). Image 3's names `A1:EC:…`, a key that isn't published, and its framework also lets in `adb_keys` ([below](#image-3-a-new-constant-and-adb_keys)) | Verified offline: image 2 patched (2026-11-16), `dexdump` verifies the result and prints the same code; image 3 patched (2026-11-22, the real-image test). Untested on the unit |
-| `/priv-app/MirrorKiosk` removed (`IMAGE_KIOSK`), image 3 only | Glass Panes' own kiosk app, a persistent home app in image 3's `system`: kept, it would run beside Glassworks ([below](#image-3-a-new-constant-and-adb_keys)) | Read and left out by the real-image test (2026-11-22). Untested on the unit |
-| 36 app folders removed from `/app` and `/priv-app` (`installer/src/unused.ts`, `UNUSED_APPS`): phone and SMS front ends, Qualcomm diagnostics, modem settings, RCS and tethering, demo apps and wallpapers, Bluetooth and ANT test tools. The phone stack (`TeleService`, `TelephonyProvider`, `Telecom`), the contacts provider, the keyboard, the display's post-processing apps (`PPPreference`, `SVIService`, `CABLService`, `colorservice`), WebView, Bluetooth, Settings and SystemUI stay (`KEPT_APPS`) | Under memory pressure the Qualcomm services died and restarted 53 to 55 times each in 43 minutes while the Mirror ran at "critical" (2026-11-18, the memory note in #519). The root hid the same set with `pm hide` on the unit (`pm disable-user` is refused from adb's shell on this image), and free RAM went from about 60 MB to 205 MB (one sample). The way back is the plain image | Folders read from image 2 with `tools/mirror/list-apps.ts` (2026-11-18); the real-image test checks each folder's APK names the listed package. Image 3 already lacks 24 of them, so 12 are removed there (2026-11-22). The removed image boots: **untested** on the unit (panel run pending). Image 2's community kiosk was never in `system` (read 1); image 3's is (the row above) |
+| `/framework/services.jar`: `UsbDebuggingManager` lets in the installer's key (the first `adbKey` line) in place of the key the image names (`IMAGE_OWNER_FINGERPRINT`); same mode, owner and label | The image's own way in over adb is a constant. Image 2's named the published project key, and its adbd ignored `adb_keys` ([below](#who-the-image-lets-in-over-adb)). Image 3's names `A1:EC:…`, a key that isn't published, and its framework also lets in `adb_keys` ([below](#image-3-a-new-constant-and-adb_keys)) | Verified offline: image 2 patched (2026-11-16), `dexdump` verifies the result and prints the same code; image 3 patched (2026-11-22, the real-image test). On the unit: the 2026-11-23 Kiln install from kiln.glassworks.dev got in over adb with the browser's key and finished (verified, [above](#mirror-images-what-kiln-changes-in-the-community-system-image-and-what-a-fresh-userdata-needs)) |
+| `/priv-app/MirrorKiosk` removed (`IMAGE_KIOSK`), image 3 only | Glass Panes' own kiosk app, a persistent home app in image 3's `system`: kept, it would run beside Glassworks ([below](#image-3-a-new-constant-and-adb_keys)) | Read and left out by the real-image test (2026-11-22). On the unit (2026-11-23 Kiln install): Glassworks was the only home screen, with no other kiosk showing (verified). Whether its removal leaves anything behind that expects it is unchecked |
+| 36 app folders removed from `/app` and `/priv-app` (`installer/src/unused.ts`, `UNUSED_APPS`): phone and SMS front ends, Qualcomm diagnostics, modem settings, RCS and tethering, demo apps and wallpapers, Bluetooth and ANT test tools. The phone stack (`TeleService`, `TelephonyProvider`, `Telecom`), the contacts provider, the keyboard, the display's post-processing apps (`PPPreference`, `SVIService`, `CABLService`, `colorservice`), WebView, Bluetooth, Settings and SystemUI stay (`KEPT_APPS`) | Under memory pressure the Qualcomm services died and restarted 53 to 55 times each in 43 minutes while the Mirror ran at "critical" (2026-11-18, the memory note in #519). The root hid the same set with `pm hide` on the unit (`pm disable-user` is refused from adb's shell on this image), and free RAM went from about 60 MB to 205 MB (one sample). The way back is the plain image | Folders read from image 2 with `tools/mirror/list-apps.ts` (2026-11-18); the real-image test checks each folder's APK names the listed package. Image 3 already lacks 24 of them, so 12 are removed there (2026-11-22). The removed image boots: **verified** on the unit in the 2026-11-23 Kiln install. Image 2's community kiosk was never in `system` (read 1); image 3's is (the row above) |
 
 The patcher refuses, with nothing written, an image whose fingerprint isn't the one above, and an
 APK that isn't the app the frame names. A second run gives the same image.
@@ -145,7 +153,8 @@ The image ships Launcher3 (`com.android.launcher3`) as a home app, and the Mirro
 to answer Android's chooser. adb's shell can't disable another app on Android 6, but it holds
 `MANAGE_USERS` (read 2026-11-15, [home-app.md](home-app.md)), which `pm hide` needs. So on the first
 boot Kiln runs `pm hide com.android.launcher3` (and `com.cyanogenmod.trebuchet` if present), and our
-app is the only home app left: Android opens it with no chooser. **Untested** on the unit. The way
+app is the only home app left: Android opens it with no chooser. **Verified** on the unit in the 2026-11-23 Kiln
+install from kiln.glassworks.dev: Glassworks came up as the only home screen, with no chooser. The way
 back (the plain Glass Panes image) brings the launcher back, because it comes with a fresh userdata.
 
 Kiln then checks what HOME opened (`dumpsys activity activities`, `mFocusedActivity`). If it isn't
@@ -232,8 +241,9 @@ What Kiln changes for it (read, then checked offline):
   released; `e2fsck -fn` on the image before and after reports the same one finding (the stock
   image's "Padding at end of inode bitmap is not set"), 23 blocks more in use (the re-deflated jar).
 
-Not checked: a flash on a unit (Glassworks or Glass Panes), and whether the kiosk's removal leaves
-anything behind that expects it (a receiver, a job). **Untested.**
+Not checked: whether the kiosk's removal leaves anything behind that expects it (a receiver, a job).
+**Untested.** The Glassworks flash on a unit is covered by the 2026-11-23 entry at the top; a Glass Panes
+(way back) flash of image 3 on a unit isn't.
 
 **Room for the app (verified 2026-11-23, the root, offline).** The first Kiln run on a unit with image 3
 stopped in the build: `no room for /priv-app/Glassworks/lib/arm64/libxul.so: it needs up to 35906 blocks,

@@ -50,6 +50,9 @@ class NotificationsPaneTest {
     private val pending = mutableListOf<() -> Unit>()
     private var t = 0L
     private val timers = mutableListOf<Triple<Long, () -> Unit, CompletableFuture<Unit>>>()
+    /** Each raise to full volume, by its longest time, and how many are still up (MasterVolume.full ends once). */
+    private val raised = mutableListOf<Long>()
+    private var up = 0
 
     private val pane = NotificationsPane(
         PaneContext(
@@ -70,6 +73,12 @@ class NotificationsPaneTest {
         schedule = { ms, action -> CompletableFuture<Unit>().also { timers += Triple(ms, action, it) } as Future<*> },
         haBase = { "http://homeassistant.local:8123" },
         now = { t },
+        fullVolume = { ms ->
+            raised += ms
+            up++
+            var ended = false
+            { if (!ended) { ended = true; up-- } }
+        },
     )
 
     /** Calls the `notify` action as Home Assistant would, through the entity's own handler. */
@@ -145,6 +154,34 @@ class NotificationsPaneTest {
         hub.dismiss(hub.state.cards.single().id)
         assertEquals(1, silenced)
         assertFalse("the next repeat is cancelled", live(timers.last { it.first == NotificationsPane.ALERT_REPEAT_MS }))
+    }
+
+    @Test
+    fun theCriticalAlertPlaysAtFullVolumeOneSoundAtATime() {
+        pane.start()
+        notify("Washer done")
+        assertTrue("a normal one plays at the panel's volume", raised.isEmpty())
+        holdDone = true
+        notify("Water leak", data = """{"priority":"critical"}""")
+        val longest = (NotificationSounds.seconds(Sound.ALERT) * 1000).toLong() + NotificationsPane.RELEASE_SLACK_MS
+        assertEquals("at most until its claim would go anyway", listOf(longest), raised)
+        assertEquals(1, up)
+        pending.removeAt(0)()
+        assertEquals("the sound ended: the volume comes back", 0, up)
+        timers.last { it.first == NotificationsPane.ALERT_REPEAT_MS }.second()
+        assertEquals("the repeat raises it again", 2, raised.size)
+        assertEquals(1, up)
+        hub.dismiss(hub.state.cards.first { it.notification.priority == Priority.CRITICAL }.id)
+        assertEquals("silenced mid-sound, it never calls back: the volume comes back now", 0, up)
+    }
+
+    @Test
+    fun aSpeakerThatFailsPutsTheVolumeBack() {
+        pane.start()
+        playFails = true
+        runCatching { notify("Water leak", data = """{"priority":"critical"}""") }
+        assertEquals(1, raised.size)
+        assertEquals(0, up)
     }
 
     @Test

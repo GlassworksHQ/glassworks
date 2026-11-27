@@ -19,8 +19,8 @@
     </picture>
   </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-beta-on-dark.svg">
-    <img alt="Status: beta" src="https://www.glassworks.dev/brand/badge-status-beta-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-stable-on-dark.svg">
+    <img alt="Status: stable" src="https://www.glassworks.dev/brand/badge-status-stable-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -59,8 +59,12 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
   [docs/onboarding.md](../../../docs/onboarding.md).
 - **Microphone/camera work over plain `http://`.** The dashboard host is added to
   Gecko's `dom.securecontext.allowlist`, so `window.isSecureContext` is true and
-  `navigator.mediaDevices.getUserMedia()` / AudioWorklet are available. Mic, camera and
-  autoplay are granted without prompts (Gecko `PermissionDelegate` + Android `RECORD_AUDIO`).
+  `navigator.mediaDevices.getUserMedia()` / AudioWorklet are available. The mic, the camera and
+  the permissions a page asks for are granted without prompts (Gecko `PermissionDelegate` + Android
+  `RECORD_AUDIO`), but only to pages on the signed-in Home Assistant or a secure-context host. Any
+  other page, or a frame of another site inside the dashboard, is refused and logged, and what an
+  older build saved for such a page is forgotten at startup. Autoplay is allowed on every page
+  (Gecko's `media.autoplay.*` prefs), not through the delegate.
   Verified on the panel: `getUserMedia({audio:true})` returns a live 48 kHz track.
 - HOME + LAUNCHER intent filters (can be the default launcher), `BootReceiver`
   (`BOOT_COMPLETED`, `MY_PACKAGE_REPLACED`).
@@ -162,7 +166,7 @@ $A --ez show_setup true    # preview the setup screen at its live step (changes 
 $A --ez show_setup true --es setup_step wifi   # ... or a given step: wifi|ha|signin|panes|radio|silent_updates|done
 $A --ez show_setup false   # close the preview
 $A --ez show_signin true   # preview the QR sign-in step (doesn't touch the session)
-$A --es open http://192.168.1.100:8123/profile/general      # navigate once (not persisted)
+$A --es open http://homeassistant.local:8123/history         # navigate once (not persisted)
 $A --ef zoom 1.25          # CSS px ratio; 0 = auto (device density 1.5). Restarts the app.
 $A --es secure_hosts a.lan,b.lan   # extra secure-context hosts. Restarts the app.
 $A --ez remote_debug true  # Gecko remote debugging. Restarts the app.

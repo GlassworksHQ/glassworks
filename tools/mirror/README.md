@@ -110,6 +110,12 @@ Two read-only scripts for #334 ([option-c.md](../../frames/lululemon-mirror/rese
   Mirror as adb's shell and compares its hash. Nothing is written on the Mirror or kept on the
   computer but the hash. Only the root runs it, through the adb server already bound to the Mirror.
 
+## Camera spike (`camera-spike/`)
+
+A throwaway app that opens the Mirror's camera through Camera1 and Camera2 and logs whether frames arrive and whether
+they are blank. It found the camera pane's green stills; see [camera-spike/README.md](camera-spike/README.md) and
+[camera-stock.md](../../frames/lululemon-mirror/research/camera-stock.md).
+
 ## Stock Mirror probe (`stock-probe.ts`)
 
 `stock-probe.ts` is a guided 6-step tool for inspecting a Mirror that is still running lululemon's

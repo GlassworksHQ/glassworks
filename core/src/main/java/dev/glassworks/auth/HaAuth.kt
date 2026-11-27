@@ -43,6 +43,11 @@ object HaAuth {
     private val cache = AccessTokenCache()
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
     private var server: HttpServer? = null
+    /**
+     * The sign-in server's pending sign-ins ([signInStates]), made once per process and kept across server restarts, so
+     * a factory reset drops the ones the live server holds ([forgetPendingSignIns]).
+     */
+    @Volatile private var signInStates: StateStore? = null
     /** The Manage page while the server runs: the settings menu's Overview shows and does what its Overview does. */
     var manage: ManagePage? = null
         private set
@@ -117,7 +122,11 @@ object HaAuth {
     fun startServer(context: Context) {
         init(context)
         if (server != null) return
-        val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, thread = threadJoin)
+        // One store for the process: a bind retry keeps the Manage page, and the sign-in server inside it, built with it.
+        val states = signInStates ?: signInStates(prefs).also { signInStates = it }
+        // A sign-in started while a .local Home Assistant had no address yet trades its code through the one found since.
+        val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, states, thread = threadJoin,
+            reach = prefs::route)
         // A Manage page that can't load (a class Android 6 refuses, #435) leaves the QR pages up, and the app with them.
         val m = manage ?: orWithout("The Manage page", { AuthLog.w(it) }) {
             val page = context.glassworks.managePage(context, signIn, tokens, prefs)
@@ -168,6 +177,27 @@ object HaAuth {
             bindRetry = retry
             main.postDelayed(retry, 10_000)
         }
+    }
+
+    /**
+     * The sign-in server's pending sign-ins, saved in [prefs]: the app restarts when Home Assistant's address first goes
+     * in, often while a sign-in is open at Home Assistant (Kiln's Home Assistant step), and it must still be known when
+     * Home Assistant sends the person back to the new process.
+     */
+    internal fun signInStates(prefs: KioskPrefs) = StateStore(saved = object : SavedSignIns {
+        override fun read() = prefs.pendingSignIns
+        override fun write(text: String?) { prefs.pendingSignIns = text }
+    })
+
+    /**
+     * Forgets every sign-in in progress (a factory reset): the running server's first, so none finishes before the app
+     * restarts and nothing it saves later brings them back, then the saved copy. False when that couldn't be removed.
+     */
+    @Synchronized // with startServer, which makes the store: a reset never runs between its read of the saved copy and this
+    fun forgetPendingSignIns(context: Context): Boolean {
+        init(context)
+        signInStates?.clear()
+        return try { prefs.pendingSignIns = null; true } catch (e: SignInNotStored) { AuthLog.w(e.message ?: "pending sign-ins not removed"); false }
     }
 
     /** The pending retry when the port was busy, until it runs or [stopServer] cancels it. */

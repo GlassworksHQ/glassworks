@@ -36,6 +36,8 @@ export interface ChannelSetupDeps {
 export interface SetupSteps {
   /** The device has a touchscreen; without one (false), no step offers "do it on the panel". Unset: it has. */
   readonly touch?: boolean;
+  /** The device as the steps name it (its frame's `the`); unset: "the panel". */
+  readonly the?: string;
   /** Runs a button's work, one at a time. */
   click(name: string, run: () => Promise<void> | void): Promise<void>;
   /** The Home Assistant address as the person typed it, shown again if they come back to the step. */
@@ -60,6 +62,8 @@ export interface SetupSteps {
 export interface WifiSteps {
   /** As SetupSteps `touch`. */
   readonly touch?: boolean;
+  /** As SetupSteps `the`. */
+  readonly the?: string;
   click(name: string, run: () => Promise<void> | void): Promise<void>;
   /** The step from the start (Try again). */
   wifi(): Promise<void>;

@@ -8,6 +8,7 @@ Android 6, no splash). Kiln's Mirror recipe writes it into the Glass Panes syste
 | File | What |
 |---|---|
 | `bootanimation.zip` | 1920x1080 @ 30 fps (the panel's own framebuffer; the portrait art turned 90° counter-clockwise, `boot.rotate`), STORED, full frames (Android 6 doesn't read `trim.txt`), 11.44 MB |
+| `bootanimation-compact.zip` | The boot animation for Glassworks on stock firmware (stock-in-place): one full-screen 1080x1920 frame, upright, STORED, within the 22,901 bytes of stock's own `bootanimation.zip` ([below](#on-stock-firmware)) |
 | `splash-landscape.png`, `preview.webp` | Previews only. The Mirror has no splash Kiln can change |
 | `outputs.json` | What the build used and wrote. A test and CI check the files against it |
 
@@ -30,6 +31,23 @@ ROTATION_270 means the graphics are drawn turned 270° clockwise.
 **Verified on the unit** (2026-11-16, the root's run; the maintainer's photo): the turned animation
 runs upright on the portrait glass. If a later unit shows it upside down, its glass is mounted the
 other way: set `rotate` to 270 and rebuild.
+
+## On stock firmware
+
+Glassworks can also install on the Mirror's stock firmware without replacing the system image. That
+install writes the boot animation over stock's `/system/media/bootanimation.zip` in the blocks the
+file already has, so ours can't be any larger. On stock 1.24.0 that file is 22,901 bytes:
+`desc.txt` reads `1080 1920 10`, and its one frame is the lululemon Studio logo, upright on a
+1080x1920 portrait canvas (read from the stock system image, 2026-11-24). Stock also sets
+`persist.panel.orientation=270`, which its boot animation player reads, so the player turns the
+picture itself.
+
+`bootanimation-compact.zip` is built for that player: upright like stock's own, one full-screen
+frame with the Glassworks stack, the wordmark and the device line, held until Android has booted.
+It's about 10 KB. The generator builds it because the Mirror's `frame.json` sets
+`"compactBudget": 22901`. The stock install writes it in place of stock's own file, padded to stock's
+exact size with an empty zip comment (`padZipToExactLength` in the installer's `stock.ts`), which every
+zip reader skips.
 
 ## Not changeable: the boot logo
 

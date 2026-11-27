@@ -431,6 +431,8 @@ with a byte-exact rollback using the original blocks read over HTTP beforehand.
     confirms stock `1.24.0` `adbd` rejects `/data/misc/adb/adb_keys` on its own.
   - Contains `com.android.server.MirrorApService`, which drives `/system/bin/mapd` (`running`) and
     `hostapd` to bring up the `mirror-<serial>` SoftAP at `192.168.43.1` (DHCP `192.168.43.2`–`254`).
+    With Glassworks in place this hotspot gets in the way, so the in-place patch empties
+    `MirrorApService.systemReady()`: [stock-softap.md](stock-softap.md).
 - **Init services (`init.svc.*`, 58 entries):** confirms `qcom-post-boot` (`stopped`),
   `flash_recovery` (`stopped`), and Mirror-specific `mapd` (`running`) and `cfgchkup` (`stopped`).
   `file_contexts` under `device/mirror/mirror/sepolicy/file_contexts` labels `/system/bin/mapd`
@@ -601,9 +603,33 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-onl
      sets `persist.sys.usb.config=mtp,adb` and `persist.fuse_sdcard=true`, and `MtpService` starts
      when `device_provisioned=1`, but `UsbDeviceManager` keeps `mUsbDataUnlocked=false` until a
      screen tap, so `GetStorageIDs` returns **0 storages** on untouched stock OOBE.
-   - **Home Wi-Fi fallback (untested):** pre-saving the user's home Wi-Fi in Stage 1 `userdata` +
+   - **Home Wi-Fi fallback (untested end to end):** pre-saving the user's home Wi-Fi in Stage 1 `userdata` +
      `enable_wifi` marker to see if stock joins home Wi-Fi cleanly instead of `mirror-<serial>`
-     SoftAP (still untested on stock `1.24.0`).
+     SoftAP. Kiln now takes this path on a reinstall over Glassworks, whose patched services.jar has no
+     SoftAP. Checked without USB on the dev Mirror (2026-11-26, Glassworks installed in place, network adb):
+     ```
+     $ adb shell 'id -u; pm list packages dev.glassworks.generic_android.legacy; echo "exit=$?"; ps | grep -c hostapd'
+     2000
+     package:dev.glassworks.generic_android.legacy
+     exit=0
+     0
+     $ adb shell cat /system/etc/wifi/wpa_supplicant.conf
+     update_config=1
+     eapol_version=1
+     ap_scan=1
+     fast_reauth=1
+     pmf=1
+     p2p_no_group_iface=1
+     ```
+     - **Verified:** as `shell` (uid 2000), the frame's `ownWifiGone` command prints exactly the one
+       `package:` line it looks for, with exit 0.
+     - **Verified:** no `hostapd` runs (count 0).
+     - **Verified:** the template is the stage's `DEFAULT_WIFI_TEMPLATE` line for line; `inplace.test.ts`
+       keeps this file as `MIRROR_WIFI_TEMPLATE` and fails if the constant changes.
+     - **Read:** the agent's `CHANGE_WIFI_STATE`, its `wlan*` address for `lanIp`, and the CORS and
+       `Access-Control-Allow-Private-Network` headers Chrome's local network access needs.
+     - **Still untested on a Mirror:** the agent joining the network on the stage's first boot, and
+       Kiln's local network fetch to it. Bluetooth stays the fallback for the transfer.
    - **Stock-in-place viability — verified (2026-11-25):** `/system/framework/oat/arm64/services.odex`
      is absent (2026-11-24), and the live Track A run on the dev Mirror answered the rest. (a) `pm
      disable-user` throws `SecurityException` as `shell`, but **`pm hide` works on all 8 lululemon
@@ -620,6 +646,13 @@ npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --backup-onl
      [`frames/lululemon-mirror/installer/src/stock.ts`](../installer/src/stock.ts), shared by Kiln and
      the Node tool. USB MTP (`mUsbDataUnlocked=false` → 0 storages) and AOA v2 are dead ends, so the
      Stage 1 transport stays the SoftAP HTTP probe (or USB `adb forward`), not MTP.
+   - **Kiln's way back to stock (untested on a unit, 2026-11-24):** everything Kiln's app install
+     changes (the APK in `/data/app`, `device_owner.xml`, the `pm hide` state in
+     `package-restrictions.xml`, the preferred home activity, `user_rotation`) lives in `userdata`, so
+     Kiln's undo writes `restore-services.sparse` and then an empty ext4 `userdata` (root `0771
+     system:system`, `lost+found` only), the browser's version of `--undo --erase-userdata`. The
+     install's own fresh `userdata` is built the same way plus `/misc/adb`, so stock should take it
+     on first boot as after a factory reset, but no unit has booted Kiln's empty one yet.
 4. **Trust model for binding the SoftAP probe to the fastboot flash target — partially closed
    (2026-11-25, read):** a compatible but different Mirror in fastboot could otherwise receive
    writes computed from another unit's FIEMAP offsets (CodeRabbit, #769). `stock-surgical-adb.ts`

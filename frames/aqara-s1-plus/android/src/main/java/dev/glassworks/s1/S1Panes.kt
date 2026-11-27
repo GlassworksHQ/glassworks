@@ -90,6 +90,7 @@ class S1Panes : AppParts {
             panePrefs.radio,
             setUpBefore = { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) },
             agent = runtime.frame.agent,
+            panelIp = { dev.glassworks.platform.PanelAddress.now(context) },
         ) { prefs.haBase }
         val notify = NotificationsDefinition(
             panePrefs.paneFile("notifications"), notifications,
@@ -286,6 +287,8 @@ class S1Panes : AppParts {
                 haBase = { prefs.haBase },
                 now = SystemClock::elapsedRealtime,
                 touch = { runtime.frame.input == dev.glassworks.frame.Input.TOUCH },
+                // A critical alert plays at full volume, even muted, and the volume comes back after each sound.
+                fullVolume = runtime.volume(ctx)::full,
             ),
         ) + runtime.frame.panes(paneContext, exec) +
             runtime.paneDefinitions(ctx).filterIsInstance<RadioDefinition>().map { it.pane(paneContext, panelIp = host::ipAddress) } +

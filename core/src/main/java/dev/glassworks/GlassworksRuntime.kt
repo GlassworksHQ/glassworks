@@ -70,12 +70,18 @@ class GlassworksRuntime(
 
     override val screen = ScreenPolicy(
         presence, frame.light, app.components.admin, settings = ::KioskPrefs,
-        logTag = "Glassworks.Screen", wakeLockTag = "glassworks:wake",
+        logTag = "Glassworks.Screen", wakeLockTag = "glassworks:wake", sleepMode = frame.sleepMode,
     )
 
     private var definitions: List<PaneDefinition>? = null
 
     override val orbs = OrbBakes()
+
+    private var masterVolume: dev.glassworks.audio.MasterVolume? = null
+
+    override fun volume(context: Context): dev.glassworks.audio.MasterVolume = synchronized(this) {
+        masterVolume ?: dev.glassworks.audio.MasterVolume.of(context).also { masterVolume = it }
+    }
 
     /**
      * The app's panes in the order the settings list them, with the frame's among them, made once. A pane the

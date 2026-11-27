@@ -63,10 +63,10 @@ describe('keeping the Mirror in Home Assistant over a reflash', () => {
 
   it('the hand-back row shows only with a key held', async () => {
     await show(await keepDemo(mirrorEntry, 'flash-keep-working', true));
-    expect(screen.getByText('Restore your Home Assistant connection key')).toBeTruthy();
+    expect(screen.getByText('Keep your Home Assistant connection')).toBeTruthy();
     cleanup();
     await show(await imageDemo(mirrorEntry, 'flash-working', true));
-    expect(screen.queryByText('Restore your Home Assistant connection key')).toBeNull();
+    expect(screen.queryByText('Keep your Home Assistant connection')).toBeNull();
   });
 
   it('Done says Same device when the key went back, Confirm once with the HA steps otherwise, nothing on a first install', async () => {
@@ -112,7 +112,8 @@ async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootM
     flashedHere: { get: () => flashed, set: () => { flashed = true; } },
     holdingKey: (on) => holding.push(on),
   });
-  f.choose(); // Glassworks, first and picked (#579)
+  f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
+  f.choose();
   await f.download();
   await mirror.pickApk('kiosk.apk', fakeMirrorApk());
   return { f, built, after, asked, holding, flashedHere: () => flashed };

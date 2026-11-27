@@ -8,6 +8,59 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 
 ## [Unreleased]
 
+### Added
+- **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
+  page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
+  with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel
+  down in Home Assistant quiets all of it, not only announcements. The Music page's slider is now called
+  **Music volume** and sets Music Assistant's level under it.
+- **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
+  when the panel is turned down or muted, and the volume goes back to where it was after each tone.
+
+### Changed
+- **Kiln is easier to move around in.** Every installer screen has a Back button in the same place when going back is
+  safe, and says why when it isn't. Done steps on the side rail are links back to them. Reopening Kiln partway through
+  an install shows where you stopped and what's already on the device, with Continue and a way out. Start over asks
+  first, in a dialog that says what starts again and what stays. On a phone, a slim step bar opens the full list of
+  steps, and the main button stays at the bottom of the screen.
+
+### Fixed
+- **App updates fail fast when Android blocks unknown-source installs, and S1 Plus setup allows them for fallback updates.** On a panel without the root update service, starting an update when "Install unknown apps" is off used to open a dead-end Android dialog and wait 10 minutes to time out. Glassworks now reports the missing permission right away, and both Kiln and `install.sh` allow "Install unknown apps" on the S1 Plus so fallback updates can show Android's confirmation screen.
+- **Radio firmware sensor says `none` instead of `v1` when no root helper is installed.** Panels without a root helper previously showed `(installed: v1)` in the Radio firmware sensor alongside the Radio helper sensor saying no helper was installed.
+- **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
+  restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
+  you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in
+  in progress across the restart.
+- **The first sign-in no longer fails with "Can't reach Home Assistant" when you enter a `.local` address.**
+  Android 11 and older can't look up names like `homeassistant.local`, so the panel reaches Home Assistant through
+  the address it finds on your network. A sign-in started before the panel had found that address kept the name and
+  failed, and it only worked when you tried again. The panel now finishes the sign-in through the address it has
+  found by then, waiting a few seconds for it if needed.
+- **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
+  dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
+  running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
+  before Android closed it.
+- **The panel's address never comes from a hotspot.** The address the panel shows and hands to Home Assistant (setup page, sign-in code, Thread join, the radio's ZHA and Thread addresses, *IP address*) now comes only from the Wi-Fi network Android is connected to. While the setup Wi-Fi or Android's tethering was up, it could show the hotspot's own address instead.
+- **Kiln installs the newest S1 release.** A fresh install from Kiln's S1 page now downloads the app from the newest
+  release at the moment you install, so a panel no longer starts out one version behind and offers an update right
+  away.
+- **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
+  every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
+  secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
+  is refused, and the panel's log says so. An `allow` attribute on the frame doesn't change that: a site framed in
+  your dashboard needs to be one of the secure hosts too. Permissions an older version saved for other sites, including
+  framed ones, are forgotten when the app starts.
+- **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
+  your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
+  (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so once Home Assistant has
+  set the key, no other device can point the panel at its own page. Home Assistant 2026.11 or newer sets the key by
+  itself when you add the panel; do that from a network you trust. On an older Home Assistant, change these on the
+  panel or on the Manage page. The speaker, reload, restart and the other everyday controls work as before.
+  Notifications sent with the `notify` action and every radio control (**Radio mode**, **Radio allowed clients**,
+  **Join** and **Leave Zigbee network**, **Thread dataset**) need the key too, so a stranger on your network can't
+  put an alert on the screen or move the panel's radio to another network. On an older Home Assistant, `notify`
+  calls fail until you update it.
+
 ## [0.9.0] - 2026-11-24
 
 **S1 Kiosk is now Glassworks, in its last release before 1.0: a browser Manage page for every panel, themes and an edge glow for Assist, notifications and Bluetooth proxy panes, and frame updates from Home Assistant.**

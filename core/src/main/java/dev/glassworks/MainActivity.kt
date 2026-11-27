@@ -22,6 +22,7 @@ import android.widget.Toast
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
+import dev.glassworks.engine.TrustedPages
 import dev.glassworks.pane.applyFrom
 import dev.glassworks.pane.intentExtras
 import dev.glassworks.pane.permissionsToAsk
@@ -42,7 +43,6 @@ import dev.glassworks.frame.Orientation
 import dev.glassworks.frame.openSystemSettings
 import dev.glassworks.dashboard.DashboardOptions
 import dev.glassworks.dashboard.Dashboards
-import dev.glassworks.discovery.HaUrls
 import dev.glassworks.settings.KioskSettingsOverlay
 import dev.glassworks.settings.PanelBlueprints
 import dev.glassworks.settings.S1Settings
@@ -79,6 +79,23 @@ open class MainActivity : Activity() {
     private lateinit var setupOverlay: SetupOverlay
     private lateinit var wifiStatus: WifiSetupStatus
     private lateinit var root: android.widget.FrameLayout
+
+    /**
+     * Black over everything while the screen sleeps with its backlight off (ScreenPolicy.blackout, a frame's
+     * SleepMode.BACKLIGHT_OFF). It takes the tap that wakes the screen, so that tap never reaches the page.
+     */
+    private val blackoutView by lazy {
+        View(this).apply {
+            setBackgroundColor(android.graphics.Color.BLACK)
+            elevation = BLACKOUT_ELEVATION_DP * resources.displayMetrics.density
+            visibility = View.GONE
+            isClickable = true
+            setOnTouchListener { _, ev ->
+                if (ev.actionMasked == MotionEvent.ACTION_DOWN) glassworks.screen.wake("touch")
+                true
+            }
+        }
+    }
     private var page: Page? = null
     private val handler = Handler(Looper.getMainLooper())
     private var pendingAndroidPermission: ((Boolean) -> Unit)? = null
@@ -157,7 +174,7 @@ open class MainActivity : Activity() {
     }
 
     private fun showThreadJoin(s: dev.glassworks.auth.ThreadJoin.State) {
-        val url = dev.glassworks.auth.ThreadJoin.url(HaUrls.localIpv4())
+        val url = dev.glassworks.auth.ThreadJoin.url(dev.glassworks.platform.PanelAddress.now(this))
         when {
             s is dev.glassworks.auth.ThreadJoin.State.NeedsAdmin -> {
                 if (settingsOverlay.isShowing) settingsOverlay.hide()
@@ -298,6 +315,7 @@ open class MainActivity : Activity() {
             overlays.forEach { it.screenChanged() }
         }
         glassworks.screen.onTestDashboard = { onTestDashboard() }
+        glassworks.screen.onBlackout = ::showBlackout
         glassworks.commandSink = { applyIntent(it, fromNewIntent = true) }
         startSession()
         intent?.let { i -> handler.post { applySetupPreview(i) } }
@@ -543,7 +561,7 @@ open class MainActivity : Activity() {
             wifi = wifiStatus.snapshot(),
             haUrl = prefs.haBase,
             haSource = if (prefs.isAutoUrl) prefs.haUrlSource else "",
-            panelIp = HaUrls.localIpv4(),
+            panelIp = dev.glassworks.platform.PanelAddress.now(this),
             signedIn = HaAuth.signedIn,
             signinMoved = !preview && HaAuth.movedAway,
             preview = preview,
@@ -992,6 +1010,33 @@ open class MainActivity : Activity() {
 
     // ---- hidden settings gesture (doesn't consume the touch)
 
+    /**
+     * Shows or hides [blackoutView]. It joins the window, on top, only at the first blackout, so a frame that never
+     * has one (every SleepMode.LOCK frame) keeps its layers exactly as they were.
+     */
+    private fun showBlackout(on: Boolean) {
+        if (on && blackoutView.parent == null) root.addView(blackoutView, android.widget.FrameLayout.LayoutParams(-1, -1))
+        blackoutView.visibility = if (on) View.VISIBLE else View.GONE
+    }
+
+    private var wakeKeyCode: Int? = null
+
+    /** A key wakes a screen that sleeps with its backlight off, and its repeats/release do nothing else (ScreenPolicy.blackout). */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (glassworks.screen.blackout) {
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                wakeKeyCode = event.keyCode
+                glassworks.screen.wake("key")
+            }
+            return true
+        }
+        if (wakeKeyCode == event.keyCode) {
+            if (event.action == android.view.KeyEvent.ACTION_UP || event.isCanceled) wakeKeyCode = null
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
             glassworks.screen.userActivity()
@@ -1156,6 +1201,12 @@ open class MainActivity : Activity() {
     // ---- what the page reports (dev.glassworks.engine)
 
     private val pageHost = object : PageHost {
+        // Home Assistant and the secure-context hosts, and a test's own dashboard while it has one (#847).
+        override fun trusts(url: String): Boolean = TrustedPages.trusts(
+            url, HaAuth.signedInBase,
+            prefs.secureHosts() + listOfNotNull(glassworks.screen.testDashboard?.let { Uri.parse(it).host }),
+        )
+
         override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) {
             val missing = permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
             if (missing.isEmpty()) {
@@ -1393,6 +1444,7 @@ open class MainActivity : Activity() {
         glassworks.screen.onBrightness = null
         glassworks.screen.onStateChanged = null
         glassworks.screen.onTestDashboard = null
+        glassworks.screen.onBlackout = null
         glassworks.screen.stayOn(NOT_READY, false)
         glassworks.screen.stayOn(SETUP_NO_TOUCH, false)
         glassworks.commandSink = null
@@ -1441,6 +1493,8 @@ open class MainActivity : Activity() {
         private const val SETTINGS_TICK_MS = 2_000L
         /** The [dev.glassworks.screen.ScreenPolicy.stayOn] reason while setup or the connecting screen is up (#449). */
         private const val NOT_READY = "not ready"
+        /** Above every layer, the camera's dot (30 dp) included. */
+        private const val BLACKOUT_ELEVATION_DP = 40f
         private const val SETUP_NO_TOUCH = "setup without touch"
         private const val STATE_SETUP_UP = "dev.glassworks.setup_up"
         private const val STATE_RESTARTED_IN_SETUP = "dev.glassworks.restarted_in_setup"

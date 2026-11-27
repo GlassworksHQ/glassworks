@@ -133,7 +133,7 @@ describe('every Kiln page has a contract', () => {
       for (const [flow, f] of Object.entries(d.flows)) {
         const ids = f.steps.map((s) => s.id);
         if (new Set(ids).size !== ids.length) bad.push(`${frame} ${flow}: a step id twice`);
-        for (const s of f.steps) if (!['fel', 'fastboot', 'adb', 'usb', 'none'].includes(s.transport)) bad.push(`${frame} ${flow} ${s.id}: transport ${s.transport}`);
+        for (const s of f.steps) if (!['fel', 'fastboot', 'adb', 'usb', 'agent', 'none'].includes(s.transport)) bad.push(`${frame} ${flow} ${s.id}: transport ${s.transport}`);
       }
     }
     expect(bad).toEqual([]);

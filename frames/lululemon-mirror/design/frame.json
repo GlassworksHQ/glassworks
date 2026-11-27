@@ -238,7 +238,8 @@
   },
   "boot": {
     "androidApi": 23,
-    "rotate": 90
+    "rotate": 90,
+    "compactBudget": 22901
   },
   "abis": ["arm64-v8a", "armeabi-v7a"],
   "app": {
@@ -278,7 +279,7 @@
     }
   ],
   "provides": ["microphone", "speaker", "bluetooth-le", "camera"],
-  "camera": { "maxPixels": 921600 },
+  "camera": { "maxPixels": 921600, "sensorDegrees": 180 },
   "panes": {
     "assist": {
       "support": "alpha",
@@ -302,7 +303,7 @@
     },
     "camera": {
       "support": "alpha",
-      "note": "It has a camera (5 MP, front). In the legacy build: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on; Kiln grants the camera. Not yet run on a Mirror."
+      "note": "It has a camera (5 MP, front). In the legacy build: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on; Kiln grants the camera. The live stream costs memory the dashboard needs, so with it on the dashboard reloads more often."
     },
     "diagnostics": {
       "support": "alpha",
@@ -353,7 +354,7 @@
       "detail": "There's no way to save the stock image first"
     },
     "updates": {
-      "value": "planned"
+      "value": "ha"
     }
   },
   "ratingsNote": "Check before flashing: fastboot must report MSM8916 and the expected partition sizes. If anything differs, stop.",
@@ -446,16 +447,13 @@
   "facts": {
     "install": [],
     "silentUpdates": "Yes: the app is a system app that may install apps",
-    "kiosk": { "onlyHome": true },
-    "setup": ["computer"],
-    "branding": { "bootAnimation": true },
-    "panelRuns": false,
-    "unverified": ["install", "silentUpdates", "kiosk", "setup", "branding"],
+    "kiosk": { "onlyHome": true, "noVendorUi": true, "survivesReboot": true, "sleepsAndWakes": true },
+    "setup": ["computer", "hotspot"],
+    "branding": { "bootAnimation": true, "vendorLogo": true },
+    "panelRuns": true,
     "notes": {
-      "install": "Kiln's Mirror recipe runs in test only (/lululemon-mirror?apk=local).",
-      "silentUpdates": "Seen with the probe app on 2026-11-16 (privileged-app.md); not yet with Glassworks.",
-      "kiosk": "The only home screen: seen with the probe app on 2026-11-16 (first-boot.md) and with Glassworks on 2026-11-17. The other checks aren't done on a Mirror yet.",
-      "setup": "It has no touch. The setup hotspot is meant for it, and hasn't run on a Mirror yet."
+      "setup": "It has no touch, so setup runs from the computer during the install, or from a phone on the setup hotspot.",
+      "branding": "lululemon's logo shows first, because it lives in the locked bootloader. The Glassworks boot animation follows."
     }
   },
   "release": {
@@ -463,7 +461,8 @@
     "frame": {
       "bundle": "notice",
       "title": "lululemon Mirror frame",
-      "changelog": "frames/lululemon-mirror/FRAME-CHANGELOG.md"
+      "changelog": "frames/lululemon-mirror/FRAME-CHANGELOG.md",
+      "versionFile": "frames/lululemon-mirror/installer/src/image.ts"
     }
   }
 }

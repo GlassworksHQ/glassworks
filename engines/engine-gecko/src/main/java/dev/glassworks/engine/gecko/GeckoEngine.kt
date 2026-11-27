@@ -14,6 +14,7 @@ import android.view.Gravity
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
 import android.widget.TextView
+import dev.glassworks.auth.OAuth
 import dev.glassworks.engine.Engine
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
@@ -30,9 +31,11 @@ import org.mozilla.geckoview.GeckoSession.PermissionDelegate.ContentPermission
 import org.mozilla.geckoview.GeckoSession.PermissionDelegate.MediaSource
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.StorageController
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebResponse
 import java.io.File
+import java.lang.ref.WeakReference
 
 /**
  * [Engine] on GeckoView. This package is the only code that imports GeckoView
@@ -81,6 +84,32 @@ class GeckoEngine(
         }
     }
 
+    @Volatile private var grantsChecked = false
+
+    /**
+     * Once per process, at the first page: content permissions Gecko saved for a page the app doesn't trust go back to
+     * asking (#847). Gecko keeps a page's answer and doesn't call the delegate again, and builds before #847 allowed
+     * every page. A later request from such a page then reaches the delegate, which refuses it. A read that fails, or
+     * that answers once the page is gone, is tried again with the next page.
+     */
+    private fun forgetUntrustedGrants(rt: GeckoRuntime, host: PageHost) {
+        if (grantsChecked) return
+        grantsChecked = true
+        val storage = try { rt.storageController } catch (e: Exception) { Log.w(logTag, "No saved content permissions to check", e); return }
+        // Weak: the read waits for Gecko's profile, and Gecko's dispatcher holds it until then (forever, where Gecko
+        // never starts: the JVM tests). It mustn't keep the activity, or this engine, alive meanwhile.
+        val hostRef = WeakReference(host)
+        val engineRef = WeakReference(this)
+        val tag = logTag
+        storage.allPermissions.accept({ saved ->
+            val h = hostRef.get()
+            if (h == null) engineRef.get()?.grantsChecked = false else forget(saved.orEmpty(), storage, h, tag)
+        }, { e ->
+            Log.w(tag, "Couldn't read saved content permissions; trying again with the next page", e)
+            engineRef.get()?.grantsChecked = false
+        })
+    }
+
     private fun helper(context: Context): GeckoResult<WebExtension> {
         helper?.let { return it }
         return runtime(context).webExtensionController
@@ -96,8 +125,9 @@ class GeckoEngine(
             // Belt and braces for the same thing via the legacy insecure-media prefs.
             "media.devices.insecure.enabled" to true,
             "media.getusermedia.insecure.enabled" to true,
-            // Kiosk: no prompts (the PermissionDelegate grants too), autoplay allowed.
-            "media.navigator.permission.disabled" to true,
+            // No media.navigator.permission.disabled: it hands getUserMedia the devices without asking the
+            // PermissionDelegate, which grants them only to Home Assistant and the secure hosts (#847).
+            // Kiosk: no prompts (the PermissionDelegate answers), autoplay allowed.
             "media.autoplay.default" to 0,
             "media.autoplay.blocking_policy" to 0,
             "media.autoplay.block-webaudio" to false,
@@ -167,9 +197,16 @@ class GeckoEngine(
             s.navigationDelegate = navigationDelegate
             s.progressDelegate = progressDelegate
             s.open(runtime(activity))
+            forgetUntrustedGrants(runtime(activity), host)
             helper(activity).accept({ ext ->
                 if (ext != null) s.webExtensionController.setMessageDelegate(ext, messageDelegate, extension.nativeApp)
             }, { e -> Log.e(logTag, "helper extension failed", e) })
+            // A new session starts out active (shown). GeckoView makes it active when the view has a surface
+            // (setSession, and each new surface) and inactive when the surface goes, but setSession without a
+            // surface leaves it as it is. So a session opened while the app is in the background (the content
+            // process was killed there and restart() runs) would stay "shown" until the app comes back: the page
+            // keeps drawing for nobody, and Home Assistant never sees it hidden. Start it hidden; a surface shows it.
+            s.setActive(false)
             view.setSession(s)
             view.coverUntilFirstPaint(background)
             session = s
@@ -256,14 +293,23 @@ class GeckoEngine(
                 host.onAndroidPermissions(permissions.orEmpty().toList()) { ok -> if (ok) callback.grant() else callback.reject() }
             }
 
+            // Gecko sends the top-level page as uri (the frame that asks, for storage access) and the frame that asks as
+            // thirdPartyOrigin, and saves the answer for the top-level page. A refusal is PROMPT, not DENY: nothing is
+            // granted, and a frame of another site doesn't leave a saved no on Home Assistant's own page (#847).
             override fun onContentPermissionRequest(
                 session: GeckoSession,
                 perm: ContentPermission
             ): GeckoResult<Int> {
-                Log.i(logTag, "Granting content permission ${perm.permission} for ${perm.uri}")
+                val frame = frameOf(perm)
+                if (!trusted(perm.uri) || (frame != null && !host.trusts(frame))) {
+                    Log.w(logTag, "Refusing content permission ${perm.permission} for ${forLog(frame ?: perm.uri)} on ${forLog(shown)}: not Home Assistant or a secure host")
+                    return GeckoResult.fromValue(ContentPermission.VALUE_PROMPT)
+                }
+                Log.i(logTag, "Granting content permission ${perm.permission} for ${forLog(perm.uri)}")
                 return GeckoResult.fromValue(ContentPermission.VALUE_ALLOW)
             }
 
+            // uri is the document that asks (a frame's own, in a frame).
             override fun onMediaPermissionRequest(
                 session: GeckoSession,
                 uri: String,
@@ -271,10 +317,24 @@ class GeckoEngine(
                 audio: Array<out MediaSource>?,
                 callback: PermissionDelegate.MediaCallback
             ) {
+                if (!trusted(uri)) {
+                    Log.w(logTag, "Refusing media for ${forLog(uri)} on ${forLog(shown)}: not Home Assistant or a secure host")
+                    callback.reject()
+                    return
+                }
                 val mic = audio?.firstOrNull { it.source == MediaSource.SOURCE_MICROPHONE } ?: audio?.firstOrNull()
                 val cam = video?.firstOrNull { it.source == MediaSource.SOURCE_CAMERA } ?: video?.firstOrNull()
-                Log.i(logTag, "Granting media for $uri: audio=${mic?.name} video=${cam?.name}")
+                Log.i(logTag, "Granting media for ${forLog(uri)}: audio=${mic?.name} video=${cam?.name}")
                 callback.grant(cam, mic)
+            }
+
+            /**
+             * Both the top-level page ([shown]) and the document that asks ([uri]) are ones the app trusts (#847): a
+             * page off Home Assistant gets nothing, and neither does a frame of another site inside a dashboard.
+             */
+            private fun trusted(uri: String?): Boolean {
+                val top = shown
+                return top != null && uri != null && host.trusts(top) && host.trusts(uri)
             }
         }
 
@@ -349,5 +409,36 @@ class GeckoEngine(
                 host.onConnect(p)
             }
         }
+    }
+
+    private companion object {
+        /**
+         * Sets [saved] grants that [host] doesn't trust back to asking: the page's, or the frame's of another site a
+         * storage-access grant names. Gecko answers such a grant itself, without asking the delegate. Holds nothing of
+         * the engine's.
+         */
+        fun forget(saved: List<ContentPermission>, storage: StorageController, host: PageHost, tag: String) {
+            saved.filter { it.value == ContentPermission.VALUE_ALLOW }.forEach {
+                val frame = frameOf(it)
+                val untrusted = when {
+                    !host.trusts(it.uri) -> it.uri
+                    frame != null && !host.trusts(frame) -> frame
+                    else -> return@forEach
+                }
+                Log.i(tag, "Forgetting content permission ${it.permission} for ${forLog(untrusted)}: not Home Assistant or a secure host")
+                storage.setPermission(it, ContentPermission.VALUE_PROMPT)
+            }
+        }
+
+        /**
+         * The frame a content permission is for, when it isn't the page's own: Gecko's thirdPartyOrigin (a storage-access
+         * request or grant), without the ^attributes an origin can carry. Null when there is none.
+         */
+        fun frameOf(perm: ContentPermission): String? =
+            perm.thirdPartyOrigin?.substringBefore('^')?.takeIf { it.isNotBlank() }
+
+        /** A page in the log: its origin only, so a query or a path with a secret in it stays out (#847). */
+        fun forLog(url: String?): String =
+            url?.let { OAuth.origin(it) ?: (it.substringBefore(':', "").ifEmpty { "a page" } + ":") } ?: "no page"
     }
 }

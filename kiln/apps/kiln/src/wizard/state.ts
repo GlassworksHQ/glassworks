@@ -3,9 +3,10 @@
 // derived from it by the selectors below, so a screen never keeps its own copy.
 import type { AskKind, BackupMeta, PartState, Phase, Progress } from '@glassworks/kiln-core';
 import type { SetupState } from '@glassworks/setup-channel';
+import type { Go } from '../components/Nav';
 import { SET_UP, type SetUpStep } from './routes';
 import type { SilentWords } from '../components/SilentUpdates';
-import type { AppPhase, AppSettings } from '@glassworks/kiln-core';
+import type { AppPhase, AppSettings, KilnFrame } from '@glassworks/kiln-core';
 
 export type Flow = 'install' | 'undo';
 /**
@@ -23,7 +24,8 @@ export type { AppSettings };
 
 /** What the setup step shows, one phase at a time (Glassworks over adb). */
 export type Setup =
-  | { phase: 'waiting'; note: string }
+  /** `typical`: how long it usually takes, in the frame's words ("1–2 minutes"), where they say */
+  | { phase: 'waiting'; note: string; typical?: string }
   /** `installing`: the app is going in; provision's AppPhases so far, the last one now */
   /** `apply`: the app is on already (a frame whose install put it on): the step applies the settings, no install */
   | { phase: 'settings'; installing?: AppPhase[]; error?: string; update: boolean; apply?: true; chosen?: AppSettings }
@@ -275,7 +277,11 @@ export interface RailStep {
   name: string;
   mark: RailMark;
   /** during set-up, its own steps; `route` is the step's (routes.ts), for going back to it */
-  sub?: { name: string; mark: RailMark; route: (typeof SET_UP)[number] }[];
+  sub?: { name: string; mark: RailMark; route: (typeof SET_UP)[number]; go?: Go }[];
+  /** A done step the person can return to, and how (docs/design/kiln/navigation.md). Only while nothing runs. */
+  go?: Go;
+  /** A done step behind a write: no way back to it (the shell's `lock` says why). */
+  lock?: boolean;
 }
 
 /**
@@ -342,7 +348,7 @@ export function milestones(s: WizardState, panelName: string): Milestone[] {
   const { overall, phase } = s.progress;
   const at = ORDER.indexOf(phase);
   const restarting = overall >= 0.98;
-  const rows: [string, boolean, boolean][] = s.flow === 'undo'
+  const rows: [string, boolean, boolean, string?][] = s.flow === 'undo'
     ? [
         [`Found your ${panelName}`, overall > 0, overall >= 0.01],
         ['Started the installer in memory', overall >= 0.01, at >= 3],
@@ -358,6 +364,43 @@ export function milestones(s: WizardState, panelName: string): Milestone[] {
         ['Restarting the panel', restarting, false],
       ];
   return rows.filter(([, reached]) => reached).map(([text, , done]) => ({ text, done }));
+}
+
+/**
+ * Every step of the firing, the ones still to come too, in plain present-tense words: the install screen's list
+ * (components/Kit Progress). `done` and `reached` as milestones() has them.
+ */
+/**
+ * Set-up's wait for the device's first start after the install, with how long it usually takes where the frame's words
+ * say (`time.steps.first-boot`).
+ */
+export function firstStart(f: Pick<KilnFrame, 'time' | 'the' | 'short'>): Extract<Setup, { phase: 'waiting' }> {
+  const the = f.the ?? `the ${f.short}`;
+  const typical = f.time?.steps?.['first-boot'];
+  return { phase: 'waiting', note: `${the.charAt(0).toUpperCase()}${the.slice(1)} is starting its new software`, ...(typical ? { typical } : {}) };
+}
+
+/** `step`: the install flow's step a row belongs to, where it maps to one (installer.json), so its time can be said. */
+export function firingSteps(s: WizardState, panelName: string): { text: string; reached: boolean; done: boolean; step?: string }[] {
+  const { overall, phase } = s.progress;
+  const at = ORDER.indexOf(phase);
+  const restarting = overall >= 0.98;
+  const rows: [string, boolean, boolean, string?][] = s.flow === 'undo'
+    ? [
+        [`Find your ${panelName}`, overall > 0, overall >= 0.01],
+        ['Start the installer in its memory', overall >= 0.01, at >= 3],
+        ['Put your original software back and check it', at >= 3, restarting],
+        ['Restart the panel', restarting, false],
+      ]
+    : [
+        [`Find your ${panelName}`, overall > 0, overall >= 0.01],
+        ['Start the installer in its memory', overall >= 0.01, at >= 1],
+        ['Back up your original software and check the copy', at >= 1, at >= 2],
+        ['Prepare the new software', at >= 2, at >= 3],
+        ['Write the new software and check every write', at >= 3, restarting],
+        ['Restart the panel', restarting, false, 'first-boot'],
+      ];
+  return rows.map(([text, reached, done, step]) => ({ text, reached, done, ...(step ? { step } : {}) }));
 }
 
 /** "68% · ~3 min": the estimate once there is enough to go on. */

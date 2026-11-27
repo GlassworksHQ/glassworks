@@ -11,6 +11,84 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
+  page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
+  with a mute switch. It is Android's media volume, so the device's volume buttons move it too. Home Assistant's
+  *Speaker* volume and mute now control the same thing, so turning the panel down in Home Assistant quiets all of
+  it, not only announcements. The Music page's slider is now called
+  **Music volume** and sets Music Assistant's level under it. On the few devices whose volume Android keeps fixed,
+  such as some TV boxes, it still sets everything but the dashboard's own sound.
+- **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
+  when the panel is turned down or muted, and the volume goes back to where it was after each tone.
+
+### Fixed
+- **The Mirror's camera shows a real picture.** Home Assistant used to show the Mirror's camera as mostly solid
+  green with a streaky band, in stills and in the video stream alike. The panel asked the camera for a slower frame
+  rate than it runs well at; it now asks every camera for its normal rate. If a camera still sends empty frames, the
+  panel never passes them on and restarts the camera.
+- **The Mirror's camera stands upright.** Its snapshots used to come out upside down and its video stream on its
+  side, because the Mirror's camera reports the wrong mounting. Both now stand as you see the room, and the stream is
+  portrait on the Mirror. Every camera's stream now turns the same way its snapshots do.
+- **The panel waits its turn when another app has the camera.** It used to try for the camera every few seconds,
+  several times at once, which on Android 6 could crash the system's camera and audio service. It now waits a
+  little longer after each try, up to a minute, and takes the camera as soon as the other app lets it go.
+- **The Mirror's camera stream runs at full speed.** With the video stream on, the Mirror's camera slowed to about
+  7 frames a second, because it copied every frame for motion detection too. Motion detection now looks at a few
+  frames a second while the stream gets all of them.
+- **The Mirror keeps its Wi-Fi on after a restart.** On the Mirror's stock software, a quick restart could find
+  the Wi-Fi chip not ready yet, and Android then switched Wi-Fi off and kept it off, so the panel stayed offline
+  until someone turned Wi-Fi back on. Glassworks now turns Wi-Fi back on by itself when that happens, trying for a
+  couple of minutes. A Wi-Fi you switch off on purpose stays off. Kiln's in-place install also sets Wi-Fi's switch
+  back on when it finds it off. And when the setup hotspot finds Wi-Fi switched off, it turns Wi-Fi on and gives
+  your saved network a few minutes to join before it opens, so it no longer takes the panel offline for 15 minutes.
+- **The Mirror's screen never stays dark while it's awake.** On the Mirror, brightness 0 turns the backlight off, so
+  a panel whose system brightness was at 0 came up awake but black, and waking it from Home Assistant didn't help.
+  Glassworks now keeps the Mirror's screen at a visible level whenever it's awake, whatever the system or manual
+  brightness says. Sleep still turns the backlight off. In the legacy build.
+- **App updates fail fast when "Install unknown apps" is turned off.** On Android 8 and newer (unless Glassworks is a system app or device owner), starting a Home Assistant update without "Install unknown apps" allowed used to download the APK, open Android's refusal dialog, and wait 10 minutes before reporting a timeout. Glassworks now stops right away and tells you to enable "Install unknown apps" in Android's settings.
+- **Wi-Fi setup over Bluetooth finishes on the Mirror.** When Home Assistant or its phone app sent the Wi-Fi
+  details over Bluetooth, the Mirror joined the network, but the phone or Home Assistant kept saying it was
+  connecting because the Mirror dropped the Bluetooth connection before it could report back. It now stays
+  connected and reports the join, so the setup finishes. In the legacy build.
+- **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
+- **A Wi-Fi network you give Glassworks stays saved after a restart on Android 6 and 7.** The legacy build joined
+  the network from Kiln or your phone, but Android forgot it at the next restart, so a lululemon Mirror on its stock
+  system asked you to send Wi-Fi from a phone every time it started. It now keeps the network, as Android 8 and newer
+  always did.
+- **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
+  restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
+  you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in
+  in progress across the restart.
+- **The first sign-in no longer fails with "Can't reach Home Assistant" when you enter a `.local` address.**
+  Android 11 and older can't look up names like `homeassistant.local`, so the panel reaches Home Assistant through
+  the address it finds on your network. A sign-in started before the panel had found that address kept the name and
+  failed, and it only worked when you tried again. The panel now finishes the sign-in through the address it has
+  found by then, waiting a few seconds for it if needed.
+- **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
+  dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
+  running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
+  before Android closed it.
+- **Kiln asks for Chrome or Edge before it starts.** In a browser that can't talk to USB devices, such as Firefox or
+  Safari, Kiln's Mirror and Android pages now say so on their first screen, as the S1 page does. Before, the Mirror
+  page let you download and build its whole system image first, then stopped at the first USB step. Comes with Kiln,
+  not the app.
+- **The Mirror's setup screen no longer points at its own hotspot's address.** On a Mirror still running its stock setup mode with no Wi-Fi, the Wi-Fi step said to open `http://192.168.43.1:8099/setup` on a computer, an address no computer on your network can reach. It now waits for Wi-Fi and says why the setup Wi-Fi isn't up. On every device, the address Glassworks shows and hands to Home Assistant (setup page, sign-in code, Thread join, camera, *IP address*) comes only from the Wi-Fi or Ethernet network Android is connected to, never from a hotspot or tethering.
+- **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
+  every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
+  secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
+  is refused, and the panel's log says so. An `allow` attribute on the frame doesn't change that: a site framed in
+  your dashboard needs to be one of the secure hosts too. Permissions an older version saved for other sites, including
+  framed ones, are forgotten when the app starts.
+- **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
+  your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
+  (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so once Home Assistant has
+  set the key, no other device can point the panel at its own page. Home Assistant 2026.11 or newer sets the key by
+  itself when you add the panel; do that from a network you trust. On an older Home Assistant, change these on the
+  panel or on the Manage page. The speaker, reload, restart and the other everyday controls work as before.
+  Notifications sent with the `notify` action need the key too, so a stranger on your network can't put an alert on
+  the screen. On an older Home Assistant, `notify` calls fail until you update it.
+
 ## [0.9.0] - 2026-11-24
 
 **The last release before 1.0. For Android 8 and newer it's the first release since 0.2.0, and brings everything in 0.3.0; the legacy build moves up from 0.3.0.**

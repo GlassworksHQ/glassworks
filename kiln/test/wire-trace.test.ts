@@ -3,8 +3,7 @@
 //   S1_WIRE_TRACE=/tmp/before.txt npx vitest run test/wire-trace.test.ts   (from kiln/)
 // The trace holds payload hashes of the real partitions: keep it out of the repo.
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { s1Plus, type AssetName } from '@glassworks/aqara-s1-plus-installer';
@@ -12,23 +11,13 @@ import { InstallFlow, restoreFromBackup, type FlowUi } from '@glassworks/kiln-co
 import { Fastboot } from '@glassworks/fastboot';
 import type { BulkTransport } from '@glassworks/fel/transport';
 import { FakeUboot } from '@glassworks/fel/fakes';
+import { G, HAVE, MISSING, STALE, STOCK } from './s1-golden';
 
-const B = join(homedir(), 'src/aqara-panel-backups');
-const STOCK = join(B, 'install-4.5.80-20261109-203611');
-const G = process.env.S1_WEB_GOLDEN ?? join(B, 'web-golden');
 const OUT = process.env.S1_WIRE_TRACE;
-const HAVE = existsSync(join(STOCK, 'boot.img')) && existsSync(join(G, 'out/SHA256SUMS'));
-/** The overlay files this revision's recipe reads: goldens made for another overlay can't drive the trace. */
-const OVERLAY = ['glassworks.rc', 'glassworks_loader.sh', 'glassworks_verify', 'glassworks_bundle.pub', 'glassworks_agent.sh',
-  'glassworks_firstboot.sh', 'glassworks_netwatch.sh', 'glassworks_update.sh', 'glassworks_bootanimation.zip', 'otbr-agent', 'ot-ctl'];
-const MISSING = HAVE ? OVERLAY.filter((f) => !existsSync(join(G, 'fixtures/overlay', f))) : [];
 if (OUT && !HAVE) {
   throw new Error(`S1_WIRE_TRACE: needs ${join(STOCK, 'boot.img')} and ${join(G, 'out/SHA256SUMS')}: no trace was written`);
 }
-if (OUT && MISSING.length) {
-  throw new Error(`S1_WIRE_TRACE: ${G} has goldens for another overlay (missing ${MISSING.join(', ')}): ` +
-    'regenerate them with gen.sh, or point S1_WEB_GOLDEN at a set for this revision');
-}
+if (OUT && MISSING.length) throw new Error(`S1_WIRE_TRACE: ${STALE}: no trace was written`);
 const rd = (p: string) => new Uint8Array(readFileSync(p));
 
 const text = (b: Uint8Array) => (b.length <= 64 && b.every((x) => x >= 0x20 && x < 0x7f) ? JSON.stringify(new TextDecoder().decode(b)) : '');

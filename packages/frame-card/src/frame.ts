@@ -101,13 +101,16 @@ export interface FrameDesign {
   /** the screen in px, upright, as people see it (the Mirror: 1080x1920; branding/boot reads it). A panel that stands turned says so with `boot.rotate` */
   display?: { width: number; height: number };
   /** the boot branding's format limits (branding/boot/target.py); `rotate`: degrees counter-clockwise from `display` into the panel's framebuffer */
-  boot?: { androidApi?: number; splash?: 'allwinner-boot-resource'; zipBudget?: number; rotate?: 90 | 270 };
+  boot?: { androidApi?: number; splash?: 'allwinner-boot-resource'; zipBudget?: number; rotate?: 90 | 270; compactBudget?: number };
   /** what the device's userspace runs, preferred first; the app's release builds every frame's (#98). Optional so code that builds a FrameDesign without it still compiles */
   abis?: Abi[];
   /** the device can sit on a dock (the Pixel Tablet): the app gives Home Assistant its Docked sensor from the start (docs/esphome.md#docked) */
   dock?: boolean;
-  /** `maxPixels`: the most the camera and its stream may run at, for a device whose memory can't hold more next to the page */
-  camera?: { maxPixels: number };
+  /**
+   * `maxPixels`: the most the camera and its stream may run at, for a device whose memory can't hold more next to the page.
+   * `sensorDegrees`: how the camera's sensor really sits, for a device whose camera reports it wrong (the Mirror's)
+   */
+  camera?: { maxPixels?: number; sensorDegrees?: 0 | 90 | 180 | 270 };
   /**
    * The app Kiln installs on this frame, when it isn't Glassworks: its package (`id`), the activity adb
    * starts it with (whose extras it trusts from adb), the activity its HOME filter is on (an alias),
@@ -183,7 +186,7 @@ export interface FrameRelease {
     abis?: 'every-frame'; latest?: boolean; task?: string; apk?: string; package?: string; minSdk?: number; writeSettings?: boolean;
   }>;
   app?: string[];
-  frame?: { bundle: 'signed' | 'notice'; title: string; changelog: string; script?: string; pubkey?: string; assets?: string[]; note?: string };
+  frame?: { bundle: 'signed' | 'notice'; title: string; changelog: string; script?: string; pubkey?: string; assets?: string[]; note?: string; versionFile?: string };
 }
 
 /** One piece of outside work a frame relies on, and who made it. */

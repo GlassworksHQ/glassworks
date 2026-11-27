@@ -41,7 +41,7 @@ export const RENDERS: Record<string, string> = {
 };
 
 /** Frames with a published Clarity result (`frames/<id>/clarity/clarity.json`); kiln/apps/kiln/test/frame-designs.test.ts keeps it true. */
-export const MEASURED: ReadonlySet<string> = new Set([s1Plus.id, pixelTablet.id]);
+export const MEASURED: ReadonlySet<string> = new Set([s1Plus.id, pixelTablet.id, mirror.id]);
 
 /** A frame's release line: its tags (`{version}` is the version) and the files a tag may serve (`{abi}`: one per frame.json `abis`). */
 export interface Release { line: string; tag: string; assets: string[] }
@@ -69,7 +69,8 @@ export interface Flow { steps: FlowStep[]; engine?: FlowEngine; wayBack?: WayBac
 /** What Kiln reads of a frame's installer.json before it loads the frame. */
 export interface Installer {
   route: string;
-  words?: { name: string };
+  /** `time.total`: how long its install usually takes, which the picker's What you'll need says (FrameWords `time`). */
+  words?: { name: string; time?: { total?: string } };
   /**
    * Its flows' steps (docs/design/kiln/frames-as-data.md). `route`: the step's address under the frame's route ("" is
    * the route itself), `title` the first part of that page's title. Kiln gives every frame its steps' routes, the

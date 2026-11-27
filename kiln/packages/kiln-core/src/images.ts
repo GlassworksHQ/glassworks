@@ -145,6 +145,11 @@ export interface ImageRecipe {
   licence: string;
   /** One line on the card. */
   summary: string;
+  /**
+   * Where the frame's choice puts it, when it offers more than one way: `recommended` comes first and is picked,
+   * `alternative` follows. `trade` is one line on what it gains and what it costs ("Slower, but …").
+   */
+  advice?: { tag: 'recommended' | 'alternative'; trade: string };
   /** Where questions about it go. A community image's own project. */
   support: ImageLink;
   /** Whose its vendor files are, when they aren't its maker's: said on its download screen. */
@@ -181,6 +186,11 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
   if (r.mode !== undefined && r.mode !== 'replace' && !inPlace) bad.push(`mode "${String(r.mode)}": replace or in-place`);
   if (inPlace && r.community) bad.push('a community image is installed as published: no in-place mode');
   for (const k of ['name', 'licence', 'summary'] as const) if (!r[k]?.trim()) bad.push(`${k} is missing`);
+  if (r.advice !== undefined) {
+    if (r.advice.tag !== 'recommended' && r.advice.tag !== 'alternative') bad.push(`advice tag "${String(r.advice.tag)}": recommended or alternative`);
+    if (typeof r.advice.trade !== 'string' || !r.advice.trade.trim()) bad.push('advice trade is missing');
+    if (r.community && r.advice.tag === 'recommended') bad.push('a community image is never the recommended one');
+  }
   for (const k of ['by', 'project', 'support'] as const) {
     if (!r[k]?.name?.trim() || !https(r[k]?.href)) bad.push(`${k} needs a name and an https link`);
   }
@@ -396,12 +406,18 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
   return bad;
 }
 
+/** The image the frame recommends, or its first: what the choice starts on. */
+export function defaultImage<R extends ImageRecipe>(images: readonly R[]): R {
+  return images.find((r) => r.advice?.tag === 'recommended') ?? images[0]!;
+}
+
 /** Throws unless every recipe is valid for the frame and their ids are unique. For the frame's own tests and for Kiln at start. */
 export function assertImages(images: readonly ImageRecipe[], frame: FrameAccess): void {
   const bad = images.flatMap((r) => validateImage(r, frame).map((b) => `${r.id}: ${b}`));
   const ids = images.map((r) => r.id);
   if (new Set(ids).size !== ids.length) bad.push('two images share an id');
   if (!images[0] || images[0].community) bad.push('Glassworks comes first');
+  if (images.filter((r) => r.advice?.tag === 'recommended').length > 1) bad.push('more than one image is recommended');
   if (bad.length) throw new Error(`invalid image recipes:\n${bad.join('\n')}`);
 }
 

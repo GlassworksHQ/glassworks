@@ -31,6 +31,27 @@ Glassworks uses standard ESPHome Noise encryption (`Noise_NNpsk0_25519_ChaChaPol
 
 See [onboarding.md](onboarding.md#2-adoption--encryption-esphome-dynamic-keys-) for wire-level provisioning details.
 
+### What works without encryption
+
+Until Home Assistant gives the panel its key, anyone on your network can talk to the panel's ESPHome API, not only Home Assistant. That covers a panel you haven't added yet, and one that a Home Assistant older than 2026.11 added without a key. The panel keeps the everyday controls working in that case. Anything that changes which page the panel shows or who it's signed in as waits for an encrypted connection, and so do notifications, the pane switches, the camera's pictures, stream and privacy switch, and every control that changes the radio.
+
+| Works without encryption | Needs an encrypted connection with the panel's key |
+|---|---|
+| Sensors and diagnostics, the screen light, screen mode, idle timeout, brightness, zoom, **Hide HA header**, the **Dashboard** select (Home Assistant's own dashboards only) | **Dashboard URL** (`dashboard_url`) |
+| **Speaker**: playback, volume, TTS and announcements | **Sign out** (`sign_out`) |
+| **Reload dashboard**, **Restart app** | **Start Wi-Fi setup (Bluetooth)** (`improv_ble`) and **Open device settings** (`open_settings`) |
+| **Allow setup over the network**: pairing still needs the code shown on the panel's screen | The `notify` action ([Notifications](notifications.md)) |
+| App and frame updates, voice, **Do not disturb**, **Camera use** and the camera's motion sensitivity | Pane switches, the time zone, the Bluetooth proxy, and the camera's snapshots, **ONVIF stream** and **Camera privacy** |
+| | Every radio control: **Radio mode**, **Radio allowed clients**, **Zigbee stack**, **Join Zigbee network** and **Leave Zigbee network**, **Radio firmware image** and **Flash radio firmware**, **Join Home Assistant's Thread network**, **Leave Thread network** and **Thread dataset** |
+
+Snapshots reach Home Assistant only over the encrypted connection, and turning on the **ONVIF stream** needs it too. Once the stream is on, though, it's read with its own sign-in (see [Camera entities](#camera-entities)), not with the ESPHome key.
+
+Without a key, the controls in the right column do nothing when Home Assistant uses them, and the entity snaps back to its old state. A `notify` call fails, and the reason shows in the script's trace. You can still change every control on the panel itself or on the [Manage page](manage.md).
+
+The key protects the panel from the moment Home Assistant sets it. Until then, any device on your network could set a key of its own first, so add a new panel to Home Assistant from a network you trust.
+
+The dashboard's address matters because the panel gives the microphone and the camera, with no prompt, only to pages on your Home Assistant and on the secure hosts set in the panel's settings. Any other page gets neither, so a link that leads off your dashboard can't listen in.
+
 ## Device identity
 
 | Field | Value |
@@ -101,7 +122,7 @@ To enable any disabled entity in Home Assistant: open **Settings → Devices & s
 | Dashboard | `dashboard` | Core | Config | No | Enable to pick a Lovelace dashboard from HA |
 | Dashboard URL | `dashboard_url` | Core | Config | No | Custom dashboard URL override |
 | Hide HA header | `hide_ha_header` | Core | Config | No | Usually configured once |
-| Open device settings | `open_settings` | Core | Config | No | Opens the hidden settings overlay on screen |
+| Open device settings | `open_settings` | Core | Config | No | Opens the device's Android settings on screen |
 | Start Wi-Fi setup (Bluetooth) | `improv_ble` | Core | Config | No | Needed only when changing Wi-Fi via BLE |
 | Sign out | `sign_out` | Core | Config | No | Revokes dashboard sign-in |
 | App version, Update status, Home Assistant URL, Signed in | `app_version`, `update_status`, `home_assistant_url`, `signed_in` | Core | Diagnostic | No | Troubleshooting |
@@ -159,16 +180,16 @@ Home Assistant applies `disabled_by_default` only when an entity is registered f
 | `number` **Idle timeout** (`s`) | `idle_timeout` | Seconds of inactivity before turning the screen off (`0` = never). Setting a value above 0 switches **Screen mode** to `presence`. Automated by [Panel night mode](blueprints.md). |
 | `number` **Max auto brightness** (`%`, 5–100, step 5) | `max_brightness` | Caps the maximum brightness that **Auto brightness** can reach (default 100%). Manual brightness and high/critical notifications are not capped. |
 | `number` **Presence range** (`m`, 0–2.5, step 0.1) | `presence_range` | Adjusts VI5300 detection distance on the S1 Plus (`0` = firmware default; requires `WRITE_SECURE_SETTINGS`). |
-| `text` **Dashboard URL** | `dashboard_url` | Loads a specific dashboard URL (`auto` loads your default Home Assistant dashboard). |
+| `text` **Dashboard URL** | `dashboard_url` | Loads a specific dashboard URL (`auto` loads your default Home Assistant dashboard). Encrypted connection only ([why](#what-works-without-encryption)). |
 | `select` **Dashboard** | `dashboard` | Lists `Default` plus every Lovelace dashboard fetched from Home Assistant (and `Custom` if a custom URL is saved). Selecting an option saves and reloads immediately. |
 | `number` **Zoom** (`0` = auto) | `zoom` | Overrides CSS display scale ratio and restarts the app. |
 | `button` **Reload dashboard** | `reload_dashboard` | Reloads the active dashboard web page. |
-| `button` **Open device settings** | `open_settings` | Opens the panel's hidden settings menu on screen. |
+| `button` **Open device settings** | `open_settings` | Opens the device's own Android settings app on screen (encrypted connection only). |
 | `button` **Restart app** | `restart_app` | Restarts the Glassworks kiosk process. |
-| `button` **Start Wi-Fi setup (Bluetooth)** | `improv_ble` | Starts Improv Wi-Fi provisioning over Bluetooth on demand. |
+| `button` **Start Wi-Fi setup (Bluetooth)** | `improv_ble` | Starts Improv Wi-Fi provisioning over Bluetooth on demand (encrypted connection only). |
 | `button` **Allow setup over the network** | `lan_setup` | Opens `/setup` network pairing for 30 minutes ([Manage guide](manage.md#set-up-over-the-network)). |
 | `switch` **Hide HA header** | `hide_ha_header` | Hides Home Assistant's top header bar and sidebar live. |
-| `media_player` **Speaker** | `speaker` | Supports play, pause, stop, volume, mute, `play_media`, and `announce` (MP3 format). |
+| `media_player` **Speaker** | `speaker` | Supports play, pause, stop, volume, mute, `play_media`, and `announce` (MP3 format). Its volume and mute are the panel's master volume: they apply to everything the panel plays, including voice replies, timers, notifications, Music Assistant, and the dashboard's own sound, and they match the **Sound** page in the panel's settings. |
 | `switch` **Music Assistant player (Sendspin)** | `sendspin` | Enables or disables the native synchronized Sendspin player (encrypted connection required; [Sendspin guide](sendspin.md)). |
 | `text_sensor` **Music Assistant player status** | `sendspin_status` | Reports Sendspin pairing, active stream codec, track metadata, or `off`. |
 | `switch` **Mute microphone** | `mute_microphone` | Completely releases the microphone. |
@@ -177,23 +198,23 @@ Home Assistant applies `disabled_by_default` only when an entity is registered f
 | `number` **Mic gain** | `mic_gain` | Scales microphone input gain from `0.5` to `4.0×`. |
 | `number` **Wake word threshold** | `wake_word_threshold` | Detection cutoff (`0.10`–`0.99`; lower = more sensitive). Resets to each microWakeWord model's default cutoff when switching wake words (`0.97` for Okay Nabu and Hey Jarvis, `0.95` for Hey Mycroft, `0.90` for Alexa; `0.50` for legacy openWakeWord). |
 | `text_sensor` **Voice status** | `voice_status` | Wake word readiness (`Ready`, `Getting ready`, or specific failure reason; see [When voice can't get ready](#when-voice-cant-get-ready)). |
-| `select` **Radio mode** | `radio_mode` | `Off` (default), `Zigbee coordinator (TCP)`, `Zigbee router (repeater)`, `Thread border router`, `Thread router (repeater)` ([Radio guide](../frames/aqara-s1-plus/docs/radio-guide.md)). Requires root helper. |
+| `select` **Radio mode** | `radio_mode` | `Off` (default), `Zigbee coordinator (TCP)`, `Zigbee router (repeater)`, `Thread border router`, `Thread router (repeater)` ([Radio guide](../frames/aqara-s1-plus/docs/radio-guide.md)). Requires root helper (encrypted connection only). |
 | `text_sensor` **Radio status** | `radio_status` | Active radio mode, port/URL details, and allowed clients. |
-| `text` **Radio allowed clients** | `radio_allowed_clients` | Space- or comma-separated IPs/CIDRs allowed alongside Home Assistant (`any` disables firewall; blank = Home Assistant only). |
+| `text` **Radio allowed clients** | `radio_allowed_clients` | Space- or comma-separated IPs/CIDRs allowed alongside Home Assistant (`any` disables firewall; blank = Home Assistant only; encrypted connection only). |
 | `select` **Zigbee stack** | `zigbee_stack` | `Aqara 7.3.3 (EZSP 12, ZHA)` or `Silicon Labs 8.2.2 (EZSP 18, Zigbee2MQTT, experimental)` (encrypted connection only; requires helper v4). |
 | `text_sensor` **Radio helper** | `radio_helper` | Reports active root helper source and version, noting if a boot image refresh is needed. |
 | `text_sensor` **Radio connected client** | `radio_connected` | Shows the client currently connected to the Zigbee coordinator port (e.g. `Home Assistant · 192.0.2.20 · since 14:32` or `Nobody`). |
 | `text_sensor` **Radio firmware** | `radio_firmware` | Active radio firmware version and flashing progress/result. |
 | `select` **Radio firmware image** / `button` **Flash radio firmware** | `radio_firmware_image` / `radio_firmware_flash` | Two-step armed radio firmware flash (`Keep current`, `Aqara stock image`, `Image from the radio bundle`; encrypted connection only). |
-| `button` **Join / Leave Zigbee network** | `zigbee_router_join` / `zigbee_router_leave` | Joins or leaves a Zigbee network in repeater mode. |
+| `button` **Join / Leave Zigbee network** | `zigbee_router_join` / `zigbee_router_leave` | Joins or leaves a Zigbee network in repeater mode (encrypted connection only). |
 | `button` **Join Home Assistant's Thread network** / **Leave Thread network** | `thread_join_ha` / `thread_leave` | Automatically fetches your preferred Thread dataset from Home Assistant (via QR admin prompt if needed) or forgets stored Thread credentials (encrypted connection only). |
-| `text_sensor` **Thread join** / `text` **Thread dataset** | `thread_join` / `thread_dataset` | Join progress status and write-only manual Thread TLV dataset input (whitespace stripped, never logged). |
+| `text_sensor` **Thread join** / `text` **Thread dataset** | `thread_join` / `thread_dataset` | Join progress status and write-only manual Thread TLV dataset input (whitespace stripped, never logged; encrypted connection only). |
 | `text_sensor` **IP address** | `ip_address` | Panel's current IP address. |
 | `text` **Time zone** / `text_sensor` **Time zone status** | `time_zone` / `time_zone_status` | IANA time zone (e.g. `America/New_York`) persisted across reboots by the S1 Plus root helper (encrypted connection only). |
 | `text_sensor` **App version** / `update` **App update** / `text_sensor` **Update status** | `app_version`, `app_update`, `update_status` | Installed version, Home Assistant update control, and detailed download/install progress ([App updates](#app-updates)). |
 | `update` **Frame update** | `frame_update` | Tracks Glassworks frame-layer releases on S1 Plus and Mirror ([Frame updates](#frame-updates)). |
 | `text_sensor` **Silent updates** | `silent_updates` | Reports whether updates install hands-free (`Yes: …` or `No: …`; [Silent updates](#silent-updates)). |
-| `text_sensor` **Home Assistant URL** / **Signed in** / `button` **Sign out** | `home_assistant_url`, `signed_in`, `sign_out` | Active dashboard server URL, QR sign-in state (`yes`/`no`), and remote sign-out. |
+| `text_sensor` **Home Assistant URL** / **Signed in** / `button` **Sign out** | `home_assistant_url`, `signed_in`, `sign_out` | Active dashboard server URL, QR sign-in state (`yes`/`no`), and remote sign-out (encrypted connection only). |
 
 #### Screen entities by frame
 
@@ -486,7 +507,7 @@ The test suite exercises `EspHomeApiTest` (end-to-end against real `aioesphomeap
 - **No acoustic echo cancellation / barge-in:** Wake word detections are paused while listening or speaking; tap the overlay to interrupt.
 - **Shared microphone with GeckoView:** Running in-browser Assist inside the dashboard competes with the on-device wake word engine; toggle **Mute microphone** if using in-browser Assist.
 - **No Chromecast:** Google Cast receivers require Google device certification; use native [Sendspin](sendspin.md) for synced audio instead.
-- **Privileged controls require encryption:** Radio, time zone, pane switches, and camera streaming refuse changes over unencrypted plaintext connections.
+- **Privileged controls require encryption:** Every radio control, the `notify` action, the time zone, pane switches, the camera's snapshots, ONVIF stream and **Camera privacy**, **Dashboard URL**, **Sign out**, **Start Wi-Fi setup (Bluetooth)** and **Open device settings** refuse changes over unencrypted plaintext connections ([What works without encryption](#what-works-without-encryption)).
 
 ### Aqara cloud
 

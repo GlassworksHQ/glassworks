@@ -71,7 +71,7 @@ lockfile swap). Its `package.json` lists `kiln` (the page), `kiln/packages/*`, `
 | `packages/kiln-core` | The step engine: `InstallFlow`, the `FlowUi` contract, the `Recipe` types, backups, and image recipes (`images.ts`: the step library, Kiln's safety steps, validation; docs/kiln-images.md) |
 | `workers/refract` | Refract, the Cloudflare Worker at `refract.glassworks.dev`: streams GitHub release files to Kiln with CORS headers and Range, storing nothing. An allowlist of other projects' files (the Mirror's image), and this repo's release lines (`releases.json`, written from the frames' `installer.json` `releases`): every Glassworks APK and its `.sha256`. **Every large file Kiln downloads goes through Refract, never through a Vercel function** (Kiln's own APK route got the Vercel team paused for Fast Origin Transfer, 2026-11-23). Not a root workspace: its own lockfile and CI job (`refract`), so wrangler and workerd stay out of the root `npm ci`. See its [README](workers/refract/README.md) |
 | `../frames/aqara-s1-plus/installer` | The S1 recipe (`s1Plus`), provisioning, the signing-key switch, the app's Improv socket |
-| `../frames/lululemon-mirror/installer` | The Mirror's recipe, beta (`/lululemon-mirror`: the app from its newest release, or `?apk=local`, a file). Over fastboot (#40): the Glass Panes image checked and patched (`image.ts`, which also leaves out the image's own kiosk app; `services.ts` makes it let in this browser's adb key, not the key the image names), a fresh userdata, the fastboot checks, the writes and the first boot (`flash.ts`). The app is the legacy build of Glassworks for generic Android, named in `design/frame.json` (`app`; `src/app.ts`). What the page can install, Glassworks and the community images (Glass Panes), as recipes of data over kiln-core's step library (`src/choices.ts`; kiln-core `images.ts`; how to add one: `docs/kiln-images.md`); Glass Panes' copies with this browser's key in its system and userdata and the network saved (`src/wifi.ts`). Over adb on a Mirror already on the community image: that APK, upright, the only home screen by `pm hide` on the others (no tap: the Mirror has no touchscreen), undo unhides the one it had (`recipe.ts`) |
+| `../frames/lululemon-mirror/installer` | The Mirror's recipe, beta (`/lululemon-mirror`: the app from its newest release, or `?apk=local`, a file). Over fastboot (#40): the Glass Panes image checked and patched (`image.ts`, which also leaves out the image's own kiosk app; `services.ts` makes it let in this browser's adb key, not the key the image names), a fresh userdata, the fastboot checks, the writes and the first boot (`flash.ts`). The app is the legacy build of Glassworks for generic Android, named in `design/frame.json` (`app`; `src/app.ts`). What the page can install, Glassworks, Glassworks on the stock software (Stock-in-place: `stage.ts` puts the MIT stock probe app on userdata as the setup agent, `inplace.ts` checks its bundle, patches `services.jar` in its own blocks with a restore image of the same blocks, and installs the app as Device Owner; the stock system stays) and the community images (Glass Panes), as recipes of data over kiln-core's step library (`src/choices.ts`; kiln-core `images.ts`; how to add one: `docs/kiln-images.md`); Glass Panes' copies with this browser's key in its system and userdata and the network saved (`src/wifi.ts`). Over adb on a Mirror already on the community image: that APK, upright, the only home screen by `pm hide` on the others (no tap: the Mirror has no touchscreen), undo unhides the one it had (`recipe.ts`) |
 | `../frames/generic-android/installer` | Any Android 6+ device over adb (#403), Kiln's `/android` (beta: the newest `generic-android-v*` release, or `?apk=local` for a file; the engine's USB-debugging flow, `apps/kiln/src/device/usb*`, with this frame's `src/kiln.ts` and `src/sim.ts`). Reads the device, picks Glassworks or its legacy build from the APK, installs or updates in place, grants and reads back what adb can, sets HOME (`set-home-activity` on Android 7+, else the chooser), hands over to setup over the LAN. `devices.ts`: USB vendor ID or adb's maker and model to a brand and its sourced steps to turn on USB debugging. `browser.ts`: the same from the device's own browser, for Kiln's `/android/tablet` (no USB). Its command sequences per API level are pinned (`test/golden/generic-adb-commands.json`) |
 | `../frames/*/design` | Each frame's design data: `frame.json` (catalog fields, the 3D model in mm) and `recovery.json`. Kiln's picker reads it; format and how the website reads it in [frames/README.md](../frames/README.md) |
 | `../packages/frame-card` | The frame card and 3D device mockup, shared with glassworks.dev ([README](../packages/frame-card/README.md)). Kiln's picker wraps it in a radio item |
@@ -94,6 +94,29 @@ workspace's dependencies resolve, to the one copy at the root.
 - **Backups come before writes, and writes are verified by read-back.** Keep the refusal points
   from the CLI: wrong SoC id, unexpected partition layout, a backup `boot` that is already patched,
   and on undo a backup whose splash is already ours (`test/refusals.test.ts`).
+  **Check as much as you possibly can, and where a write can't be checked one way, check it another.**
+  Read a write back where it was written when the device allows it. When it doesn't, verify it the
+  next place Kiln reaches the device, and say in the log and the docs which check ran where. The
+  example: the lululemon Mirror's bootloader has no fastboot upload, so its in-place install can't
+  read its system write back in fastboot. Once the Mirror has started and Kiln is on adb, Kiln reads
+  back each file the write changed (the frame's build names them, `InPlaceCode` `readBack`), hashes
+  it in the browser and compares it with what it built, before the app's install. A mismatch stops
+  there with the way back; a file Kiln can't read is logged as unchecked and the install goes on, since
+  a failed read says nothing about the write. Which files and paths to check is the frame's data or
+  code, never Kiln's.
+  **The one write that isn't read back: the stock Mirror's restore (the in-place way back).** After it,
+  nothing can read the device: its fastboot has no partition read, and the restore resets app data, so
+  stock's adb no longer trusts Kiln (maintainer, 2026-11-25; the exception in
+  [AGENTS.md](../AGENTS.md#hard-rules) rule 1). So Kiln checks everything it is about to write before
+  the first write (`packages/kiln-core/src/restore.ts`), and writes nothing if any check fails: every
+  file of the restore point has the size and SHA-256 recorded when it was made (its manifest's
+  `kiln.files`); it was made on this device (the SHA-256 of fastboot's serial); its restore image is
+  whole, sized for the partition, and fills nothing; that image puts back exactly the original files
+  the frame names (`InPlaceCode` `restored`), byte for byte, and writes no other block; and, while adb
+  still trusts Kiln before the restart, each of those files on the device is what the install wrote or
+  still the original. After the writes, fastboot's OKAY on each one is the last check there is, and
+  the log says so. Don't widen this exception to other writes, and don't drop a check before the write
+  to make up for it.
 - Assets (U-Boot, Magisk, the APK) are pinned by SHA-256 in `assets.lock.json` and checked on download.
   Bump the hash and the source together.
 - Only `app/` touches the DOM. Other modules talk through their exports, so `test/flow.test.ts` can

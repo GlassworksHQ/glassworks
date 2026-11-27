@@ -44,12 +44,16 @@ class SetupHotspotTest {
     private var scanDone: (() -> Unit)? = null
     private val logged = mutableListOf<String>()
     private var changes = 0
+    /** The Wi-Fi switch is off and the app may switch it on, when set; switching it on clears it. */
+    private var radioOff = false
+    private var radioSwitches = 0
     private val setup = SetupHotspot(
         hotspot, connected = { connected }, clock = { now },
         onChange = { changes++ }, log = { logged += it },
         schedule = { d, r -> val w = (now + d) to r; wakes += w; { wakes.remove(w) } },
         blocked = { if (radioLocked) HotspotFailure.WIFI_OFF else null },
         beforeStart = { start -> if (holdScan) scanDone = start else start() },
+        switchRadioOn = { if (radioOff) { radioOff = false; radioSwitches++; true } else false },
     )
 
     /** Moves the clock to [t], running each wake that falls due on the way. */
@@ -78,6 +82,41 @@ class SetupHotspotTest {
         assertTrue(setup.isOn)
         at(4 * min)
         assertEquals(View.On(net, 14 * min, asked = false), setup.view)
+    }
+
+    @Test
+    fun `with Wi-Fi off, rule 1 switches it on and gives the saved network its minutes before the hotspot`() {
+        // The Mirror, 2026-11-25: the driver failed at boot, the hotspot switched Wi-Fi on and took the radio 4 s later
+        radioOff = true
+        setup.start()
+        at(3 * min)
+        assertEquals("switched on", 1, radioSwitches)
+        assertFalse("no hotspot while the saved network joins", hotspot.on)
+        at(6 * min - 1)
+        assertFalse(hotspot.on)
+        at(6 * min)
+        assertTrue("still offline 3 minutes later: the hotspot", hotspot.on)
+        assertEquals(1, radioSwitches)
+    }
+
+    @Test
+    fun `with Wi-Fi off, a saved network that joins after the switch-on keeps the hotspot off`() {
+        radioOff = true
+        setup.start()
+        at(3 * min)
+        connected = true
+        setup.refresh()
+        at(30 * min)
+        assertEquals(0, hotspot.starts)
+    }
+
+    @Test
+    fun `an asked hotspot doesn't wait for the radio`() {
+        radioOff = true
+        setup.start()
+        assertTrue(setup.ask())
+        assertTrue(hotspot.on)
+        assertEquals("the scan before it switches the radio on, not this", 0, radioSwitches)
     }
 
     @Test
