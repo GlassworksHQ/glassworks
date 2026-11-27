@@ -239,6 +239,9 @@ internal class LiveCameraFeed(
      */
     val capabilitiesKnown: Boolean get() = stream && knowledge.capabilities(entityId) != null
 
+    /** Whether it runs, plays (shown) and is on screen now. Tests. */
+    internal val stateForTests: Triple<Boolean, Boolean, Boolean> get() = Triple(running, shown, onScreen)
+
     fun start() {
         if (running) return
         running = true

@@ -507,4 +507,55 @@ class MasonrySlicesTest {
         assertTrue("several big entities cards were made in chunks: $checked", checked >= 3)
         assertFalse(vv.buildInProgress)
     }
+
+    // A card a chunk made is shown in the stage as below the fold of a view built in one go, so what it decides from
+    // being shown holds when it moves to its column (Greptile on #950: a GONE stage told a clock it was hidden, and the
+    // move, which dispatches no visibility change, left it stopped).
+    @Test
+    fun aDeferredClockKeepsTickingOnceItsInItsColumn() {
+        val heavy = cards("heavy", 60).put(JSONObject().put("type", "clock").put("clock_size", "small"))
+            .apply { for (i in 0 until 10) put(JSONObject().put("type", "markdown").put("content", "after $i")) }
+        val config = JSONObject().put("views", JSONArray().put(JSONObject().put("path", "heavy").put("cards", heavy))).toString()
+        val vv = vitroView(config, sliced = true)
+        assertTrue("the clock is below the first screen", all(vv).none { it is dev.glassworks.engine.vitro.cards.ClockCardView })
+        while (vv.buildInProgress && queued.isNotEmpty()) chunk()
+        assertFalse(vv.buildInProgress)
+        val clock = all(vv).filterIsInstance<dev.glassworks.engine.vitro.cards.ClockCardView>().single()
+        assertTrue("in its column, shown", clock.isShown && clock.parent?.parent is MasonryColumnsLayout)
+        // A time it would never show now, then its next tick (5 s apart without seconds).
+        clock.renderAt(java.util.Date(978_356_220_000L))
+        val stale = clock.renderedTime
+        ShadowLooper.idleMainLooper(6, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue("it ticked: still $stale", clock.renderedTime != stale)
+    }
+
+    // A camera card of HA's default `auto` view (snapshots) below the first screen: placed, it runs and is shown, off
+    // screen there, and on screen once scrolled to, as a card below the fold of a view built in one go.
+    @Test
+    fun aDeferredCameraCardFollowsBeingShownAndOnScreen() {
+        val camera = JSONObject().put("type", "picture-entity").put("entity", "camera.porch")
+        val heavy = cards("heavy", 60).put(camera).apply { for (i in 0 until 10) put(JSONObject().put("type", "markdown").put("content", "after $i")) }
+        val config = JSONObject().put("views", JSONArray().put(JSONObject().put("path", "heavy").put("cards", heavy))).toString()
+        // The panel's window shows, as on the panel: a camera in a hidden window starts nothing.
+        val vv = vitroView(config, sliced = true) { showWindow(activity.window.decorView) }
+        assertTrue("the camera is below the first screen", all(vv).none { it is dev.glassworks.engine.vitro.cards.PictureCardView })
+        while (vv.buildInProgress && queued.isNotEmpty()) chunk()
+        assertFalse(vv.buildInProgress)
+        ShadowLooper.idleMainLooper(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+        val card = all(vv).filterIsInstance<dev.glassworks.engine.vitro.cards.PictureCardView>().single()
+        val feed = card.feedForTests!!
+        val (running, shown, _) = feed.stateForTests
+        assertTrue("its snapshots run", running)
+        assertTrue("it plays as shown", shown)
+        assertFalse("below the fold, off screen", feed.stateForTests.third)
+        // Scrolled to it: on screen.
+        val scroll = vv.currentScroll()!!
+        val r = android.graphics.Rect(0, 0, card.width, card.height)
+        scroll.offsetDescendantRectToMyCoords(card, r)
+        scroll.scrollTo(0, r.top)
+        ShadowLooper.idleMainLooper(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+        // What a frame after the scroll dispatches, which Robolectric's window doesn't: the card looks again.
+        vv.viewTreeObserver.dispatchOnGlobalLayout()
+        assertTrue("scrolled to, on screen", feed.stateForTests.third)
+    }
 }

@@ -515,7 +515,7 @@ class VitroView(
         if (stage == null || b.placeAtOnce) {
             for ((step, card) in made) step.place(card, false)
         } else {
-            // Into the stage: in the view's tree, attached, but GONE, so nothing lays them out yet.
+            // Into the stage: in the view's tree, attached and shown as below the fold, but nothing lays them out yet.
             for ((step, card) in made) stage.addView(card)
             b.staged += made
         }
@@ -580,7 +580,7 @@ class VitroView(
         } finally {
             android.os.Trace.endSection()
         }
-        // Their islands were paused in the stage: they run as their view does.
+        // Their islands follow their view, as everywhere in it.
         updateIslandsShown()
     }
 
