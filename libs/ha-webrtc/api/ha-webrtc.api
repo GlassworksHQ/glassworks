@@ -74,7 +74,9 @@ public final class dev/glassworks/hawebrtc/HaWebRtcPlayer$Options {
 	public fun <init> (Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;)V
 	public fun <init> (Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;Ldev/glassworks/hawebrtc/VideoScaling;)V
 	public fun <init> (Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;Ldev/glassworks/hawebrtc/VideoScaling;Ldev/glassworks/hawebrtc/VideoViewKind;)V
-	public synthetic fun <init> (Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;Ldev/glassworks/hawebrtc/VideoScaling;Ldev/glassworks/hawebrtc/VideoViewKind;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;Ldev/glassworks/hawebrtc/VideoScaling;Ldev/glassworks/hawebrtc/VideoViewKind;I)V
+	public synthetic fun <init> (Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;Ldev/glassworks/hawebrtc/VideoScaling;Ldev/glassworks/hawebrtc/VideoViewKind;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getPacedMaxFps ()I
 	public final fun getScaling ()Ldev/glassworks/hawebrtc/VideoScaling;
 	public final fun getStream ()Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;
 	public final fun getView ()Ldev/glassworks/hawebrtc/VideoViewKind;

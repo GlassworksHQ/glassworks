@@ -6,6 +6,7 @@ package dev.glassworks.engine.vitro.camera
 
 import android.content.Context
 import android.graphics.Rect
+import android.os.Trace
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
@@ -87,6 +88,20 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
     }
 
     /**
+     * Android 8 and later: a change inside passes up to the window. A video frame's (its TextureView's, on every frame)
+     * is a `vitro camera invalidate` trace section, the card guards' part of it included.
+     */
+    override fun onDescendantInvalidated(child: View, target: View) {
+        if (target !is TextureView) return super.onDescendantInvalidated(child, target)
+        Trace.beginSection(TRACE_INVALIDATE)
+        try {
+            super.onDescendantInvalidated(child, target)
+        } finally {
+            Trace.endSection()
+        }
+    }
+
+    /**
      * Android 6 and 7: its child changed, and when that's a video's TextureView (a new frame), the card guards above
      * hear it as one ([VideoRedraw]) and don't record themselves again for it. Android 8 and later tell them which
      * view changed instead.
@@ -130,6 +145,8 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
         const val CONTAIN = "contain"
         const val COVER = "cover"
         const val FILL = "fill"
+
+        private const val TRACE_INVALIDATE = "vitro camera invalidate"
 
         /** How close, in pixels, a fitted axis may come to the frame before it takes the frame's size ([fitted]). */
         internal const val SNAP_PX = 2
