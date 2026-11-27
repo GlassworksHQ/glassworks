@@ -357,10 +357,11 @@ class VitroView(
     private var buildingIndex = -1
 
     /**
-     * A card of a masonry view still to be added ([SlicedBuild]): [make] builds it (or hands back the one built ahead,
-     * a live camera), [attach] puts it in its column, after the cards before it there.
+     * A card of a masonry view still to be added ([SlicedBuild]): [make] builds it, [attach] puts it in its column in
+     * place of the empty slot that held its place there. A card is never built without being attached in the same
+     * step, so whatever it opens (an island's page, its subscriptions, a camera) goes with its view when the view goes.
      */
-    private class CardStep(val make: () -> View, val attach: (View) -> Unit, val discard: () -> Unit = {})
+    private class CardStep(val make: () -> View, val attach: (View) -> Unit)
 
     /**
      * The cards below a masonry view's first screen, in config order, collected while [buildViewTree] runs:
@@ -447,8 +448,6 @@ class VitroView(
         val b = building ?: return
         building = null
         b.unschedule()
-        // A camera made ahead of its turn closes its stream: its card is never attached now.
-        b.steps.forEach { it.discard() }
         b.steps.clear()
         if (dropPartial) dropView(b.index, keepIslands = false)
     }
@@ -1731,9 +1730,9 @@ class VitroView(
      * view builds, if the connection knows their capabilities ([PictureCardView.startEarly]). Only those the build
      * shows, while the dashboard is on screen: a hidden card opens no stream, as in HA.
      */
-    private fun startCamerasEarly(card: View, untilAttached: Boolean = false) {
+    private fun startCamerasEarly(card: View) {
         if (!dashboardShown || !activityShown || card.visibility != VISIBLE) return
-        forEachCard(card) { c -> if (c is PictureCardView && visibleWithin(c, card)) c.startEarly(untilAttached) }
+        forEachCard(card) { c -> if (c is PictureCardView && visibleWithin(c, card)) c.startEarly() }
     }
 
     private fun forEachCard(v: View, action: (CardSurface) -> Unit) {
@@ -2208,18 +2207,19 @@ class VitroView(
         val columns = (0 until count).map { cardColumn(ctx) }
         columns.forEach { row.addView(it, LinearLayout.LayoutParams(0, WRAP_CONTENT)) }
         val viewIndex = buildingIndex
-        fun make(configIndex: Int, card: CardConfig, ahead: Boolean = false): View {
+        fun make(configIndex: Int, card: CardConfig): View {
             val v = wrapVisibility(card, buildCard(card, ctx, fillViewport = false), ctx)
             clarity?.cardBuilt(viewIndex, configIndex, card, v)
             cacheCardAsLayer(v, card, ctx)
-            startCamerasEarly(v, untilAttached = ahead)
+            startCamerasEarly(v)
             return v
         }
         val deferred = pendingSteps
         // The first screen: each card whose column, as HA's card sizes fill it (50 px a unit, and the card's margins),
         // puts its top within it. Those are made and attached now, so the view's first frame shows that screen whole;
         // the rest follow in chunks ([SlicedBuild]), or here too, outside a view build. Every column gets its first
-        // card now, so none changes width as the rest arrive.
+        // card now, so none changes width as the rest arrive. A card left for later holds its place in its column with
+        // an empty slot (GONE: no room, no margin), so a card built before the ones above it still lands in order.
         val margin = cardMargin(ctx)
         val viewportDp = (if (height > 0) height else resources.displayMetrics.heightPixels) / dp
         val firstScreenDp = viewportDp * FIRST_SCREEN_SHARE
@@ -2228,15 +2228,18 @@ class VitroView(
             val column = columns[placement[k]]
             val top = tops[placement[k]]
             tops[placement[k]] += HaCardSize.of(card, ::stateForBuild) * 50.0 + margin[0] + margin[2]
-            val attach = { v: View -> column.addView(v, cardMarginParams(ctx, widthDp)) }
-            when {
-                deferred == null || top < firstScreenDp -> attach(make(configIndex, card))
-                // A live camera below the first screen is made now all the same: its stream starts with the view, as
-                // in a build in one go, and the card waits for its turn in its column.
-                playsLiveVideo(card) -> make(configIndex, card, ahead = true).let { early ->
-                    deferred += CardStep({ early }, attach, discard = { forEachCard(early) { (it as? PictureCardView)?.stopEarly() } })
+            // A live camera below the first screen is made and attached now all the same, in its place: its stream
+            // starts with the view, as in a build in one go.
+            if (deferred == null || top < firstScreenDp || playsLiveVideo(card)) {
+                column.addView(make(configIndex, card), cardMarginParams(ctx, widthDp))
+            } else {
+                val slot = View(context).apply { visibility = GONE }
+                column.addView(slot, cardMarginParams(ctx, widthDp))
+                deferred += CardStep({ make(configIndex, card) }) { v ->
+                    val at = column.indexOfChild(slot)
+                    column.removeViewAt(at)
+                    column.addView(v, at, cardMarginParams(ctx, widthDp))
                 }
-                else -> deferred += CardStep({ make(configIndex, card) }, attach)
             }
         }
         return row

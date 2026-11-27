@@ -312,6 +312,9 @@ class EntityStore {
     fun size(): Int = states.size
     fun all(): Map<String, EntityState> = states
 
+    /** How many listeners follow [entityId] now ([subscribe]). Tests. */
+    internal fun listenerCount(entityId: String): Int = listeners[entityId]?.size ?: 0
+
     /** Subscribes to changes for one [entityId]. Returns an unsubscribe handle. */
     fun subscribe(entityId: String, listener: (EntityState?) -> Unit): () -> Unit {
         // getOrPut on a ConcurrentMap is get + putIfAbsent: computeIfAbsent needs API 24, and this module is minSdk 23.

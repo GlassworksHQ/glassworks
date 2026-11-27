@@ -64,8 +64,9 @@ class MasonrySlicesTest {
         sliced: Boolean,
         metrics: MutableList<VitroMetrics> = ArrayList(),
         layers: VitroView.CardLayers? = null,
+        store: EntityStore = EntityStore(),
+        islands: Pair<dev.glassworks.engine.vitro.island.VitroIslandServer, (String) -> dev.glassworks.engine.Page?>? = null,
     ): VitroView {
-        val store = EntityStore()
         val vv = VitroView(activity, store, 0xFF000000.toInt())
         layers?.let { vv.cardLayers = it }
         if (sliced) {
@@ -84,6 +85,7 @@ class MasonrySlicesTest {
                 context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
                 accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
                 fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+                islandServer = islands?.first, openIslandPage = islands?.second,
             )
         }
         activity.setContentView(vv)
@@ -102,12 +104,18 @@ class MasonrySlicesTest {
     /** The masonry columns of the view on screen. */
     private fun columns(vv: VitroView): MasonryColumnsLayout = all(vv.currentScroll()!!).filterIsInstance<MasonryColumnsLayout>().single()
 
-    /** The cards attached to [row]'s columns, by column. */
-    private fun attached(row: MasonryColumnsLayout): List<Int> = (0 until row.childCount).map { (row.getChildAt(it) as ViewGroup).childCount }
+    /** An empty slot holding a card's place in its column until its chunk builds it. */
+    private fun isSlot(v: View) = v.javaClass == View::class.java && v.visibility == View.GONE
 
-    /** The card views in [row]'s columns. */
+    /** The card views in [row]'s columns (not the slots still waiting for theirs). */
     private fun cardViews(row: MasonryColumnsLayout): List<View> =
         (0 until row.childCount).flatMap { c -> (row.getChildAt(c) as ViewGroup).let { col -> (0 until col.childCount).map { col.getChildAt(it) } } }
+            .filterNot(::isSlot)
+
+    /** The cards attached to [row]'s columns, by column. */
+    private fun attached(row: MasonryColumnsLayout): List<Int> = (0 until row.childCount).map { c ->
+        (row.getChildAt(c) as ViewGroup).let { col -> (0 until col.childCount).count { !isSlot(col.getChildAt(it)) } }
+    }
 
     /** The name a test card shows (`heavy 12`). */
     private fun nameOf(card: View): String =
@@ -300,6 +308,38 @@ class MasonrySlicesTest {
             val firstLayered = firstScreen.count { it.layerType == View.LAYER_TYPE_HARDWARE }
             val firstFit = (limit / VitroView.layerBytes(cards[0].width, cards[0].height)).toInt().coerceAtMost(firstScreen.size)
             assertEquals("$mode: the first screen's cards hold the first layers", firstFit, firstLayered)
+        }
+    }
+
+    // A card below the first screen is never built apart from its view (Greptile on #950): a live camera there is made
+    // and attached in the first pass, in its place, so a build dropped before its chunks takes everything that card
+    // opened with the view. Here a stack holding the camera and an iframe island, dropped by a view switch: the
+    // island's page closes and nothing follows the camera's entity any more, as for any card of a dropped view.
+    @Test
+    fun aBuildDroppedBeforeItsChunksReleasesWhatItsCardsOpened() {
+        val camera = JSONObject().put("type", "picture-entity").put("entity", "camera.porch").put("camera_view", "live")
+        val iframe = JSONObject().put("type", "iframe").put("url", "https://example.com/").put("aspect_ratio", "60%")
+        val stack = JSONObject().put("type", "vertical-stack").put("cards", JSONArray().put(camera).put(iframe))
+        val heavy = cards("heavy", 60).put(stack).apply { for (i in 0 until 10) put(JSONObject().put("type", "markdown").put("content", "after $i")) }
+        val config = JSONObject().put("views", JSONArray()
+            .put(JSONObject().put("path", "heavy").put("title", "HEAVY").put("cards", heavy))
+            .put(JSONObject().put("path", "light").put("title", "LIGHT").put("cards", cards("light", 2)))).toString()
+        val store = EntityStore()
+        val server = dev.glassworks.engine.vitro.island.VitroIslandServer(session = { FakeHaServer.BASE to FakeHaServer.TOKEN })
+        val pages = ArrayList<RecordingPage>()
+        try {
+            val vv = vitroView(config, sliced = true, store = store, islands = server to { _ -> RecordingPage(activity).also { pages += it } })
+            assertTrue("the rest of the view waits for its chunks", vv.buildInProgress && queued.isNotEmpty())
+            assertEquals("the iframe's page is open, with the view's first pass", 1, pages.size)
+            assertTrue("the camera follows its entity", store.listenerCount("camera.porch") > 0)
+
+            assertTrue(vv.navigateToView("light"))
+            ShadowLooper.idleMainLooper()
+            assertFalse(vv.buildInProgress)
+            assertTrue("no island page is left open", pages.all { it.closed })
+            assertEquals("nothing follows the camera any more", 0, store.listenerCount("camera.porch"))
+        } finally {
+            server.stop()
         }
     }
 }
