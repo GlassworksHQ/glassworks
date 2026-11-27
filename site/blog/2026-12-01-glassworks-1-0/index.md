@@ -49,25 +49,25 @@ Here's what you get today.
 
 **Automatic updates through Home Assistant.** New releases appear under *Settings → Updates* alongside the rest of your devices. Tap update, or automate it.
 
-**Modular features ("panes").** Hardware capabilities are packaged as panes, and a device only exposes the ones its hardware supports:
+**Modular features ("panes").** Hardware capabilities are packaged as panes, and a device only exposes the ones its hardware supports. At 1.0, every pane is **stable** except the S1's wired wall base:
 
-- **Assist voice & Timers** *(stable)* — on-device `microWakeWord` detection handing straight off to Home Assistant Assist, plus on-screen voice timers.
-- **Music (Sendspin)** *(stable)* — synced multi-room playback straight from Music Assistant.
-- **Camera presence** *(stable)* — lighting-invariant motion wake, snapshots, and an optional ONVIF stream.
-- **Diagnostics** *(stable)* — CPU, temperature, RAM, storage, Wi-Fi, and uptime in Home Assistant.
-- **Zigbee / Thread radio** *(beta)* — exposes a built-in Silicon Labs chip as a Zigbee coordinator, Thread border router, or network repeater.
-- **Bluetooth proxy & Notifications** *(beta)* — active BLE proxy plus rich on-screen notifications with pictures, action buttons, and sounds.
+- **Assist voice & Timers** — on-device `microWakeWord` detection handing straight off to Home Assistant Assist, plus on-screen voice timers.
+- **Music (Sendspin)** — synced multi-room playback straight from Music Assistant.
+- **Camera presence** — lighting-invariant motion wake, snapshots, and an optional ONVIF stream.
+- **Zigbee / Thread radio** — exposes a built-in Silicon Labs chip as a Zigbee coordinator, Thread border router, or network repeater.
+- **Bluetooth proxy & Notifications** — active BLE proxy plus rich on-screen notifications with pictures, action buttons, and sounds.
+- **Diagnostics** — CPU, temperature, RAM, storage, Wi-Fi, and uptime in Home Assistant.
 - **Wall base** *(alpha, S1 Plus)* — relays and sensors on the S1's wired wall base.
 
 Optional panes like the Bluetooth proxy and camera stay off until you turn them on, and every pane can be toggled anytime so features you don't use never eat memory or CPU.
 
 **Honest performance grades with [Clarity](../../../docs/clarity.md).** Spec sheets don't tell you whether a wall panel will actually feel snappy with a real Home Assistant dashboard. So we built Clarity—a standardized, open benchmark that runs the real HA frontend on every device and gives it a public grade from A+ to E. The S1 Plus scores **D** (best kept to light dashboards; typical dashboards block the browser's main thread for 2.7 seconds). If a piece of hardware has limits, you should know before you buy it or mount it on a wall. <!-- Once /blog/clarity publishes, add: I wrote a separate post about how Clarity works: [Introducing Clarity](https://www.glassworks.dev/blog/clarity). -->
 
-**Supported devices ("frames") at 1.0:**
+**Supported devices ("frames") at 1.0** — all **stable**:
 
-- **[Aqara Panel Hub S1 Plus](../../../frames/aqara-s1-plus/README.md)** *(stable)* — the reference device where Glassworks started and where every feature lands first. Clarity grade **D**.
-- **[lululemon Studio Mirror](../../../frames/lululemon-mirror/README.md)** *(beta)* — a 40-inch display behind a full-length mirror, installed via Kiln's stock-in-place patcher (with Device Owner silent updates and a true restore point back to stock) or the community Glass Panes image. Clarity grade **E** on the web path.
-- **[Generic Android](../../../frames/generic-android/README.md)** *(beta)* — a no-root app for whatever Android tablet you already have, tested on the [Google Pixel Tablet](../../../frames/google-pixel-tablet/README.md) (Clarity grade **B**) and a 2016 [Samsung Galaxy Tab A 10.1](../../../frames/samsung-galaxy-tab-a-10-1-2016/README.md) running LineageOS.
+- **[Aqara Panel Hub S1 Plus](../../../frames/aqara-s1-plus/README.md)** — the reference device where Glassworks started and where every feature lands first. Clarity grade **D**.
+- **[lululemon Studio Mirror](../../../frames/lululemon-mirror/README.md)** — a 40-inch display behind a full-length mirror, installed via the community Glass Panes image or Kiln's stock-in-place patcher (with Device Owner silent updates and a true restore point back to stock). Clarity grade **E** on the web path.
+- **[Generic Android](../../../frames/generic-android/README.md)** — a no-root app for whatever Android tablet you already have, tested on the [Google Pixel Tablet](../../../frames/google-pixel-tablet/README.md) (Clarity grade **B**) and a 2016 [Samsung Galaxy Tab A 10.1](../../../frames/samsung-galaxy-tab-a-10-1-2016/README.md) running LineageOS.
 
 ## Cracking open locked hardware—with a road back to stock
 
