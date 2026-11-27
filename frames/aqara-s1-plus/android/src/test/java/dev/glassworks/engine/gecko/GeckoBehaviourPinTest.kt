@@ -393,6 +393,35 @@ class GeckoBehaviourPinTest {
         assertTrue("s2.active true" !in ev)
     }
 
+    // ---- the activity goes: its session goes with it
+
+    @Test
+    fun `a recreated activity closes the old session before the new one opens`() = harness().use { h ->
+        // Kiln's set_locale and a font scale change recreate the activity: the old session must not stay open, holding
+        // the destroyed activity and its view.
+        val ev = h.eventsDuring { h.controller.recreate() }
+        val closed = ev.indexOf("s1.close")
+        assertTrue("$ev", ev.indexOf("view.releaseSession") in 0 until closed)
+        assertTrue("$ev", closed < ev.indexOf("s2.open"))
+        assertEquals("$ev", 1, ev.count { it == "s1.close" })
+    }
+
+    @Test
+    fun `a destroyed activity leaves no session open, and a late crash report opens none`() {
+        // Not use{}: the harness's close() destroys the activity, which this test already did.
+        val h = harness()
+        try {
+            val s1 = h.session
+            val crash = h.content
+            val ev = h.eventsDuring { h.controller.pause().stop().destroy() }
+            assertEquals(listOf("view.releaseSession", "s1.close"), ev.filter { it == "view.releaseSession" || it.startsWith("s1.") })
+            assertFalse(s1.isOpen)
+            assertEquals("no new session after close", emptyList<String>(), h.eventsDuring { crash.onCrash(s1) }.filter { ".open" in it })
+        } finally {
+            GeckoPinHarness.haAuthPrefs()?.auth = null
+        }
+    }
+
     // ---- permissions: Home Assistant and the secure hosts get them with no prompt, any other page none (#847)
 
     /** The top-level page is at [url], as GeckoView reports a committed load. */

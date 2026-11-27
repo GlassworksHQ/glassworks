@@ -212,7 +212,22 @@ class GeckoEngine(
             session = s
         }
 
+        /** Set by [close]: a restart or load that comes after (a posted callback) opens no new session. */
+        private var closed = false
+
+        override fun close() {
+            if (closed) return
+            closed = true
+            session?.let {
+                view.releaseSession()
+                it.close()
+            }
+            session = null
+            ports.clear()
+        }
+
         override fun restart() {
+            if (closed) return
             session?.let {
                 view.releaseSession()
                 it.close()

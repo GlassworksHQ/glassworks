@@ -98,7 +98,7 @@ public class ImprovBleServer(
     private val subscribed = ConcurrentHashMap<String, MutableSet<UUID>>()
     private val mtu = ConcurrentHashMap<String, Int>()
     private val devices = ConcurrentHashMap<String, BluetoothDevice>()
-    private val prepared = ConcurrentHashMap<String, java.io.ByteArrayOutputStream>()
+    private val prepared = PreparedWrites()
 
     private data class Pending(val device: BluetoothDevice, val uuid: UUID, val value: ByteArray)
     private val queue = ArrayDeque<Pending>()
@@ -430,7 +430,7 @@ public class ImprovBleServer(
                 devices[addr] = device
                 main.post { listener.onClientConnected(addr) }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                devices.remove(addr); subscribed.remove(addr); mtu.remove(addr); prepared.remove(addr)
+                devices.remove(addr); subscribed.remove(addr); mtu.remove(addr); prepared.drop(addr)
                 main.post {
                     listener.onClientDisconnected(addr)
                     // Some stacks stop legacy advertising once a central connected; make sure it runs.
@@ -467,8 +467,13 @@ public class ImprovBleServer(
                 return
             }
             if (preparedWrite) {
-                // Long write: queue the pieces until onExecuteWrite. Response echoes the value.
-                prepared.getOrPut(device.address) { java.io.ByteArrayOutputStream() }.write(v)
+                // Long write: queue the pieces until onExecuteWrite. Response echoes the value. One longer than any
+                // Improv command is dropped whole, so a client can't grow it without end.
+                if (!prepared.append(device.address, v)) {
+                    Log.w(logTag, "${device.address} long write over ${PreparedWrites.MAX_BYTES} bytes: dropped")
+                    if (responseNeeded) s.sendResponse(device, requestId, BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH, offset, null)
+                    return
+                }
                 if (responseNeeded) s.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, v)
                 return
             }
@@ -477,12 +482,9 @@ public class ImprovBleServer(
         }
 
         override fun onExecuteWrite(device: BluetoothDevice, requestId: Int, execute: Boolean) {
-            val buf = prepared.remove(device.address)
+            val v = prepared.take(device.address)
             server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
-            if (execute && buf != null) {
-                val v = buf.toByteArray()
-                main.post { listener.onRpcWrite(v) }
-            }
+            if (execute && v != null) main.post { listener.onRpcWrite(v) }
         }
 
         override fun onDescriptorReadRequest(device: BluetoothDevice, requestId: Int, offset: Int, d: BluetoothGattDescriptor) {

@@ -68,6 +68,9 @@ object HaAuth {
         exec = exec,
     )
 
+    /** The panel's screen shows the sign-in QR code: a sign-in from it may replace the stored one ([SignInServer]). */
+    val signInArm = SignInArm()
+
     @Synchronized
     fun init(context: Context) {
         if (!::prefs.isInitialized) prefs = KioskPrefs(context.applicationContext)
@@ -125,8 +128,9 @@ object HaAuth {
         // One store for the process: a bind retry keeps the Manage page, and the sign-in server inside it, built with it.
         val states = signInStates ?: signInStates(prefs).also { signInStates = it }
         // A sign-in started while a .local Home Assistant had no address yet trades its code through the one found since.
+        // Once signed in, only a Manage session or the panel's own screen may replace the sign-in (signedIn, signInArm).
         val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, states, thread = threadJoin,
-            reach = prefs::route)
+            reach = prefs::route, signedIn = { signedIn }, armed = signInArm::armed)
         // A Manage page that can't load (a class Android 6 refuses, #435) leaves the QR pages up, and the app with them.
         val m = manage ?: orWithout("The Manage page", { AuthLog.w(it) }) {
             val page = context.glassworks.managePage(context, signIn, tokens, prefs)
@@ -139,14 +143,15 @@ object HaAuth {
             }
             page
         }?.also { manage = it }
-        val s = m?.http(OAuth.SIGNIN_PORT) ?: qrOnly(signIn)
-        // Setup over the LAN (#34) shares the port: the setup channel's own loop, gated by pairing with the panel's code.
         val frame = context.glassworks.frame
+        // The ESPHome name, from the MAC PanelDevice saved (a panel that never announced itself has none yet).
+        val ownHosts = PanelHosts.cached { PanelHosts.now(prefs.deviceMac.takeIf { it.isNotEmpty() }?.let(frame::nodeName)) { msg, e -> AuthLog.w("$msg: $e") } }
+        val s = m?.http(OAuth.SIGNIN_PORT) ?: qrOnly(signIn, ownHosts)
+        // Setup over the LAN (#34) shares the port: the setup channel's own loop, gated by pairing with the panel's code.
         val lan = LanSetup(
             serve = SetupChannelServer.lan(context, context.glassworks),
             code = context.glassworks.panelCode,
-            // The ESPHome name, from the MAC PanelDevice saved (a panel that never announced itself has none yet).
-            ownHosts = PanelHosts.cached { PanelHosts.now(prefs.deviceMac.takeIf { it.isNotEmpty() }?.let(frame::nodeName)) { msg, e -> AuthLog.w("$msg: $e") } },
+            ownHosts = ownHosts,
             // The setup hotspot's key shows only on the panel's screen, so anyone on it can see the screen (#197).
             pairingOpen = { prefs.lanPairingOpen || context.glassworks.setupHotspot?.isOn == true },
             event = { msg -> android.util.Log.i(LAN_TAG, msg) },
@@ -203,10 +208,16 @@ object HaAuth {
     /** The pending retry when the port was busy, until it runs or [stopServer] cancels it. */
     private var bindRetry: Runnable? = null
 
-    /** The web server with only the QR-code pages, for when the Manage page can't load. */
-    internal fun qrOnly(signIn: SignInServer): HttpServer = HttpServer(OAuth.SIGNIN_PORT, { req ->
-        val r = signIn.handle(SignInServer.Request(req.method, req.path, req.query, req.headers))
-        HttpResponse(r.status, r.headers, r.body)
+    /**
+     * The web server with only the QR-code pages, for when the Manage page can't load. It answers only to the panel's own
+     * names, as the Manage page does (DNS rebinding), and no browser holds a Manage session here.
+     */
+    internal fun qrOnly(signIn: SignInServer, ownHosts: () -> Set<String>): HttpServer = HttpServer(OAuth.SIGNIN_PORT, { req ->
+        if (!dev.glassworks.manage.ManageServer.hostAllowed(req.headers["host"], ownHosts())) HttpResponse.text(400, "Open this page with the panel's address.")
+        else {
+            val r = signIn.handle(SignInServer.Request(req.method, req.path, req.query, req.headers))
+            HttpResponse(r.status, r.headers, r.body)
+        }
     })
 
     @Synchronized
@@ -221,6 +232,7 @@ object HaAuth {
 
     private fun onSignedIn(auth: StoredAuth, first: TokenResult.Ok) {
         prefs.auth = auth
+        signInArm.disarm() // one sign-in per code on the screen: a second phone that scanned it doesn't replace this one
         cache.put(first.accessToken, first.expiresIn)
         AuthLog.i("Refresh token stored for ${auth.haBase}")
         notifyChanged()
@@ -233,6 +245,7 @@ object HaAuth {
      */
     fun signInStored(how: String) {
         cache.clear()
+        signInArm.disarm() // signed in another way: the code that was on the screen no longer replaces it
         AuthLog.i("$how${signedInBase?.let { " for $it" } ?: ""}")
         notifyChanged()
     }

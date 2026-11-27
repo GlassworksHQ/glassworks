@@ -258,6 +258,7 @@ open class MainActivity : Activity() {
         overlays = runtime.app.overlays(runtime, overlayHost)
         setupOverlay = SetupOverlay(this, glassworks.frame, setupPanes, deviceSteps, glassworks.panesStep(this)).apply {
             onUsePanel = ::onUsePanelLogin
+            onSignInShown = HaAuth.signInArm::arm
             onManualUrl = ::onManualHaUrl
             onChooseNetwork = { if (!setupPreview) glassworks.setupHotspot?.configured(); openWifiSettings() }
             onSkipHa = ::onSkipHaSetup
@@ -1449,6 +1450,10 @@ open class MainActivity : Activity() {
         glassworks.screen.stayOn(SETUP_NO_TOUCH, false)
         glassworks.commandSink = null
         handler.removeCallbacksAndMessages(null)
+        // The page's session goes with this activity: a recreate (Kiln's set_locale, a font scale change) opens its own,
+        // and a session left open would keep the destroyed activity and its view alive.
+        page?.close()
+        page = null
         super.onDestroy()
     }
 

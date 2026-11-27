@@ -412,7 +412,8 @@ open class AppManage(
     }
 
     private fun qr(signIn: SignInServer, req: HttpRequest): HttpResponse {
-        val r = signIn.handle(SignInServer.Request(req.method, req.path, req.query, req.headers))
+        // A browser signed in to Manage may replace the panel's Home Assistant sign-in; nobody else on the network may.
+        val r = signIn.handle(SignInServer.Request(req.method, req.path, req.query, req.headers, manage = server.signedIn(req)))
         return HttpResponse(r.status, r.headers, r.body)
     }
 

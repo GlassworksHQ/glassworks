@@ -128,10 +128,15 @@ data class PendingSignIn(
     val then: Then = Then.QR,
     /** A setup sign-in's binding cookie ([StateStore.create]), or -1. */
     val slot: Int = -1,
+    /**
+     * Started while the panel was signed in, by someone allowed to replace that sign-in ([SignInServer]: a browser signed
+     * in to Manage, or while the panel's screen asked for a sign-in). Its callback may then replace it.
+     */
+    val replaces: Boolean = false,
 ) {
     override fun toString() =
         "PendingSignIn(clientId=$clientId, redirectUri=$redirectUri, haBase=$haBase, createdAt=$createdAt, " +
-            "purpose=$purpose, then=$then, slot=$slot, codeVerifier=<redacted>)"
+            "purpose=$purpose, then=$then, slot=$slot, replaces=$replaces, codeVerifier=<redacted>)"
 
     companion object {
         const val PURPOSE_SIGNIN = "signin"
@@ -193,6 +198,7 @@ class StateStore(
     @Synchronized
     fun create(
         clientId: String, redirectUri: String, haBase: String, purpose: String = PendingSignIn.PURPOSE_SIGNIN, then: Then = Then.QR,
+        replaces: Boolean = false,
     ): NewSignIn {
         prune()
         while (pending.size >= max) pending.remove(pending.keys.first())
@@ -201,7 +207,7 @@ class StateStore(
         // A setup sign-in gets a slot no other pending one holds, so its binding cookie never replaces a live one,
         // and a browser never holds more than [max] of them. There is always one free: fewer than [max] are pending.
         val slot = if (then == Then.SETUP) (0 until max).first { n -> pending.values.none { it.then == Then.SETUP && it.slot == n } } else -1
-        pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier, then, slot)
+        pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier, then, slot, replaces)
         save()
         return NewSignIn(s, OAuth.codeChallenge(verifier), slot)
     }
@@ -252,7 +258,7 @@ class StateStore(
             for ((state, p) in pending) put(JSONObject()
                 .put("state", state).put("client_id", p.clientId).put("redirect_uri", p.redirectUri).put("ha_base", p.haBase)
                 .put("created_at", p.createdAt).put("purpose", p.purpose).put("verifier", p.codeVerifier)
-                .put("then", p.then.name).put("slot", p.slot))
+                .put("then", p.then.name).put("slot", p.slot).put("replaces", p.replaces))
         }.toString()
 
         /** What [encode] wrote; anything it can't read is left out (a sign-in it drops just runs out). */
@@ -266,6 +272,8 @@ class StateStore(
                     out[o.getString("state")] = PendingSignIn(
                         o.getString("client_id"), o.getString("redirect_uri"), o.getString("ha_base"), o.getLong("created_at"),
                         o.getString("purpose"), o.getString("verifier"), then, o.getInt("slot"),
+                        // Saved before it was recorded: no replacing.
+                        o.optBoolean("replaces", false),
                     )
                 } catch (_: JSONException) {
                 }

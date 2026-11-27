@@ -96,13 +96,14 @@ class CameraPane(
         // authOnly (#847): a LAN client on a panel with no ESPHome key yet mustn't turn the camera's privacy off.
         SwitchEntity("camera_privacy", "Camera privacy", "mdi:camera-off", get = { prefs.privacy }, set = { prefs.privacy = it })
             .apply { authOnly = true },
+        // authOnly, as privacy and the stream: a LAN client on a panel with no ESPHome key yet mustn't turn snapshots on.
         SelectEntity(
             "camera_use", "Camera use", "mdi:cctv", disabledByDefault = true,
             options = listOf(CameraPrefs.USE_PRESENCE, CameraPrefs.USE_CAMERA),
             get = { if (prefs.use == CameraUse.PRESENCE) CameraPrefs.USE_PRESENCE else CameraPrefs.USE_CAMERA },
             // Home Assistant reads these options at every connect (an update reconnects), so it never sends the old name.
             set = { prefs.use = if (it == CameraPrefs.USE_CAMERA) CameraUse.PRESENCE_AND_SNAPSHOTS else CameraUse.PRESENCE },
-        ),
+        ).apply { authOnly = true },
         SwitchEntity(
             "onvif_stream", "ONVIF stream", "mdi:video-wireless", EntityCategory.CONFIG, disabledByDefault = true,
             // Refused in Presence only (the approved design), and on a camera that can't stream: the switch springs back.
