@@ -39,11 +39,20 @@ import java.util.concurrent.CopyOnWriteArraySet
  * page's WebSocket and its external auth are Home Assistant's own, and nothing here stands in for them.
  *
  * Loopback is open to every app on the device, so the proxy (which spends the panel's token) answers only a client
- * that holds this server's capability: a random cookie the island page sets. Other apps never get it (slot ids are
- * unguessable too). In depth: every request must name this server as its `Host` (a page whose own name resolves to
- * 127.0.0.1, DNS rebinding, is refused); the proxy forwards only the paths the islands use, never a `.`/`..` segment
- * or an escaped slash; a bridge needs the cookie or this server's own `Origin`. Refusals are logged without queries
- * or tokens.
+ * that holds this server's capability: a random path segment, new for every server ([capPath]). Island pages, their
+ * bridges and what the page itself loads live under it (`/<cap>/__vitro/island/<id>`, `/<cap>/local/card.js`). What a
+ * card builds itself from an absolute path (an entity picture's `/api/…`, an `import('/hacsfiles/…')`) arrives without
+ * it, but with the page's address as its `Referer`, which holds it: that request is let through, a `GET` by a redirect
+ * into [capPath], so what it loads in turn (a module's imports, a stylesheet's fonts) has the capability in its address
+ * too. Every answer says `Referrer-Policy: same-origin`, so the browser never names an island's address to another
+ * origin, and another app on another loopback port never learns the capability.
+ *
+ * Not a cookie (#799): cookies aren't kept apart by port (RFC 6265), so the browser sent one set on 127.0.0.1 to every
+ * other server there, where another app could take it and replay it here.
+ *
+ * In depth: every request must name this server as its `Host` (a page whose own name resolves to 127.0.0.1, DNS
+ * rebinding, is refused); the proxy forwards only the paths the islands use, never a `.`/`..` segment or an escaped
+ * slash; slot ids are unguessable too. Refusals are logged without queries, tokens or the capability.
  *
  * The origin stays the same across app starts ([portMemory]): what a card keeps in `localStorage` or IndexedDB is per
  * origin, so a new port on every start would hand every card empty storage (#881). The server takes the port it had
@@ -108,11 +117,12 @@ class VitroIslandServer(
     private val activeSockets = ConcurrentHashMap<String, CopyOnWriteArraySet<WebSocketStreams>>()
     private val random = SecureRandom()
 
-    /** The proxy's capability, random per server: the [CAPABILITY_COOKIE] a client must send to use the panel's token. */
-    private val capability: String = hex(ByteArray(32).also(random::nextBytes))
-
-    private val capabilityCookie: Map<String, String>
-        get() = mapOf("Set-Cookie" to "$CAPABILITY_COOKIE=$capability; Path=/; HttpOnly; SameSite=Strict")
+    /**
+     * The proxy's capability, 128 random bits new for every server, as the first segment of a path: `/<32 hex digits>`.
+     * Only what is under it (or a same-origin request whose `Referer` is) spends the panel's token or opens a bridge.
+     * The island page builds its own addresses with it; nothing else of the app's needs it.
+     */
+    val capPath: String = "/" + hex(ByteArray(CAPABILITY_BYTES).also(random::nextBytes))
 
     /**
      * Memory every proxied response being read shares, in KiB: the server answers with whole bodies, and sixteen
@@ -164,7 +174,8 @@ class VitroIslandServer(
     private fun newServer(port: Int): HttpServer =
         HttpServer(
             port = port,
-            handler = ::handle,
+            // Every answer: never this server's addresses (they hold the capability) in a request to another origin.
+            handler = { req -> handle(req).let { if (it.upgrade != null) it else it.with(REFERRER_POLICY) } },
             // Explicit IPv4 127.0.0.1: on Android, InetAddress.getLoopbackAddress() returns IPv6 ::1,
             // which refuses IPv4 http://127.0.0.1:<port> connections from GeckoView.
             bindAddress = InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)),
@@ -193,7 +204,28 @@ class VitroIslandServer(
         // Unguessable, so another app on the device can't open a live card's bridge by counting.
         val id = "s" + hex(ByteArray(16).also(random::nextBytes))
         slots[id] = handler
-        return id to "$base/__vitro/island/$id"
+        return id to "$base$capPath/__vitro/island/$id"
+    }
+
+    /** True when [url] is an island page of this server (under its [capPath]), never another of its paths. */
+    fun isIslandPage(url: String): Boolean = origin?.let { url.startsWith("$it$capPath/__vitro/island/") } == true
+
+    /**
+     * [url] on this server as the path it stands for on Home Assistant, the capability taken off (a link a card's page
+     * followed to `/local/help.html`): it goes to Home Assistant, which must never see the capability. Null for a URL
+     * on any other origin.
+     */
+    fun haPath(url: String): String? {
+        val o = origin ?: return null
+        if (!url.startsWith("$o/")) return null
+        return withoutCap(url.removePrefix(o))
+    }
+
+    /** [path] without this server's [capPath] in front. */
+    fun withoutCap(path: String): String = when {
+        path.startsWith("$capPath/") -> path.removePrefix(capPath)
+        path == capPath -> "/"
+        else -> path
     }
 
     /**
@@ -219,17 +251,21 @@ class VitroIslandServer(
     }
 
     private fun handle(req: HttpRequest): HttpResponse {
-        val path = req.path
+        // Inside the capability: the path after it is what the request is for.
+        val inside = req.path.startsWith("$capPath/")
+        val path = if (inside) req.path.removePrefix(capPath) else req.path
         // DNS rebinding: a page on another name that resolves to 127.0.0.1 sends that name as its Host.
         if (req.headers["host"]?.trim()?.lowercase() != "127.0.0.1:$port") {
             log("refused: Host isn't this server (${req.method} ${firstSegment(path)})")
             return HttpResponse.text(421, "Misdirected request")
         }
         if (path.startsWith("/__vitro/island/")) {
+            // Only at its address under the capability: that address is what the page's own requests name as their
+            // Referer, and what its relative ones resolve under.
+            if (!inside) return refused(req, path)
             val id = path.removePrefix("/__vitro/island/")
             val slot = slots[id] ?: return HttpResponse.text(404, "Unknown island slot")
-            // The page's own requests (card scripts, `hass.callApi`) go through the proxy with this cookie.
-            return HttpResponse.html(200, slot.html, capabilityCookie)
+            return HttpResponse.html(200, slot.html)
         }
         if (path.startsWith("/__vitro/icon/")) {
             val iconName = path.removePrefix("/__vitro/icon/")
@@ -252,19 +288,32 @@ class VitroIslandServer(
             )
         }
         if (path.startsWith("/__vitro/ws/")) {
+            // The island page opens its bridge under the capability; nothing else may (an Origin is anyone's to write).
+            if (!inside) return refused(req, path)
             val id = path.removePrefix("/__vitro/ws/")
             val slot = slots[id] ?: return HttpResponse.text(404, "Unknown island slot")
-            // The island page itself: it sends the cookie (same site) and this server's Origin.
-            if (!authorized(req) && req.headers["origin"]?.trim()?.lowercase() != "http://127.0.0.1:$port") {
-                log("refused: a bridge without the capability or this server's Origin")
-                return HttpResponse.text(403, "Not allowed")
-            }
             val wsKey = req.headers["sec-websocket-key"] ?: return HttpResponse.text(400, "Missing Sec-WebSocket-Key")
             return HttpResponse.webSocket(wsKey, idleMs = bridgeIdleMs) { ws ->
                 runSlotSocket(id, slot, ws)
             }
         }
-        return proxyToHa(req)
+        if (!inside) {
+            // Another app on the device must not borrow the panel's Home Assistant session.
+            if (!referredFromInside(req)) return refused(req, path)
+            // A card's own absolute path (`/api/…`, `/hacsfiles/…`) from an island page: a GET goes into the capability
+            // first, so the browser holds what it loads (a module, a stylesheet) at an address with the capability,
+            // and what that loads in turn names it as its Referer. Other methods carry no such address.
+            if ((req.method == "GET" || req.method == "HEAD") && forwards(path)) {
+                return HttpResponse(307, mapOf("Location" to capPath + req.target, "Cache-Control" to "no-store"), ByteArray(0))
+            }
+        }
+        return proxyToHa(req, path, if (inside) req.target.removePrefix(capPath) else req.target)
+    }
+
+    /** A request without the capability: refused as the proxy refuses one, logged without its query or the rest of its path. */
+    private fun refused(req: HttpRequest, path: String): HttpResponse {
+        log("refused: no capability (${req.method} ${firstSegment(path)})")
+        return HttpResponse.text(403, "Not allowed")
     }
 
     private fun runSlotSocket(id: String, slot: SlotHandler, ws: WebSocketStreams) {
@@ -330,36 +379,38 @@ class VitroIslandServer(
     }
 
     /**
-     * Strictly proxies HA static assets and API paths (`/local/...`, `/hacsfiles/...`, `/api/...`) to the [session]'s origin:
-     * `GET`, `POST`, `PUT`, `PATCH` and `DELETE` (what `hass.callApi` / `hass.fetchWithAuth` send), with the
-     * panel's Bearer token injected. A `204 No Content` comes back with an empty body.
+     * True when [req] comes from a page under the capability: its `Referer` is an address of this very origin inside
+     * [capPath]. The browser writes it, and with this server's `Referrer-Policy: same-origin` only for requests to this
+     * origin, so no other app learns it; an app that writes one itself must hold the capability already.
      */
-    /** True when [req] carries this server's capability cookie. */
-    private fun authorized(req: HttpRequest): Boolean {
-        val cookies = req.headers["cookie"] ?: return false
-        return cookies.split(';').any { c ->
-            val kv = c.trim()
-            kv.startsWith("$CAPABILITY_COOKIE=") &&
-                java.security.MessageDigest.isEqual(kv.substringAfter('=').toByteArray(), capability.toByteArray())
-        }
+    private fun referredFromInside(req: HttpRequest): Boolean {
+        val referer = req.headers["referer"]?.trim() ?: return false
+        val inside = "http://127.0.0.1:$port$capPath/"
+        if (referer.length < inside.length) return false
+        return java.security.MessageDigest.isEqual(referer.substring(0, inside.length).toByteArray(), inside.toByteArray())
     }
 
-    private fun proxyToHa(req: HttpRequest): HttpResponse {
-        // Another app on the device must not borrow the panel's Home Assistant session.
-        if (!authorized(req)) {
-            log("refused: no capability (${req.method} ${firstSegment(req.path)})")
-            return HttpResponse.text(403, "Not allowed")
-        }
+    /** True when the proxy forwards [path], one of its own prefixes or under a Lovelace resource's folder. */
+    private fun forwards(path: String): Boolean =
+        proxied(path) || underResource(path, runCatching { session().first }.getOrNull())
+
+    /**
+     * Strictly proxies HA static assets and API paths (`/local/...`, `/hacsfiles/...`, `/api/...`) to the [session]'s origin:
+     * `GET`, `POST`, `PUT`, `PATCH` and `DELETE` (what `hass.callApi` / `hass.fetchWithAuth` send), with the
+     * panel's Bearer token injected. A `204 No Content` comes back with an empty body. [path] and [target] (the path
+     * with the query) are the request's without the capability; the caller has checked that it holds it.
+     */
+    private fun proxyToHa(req: HttpRequest, path: String, target: String): HttpResponse {
         // Only what the islands load: anything else isn't forwarded with the panel's token.
         val (origin, firstToken) = session()
         var token = firstToken
-        if (!proxied(req.path) && !underResource(req.path, origin)) {
-            log("refused: not a proxied path (${req.method} ${firstSegment(req.path)})")
+        if (!proxied(path) && !underResource(path, origin)) {
+            log("refused: not a proxied path (${req.method} ${firstSegment(path)})")
             return HttpResponse.text(404, "Not found")
         }
         val base = origin?.trimEnd('/') ?: return HttpResponse.text(503, "Home Assistant not configured")
-        if (!req.path.startsWith("/")) return HttpResponse.text(400, "Invalid path")
-        var targetUrl = base + req.target
+        if (!path.startsWith("/")) return HttpResponse.text(400, "Invalid path")
+        var targetUrl = base + target
         val held = IntArray(1)
         // Set once a response carries the permits: the server releases them after writing it (its onDone).
         var handedOff = false
@@ -393,9 +444,9 @@ class VitroIslandServer(
                         renewed = true
                         val fresh = renewedSession(token)
                         if (fresh != null && sameBase(fresh.first, base) && !fresh.second.isNullOrEmpty() && fresh.second != token) {
-                            log("retrying a request Home Assistant refused, with a renewed token (${firstSegment(req.path)})")
+                            log("retrying a request Home Assistant refused, with a renewed token (${firstSegment(path)})")
                             token = fresh.second
-                            targetUrl = base + req.target
+                            targetUrl = base + target
                             hops = 0
                             continue
                         }
@@ -426,7 +477,7 @@ class VitroIslandServer(
                     val stream = if (code in 200..399) conn.inputStream else conn.errorStream
                     val bytes = stream?.use { readCapped(it, MAX_PROXY_BODY, proxyBudget, held) }
                         ?: ByteArray(0)
-                    headers["Content-Type"] = conn.contentType ?: guessMime(req.path)
+                    headers["Content-Type"] = conn.contentType ?: guessMime(path)
                     // The body stays in memory until it's written: its share of the budget goes with it, released by
                     // the server once the write ends (or fails), not when this returns.
                     val permits = held[0]
@@ -576,12 +627,27 @@ class VitroIslandServer(
             return "$scheme://$host:${if (url.port < 0) url.defaultPort else url.port}"
         }
 
-        /** The first path segment, for a refusal's log line: never the rest (ids) or the query. */
-        private fun firstSegment(path: String): String =
-            "/" + path.removePrefix("/").substringBefore('/').take(40) + if (path.removePrefix("/").contains('/')) "/…" else ""
+        /**
+         * The first path segment, for a refusal's log line: never the rest (ids) or the query, and never what looks like
+         * a capability (another server's, or a guess at this one's).
+         */
+        private fun firstSegment(path: String): String {
+            val first = path.removePrefix("/").substringBefore('/').take(40)
+            val shown = if (CAPABILITY_LIKE.matches(first)) "…" else first
+            return "/" + shown + if (path.removePrefix("/").contains('/')) "/…" else ""
+        }
 
-        /** The cookie that carries the proxy's capability. */
-        internal const val CAPABILITY_COOKIE = "vitro_cap"
+        /** The capability's random bytes: 128 bits, as 32 hex digits in [capPath]. */
+        private const val CAPABILITY_BYTES = 16
+
+        private val CAPABILITY_LIKE = Regex("[0-9a-fA-F]{${CAPABILITY_BYTES * 2}}")
+
+        /**
+         * On every answer: a request to another origin (another app's port on 127.0.0.1, a CDN, Home Assistant itself)
+         * never names an island's address, which holds the capability. `same-origin`, not `no-referrer`: the page's own
+         * requests name it, which is what lets a card's absolute paths through ([referredFromInside]).
+         */
+        private val REFERRER_POLICY = mapOf("Referrer-Policy" to "same-origin")
 
         private fun hex(b: ByteArray): String = b.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
 

@@ -213,20 +213,16 @@ class VitroEngine(
             // href>`) would load that site at card size with no way back. It opens as a native card's `url` action
             // does instead ([navigateInPlace]: the panel's page, with back).
             override fun allowsLoad(url: String): Boolean {
-                if (url == "about:blank" || islandPageUrl(url)) return true
-                val origin = islandServer.origin
+                // An island document of the island server (`/<cap>/__vitro/island/<id>`), never another of its paths or hosts.
+                if (url == "about:blank" || islandServer.isIslandPage(url)) return true
+                val haPath = islandServer.haPath(url)
                 when {
                     // Another document the island server proxies from HA (a `/local/help.html`): HA's own page for it,
-                    // with back, never in the card's window.
-                    origin != null && url.startsWith("$origin/") -> main.post { if (!disposed) navigateInPlace(url.removePrefix(origin)) }
+                    // with back, never in the card's window, and without the island server's capability.
+                    haPath != null -> main.post { if (!disposed) navigateInPlace(haPath) }
                     url.startsWith("http://") || url.startsWith("https://") -> main.post { if (!disposed) navigateInPlace(url) }
                 }
                 return false
-            }
-            /** An island document of the island server (`/__vitro/island/<id>`), never another of its paths or hosts. */
-            private fun islandPageUrl(url: String): Boolean {
-                val origin = islandServer.origin ?: return false
-                return url.startsWith("$origin/__vitro/island/")
             }
             // The activity's host decides, as for every page (#847). An island's own page is on loopback, not Home
             // Assistant, so its card gets no microphone or camera without a prompt.
@@ -1540,6 +1536,9 @@ class VitroEngine(
         private const val NO_DASHBOARD = "\u0000fallback"
 
         private val LOG_QUERY = Regex("""[?#][^\s"'<>]*""")
+
+        /** The island server's capability, a path segment of 32 hex digits (`VitroIslandServer.capPath`). */
+        private val LOG_CAPABILITY = Regex("""/[0-9a-fA-F]{32}(?![0-9a-zA-Z])""")
         private val LOG_PROXIED = Regex("""/(api|local|hacsfiles|static|auth|__vitro/island|__vitro/ws)/[^\s?#"'<>]*""")
 
         private val LOG_AUTHORITY = Regex("""\b([a-z][a-z0-9+.-]*://)[^/\s?#"'<>]+""", RegexOption.IGNORE_CASE)
@@ -1548,12 +1547,12 @@ class VitroEngine(
         private val LOG_HOST = Regex("""(?<![\w.-])(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*(?::\d+)?(?![\w.-])""", RegexOption.IGNORE_CASE)
 
         /**
-         * [text] as it may go to logcat: no query or fragment (an OAuth `state`, a camera token, the proxy's
-         * capability), no path below the proxied prefixes (entity ids, slot ids, resource names), and no Home
+         * [text] as it may go to logcat: no query or fragment (an OAuth `state`, a camera token), not the island
+         * proxy's capability, no path below the proxied prefixes (entity ids, slot ids, resource names), and no Home
          * Assistant address (an origin, a host name or an IP a connection error names).
          */
         internal fun forLog(text: String): String =
-            text.replace(LOG_QUERY, "?…").replace(LOG_PROXIED) { "/${it.groupValues[1]}/…" }
+            text.replace(LOG_QUERY, "?…").replace(LOG_CAPABILITY, "/…").replace(LOG_PROXIED) { "/${it.groupValues[1]}/…" }
                 .replace(LOG_AUTHORITY) { "${it.groupValues[1]}…" }
                 .replace(LOG_IPV4, "…").replace(LOG_IPV6, "…").replace(LOG_HOST, "…")
 

@@ -976,6 +976,9 @@ class VitroEngineTest {
         assertEquals("Starting Vitro 0.0.1", VitroEngine.forLog("Starting Vitro 0.0.1"))
         assertEquals("[3] GET /api/… -> 200", VitroEngine.forLog("[3] GET /api/states/sensor.private_thing -> 200"))
         assertEquals("GET /__vitro/island/… -> 200", VitroEngine.forLog("GET /__vitro/island/s0123abcd -> 200"))
+        // Never the island server's capability, wherever it is in a line.
+        assertEquals("GET /…/__vitro/island/… -> 200", VitroEngine.forLog("GET /0123456789abcdef0123456789abcdef/__vitro/island/s0123abcd -> 200"))
+        assertEquals("refused: /…/local/… (x)", VitroEngine.forLog("refused: /0123456789ABCDEF0123456789abcdef/local/card.js (x)"))
         assertEquals("Connection reset", VitroEngine.forLog("Connection reset"))
     }
 
@@ -1216,6 +1219,57 @@ class VitroEngineTest {
         assertFalse(html.contains("\\/local\\/"))
     }
 
+    /**
+     * #799 (Greptile): the island server's capability is a path, so every address the page builds for the proxy and
+     * the bridge starts with it; a resource on another site, or on HA's own origin, is as written. The page never names
+     * its own address to another origin, and a card's `navigate` or link never hands HA a path with the capability.
+     */
+    @Test
+    fun theIslandPageBuildsItsAddressesUnderTheCapability() {
+        val cap = "/0123456789abcdef0123456789abcdef"
+        val resources = listOf(
+            LovelaceResource("/local/custom-card.js", "module"),
+            LovelaceResource("/hacsfiles/acme/acme-card.js?hacstag=1", "module"),
+            LovelaceResource("/local/legacy.js", "js"),
+            LovelaceResource("/local/island.css", "css"),
+            LovelaceResource("https://cdn.example/card.js", "module"),
+            LovelaceResource("//cdn.example/other.js", "module"),
+        )
+        val html = WebIslandCardView.buildIslandHtml(cardContext(resources = resources), islandCard(), slotId = "s1", base = cap)
+        assertTrue(html.contains("<meta name=\"referrer\" content=\"same-origin\">"))
+        assertTrue(html.contains("const VITRO_BASE = \"$cap\";"))
+        // Card resources on Home Assistant: under the capability.
+        assertTrue(html.contains("<script type=\"module\" src=\"$cap/local/custom-card.js\"></script>"))
+        assertTrue(html.contains("<script type=\"module\" src=\"$cap/hacsfiles/acme/acme-card.js?hacstag=1\"></script>"))
+        assertTrue(html.contains("<script src=\"$cap/local/legacy.js\"></script>"))
+        assertTrue(html.contains("<link rel=\"stylesheet\" href=\"$cap/local/island.css\">"))
+        // On another site: as written (the capability never goes there).
+        assertTrue(html.contains("src=\"https://cdn.example/card.js\""))
+        assertTrue(html.contains("src=\"//cdn.example/other.js\""))
+        // hass.callApi, fetchWithAuth and the bridge (and its retry) go under it too.
+        assertTrue(html.contains("return fetch(VITRO_BASE + '/api/' + "))
+        assertTrue(html.contains("path.startsWith('/') && !path.startsWith('//') ? VITRO_BASE + path : path"))
+        assertTrue(html.contains("location.host + VITRO_BASE + '/__vitro/ws/' + \"s1\""))
+        assertTrue(html.contains("fetch(VITRO_BASE + '/__vitro/ws/' + \"s1\""))
+        // Every address the page writes for the island server: under VITRO_BASE, or HA's public files that need no
+        // capability (icons, strings: kept across app starts in the browser's cache).
+        for (m in Regex("""['"](/(?:api|local|hacsfiles|static|frontend_latest|media|__vitro/ws|__vitro/island)/)""").findAll(html)) {
+            val before = html.substring(maxOf(0, m.range.first - 16), m.range.first)
+            assertTrue("an address outside the capability: …$before${m.value}", before.endsWith("VITRO_BASE + ") || before.endsWith("startsWith(") ||
+                before.endsWith("!path.startsWith("))
+        }
+        assertTrue(html.contains("fetch('/__vitro/icon/' + "))
+        // A card's link or navigate never hands Home Assistant the capability, and the page keeps its own address.
+        assertTrue(html.contains("vitroHaPath(u.pathname) + u.search + u.hash"))
+        assertTrue(html.contains("history.replaceState(history.state, '', VITRO_PAGE)"))
+        assertTrue(html.contains("navigateTo(vitroHaPath(p), "))
+
+        // Without a server (tests, the page before it starts): the paths as they were.
+        val plain = WebIslandCardView.buildIslandHtml(cardContext(resources = resources), islandCard())
+        assertTrue(plain.contains("const VITRO_BASE = \"\";"))
+        assertTrue(plain.contains("<script type=\"module\" src=\"/local/custom-card.js\"></script>"))
+    }
+
     @Test
     fun aFullViewportIslandFillsTheScreen() {
         val full = WebIslandCardView.buildIslandHtml(cardContext(), islandCard(), fillViewport = true)
@@ -1276,8 +1330,8 @@ class VitroEngineTest {
         assertTrue(html.contains("customElements.whenDefined(t)"))
         // The hass surface real cards read.
         assertTrue(html.contains("callApi: vitroCallApi"))
-        assertTrue(html.contains("fetch('/api/' + String(path || '').replace(/^\\/+/, ''), init)"))
-        assertTrue(html.contains("fetchWithAuth(path, init) { return fetch(path, init || {}); }"))
+        assertTrue(html.contains("fetch(VITRO_BASE + '/api/' + String(path || '').replace(/^\\/+/, ''), init)"))
+        assertTrue(html.contains("fetchWithAuth(path, init) {"))
         assertTrue(html.contains("localize: makeLocalize(),"))
         assertTrue(html.contains("formatEntityState: vitroFormatState"))
         assertTrue(html.contains("formatEntityAttributeValue: vitroFormatAttribute"))

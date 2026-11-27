@@ -62,6 +62,9 @@ class IslandEndToEndTest {
     private lateinit var haOrigin: String
     private val islands = ArrayList<VitroIslandServer>()
 
+    /** Requests the island servers refused for want of the capability (#799): a card's that never reached Home Assistant. */
+    private val refusals = java.util.concurrent.CopyOnWriteArrayList<String>()
+
     @After fun tearDown() {
         islands.forEach { runCatching { it.stop() } }
         if (::ha.isInitialized) ha.stop()
@@ -228,7 +231,10 @@ class IslandEndToEndTest {
             // HA's answer, as a subscription for every entity gives it: what the fixture lacks doesn't exist, and the
             // island's seed is complete (the page makes its card with it).
             store.markSnapshot(emptySet())
-            val server = VitroIslandServer(session = { haOrigin to TOKEN }).also { islands += it }
+            // The browser's own favicon request isn't a card's.
+            val server = VitroIslandServer(session = { haOrigin to TOKEN }, log = { line ->
+                if (line.startsWith("refused: no capability") && "/favicon.ico" !in line) refusals += line
+            }).also { islands += it }
             val ctx = context(
                 activity, store, server, listOf(resource(case.module)),
                 haConfig = if (guard) ({ configNow }) else ({ config }),
@@ -247,6 +253,7 @@ class IslandEndToEndTest {
                 .put("url", islandUrl(island)).put("tag", case.card.getString("type").removePrefix("custom:"))
                 .put("expect", JSONArray(case.expect)))
             assertTrue("case $i has a page", islandUrl(island).startsWith("http://127.0.0.1:"))
+            assertTrue("case $i's page is under its server's capability", server.isIslandPage(islandUrl(island)))
         }
         idle()
         val jobFile = File.createTempFile("island-e2e", ".json").apply { writeText(JSONObject().put("cases", jobs).toString()) }
@@ -295,6 +302,8 @@ class IslandEndToEndTest {
             val tags = r.optJSONArray("tags")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()
             if ("path" !in tags) problems += "mini-graph-card: no graph (elements: $tags)"
         }
+        // Every request the cards made reached Home Assistant: their own absolute paths too (by the page's Referer).
+        for (r in refusals) problems += "island server $r"
         assertTrue(problems.joinToString("\n") + "\n\n" + out, problems.isEmpty())
     }
 

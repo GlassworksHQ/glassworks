@@ -133,16 +133,23 @@ class VitroIslandServerTest {
         val setCookie: String? = null,
         val location: String? = null,
         val cacheControl: String? = null,
+        val referrerPolicy: String? = null,
     ) {
         val text get() = String(body, Charsets.UTF_8)
     }
 
-    /** The proxy's capability cookie (`vitro_cap=…`), as an island page hands it to a browser. */
-    private val capability: String by lazy {
-        get(island.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
+    /**
+     * [url] on [server] under that server's capability ([VitroIslandServer.capPath]), as the island page builds its
+     * addresses; a URL already under it, or on another origin, is as it is.
+     */
+    private fun inside(url: String, server: VitroIslandServer = island): String {
+        val o = server.origin ?: return url
+        if (!url.startsWith("$o/")) return url
+        val path = url.removePrefix(o)
+        return if (path.startsWith(server.capPath + "/")) url else o + server.capPath + path
     }
 
-    /** [capability]: send the proxy's cookie, as the island page's browser has it. */
+    /** [capability]: ask under the island server's capability, as the island page does ([inside]). */
     private fun get(
         url: String,
         method: String = "GET",
@@ -150,12 +157,10 @@ class VitroIslandServerTest {
         headers: Map<String, String> = emptyMap(),
         capability: Boolean = true,
     ): Reply {
-        val cookie = if (capability) this.capability else null
-        val conn = URL(url).openConnection() as HttpURLConnection
+        val conn = URL(if (capability) inside(url) else url).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
             conn.instanceFollowRedirects = false
-            cookie?.let { conn.setRequestProperty("Cookie", it) }
             headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
             conn.connectTimeout = 5_000
             conn.readTimeout = 10_000
@@ -169,6 +174,7 @@ class VitroIslandServerTest {
             return Reply(
                 code, conn.contentType, stream?.use { it.readBytes() } ?: ByteArray(0),
                 conn.getHeaderField("Set-Cookie"), conn.getHeaderField("Location"), conn.getHeaderField("Cache-Control"),
+                conn.getHeaderField("Referrer-Policy"),
             )
         } finally {
             conn.disconnect()
@@ -179,16 +185,17 @@ class VitroIslandServerTest {
         assertTrue("timed out waiting for $what", latch.await(5, TimeUnit.SECONDS))
 
     /**
-     * An island page's bridge: the upgrade with [headers] (by default the capability cookie the page holds), then
-     * RFC 6455 text frames. A refused upgrade throws an [IOException] naming the status.
+     * An island page's bridge: the upgrade (under the island server's capability, as the page opens it, unless
+     * [inside] is false) with [headers], then RFC 6455 text frames. A refused upgrade throws an [IOException] naming
+     * the status.
      */
-    private inner class Bridge(id: String, headers: Map<String, String> = mapOf("Cookie" to capability)) {
+    private inner class Bridge(id: String, headers: Map<String, String> = emptyMap(), inside: Boolean = true) {
         private val sock = java.net.Socket(loopback, island.ensureStarted().substringAfterLast(':').toInt()).apply { soTimeout = 5_000 }
         private val input = java.io.BufferedInputStream(sock.getInputStream())
         private val out = sock.getOutputStream()
 
         init {
-            val req = StringBuilder("GET /__vitro/ws/$id HTTP/1.1\r\nHost: 127.0.0.1:${island.port}\r\n")
+            val req = StringBuilder("GET ${if (inside) island.capPath else ""}/__vitro/ws/$id HTTP/1.1\r\nHost: 127.0.0.1:${island.port}\r\n")
                 .append("Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n")
                 .append("Sec-WebSocket-Version: 13\r\n")
             headers.forEach { (k, v) -> req.append(k).append(": ").append(v).append("\r\n") }
@@ -281,11 +288,9 @@ class VitroIslandServerTest {
         assertEquals(1, renewals.get())
     }
 
-    /** A GET of [path] on [server] with that server's own capability cookie (each server has its own). */
-    private fun getOn(server: VitroIslandServer, path: String): Reply {
-        val cookie = get(server.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
-        return get(server.ensureStarted() + path, headers = mapOf("Cookie" to cookie), capability = false)
-    }
+    /** A GET of [path] on [server] under that server's own capability (each server has its own). */
+    private fun getOn(server: VitroIslandServer, path: String): Reply =
+        get(server.ensureStarted() + server.capPath + path, capability = false)
 
     @Test
     fun aRefusalStaysARefusalWhenNothingBetterComes() {
@@ -330,7 +335,8 @@ class VitroIslandServerTest {
     fun islandPageIsTheSlotsHtmlAndAnUnknownSlotIs404() {
         val slot = RecordingSlot("<html><body>lounge card</body></html>")
         val (id, url) = island.registerSlot(slot)
-        assertEquals(island.ensureStarted() + "/__vitro/island/" + id, url)
+        assertEquals(island.ensureStarted() + island.capPath + "/__vitro/island/" + id, url)
+        assertTrue(island.capPath, Regex("/[0-9a-f]{32}").matches(island.capPath))
 
         val page = get(url)
         assertEquals(200, page.code)
@@ -349,6 +355,8 @@ class VitroIslandServerTest {
         assertTrue(icon.text, icon.text.contains("<svg"))
         assertTrue(icon.text, icon.text.contains("<path"))
         assertTrue("never proxied", haSeen.isEmpty())
+        // Nothing secret: the page asks for them outside the capability, so the browser keeps them across app starts.
+        assertEquals(200, get(island.ensureStarted() + "/__vitro/icon/mdi:lightbulb", capability = false).code)
     }
 
     // ---- Reverse proxy ----
@@ -426,30 +434,171 @@ class VitroIslandServerTest {
 
     @Test
     fun theProxyRefusesACallerWithoutTheCapability() {
-        // Any app on the device can reach loopback: without the cookie it never gets the panel's token spent for it.
+        // Any app on the device can reach loopback: without the capability it never gets the panel's token spent for it.
         val base = island.ensureStarted()
+        val other = "/" + "0".repeat(32)
         assertEquals(403, get("$base/api/services/light/turn_on", "POST", "{}", capability = false).code)
+        assertEquals(403, get("$base/api/states", capability = false).code)
         assertEquals(403, get("$base/local/custom-card.js", capability = false).code)
-        assertEquals(403, get("$base/local/custom-card.js", headers = mapOf("Cookie" to "vitro_cap=guess"), capability = false).code)
+        // Another capability (a guess, another server's): refused as no capability.
+        assertEquals(403, get("$base$other/api/states", capability = false).code)
+        assertEquals(403, get("$base$other/local/custom-card.js", capability = false).code)
+        // The capability as a path segment further in, or a part of it, isn't the capability.
+        assertEquals(403, get("$base/api${island.capPath}/states", capability = false).code)
+        assertEquals(403, get("$base${island.capPath.dropLast(1)}/api/states", capability = false).code)
+        assertEquals(403, get("$base${island.capPath}x/api/states", capability = false).code)
         assertTrue("Home Assistant heard nothing", haSeen.isEmpty())
-        assertEquals(200, get("$base/local/custom-card.js").code)
+        assertEquals(200, get("$base${island.capPath}/local/custom-card.js", capability = false).code)
+    }
+
+    /**
+     * #799 (Greptile): the old capability, a cookie set on 127.0.0.1, went to every server on 127.0.0.1 whatever its
+     * port, where another app could take it and replay it here. A cookie of that name, whatever its value, opens nothing.
+     */
+    @Test
+    fun theOldHostWideCookieAloneOpensNothing() {
+        val base = island.ensureStarted()
+        val (id, url) = island.registerSlot(RecordingSlot())
+        val page = get(url, capability = false)
+        assertEquals(200, page.code)
+        assertNull("the island page sets no cookie: one on 127.0.0.1 would go to every port there", page.setCookie)
+        for (value in listOf("guess", island.capPath.removePrefix("/"), "0".repeat(64))) {
+            val cookie = mapOf("Cookie" to "vitro_cap=$value")
+            assertEquals(value, 403, get("$base/api/states", headers = cookie, capability = false).code)
+            assertEquals(value, 403, get("$base/local/custom-card.js", headers = cookie, capability = false).code)
+            assertEquals(value, 403, get("$base/__vitro/island/$id", headers = cookie, capability = false).code)
+            try {
+                Bridge(id, headers = cookie + ("Origin" to "http://127.0.0.1:${island.port}"), inside = false).abort()
+                throw AssertionError("a bridge outside the capability should be refused, cookie and Origin or not")
+            } catch (e: IOException) {
+                assertTrue(e.message, e.message.orEmpty().contains("403"))
+            }
+        }
+        assertTrue("Home Assistant heard nothing", haSeen.isEmpty())
     }
 
     @Test
-    fun onlyTheIslandPageHandsOutTheCapability() {
-        val (_, url) = island.registerSlot(RecordingSlot())
-        val page = get(url, capability = false)
-        assertEquals(200, page.code)
-        assertTrue(page.setCookie!!, page.setCookie.startsWith(capability + ";"))
-        assertTrue(page.setCookie.contains("HttpOnly"))
-        assertTrue(page.setCookie.contains("SameSite=Strict"))
+    fun anIslandPageIsOnlyAtItsAddressUnderTheCapability() {
+        val (id, url) = island.registerSlot(RecordingSlot("<html><body>lounge card</body></html>"))
+        val base = island.ensureStarted()
+        assertEquals(200, get(url, capability = false).code)
+        assertEquals(403, get("$base/__vitro/island/$id", capability = false).code)
+        assertEquals(403, get("$base/${"0".repeat(32)}/__vitro/island/$id", capability = false).code)
+        // A page's own requests name its address as their Referer: the island page's alone doesn't open the page.
+        assertEquals(403, get("$base/__vitro/island/$id", headers = mapOf("Referer" to url), capability = false).code)
 
         // The old entry route for Home Assistant's pages is gone: those load from Home Assistant itself.
-        val base = island.ensureStarted()
         val entry = get("$base/__vitro/enter?c=guess&to=%2Fconfig", capability = false)
         assertEquals(403, entry.code)
         assertNull(entry.setCookie)
+        assertEquals(404, get("$base${island.capPath}/__vitro/enter?c=guess&to=%2Fconfig", capability = false).code)
         assertTrue("Home Assistant heard nothing", haSeen.isEmpty())
+    }
+
+    /**
+     * Every answer keeps the browser from naming this server's addresses, which hold the capability, to another origin
+     * (another app's port on 127.0.0.1 above all): the island page, what the proxy brings and the refusals alike.
+     */
+    @Test
+    fun everyAnswerKeepsTheCapabilityFromOtherOrigins() {
+        val (_, url) = island.registerSlot(RecordingSlot())
+        val base = island.ensureStarted()
+        for (reply in listOf(
+            get(url, capability = false),
+            get("$base/local/custom-card.js"),
+            get("$base/api/camera_proxy/cam"),
+            get("$base/__vitro/icon/mdi:lightbulb"),
+            get("$base/local/custom-card.js", capability = false),
+            get("$base/local/custom-card.js", headers = mapOf("Referer" to url), capability = false),
+        )) {
+            assertEquals("${reply.code}", "same-origin", reply.referrerPolicy)
+        }
+    }
+
+    /**
+     * What a card builds from an absolute path itself (an entity picture's `/api/…`, `import('/hacsfiles/…')`) has no
+     * capability in its address, but the island page's address as its Referer: a GET goes into the capability by a
+     * redirect, so the browser holds a module at an address under it (its own imports carry it on); a POST goes
+     * through as it is. A Referer from anywhere else opens nothing.
+     */
+    @Test
+    fun aCardsAbsolutePathFromTheIslandPageGoesIntoTheCapability() {
+        val (_, url) = island.registerSlot(RecordingSlot())
+        val base = island.ensureStarted()
+        val fromPage = mapOf("Referer" to url)
+
+        val picture = get("$base/api/camera_proxy/cam?token=abc", headers = fromPage, capability = false)
+        assertEquals(307, picture.code)
+        assertEquals("${island.capPath}/api/camera_proxy/cam?token=abc", picture.location)
+        assertEquals("no-store", picture.cacheControl)
+        assertTrue("a redirect asks Home Assistant nothing", haSeen.isEmpty())
+        assertEquals(200, get(base + picture.location, capability = false).code)
+        assertEquals("/api/camera_proxy/cam?token=abc", haSeen.single().target)
+        haSeen.clear()
+
+        // A module the island holds under the capability names its own address: its absolute imports go in too.
+        val module = mapOf("Referer" to "$base${island.capPath}/hacsfiles/a/card.js")
+        val imported = get("$base/local/custom-card.js", headers = module, capability = false)
+        assertEquals(307, imported.code)
+        assertEquals("${island.capPath}/local/custom-card.js", imported.location)
+
+        // `hass.callApi('POST', …)` with an absolute path of a card's own: through, with its body, no redirect.
+        val post = get("$base/api/services/light/turn_on", "POST", "{\"a\":1}", headers = fromPage, capability = false)
+        assertEquals(200, post.code)
+        assertEquals("{\"a\":1}", haSeen.single().body)
+        haSeen.clear()
+
+        // A path the proxy doesn't forward stays refused, Referer or not.
+        assertEquals(404, get("$base/config/dashboard", headers = fromPage, capability = false).code)
+        assertEquals(404, get("$base/auth/token", "POST", "{}", headers = fromPage, capability = false).code)
+
+        // A Referer that isn't an island address of this server: another port, another host, no capability, a guess,
+        // the capability further in the path.
+        for (referer in listOf(
+            "http://127.0.0.1:1${island.capPath}/__vitro/island/s1",
+            "http://localhost:${island.port}${island.capPath}/__vitro/island/s1",
+            "http://evil.example${island.capPath}/",
+            "$base/__vitro/island/s1",
+            "$base/${"0".repeat(32)}/__vitro/island/s1",
+            "$base/x${island.capPath}/",
+            "$base${island.capPath}",
+            "$base${island.capPath.dropLast(1)}/",
+            "",
+        )) {
+            assertEquals(referer, 403, get("$base/api/camera_proxy/cam", headers = mapOf("Referer" to referer), capability = false).code)
+            assertEquals(referer, 403, get("$base/api/services/light/turn_on", "POST", "{}", headers = mapOf("Referer" to referer), capability = false).code)
+        }
+        assertTrue("Home Assistant heard nothing", haSeen.isEmpty())
+    }
+
+    /** A capability is per server: another server's (an earlier app start's) opens nothing here. */
+    @Test
+    fun eachServerHasItsOwnCapability() {
+        val second = VitroIslandServer(session = { haBase to token })
+        try {
+            second.ensureStarted()
+            assertFalse(second.capPath == island.capPath)
+            val base = island.ensureStarted()
+            assertEquals(403, get("$base${second.capPath}/local/custom-card.js", capability = false).code)
+            assertEquals(200, getOn(second, "/local/custom-card.js").code)
+        } finally {
+            second.stop()
+        }
+    }
+
+    @Test
+    fun theCapabilityStaysOffWhatGoesToHomeAssistant() {
+        val base = island.ensureStarted()
+        val (_, url) = island.registerSlot(RecordingSlot())
+        assertTrue(island.isIslandPage(url))
+        assertFalse(island.isIslandPage(url.replace(island.capPath, "")))
+        assertFalse(island.isIslandPage("$base${island.capPath}/local/x.html"))
+        assertEquals("/local/help.html?x=1", island.haPath("$base${island.capPath}/local/help.html?x=1"))
+        assertEquals("/local/help.html", island.haPath("$base/local/help.html"))
+        assertEquals("/", island.haPath("$base${island.capPath}"))
+        assertNull(island.haPath("http://127.0.0.1:1/local/help.html"))
+        assertEquals("/lovelace/1", island.withoutCap("${island.capPath}/lovelace/1"))
+        assertEquals("/lovelace/1", island.withoutCap("/lovelace/1"))
     }
 
     // ---- Loopback hardening ----
@@ -458,7 +607,7 @@ class VitroIslandServerTest {
     private fun statusWithHost(path: String, host: String): Int {
         java.net.Socket(loopback, island.ensureStarted().substringAfterLast(':').toInt()).use { sock ->
             sock.soTimeout = 5_000
-            sock.getOutputStream().write("GET $path HTTP/1.1\r\nHost: $host\r\nCookie: $capability\r\nConnection: close\r\n\r\n".toByteArray())
+            sock.getOutputStream().write("GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n".toByteArray())
             val status = sock.getInputStream().bufferedReader().readLine().orEmpty()
             return status.split(' ').getOrNull(1)?.toIntOrNull() ?: -1
         }
@@ -466,10 +615,10 @@ class VitroIslandServerTest {
 
     @Test
     fun aRequestNamingAnotherHostIsRefused() {
-        // DNS rebinding: a page on evil.example that resolves to 127.0.0.1 sends its own name, even with the cookie.
+        // DNS rebinding: a page on evil.example that resolves to 127.0.0.1 sends its own name, even with the capability.
         val (_, url) = island.registerSlot(RecordingSlot())
         val path = url.substringAfter(island.ensureStarted())
-        assertEquals(421, statusWithHost("/local/custom-card.js", "evil.example:${island.port}"))
+        assertEquals(421, statusWithHost("${island.capPath}/local/custom-card.js", "evil.example:${island.port}"))
         assertEquals(421, statusWithHost(path, "localhost:${island.port}"))
         assertEquals(421, statusWithHost(path, "127.0.0.1:1"))
         assertEquals(200, statusWithHost(path, "127.0.0.1:${island.port}"))
@@ -501,10 +650,9 @@ class VitroIslandServerTest {
         val withResources = VitroIslandServer(session = { haBase to token }, resources = { listOf("/my_integration_card/card.js") })
         try {
             val b = withResources.ensureStarted()
-            val cookie = get(withResources.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
             // The same hop the plain proxy refuses (aRedirectToAPathTheProxyRefusesIsNotFollowed) is followed into a
             // resource folder, and only there.
-            val reply = get("$b/local/to-resource", headers = mapOf("Cookie" to cookie), capability = false)
+            val reply = get("$b${withResources.capPath}/local/to-resource", capability = false)
             assertEquals(200, reply.code)
             assertEquals(listOf("/local/to-resource", "/my_integration_card/chunk.js"), haSeen.map { it.target })
         } finally {
@@ -630,8 +778,7 @@ class VitroIslandServerTest {
         val withResources = VitroIslandServer(session = { haBase to token }, resources = { resources })
         try {
             val b = withResources.ensureStarted()
-            val cookie = get(withResources.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
-            fun status(path: String) = get("$b$path", headers = mapOf("Cookie" to cookie), capability = false).code
+            fun status(path: String) = get("$b${withResources.capPath}$path", capability = false).code
             assertEquals("forwarded (the fake HA has no such file)", 404, status("/my_integration_card/chunk-1.js"))
             assertEquals(listOf("/my_integration_card/chunk-1.js"), haSeen.map { it.target })
             assertEquals("fake-token-0001".let { "Bearer $it" }, haSeen.single().authorization)
@@ -655,8 +802,7 @@ class VitroIslandServerTest {
         val withResources = VitroIslandServer(session = { haBase to token }, resources = { listOf("/dreame_vacuum/frontend.js?v=1.0.0") })
         try {
             val b = withResources.ensureStarted()
-            val cookie = get(withResources.registerSlot(RecordingSlot()).second, capability = false).setCookie!!.substringBefore(';')
-            fun fetch(path: String) = get("$b$path", headers = mapOf("Cookie" to cookie), capability = false)
+            fun fetch(path: String) = get("$b${withResources.capPath}$path", capability = false)
             val module = fetch("/dreame_vacuum/frontend.js?v=1.0.0")
             assertEquals(200, module.code)
             assertEquals("text/javascript", module.contentType)
@@ -671,26 +817,28 @@ class VitroIslandServerTest {
     }
 
     @Test
-    fun aBridgeNeedsTheCapabilityOrThisServersOrigin() {
+    fun aBridgeNeedsTheCapability() {
         val slot = RecordingSlot()
-        val (id, _) = island.registerSlot(slot)
-        try {
-            Bridge(id, headers = emptyMap()).abort()
-            throw AssertionError("a bridge without the cookie or Origin should be refused")
-        } catch (e: IOException) {
-            assertTrue(e.message, e.message.orEmpty().contains("403"))
+        val (id, url) = island.registerSlot(slot)
+        // Outside the capability: refused, whatever Origin or Referer it writes (anyone can write those).
+        for (headers in listOf(
+            emptyMap(),
+            mapOf("Origin" to "http://evil.example"),
+            mapOf("Origin" to "http://127.0.0.1:${island.port}"),
+            mapOf("Referer" to url),
+        )) {
+            try {
+                Bridge(id, headers = headers, inside = false).abort()
+                throw AssertionError("a bridge outside the capability should be refused ($headers)")
+            } catch (e: IOException) {
+                assertTrue(e.message, e.message.orEmpty().contains("403"))
+            }
         }
+        val inside = Bridge(id, headers = mapOf("Origin" to "http://127.0.0.1:${island.port}"))
         try {
-            Bridge(id, headers = mapOf("Origin" to "http://evil.example")).abort()
-            throw AssertionError("another Origin should be refused")
-        } catch (e: IOException) {
-            assertTrue(e.message, e.message.orEmpty().contains("403"))
-        }
-        val byOrigin = Bridge(id, headers = mapOf("Origin" to "http://127.0.0.1:${island.port}"))
-        try {
-            assertEquals("init", byOrigin.line().getString("type"))
+            assertEquals("init", inside.line().getString("type"))
         } finally {
-            byOrigin.abort()
+            inside.abort()
         }
     }
 
