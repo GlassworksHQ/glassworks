@@ -63,7 +63,7 @@ export interface InstallOptions extends FirstBootOptions {
   bootAnimation?: Uint8Array;
   /** GlassworksSettings.apk: Wi-Fi on, no screen timeout, no lock screen, no auto-rotate on the first boot */
   settingsOverlay?: Uint8Array;
-  /** GlassworksFramework.apk: config_screenBrightnessDark 0, so the app's backlight-off sleep turns the backlight off */
+  /** GlassworksFramework.apk: config_screenBrightnessSettingMinimum 0, so the app's backlight-off sleep turns the backlight off */
   frameworkOverlay?: Uint8Array;
   /** zeros as RAW blocks, for an LK that refuses FILL */
   fill?: boolean;
