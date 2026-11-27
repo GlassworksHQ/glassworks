@@ -97,6 +97,22 @@ Open **[kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lulule
 > [!IMPORTANT]
 > **Installing the Glassworks image permanently replaces lululemon's stock software.** The Mirror's bootloader cannot read existing partitions back, so Kiln cannot back up or restore lululemon's original firmware. Kiln asks you to confirm before writing anything. If you ever want to switch away from Glassworks later, Kiln offers a one-click path to install the plain **Glass Panes** Android image instead. To keep lululemon's system, choose [Glassworks on the stock software](#keeping-lululemons-system): it changes one system file, keeps a restore point for it, and resets only the Mirror's app data.
 
+### One-time setup for your computer
+
+The Mirror shows up in Chrome's USB list as `Android` (USB ID `18d1:d00d` in fastboot mode). On a Mac there's nothing to set up. Windows and Linux need one step first, so the browser is allowed to open it:
+
+| Operating system | One-time preparation |
+|---|---|
+| **macOS** | None. If you have `adb` installed, run `adb kill-server` first so nothing else holds the USB connection. |
+| **Windows** | With the Mirror in fastboot mode, install the [Google USB Driver](https://developer.android.com/studio/run/win-usb), or open [Zadig](https://zadig.akeo.ie/), turn on *Options → List all devices*, pick the device with USB ID `18d1:d00d`, choose **WinUSB** and click **Replace driver**. |
+| **Linux** | Save the udev rule below to `/etc/udev/rules.d/51-mirror.rules`, run `sudo udevadm control --reload`, then unplug the Mirror and plug it back in. Stop `adb` if it's running (`adb kill-server`). |
+
+```
+SUBSYSTEM=="usb", ATTR{idVendor}=="18d1", ATTR{idProduct}=="d00d", MODE="0660", TAG+="uaccess"
+```
+
+Kiln's fastboot screen shows the line for your computer and links back here. If Kiln says this computer didn't let the browser open the Mirror, it's this step. If it says another program is using the Mirror, close `adb` and any other Kiln tab.
+
 ### How the browser install works
 
 1. **Download and verify:** Kiln downloads the [Glass Panes](https://github.com/git-nimrod/glass-panes) community system image and the latest Glassworks legacy APK, resuming automatically if your connection drops and verifying every SHA-256 checksum before proceeding.

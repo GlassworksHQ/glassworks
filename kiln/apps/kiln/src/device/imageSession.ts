@@ -10,6 +10,7 @@
 import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glassworks/adb';
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, q, readApiKey } from '@glassworks/app-adb';
 import { askAdb, nothingPicked } from './adbAsk';
+import { usbRefusal, usbRefusalText } from '../wizard/explain';
 import {
   ProxyError, RestoreRefused, WrongImage, adbKeyStep, cap, checkInPlace, checkRestorePoint, defaultImage, deviceFileState, imageFromLink, parseSparseWrites, pickInList, plan, readNamedBackupZip, recordRestoreFiles, sha256Hex, sourceFile, systemKeyStep, wifiStep,
   type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type InPlaceCode, type NamedPart, type ReadBackFile,
@@ -486,6 +487,26 @@ export class ImageSession {
   }
   private log = (step: string, detail?: string) => this.set({ log: [...this.state.log, step || `  ${detail}`].slice(-400) });
 
+  /**
+   * A connection that failed, in words: a device the browser listed but couldn't open, or another program holds, in
+   * calm words (the browser's own message goes in the log), else the error's message. `fastboot`: the screen shows the
+   * frame's one-time USB setup (DeviceFrame `drivers`), which a refused fastboot connection points to.
+   */
+  /** Lets go of a fastboot connection nothing goes on with, so the next Connect opens the device fresh; never throws. */
+  private letGo(fb: FastbootLike | undefined) {
+    if (!fb) return;
+    if (this.fb === fb) this.fb = undefined;
+    try { void fb.close?.()?.catch(() => {}); } catch { /* already gone */ }
+  }
+
+  private connectWords(e: unknown, fastboot = false): string {
+    const r = usbRefusal(e);
+    const raw = e instanceof Error ? e.message : String(e);
+    if (!r) return raw;
+    this.log('', `USB: ${raw}`);
+    return usbRefusalText(r, this.d.frame.the, fastboot && !!this.d.frame.drivers);
+  }
+
   /** The picked image's recipe. */
   get recipe(): ImageRecipe { return this.recipes.find((r) => r.id === this.state.picked) ?? this.recipes[0]!; }
   recipeOf(id: string): ImageRecipe | undefined { return this.recipes.find((r) => r.id === id); }
@@ -517,7 +538,8 @@ export class ImageSession {
   /** "Install Glassworks instead", from a community image's screens: its own screen, nothing downloaded for it yet. */
   toGlassworks() {
     this.selected++;
-    const g = this.recipes[0]!;
+    // the Glassworks install the choice starts on (the recommended one), not simply the first
+    const g = defaultImage(this.recipes.filter((r) => !r.community));
     void this.forget();
     this.set({ picked: g.id, files: waiting(g), screen: 'image', link: false, fastboot: undefined, understood: false, error: undefined });
   }
@@ -700,7 +722,7 @@ export class ImageSession {
         this.log('', `adb: ${this.d.frame.the} didn't let this browser's key in`);
         this.set({ connecting: false, key: { state: 'unreachable', why: 'no-adb' } });
       } else {
-        this.set({ connecting: false, key: undefined, connectError: (e as Error).message });
+        this.set({ connecting: false, key: undefined, connectError: this.connectWords(e) });
       }
       return;
     }
@@ -768,7 +790,7 @@ export class ImageSession {
       this.running = undefined;
       this.set({ connecting: false, key: { ...k, restarted: true }, restarted: true });
     } catch (e) {
-      this.set({ connecting: false, connectError: (e as Error).message });
+      this.set({ connecting: false, connectError: this.connectWords(e) });
     }
   }
 
@@ -801,7 +823,7 @@ export class ImageSession {
     } catch (e) {
       void p?.close?.().catch(() => {}); // a refusal (not the device) or a failed restart: let go of the connection
       if (!mine()) { if (latest()) this.set({ connecting: false }); return; }
-      this.set({ connecting: false, connectError: e instanceof AdbAuthTimeout ? this.d.frame.words['fastboot.notLetIn'] : (e as Error).message });
+      this.set({ connecting: false, connectError: e instanceof AdbAuthTimeout ? this.d.frame.words['fastboot.notLetIn'] : this.connectWords(e) });
     }
   }
 
@@ -1524,7 +1546,7 @@ export class ImageSession {
     } catch (e) {
       void p?.close?.().catch(() => {});
       if (e instanceof RestoreRefused) { this.log('Stopped', e.message); this.set({ connecting: false, undo: { ...this.state.undo!, refused: e.message } }); return; }
-      this.set({ connecting: false, connectError: e instanceof AdbAuthTimeout ? this.d.frame.words['fastboot.notLetIn'] : (e as Error).message });
+      this.set({ connecting: false, connectError: e instanceof AdbAuthTimeout ? this.d.frame.words['fastboot.notLetIn'] : this.connectWords(e) });
     }
   }
 
@@ -1541,7 +1563,7 @@ export class ImageSession {
     const req = this.d.requestFastboot();
     this.set({ connecting: true, connectError: undefined });
     let fb: FastbootLike;
-    try { fb = await req; } catch (e) { this.set({ connecting: false, connectError: (e as Error).message }); return; }
+    try { fb = await req; } catch (e) { this.set({ connecting: false, connectError: this.connectWords(e, true) }); return; }
     const partition = this.restorePartition();
     try {
       // every check Kiln can make before the first write (restore.ts): nothing of the restore can be read back after it
@@ -1613,6 +1635,9 @@ export class ImageSession {
       this.undoWrote = undefined;
       this.set({ undo: { ...this.state.undo!, at: 'done', x: 1 } });
     } catch (e) {
+      // a refusal or a failed write: nothing goes on with this connection (Try again and another restore point connect
+      // again); a write that finished rebooted, which let go already
+      this.letGo(fb);
       this.log('Stopped', (e as Error).message);
       if (e instanceof RestoreRefused) { this.set({ connecting: false, undo: { ...this.state.undo!, at: 'fastboot', refused: e.message, error: undefined } }); return; }
       this.set({ connecting: false, undo: { ...this.state.undo!, at: this.state.undo?.at === 'working' ? 'error' : 'fastboot', error: (e as Error).message } });
@@ -1674,8 +1699,12 @@ export class ImageSession {
     const sel = this.selected;
     this.connects++; // an older restart still out must not clear this one's state
     this.set({ connecting: true, connectError: undefined });
+    // the connection, kept only where a later step goes on with it: the warning after checks that passed, or an
+    // in-place install's second session; every other way out lets go of it, so Connect again opens the device fresh
+    let fb: FastbootLike | undefined;
+    let keep = false;
     try {
-      const fb = await req;
+      fb = await req;
       const fastboot = await this.d.frame.imageFlow.checkFastboot(fb);
       // another image was picked (or a link opened) while this ran: its checks belong to that install, not this one
       if (sel !== this.selected) return;
@@ -1705,16 +1734,21 @@ export class ImageSession {
             return;
           }
           this.serial = serial;
+          keep = true;
           this.set({ connecting: false, fastboot, screen: 'working', error: undefined });
           void this.runFrom(stopped ?? (this.cursor ?? this.indexOf(this.recipe, 'fastboot')) + 1);
           return;
         }
         this.serial = serial;
       }
+      keep = fastboot.ok;
       this.set({ connecting: false, fastboot, screen: fastboot.ok ? 'confirm' : 'fastboot' });
     } catch (e) {
       if (sel !== this.selected) return;
-      this.set({ connecting: false, connectError: (e as Error).message });
+      this.set({ connecting: false, connectError: this.connectWords(e, true) });
+    } finally {
+      // a call another pick overtook leaves the device alone: a newer Connect may have it open
+      if (!keep && sel === this.selected) this.letGo(fb);
     }
   }
 
@@ -2068,7 +2102,7 @@ export class ImageSession {
     if (published) {
       const req = this.imageConnect ? this.imageConnect() : Promise.reject(new Error(`Kiln has no key for this image here. Turn Wi-Fi on in ${this.d.frame.the}'s Settings once instead.`));
       this.set({ connecting: true, connectError: undefined });
-      try { p = await req; } catch (e) { this.set({ connecting: false, connectError: (e as Error).message }); return; }
+      try { p = await req; } catch (e) { this.set({ connecting: false, connectError: this.connectWords(e) }); return; }
     } else {
       // the device refuses this browser's key until its framework is up: ask again every 5 s, as the first start does
       const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));

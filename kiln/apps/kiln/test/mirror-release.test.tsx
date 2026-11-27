@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // /lululemon-mirror?apk=release: the APK from the newest Mirror release through Kiln's release route, checked against
-// the release's .sha256. No release is an error, never the file picker. The Mirror is stable (frame.json), so the page is
+// GitHub's own SHA-256 of it (never the .sha256 Refract serves beside it). No release is an error, never the file picker. The Mirror is stable (frame.json), so the page is
 // open: without ?apk=…, the APK comes from the release. The locked page of a frame that isn't open: device-locked.test.tsx.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
@@ -58,7 +58,6 @@ describe('the release\'s APK', () => {
     await s.loadRelease();
     expect(asked).toEqual([
       '/api/release/generic-android-legacy/latest',
-      `https://refract.glassworks.dev/glassworks/${DEMO_TAG}/${DEMO_APK}.sha256`,
       `https://refract.glassworks.dev/glassworks/${DEMO_TAG}/${DEMO_APK}`,
     ]);
     expect(s.state.release).toMatchObject({ state: 'ready', tag: DEMO_TAG, version: '0.2.0', name: DEMO_APK, size: APK.length });
@@ -66,7 +65,7 @@ describe('the release\'s APK', () => {
     expect(s.state.apk).toMatchObject({ name: DEMO_APK, package: GLASSWORKS.package });
     expect(s.releaseBlocked()).toBeUndefined();
     await s.loadRelease(); // once is enough
-    expect(asked).toHaveLength(3);
+    expect(asked).toHaveLength(2);
   });
 
   it('drops an APK whose SHA-256 isn\'t the release\'s, and says so', async () => {
@@ -111,29 +110,33 @@ describe('the release\'s APK', () => {
     expect(s.state.release).toEqual({ state: 'none' });
   });
 
-  it('a failing release list or a missing .sha256 is an error, not "no release"', async () => {
+  it('a failing release list, or one without GitHub\'s SHA-256, is an error, not "no release"', async () => {
     const down = session((async () => new Response('', { status: 502 })) as typeof fetch);
     await down.loadRelease();
     expect(down.state.release).toEqual({ state: 'error', why: 'Couldn\'t check for releases: the release server answered 502' });
-    const route = fakeReleaseRoute('out', APK);
-    const noSum = session((async (u: RequestInfo | URL) => (String(u).endsWith('.sha256') ? new Response('', { status: 502 }) : route(u))) as typeof fetch);
+    // the .sha256 beside the file comes from Refract, as the bytes do: Kiln doesn't fall back to it (1.0 audit)
+    const asked: string[] = [];
+    const route = fakeReleaseRoute('undigested', APK);
+    const noSum = session((async (u: RequestInfo | URL) => { asked.push(String(u)); return route(u); }) as typeof fetch);
     await noSum.loadRelease();
-    expect(noSum.state.release).toEqual({ state: 'error', why: 'Couldn\'t verify the release checksum for 0.2.0 (the download proxy answered 502)' });
+    expect(noSum.state.release).toEqual({ state: 'error', why: 'Couldn\'t verify the release checksum for 0.2.0 (GitHub\'s list didn\'t give one)' });
+    expect(noSum.apkBytes()).toBeUndefined();
+    expect(asked).toEqual(['/api/release/generic-android-legacy/latest']);
   });
 
   /** A request that never answers, until its signal aborts (the real fetch rejects then). */
   const silent = (init?: RequestInit) => new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
 
-  it('a .sha256 that never answers ends in Try again, not a row stuck on "Looking" (Mirror run, 2026-11-19)', async () => {
+  it('an APK download that never answers ends in Try again, not a row stuck on "Looking" (Mirror run, 2026-11-19)', async () => {
     const route = fakeReleaseRoute('out', APK);
     let hang = true;
     const s = new AppSession({ frame: mirrorFrame,
       connect: async () => { throw new Error('unused'); },
-      release: (async (u: RequestInfo | URL, init?: RequestInit) => (hang && String(u).endsWith('.sha256') ? silent(init) : route(u, init))) as typeof fetch,
+      release: (async (u: RequestInfo | URL, init?: RequestInit) => (hang && String(u).endsWith('.apk') ? silent(init) : route(u, init))) as typeof fetch,
       releaseFetch: { stallMs: 50, retries: 1, sleep: async () => {} },
     }, true);
     await s.loadRelease();
-    expect(s.state.release).toEqual({ state: 'error', why: 'Couldn\'t verify the release checksum for 0.2.0 (the download proxy sent nothing for 1 s)' });
+    expect(s.state.release).toEqual({ state: 'error', why: 'Couldn\'t download Glassworks 0.2.0 (the download proxy sent nothing for 1 s)' });
     expect(s.releaseBlocked()).toBe('Kiln couldn\'t get Glassworks from its release. Try again.');
     hang = false;
     await s.loadRelease(); // Try again

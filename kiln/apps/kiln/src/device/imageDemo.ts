@@ -13,7 +13,7 @@ import { withAppStreams } from '../wizard/demo';
 import { memoryInPlaceStore } from './inPlace';
 import type { BluetoothLike } from './channels';
 
-export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
+export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-fastboot-denied', 'flash-confirm',
   'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-adb-refused', 'flash-error-first-start', 'flash-setup', 'flash-setup-wifi', 'flash-setup-ha', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
@@ -95,7 +95,12 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
     images,
     refract: 'https://refract.glassworks.dev',
     search: name === 'image-link' ? `?image=${community.id}` : '',
-    requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? sim.wrongSystemBytes : sim.systemBytes),
+    // flash-fastboot-denied: the browser lists the device but this computer won't let it open it (Chrome's words on Linux
+    // without a udev rule, or on Windows with the wrong driver)
+    requestFastboot: async () => {
+      if (name === 'flash-fastboot-denied') throw new DOMException('Failed to execute \'open\' on \'USBDevice\': Access denied.', 'SecurityError');
+      return fastboot(name === 'flash-fastboot-wrong' ? sim.wrongSystemBytes : sim.systemBytes);
+    },
     // flash-adb-wait: the device refuses this browser's key while it starts, and Kiln asks again; flash-adb-refused: it
     // never lets it in, and Kiln stops asking (two tries here, five minutes on a device)
     ...(name === 'flash-adb-wait' || name === 'flash-adb-refused' ? { reopenAdb: async () => { throw new Error('No authenticator can handle the request'); } } : {}),
@@ -139,7 +144,7 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
   image.toFastboot();
   if (name === 'flash-fastboot') return done;
   await image.connectFastboot();
-  if (name === 'flash-fastboot-wrong' || name === 'flash-confirm') return done;
+  if (name === 'flash-fastboot-wrong' || name === 'flash-fastboot-denied' || name === 'flash-confirm') return done;
   image.understand(true);
   const flashing = image.flash();
   if (name === 'flash-working') return done;

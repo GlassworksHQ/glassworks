@@ -28,7 +28,8 @@ type P = { s: WizardState; session: Session; frame: KilnFrame };
 /** The standard flow's screens (every frame's steps after its install): any frame's session, the frame as the flow reads it. */
 type SP = { s: WizardState; session: StandardSession; frame: StandardFrame };
 
-function os(): 'win' | 'linux' | 'other' {
+/** This computer's system, for a frame's one-time USB setup: Windows, Linux, or another that needs none (macOS, Android). */
+export function hostOs(): 'win' | 'linux' | 'other' {
   const ua = navigator.userAgent;
   return /Android/.test(ua) ? 'other' : /Windows/.test(ua) ? 'win' : /Linux/.test(ua) ? 'linux' : 'other';
 }
@@ -38,7 +39,7 @@ function os(): 'win' | 'linux' | 'other' {
  * first screen. The picker opens inside the click.
  */
 export function Connect({ s, session, frame }: P) {
-  const driver = useMemo(() => { const o = os(); return o === 'other' ? undefined : frame.drivers[o]; }, [frame]);
+  const driver = useMemo(() => { const o = hostOs(); return o === 'other' ? undefined : frame.drivers[o]; }, [frame]);
   const steps = frame.recoverySteps;
   return (
     <section className="card" aria-labelledby="h">

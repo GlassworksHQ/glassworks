@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // /android?apk=release: the APK from the newest generic-android-v* release (never the legacy build's line) through
-// Kiln's release route, checked against the release's .sha256. No release is an error, never the file picker.
+// Kiln's release route, checked against GitHub's own SHA-256 of it (never the .sha256 Refract serves beside it). No release is an error, never the file picker.
 // Generic Android is stable (frame.json), so the page is open: without ?apk=…, the APK comes from the release. The
 // locked page of a frame that isn't open: device-locked.test.tsx.
 import { act, cleanup, render, screen } from '@testing-library/react';
@@ -59,7 +59,6 @@ describe('the release\'s APK', () => {
     await s.loadRelease();
     expect(asked).toEqual([
       '/api/release/generic-android/latest',
-      `https://refract.glassworks.dev/glassworks/${TAG}/${NAME}.sha256`,
       `https://refract.glassworks.dev/glassworks/${TAG}/${NAME}`,
     ]);
     expect(TAG).toBe('generic-android-v0.2.0');
@@ -86,6 +85,16 @@ describe('the release\'s APK', () => {
     await s.loadRelease();
     expect(s.state.release).toMatchObject({ state: 'ready', tag: TAG });
     expect(s.blocked()).toBeUndefined();
+  });
+
+  it('a release list without GitHub\'s SHA-256 is an error: the .sha256 beside the file isn\'t enough (1.0 audit)', async () => {
+    const asked: string[] = [];
+    const r = route('undigested');
+    const s = session((async (u: RequestInfo | URL) => { asked.push(String(u)); return r(u); }) as typeof fetch);
+    await s.loadRelease();
+    expect(s.state.release).toEqual({ state: 'error', why: 'Couldn\'t verify the release checksum for 0.2.0 (GitHub\'s list didn\'t give one)' });
+    expect(s.state.apk).toBeUndefined();
+    expect(asked).toEqual(['/api/release/generic-android/latest']);
   });
 
   it('no release is its own state', async () => {
@@ -138,8 +147,7 @@ describe('the release\'s APK for the device\'s ABI (issue 700)', () => {
     expect(s.state.release).toMatchObject({ state: 'ready', name: NAME_32 });
     // the first screen's download, then the 32-bit build from the same release once Kiln could read the device
     expect(asked.filter((u) => !u.endsWith('/latest'))).toEqual([
-      `https://refract.glassworks.dev/glassworks/${TAG}/${NAME}.sha256`, `https://refract.glassworks.dev/glassworks/${TAG}/${NAME}`,
-      `https://refract.glassworks.dev/glassworks/${TAG}/${NAME_32}.sha256`, `https://refract.glassworks.dev/glassworks/${TAG}/${NAME_32}`,
+      `https://refract.glassworks.dev/glassworks/${TAG}/${NAME}`, `https://refract.glassworks.dev/glassworks/${TAG}/${NAME_32}`,
     ]);
     // read before it wrote anything: the abilist came before the APK went on
     const first = tablet.cmds.findIndex((c) => c.startsWith('push '));
