@@ -23,6 +23,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
 ### Fixed
+- **Setup over Bluetooth stays findable on the Mirror.** On Android 6 and 7, a hiccup while the panel updated what
+  it broadcasts could leave it invisible to the phone or browser setting it up, with nothing trying again. It now
+  tries again a few times, and if Bluetooth still refuses, setup stops and says why. Legacy build only.
 - **The Mirror's camera shows a real picture.** Home Assistant used to show the Mirror's camera as mostly solid
   green with a streaky band, in stills and in the video stream alike. The panel asked the camera for a slower frame
   rate than it runs well at; it now asks every camera for its normal rate. If a camera still sends empty frames, the

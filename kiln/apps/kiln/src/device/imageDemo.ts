@@ -20,7 +20,8 @@ export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downl
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed',
   ...['place-choose', 'place-start', 'place-fastboot', 'place-confirm', 'place-stage', 'place-join-wifi', 'place-joined', 'place-wifi-unreachable', 'place-receive-lan', 'place-receive-ble', 'place-lna-denied', 'place-receive-file', 'place-restore-point', 'place-restore-offered', 'place-restore-copied',
     'place-fastboot-again', 'place-working', 'place-connect', 'place-first-start', 'place-installing', 'place-done', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken', 'place-error-write',
-    'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-undo-refused', 'place-run', 'place-resume', 'place-resume-staged'] as const] as const;
+    'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-undo-refused', 'place-run', 'place-resume', 'place-resume-staged',
+    'place-reinstall-no-bluetooth', 'place-reinstall-no-address'] as const] as const;
 export type ImageDemo = (typeof IMAGE_DEMOS)[number];
 
 const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
@@ -236,7 +237,11 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
     if (name === 'place-error-lost') return { ...fb, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { if (p === 'userdata' && userdataWrites++ === 1) throw new Error('the bootloader stopped answering'); return fb.flashBlob(p, b, on); } };
     return fb;
   };
-  const frameWithStandIn = { ...frame, imageFlow: { ...frame.imageFlow, inPlace: name === 'place-stage' ? { ...ip.code, stage: () => held<Blob>() } : ip.code } };
+  // place-reinstall-…: a reinstall (the device's own Wi-Fi gone) in a browser without Bluetooth, with the device's
+  // address from before the restart (192.0.2.44, RFC 5737) or none (on Ethernet, say)
+  const reinstall = name === 'place-reinstall-no-bluetooth' || name === 'place-reinstall-no-address';
+  const code = reinstall ? { ...ip.code, ownWifiGone: async () => true, lanAddress: async () => (name === 'place-reinstall-no-address' ? undefined : '192.0.2.44') } : ip.code;
+  const frameWithStandIn = { ...frame, imageFlow: { ...frame.imageFlow, inPlace: name === 'place-stage' ? { ...code, stage: () => held<Blob>() } : code } };
   const app = new AppSession({ frame, connect: async () => { throw new Error('not in this demo'); } }, true);
   // place-resume… and place-error-lost: the tab's mark, kept in memory, and the browser's bundles and restore points,
   // shared by the run and the page load that opens on its mark (a reload)
@@ -262,7 +267,7 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
     sleep: (ms) => tick(ms / 20),
     inPlaceStore: store,
     ...(progress ? { progress } : {}),
-    bluetooth: device.bluetooth as BluetoothLike,
+    bluetooth: reinstall ? { getAvailability: async () => false } as unknown as BluetoothLike : device.bluetooth as BluetoothLike,
     agentFetch: name === 'place-receive-lan' ? heldFetch(device.fetch) : device.fetch,
     localNetworkPermission: async () => (name === 'place-lna-denied' ? 'denied' : 'granted'),
     handOver: (p) => { standard = handOver?.(p); },
@@ -282,6 +287,7 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   if (name === 'place-start') return done;
   image.toFastboot();
   if (name === 'place-fastboot') return done;
+  if (reinstall) await image.restartToFastboot(); // over adb: where Kiln learns the device's own Wi-Fi is gone
   await image.connectFastboot();
   if (name === 'place-confirm') return done;
   image.understand(true);
@@ -290,6 +296,7 @@ async function placeDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, nam
   await staging;
   if (name === 'place-resume-staged') return reloaded();
   if (name === 'place-receive-file') { image.receiveByHand(); return done; }
+  if (reinstall) return done;
   // the device's own Wi-Fi: before and after this computer joins it, and a Continue that finds nothing there
   if (name === 'place-join-wifi') return done;
   if (name === 'place-joined') { await waitFor(() => !!image.state.receive?.joined); return done; }

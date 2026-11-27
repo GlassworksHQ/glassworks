@@ -582,6 +582,7 @@ export function InPlaceReceive({ f, s }: P) {
   return (
     <>
       <ReceiveScreen log={<Log s={s} />} stage={r.stage} channel={r.channel} bluetoothAvailable={r.bluetooth} progress={r.progress} agentPageUrl={r.pageUrl}
+        agentPageGuessed={r.pageGuessed} agentPort={f.frame.imageFlow.inPlace?.channels.lan?.port}
         fallbackReason={r.fallback} errorMessage={r.error} words={inPlaceWordsOf(f.frame)}
         onConnectBluetooth={() => void f.receive()} onRetryLan={() => void f.receive()} onPickFile={(x) => void f.receiveFile(x)}
         onCancel={r.stage === 'transferring' || r.stage === 'connecting' ? () => void f.cancelReceive() : undefined}

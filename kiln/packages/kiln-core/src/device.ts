@@ -199,6 +199,12 @@ export interface InPlaceCode {
    * and the receive step reaches the agent over that network or Bluetooth. Without it, Kiln counts on the hotspot.
    */
   ownWifiGone?(p: PanelShell): Promise<boolean>;
+  /**
+   * Read over adb with `ownWifiGone`, when that says yes: the device's address on the person's network now, before
+   * the restart. The agent joins the same network after the stage, so it is likely reached there again, a guess the
+   * receive screen offers for the download by hand when Bluetooth can't say where the agent is. Undefined: not on it.
+   */
+  lanAddress?(p: PanelShell): Promise<string | undefined>;
   /** How the `receive` step reaches the agent: its HTTP port and path on the LAN, its Bluetooth GATT service and characteristics. */
   channels: {
     lan?: {

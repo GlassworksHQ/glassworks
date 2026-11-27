@@ -200,6 +200,33 @@ describe('Glassworks on the stock software', () => {
     expect(r.image.state.receive?.channel).toBe('lan');
   });
 
+  it('without its own Wi-Fi, the download by hand starts at the Mirror\'s address from before the restart, until Bluetooth says (#944)', async () => {
+    const r = rig({ code: { ownWifiGone: async () => true, lanAddress: async () => '192.0.2.44' } });
+    r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
+    r.image.pick(RECIPE.id);
+    r.image.choose();
+    r.image.toFastboot();
+    await r.image.restartToFastboot();
+    await r.image.connectFastboot();
+    r.image.understand(true);
+    await r.image.flash();
+    expect(r.image.state.receive).toMatchObject({ network: null, pageUrl: 'http://192.0.2.44:18765/', pageGuessed: true });
+    expect(r.progress.mark).toMatchObject({ at: 'staged', noOwnWifi: true, lanHost: '192.0.2.44' });
+    // what the agent says over Bluetooth replaces the guess
+    await toRestorePoint(r, 'ble');
+    expect(r.image.state.receive?.pageGuessed).toBeUndefined();
+  });
+
+  it('a reload on receive keeps the guessed address, but never one that isn\'t an address', async () => {
+    const kept = tab();
+    kept.set({ at: 'staged', image: RECIPE.id, secret: '00'.repeat(32), serial: FAKE_SERIAL, noOwnWifi: true, lanHost: '192.0.2.44' });
+    expect(rig({ progress: kept }).image.state.receive).toMatchObject({ pageUrl: 'http://192.0.2.44:18765/', pageGuessed: true });
+    const changed = tab();
+    changed.set({ at: 'staged', image: RECIPE.id, secret: '00'.repeat(32), serial: FAKE_SERIAL, noOwnWifi: true, lanHost: 'evil.example/x#' });
+    expect(rig({ progress: changed }).image.state.receive).toMatchObject({ pageUrl: null });
+    expect(rig({ progress: changed }).image.state.receive?.pageGuessed).toBeUndefined();
+  });
+
   it('a Mirror that stops answering the Wi-Fi check still restarts, within the read limit, and keeps the network out of the stage', async () => {
     // the Mirror's own check (pm list packages) on a shell that never answers it
     const r = rig({ code: { ownWifiGone: sim.code.ownWifiGone }, readMs: 50, hangs: (c) => c.startsWith('pm list packages') });

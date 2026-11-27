@@ -433,9 +433,25 @@ export function mirrorInPlace(words: Record<string, unknown>): InPlaceCode {
     // Glassworks in place means the install patched services.jar, MirrorApService.systemReady() included (stock.ts
     // patchStockAp): stock's mirror-<serial> hotspot never opens again, so a reinstall's agent needs the person's network
     ownWifiGone: (p) => glassworksInPlace(p),
+    // the agent rejoins the same Wi-Fi after the stage (stageNetwork), usually at the address the Mirror has now
+    lanAddress: (p) => wifiAddress(p),
     channels: { lan: { ...STOCK_PROBE_LAN }, ble: { ...STOCK_PROBE_BLE } },
     words: inPlaceWords(words),
   };
+}
+
+const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/**
+ * The running Mirror's IPv4 address on Wi-Fi (wlan0): Android 6's DHCP client property, else `ip`'s. Ethernet's
+ * doesn't count, as the stage plants only Wi-Fi. Anything Kiln can't read is undefined.
+ */
+export async function wifiAddress(p: PanelShell): Promise<string | undefined> {
+  const prop = (await p.run('getprop dhcp.wlan0.ipaddress').catch(() => undefined))?.out.trim();
+  if (prop && IPV4.test(prop)) return prop;
+  const r = await p.run('ip -4 -o addr show wlan0').catch(() => undefined);
+  const ip = r && r.code === 0 ? /\binet (\d+\.\d+\.\d+\.\d+)\//.exec(r.out)?.[1] : undefined;
+  return ip && IPV4.test(ip) ? ip : undefined;
 }
 
 /**

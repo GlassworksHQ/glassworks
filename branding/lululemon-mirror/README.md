@@ -38,7 +38,7 @@ Glassworks can also install on the Mirror's stock firmware without replacing the
 install writes the boot animation over stock's `/system/media/bootanimation.zip` in the blocks the
 file already has, so ours can't be any larger. On stock 1.24.0 that file is 22,901 bytes:
 `desc.txt` reads `1080 1920 10`, and its one frame is the lululemon Studio logo, upright on a
-1080x1920 portrait canvas (read from the stock system image, 2026-11-24). Stock also sets
+1080x1920 portrait canvas (read from the stock system image: [stock-firmware-probe.md](../../frames/lululemon-mirror/research/stock-firmware-probe.md)). Stock also sets
 `persist.panel.orientation=270`, which its boot animation player reads, so the player turns the
 picture itself.
 

@@ -46,6 +46,10 @@ export interface ReceiveScreenProps {
   progress: ReceiveProgress | null;
   /** The setup agent's own page, where the bundle can be downloaded by hand. */
   agentPageUrl: string | null;
+  /** `agentPageUrl` is the device's address from before its restart: the agent may have another now. */
+  agentPageGuessed?: boolean;
+  /** The agent's HTTP port, for the download by hand when Kiln doesn't know its address. */
+  agentPort?: number;
   /** Why Kiln moved to another channel (local network to Bluetooth, say): said calmly, not as an error. */
   fallbackReason: string | null;
   errorMessage: string | null;
@@ -211,15 +215,25 @@ function FilePicker({ onPickFile, label = 'The downloaded file' }: { onPickFile(
   );
 }
 
-/** By hand: download the file from the helper's own page, then pick it here. */
-function ByHand({ url, words, onPickFile }: { url: string | null; words: InPlaceWords; onPickFile(file: File): void }) {
+/**
+ * By hand: download the file from the helper's own page, then pick it here. Without its address (no Bluetooth to ask,
+ * no network of the device's own), the person finds it in their router; a guessed one says it may have changed.
+ */
+function ByHand({ p, onPickFile }: { p: Pick<ReceiveScreenProps, 'agentPageUrl' | 'agentPageGuessed' | 'agentPort' | 'words'>; onPickFile(file: File): void }) {
+  const url = p.agentPageUrl, the = theOf(p.words);
+  const lookUp = `your router’s list of devices`;
+  const sub = url
+    ? `It opens in a new tab and saves a file to this computer.${p.agentPageGuessed ? ` If nothing opens once ${the} has restarted, its address may have changed: ${lookUp} shows the new one.` : ''}`
+    : p.agentPort
+      ? `Find ${the}’s address in ${lookUp}, then go to http://<address>:${p.agentPort} in a new tab.`
+      : `Find ${the}’s address in ${lookUp}, then open it in a new tab.`;
   return (
     <Instructions label="By hand" steps={[
       <>
         {url
-          ? <a className="link" href={url} target="_blank" rel="noopener noreferrer">{`Open ${theOf(words)}’s download page`}</a>
-          : `Open ${theOf(words)}’s download page`}
-        <span className="sub-step">{url ? 'It opens in a new tab and saves a file to this computer.' : `Its address is shown on ${theOf(words)}.`}</span>
+          ? <a className="link" href={url} target="_blank" rel="noopener noreferrer">{`Open ${the}’s download page`}</a>
+          : `Open ${the}’s download page`}
+        <span className="sub-step">{sub}</span>
       </>,
       <>Select the downloaded file<FilePicker onPickFile={onPickFile} /></>,
     ]} />
@@ -247,7 +261,7 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
   if (stage === 'error') {
     return (
       <Problem title="The copy didn’t finish" safe={`${capital(the)}’s system hasn’t changed.`}
-        fix={<><p>Try again when you’re ready. Or download it by hand:</p><ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} /></>}
+        fix={<><p>Try again when you’re ready. Or download it by hand:</p><ByHand p={p} onPickFile={p.onPickFile} /></>}
         details={(p.errorMessage || p.log) && <>{p.errorMessage && <pre className="raw">{p.errorMessage}</pre>}{p.log}</>}>
         <Foot>
           <Cancel onCancel={p.onCancel} />
@@ -277,7 +291,7 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
         <h2 id="h">The browser blocked the local network</h2>
         <p className="lede">{`Chrome asked whether Kiln may reach devices on your network, and it was blocked. Bluetooth works without it and doesn’t need Wi-Fi, or you can allow it and try again.`}</p>
         {!p.bluetoothAvailable && <NoBluetooth />}
-        <ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />
+        <ByHand p={p} onPickFile={p.onPickFile} />
         <Foot>
           <span className="links">
             {p.onCancel && <button type="button" className="btn ghost" onClick={p.onCancel}>Stop</button>}
@@ -296,7 +310,7 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
       <section className="card" aria-labelledby="h">
         <h2 id="h">Download it by hand</h2>
         <p className="lede">{`${capital(the)} offers what Kiln needs on its own page. Save it to this computer, then pick it here.`}</p>
-        <ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />
+        <ByHand p={p} onPickFile={p.onPickFile} />
         <Foot>
           <Cancel onCancel={p.onCancel} />
           {p.bluetoothAvailable && bt(false, 'Use Bluetooth instead')}
@@ -359,7 +373,7 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
         </div>
         {(pr?.resendPass ?? 0) > 0 && <p className="status work" role="status">Checking missing pieces…</p>}
         {p.channel === 'ble' && <Hands the={the}>{`Bluetooth is slow, and that’s normal. Keep this computer near ${the} and this tab open.`}</Hands>}
-        {manual && <ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />}
+        {manual && <ByHand p={p} onPickFile={p.onPickFile} />}
         <Foot>
           <Cancel onCancel={p.onCancel} />
           {p.agentPageUrl && !manual && <button type="button" className="btn ghost" onClick={() => setManual(true)}>Use manual download instead</button>}
@@ -382,8 +396,8 @@ export function ReceiveScreen(p: ReceiveScreenProps) {
       {words.coverNote && <Note tone="turn" title="Keep the back cover off">{words.coverNote}</Note>}
       {connecting && <><p className="status work" role="status">Connecting…</p><div className="bar wait"><i /></div></>}
       {!connecting && !waiting && p.bluetoothAvailable && <BrowserAsk short={the} the={the}>{`It shows nearby Bluetooth devices. Pick ${the}, then Pair.`}</BrowserAsk>}
-      {!p.bluetoothAvailable && <><NoBluetooth /><ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} /></>}
-      {p.bluetoothAvailable && manual && <ByHand url={p.agentPageUrl} words={words} onPickFile={p.onPickFile} />}
+      {!p.bluetoothAvailable && <><NoBluetooth /><ByHand p={p} onPickFile={p.onPickFile} /></>}
+      {p.bluetoothAvailable && manual && <ByHand p={p} onPickFile={p.onPickFile} />}
       <Foot>
         <span className="links">
           {p.onCancel && <button type="button" className="btn ghost" onClick={p.onCancel}>Stop</button>}
