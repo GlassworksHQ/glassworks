@@ -75,4 +75,5 @@ where to find it and which badge or banner to use.
 | `upstream` | Caused by or waiting on HA, zigpy, Zigbee2MQTT or another project |
 | `hardware report` | Results from untested hardware: the Hardware report and Device report forms |
 
-Code is MIT ([LICENSE](LICENSE)).
+Code is MIT ([LICENSE](LICENSE)), except Glassworks Core (`dev.glassworks`), which is MPL-2.0
+([details](pane-api/src/main/java/dev/glassworks/README.md#licence)). The libraries in `libs/` are MIT.

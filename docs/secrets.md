@@ -1,8 +1,8 @@
 # Secrets on the panel
 
-The panel keeps a few secrets so it can work with nobody at the screen. Since the secret store
-(2026-11-15), each one is sealed with AES-256-GCM before it is written. The key lives in the
-Android Keystore and never leaves it. Status: **unit-tested; not yet checked on a panel.**
+The panel keeps a few secrets so it can work with nobody at the screen. Each one is sealed with
+AES-256-GCM before it is written. The key lives in the Android Keystore and never leaves it. Every
+release since 0.9.0 seals them, and it has been checked on real panels.
 
 ## What is sealed
 
@@ -17,9 +17,9 @@ Android Keystore and never leaves it. Status: **unit-tested; not yet checked on 
 
 The ESPHome API key and the Home Assistant refresh token leave the app in one place: adb can read them on the app's
 hand-over socket `@glassworks_api_key` (`SecretHandover`: adb only, uid 0 or 2000; never the LAN), and give them back
-to a new app. A Mirror reflash carries the key that way ([esphome.md](esphome.md#identity-across-reinstalls), #574),
+to a new app. A Mirror reflash carries the key that way ([esphome.md](esphome.md#identity-across-reinstalls)),
 and the S1's signing-key switch carries both
-([install.md](../frames/aqara-s1-plus/docs/install.md#switching-a-development-build-to-a-release), #584). The
+([install.md](../frames/aqara-s1-plus/docs/install.md#switching-a-development-build-to-a-release)). The
 app takes a value back only where none is stored, or over one sealed with a key it no longer has; never over one it
 can read. Until the switch's hand-over is done (its marker `files/secrets-handover`, at most 15 minutes), a value
 sealed with a key the app no longer has stays locked, not removed, so nothing reads as "no key" in the meantime. It takes a refresh token only into a sign-in its data already holds. It logs a 4-hex fingerprint, never the

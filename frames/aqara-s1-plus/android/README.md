@@ -187,7 +187,7 @@ $A --ez voice_enabled false           # each pane on/off, applied live (default 
 $A --ez notifications_enabled false   # notifications on/off, applied live (default on; docs/notifications.md)
 $A --ez bluetooth_proxy_enabled true  # the Bluetooth proxy on/off (default off)
 $A --ez sendspin_enabled false        # Music Assistant player (Sendspin) off/on (default on)
-$A --es sendspin_server 192.168.1.100 # Sendspin server: auto (default: mDNS, else <HA host>:8927) or host[:port][/path] / ws://
+$A --es sendspin_server 192.0.2.10    # Sendspin server: auto (default: mDNS, else <HA host>:8927) or host[:port][/path] / ws://
 $A --ez sendspin_unpaired_access true # let a server play without pairing (guest mode; default off)
 $A --ez sendspin_flac false           # offer only PCM to Music Assistant (default: FLAC first, PCM fallback)
 $A --es base_backend auto      # wall base: auto (UART unless Aqara cloud blocking is off) | uart | localservice

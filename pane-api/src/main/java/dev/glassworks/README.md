@@ -46,9 +46,8 @@ Glassworks is the device-neutral core in
 A **pane** is a feature: the Music Assistant player, voice, timers, the radio. This package
 (`dev.glassworks.pane`) is the contract between the two.
 
-It lives inside the S1 app for now. It becomes its own Gradle module (`:glassworks-pane-api`) in
-[migration step 6](https://github.com/GlassworksHQ/glassworks/issues/21). The API will
-change until Glassworks v1.
+It's its own Gradle module, `:glassworks-pane-api` in `pane-api/`, and the core that builds on it is
+`:glassworks-core` in `core/`. The API will change until Glassworks v1.
 
 ## What's in it
 

@@ -3,7 +3,7 @@
 Glassworks' own code is MIT ([LICENSE](LICENSE)), except the Glassworks core, which is MPL-2.0
 ([its README](pane-api/src/main/java/dev/glassworks/README.md#licence)). This file lists the third-party code that the
 project distributes: in the S1 app's APK (with the signed radio bundle that release APKs carry), and in
-the files the web installer at https://s1.edm.sh serves. For each part it gives the version, the licence
+the files Kiln, the web installer at https://kiln.glassworks.dev, serves. For each part it gives the version, the licence
 (as an SPDX identifier), where it comes from and where its source is. The libraries published to Maven
 Central (`dev.glassworks:*`, [docs/releasing.md](docs/releasing.md#libraries)) contain only this
 project's MIT code; their dependencies come from Maven Central under their own licences.
@@ -29,7 +29,7 @@ missing from section 1.
 2. [Radio bundle (inside release APKs)](#2-radio-bundle-inside-release-apks)
 3. [Web installer downloads](#3-web-installer-downloads)
 4. [The web installer page itself](#4-the-web-installer-page-itself)
-   - [Kiln, the Next.js installer (not live yet)](#kiln-the-nextjs-installer-not-live-yet)
+   - [Kiln, the Next.js installer](#kiln-the-nextjs-installer)
    - [glassworks.dev, the project site](#glassworksdev-the-project-site)
 5. [Not distributed by this project](#5-not-distributed-by-this-project)
 6. [Corresponding source for GPL, LGPL and MPL parts](#6-corresponding-source-for-gpl-lgpl-and-mpl-parts)
@@ -308,7 +308,7 @@ The bundle carries no radio firmware.
 
 ## 3. Web installer downloads
 
-The files the installer at https://s1.edm.sh serves and writes to the panel. Pinned by SHA-256 in
+The files Kiln (https://kiln.glassworks.dev) serves and writes to the panel. Pinned by SHA-256 in
 [`kiln/assets.lock.json`](kiln/assets.lock.json) and in `kiln/scripts/stage-assets.mjs`.
 
 ### U-Boot SPL and U-Boot (`u-boot-sunxi-with-spl.bin`, `u-boot.bin`)
@@ -372,6 +372,30 @@ The Ed25519 checker for radio bundles. Release `installer-files-3`, sha256 `6aa0
 - `rkr.simplekeyboard.inputmethod`, F-Droid build 149, unmodified. Apache-2.0. Copyright the Simple
   Keyboard authors. https://github.com/rkkr/simple-keyboard
 
+### Glass Panes system images (lululemon Studio Mirror)
+
+- By git-nimrod, https://github.com/git-nimrod/glass-panes. The project's own code is MIT. The Android and
+  kernel sources in the images keep their own licences, and the vendor binaries in them (Qualcomm,
+  Quectel) belong to their owners; the image's release grants no licence for those.
+- Kiln fetches the release files from Glass Panes' own GitHub release through Refract
+  ([`kiln/workers/refract`](kiln/workers/refract)), our pass-through proxy at `refract.glassworks.dev`. Refract
+  streams the files with CORS headers, stores nothing, serves only the files in its allowlist (pinned by
+  size and SHA-256 in [`kiln/workers/refract/allowlist.json`](kiln/workers/refract/allowlist.json)) and
+  credits Glass Panes on every answer. Kiln checks each file's SHA-256 and changes its copy in the browser
+  before writing it to the Mirror. Why, and the terms we read:
+  [community-image-terms.md](frames/lululemon-mirror/research/community-image-terms.md).
+
+### The Mirror's backup kernel module (`selinux_permissive.ko`, `tools/mirror` only)
+
+- Licence: GPL-2.0-only. Glassworks' own build, published with its Corresponding Source in the separate
+  [GlassworksHQ/glassworks-device-bins](https://github.com/GlassworksHQ/glassworks-device-bins) repository
+  (`frames/lululemon-mirror/selinux-permissive`, release `lululemon-mirror-selinux-permissive-v1`).
+- Kiln's web installer doesn't use it. Only the optional `--backup` step of the Mirror's command-line tool
+  ([`tools/mirror`](tools/mirror)) does: the tool fetches it through Refract, checks its size and SHA-256
+  against [`tools/mirror/device-bins.json`](tools/mirror/device-bins.json) (held to Refract's allowlist by
+  `tools/check-device-bins.py`), and embeds it in a one-boot patch on the Mirror. It isn't in this
+  repository or in any APK. `--backup-module` takes a module you built yourself instead.
+
 ### This project's files
 
 All MIT, from this repository:
@@ -430,10 +454,10 @@ The page's JavaScript and WebAssembly ([`kiln/`](kiln)):
   `src/a133.ts` is kept: it holds chip facts (addresses and ids), not code. They were first taken
   from sunxi-tools' `soc_info.c`, and the spec lists their public sources.
 
-### Kiln, the Next.js installer (not live yet)
+### Kiln, the Next.js installer
 
-[`kiln/apps/kiln`](kiln/apps/kiln) serves the same installer code (above) through Next.js. It isn't on
-s1.edm.sh yet (#27). Checked against its lockfile, each package's own licence file and a production
+[`kiln/apps/kiln`](kiln/apps/kiln) serves the same installer code (above) through Next.js, at
+https://kiln.glassworks.dev (the old address, s1.edm.sh, redirects there). Checked against its lockfile, each package's own licence file and a production
 build on 2026-11-12. The copyright lines are copied from those files. Where a package has no licence
 file, its `package.json` licence and author are given. What it adds:
 
@@ -496,8 +520,8 @@ Not shipped, by the build's traces:
   `next`, `react`, `client-only` and `styled-jsx`. Each route's trace lists only `next` and
   `@swc/helpers`.
 
-Which server a deployment runs is checked on the deployed function's files before Kiln goes live (PR
-#104). If sharp, `@img/*`, `detect-libc`, `semver` or `@emnapi/runtime` are there, they need entries
+Check which server a deployment runs on the deployed function's files whenever Kiln's Next.js version or
+its deployment changes. If sharp, `@img/*`, `detect-libc`, `semver` or `@emnapi/runtime` are there, they need entries
 here, and `semver` (ISC) needs `LICENSES/ISC.txt`.
 
 ### glassworks.dev, the project site
@@ -599,6 +623,7 @@ renders above:
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
 | GeckoView 144 | MPL-2.0 (some parts LGPL-2.1-or-later) | the generic app's legacy APK (#198) | https://hg.mozilla.org/releases/mozilla-release/rev/5f480a9ab713ba79e5a14face39aacb038c36f30 |
 | desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198), the legacy engine's debug test APK | https://github.com/google/desugar_jdk_libs (release 2.1.5) |
+| `selinux_permissive.ko` (the Mirror's backup module) | GPL-2.0-only | fetched by `tools/mirror --backup` (section 3), not in this repository | https://github.com/GlassworksHQ/glassworks-device-bins (`frames/lululemon-mirror/selinux-permissive`) |
 | GNU C Library, static in `otbr-agent`/`ot-ctl` | LGPL-2.1-or-later | installer, radio bundle | Ubuntu 22.04 source package `cross-toolchain-base` 59ubuntu3, which built `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 from Ubuntu's `glibc` 2.35 source: https://launchpad.net/ubuntu/+source/cross-toolchain-base/59ubuntu3. To relink `otbr-agent`/`ot-ctl` with a modified C library, rebuild them from source with [`frames/aqara-s1-plus/tools/radio/build-otbr.sh`](frames/aqara-s1-plus/tools/radio/build-otbr.sh). |
 | GNU C Library, `sisdk/lib/` | LGPL-2.1-or-later | radio bundle | The Ubuntu source packages named in `sisdk/NOTICE.txt` (Ubuntu snapshot `20261101T000000Z`, see `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`). The libraries can be replaced: the bundle loads them from that directory. |
 | libstdc++, libgcc_s | GPL-3.0-or-later WITH GCC-exception-3.1 | installer, radio bundle | The Ubuntu GCC cross source packages: `gcc-11-cross` for the static copies in `otbr-agent`/`ot-ctl`, and those named in `sisdk/NOTICE.txt` for `sisdk/lib/`. All are on https://launchpad.net/ubuntu |

@@ -329,7 +329,7 @@
     "reversible": {
       "value": "partly",
       "label": "Reversible to the community image, not to lululemon's software",
-      "detail": "lululemon's software can't be restored: the way back is the plain Glass Panes image"
+      "detail": "The image install's way back is the plain Glass Panes image. The experimental install on the stock software keeps a restore point that puts lululemon's system back"
     },
     "modifiesAndroid": {
       "value": "yes",

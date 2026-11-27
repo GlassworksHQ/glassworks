@@ -1,6 +1,6 @@
 # How we got here
 
-This is the engineering story behind S1 Unleashed: how a sealed Aqara wall panel became an open
+This is the engineering story behind Glassworks (which began as S1 Unleashed): how a sealed Aqara wall panel became an open
 Home Assistant device that installs from a browser. The front page says *what* it does. These
 notes say *how* it works and *how we found out*, with the evidence.
 
@@ -135,7 +135,7 @@ flowchart LR
   C --> D[Patch boot<br/>in the browser]
   D -->|flash + read back| B
   B -->|reboot| E[adb<br/>Tango]
-  E --> F[S1 Kiosk, Wi-Fi,<br/>HA, radio]
+  E --> F[Glassworks, Wi-Fi,<br/>HA, radio]
 ```
 
 - **FEL over WebUSB.** A TypeScript port of the subset of `sunxi-fel` we use: `ver`, `spl` and
@@ -160,7 +160,7 @@ The UI went through five mockups before *option E*, the one that shipped.
 ## 6. Making it a good wall panel
 
 - **A browser that can run Home Assistant.** The system WebView is Chromium 74. GeckoView ships
-  its own current engine, so S1 Kiosk is built on it.
+  its own current engine, so Glassworks is built on it.
 - **The screen that turned itself off.** At night the panel kept going dark, and it looked like a
   kiosk bug. It was Aqara's system manager: a hidden Do Not Disturb rule from 22:00 to 07:00
   forces the screen off 15 s after every wake. The panel had also shipped in the
@@ -171,7 +171,7 @@ The UI went through five mockups before *option E*, the one that shipped.
   `ha_master`, kept the cloud link up. A watchdog in Aqara's system manager also forced a Wi-Fi
   reassociation whenever that link dropped. The kiosk stops the daemon at start, and the panel
   then holds no internet connections. → [debloat.md](../../frames/aqara-s1-plus/research/debloat.md)
-- **Voice.** openWakeWord runs on the panel with TFLite. The ESPHome native API makes the panel an
+- **Voice.** microWakeWord runs on the panel with LiteRT (TensorFlow Lite). The ESPHome native API makes the panel an
   Assist satellite, and the *Ambient Stage* overlay shows the conversation.
 
 <p align="center">
@@ -186,8 +186,7 @@ firmware over CPC. Aqara's stack is
 - **Zigbee coordinator.** Keep Aqara's `cpcd` and `zigbeed`, and bridge EZSP to TCP so that
   ZHA on Home Assistant drives the radio over the network.
 - **Thread.** OpenThread's `otbr-agent`, cross-built for the panel, talks to the same RCP on the
-  free spinel IID 2. A full border-router build is still in progress, so this mode is
-  **experimental**.
+  free spinel IID 2, and runs a full Thread border router for Home Assistant.
 - **Routers.** Zigbee router and Thread router modes shipped in 0.3.0 and joined a real home network on 2026-11-10 (experimental).
 - **Deliberately not offered:** Zigbee and Thread at the same time on one radio. They would share
   a channel, and Home Assistant deprecated the same multiprotocol design on its own hardware.

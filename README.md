@@ -98,7 +98,7 @@ Each frame's README lists which panes it supports. If you want to build a new pa
 
 ## Kiln installer
 
-Kiln installs Glassworks straight from Chrome or Edge over WebUSB, backing up original partitions first wherever the device allows it and giving every install a built-in way back. On the lululemon Studio Mirror, whose bootloader can't read lululemon's software back, the way back is the community Glass Panes image ([details](docs/updates.md#lululemon-studio-mirror)). Launch it at [kiln.glassworks.dev](https://kiln.glassworks.dev), or browse its code and architecture in [`kiln/`](kiln/apps/kiln/README.md). If you prefer working from a terminal, the Aqara S1 Plus also includes a [command-line installer](frames/aqara-s1-plus/README.md#the-command-line).
+Kiln installs Glassworks straight from Chrome or Edge over WebUSB, backing up original partitions first wherever the device allows it and giving every install a built-in way back. On the lululemon Studio Mirror, whose bootloader can't read lululemon's software back, the Glassworks image's way back is the community Glass Panes image, and the experimental install that keeps lululemon's system saves a restore point that puts it back ([details](docs/updates.md#lululemon-studio-mirror)). Launch it at [kiln.glassworks.dev](https://kiln.glassworks.dev), or browse its code and architecture in [`kiln/`](kiln/apps/kiln/README.md). If you prefer working from a terminal, the Aqara S1 Plus also includes a [command-line installer](frames/aqara-s1-plus/README.md#the-command-line).
 
 ## Clarity performance grades
 
