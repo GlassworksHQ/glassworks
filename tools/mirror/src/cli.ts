@@ -34,7 +34,7 @@ install (WRITES system and userdata):
                            GlassworksSettings.apk and ro.lockscreen.disable.default (Wi-Fi on, no screen
                            timeout, no lock screen, no auto-rotate)
   --no-framework-overlay   the image's own backlight floor: leave out frames/lululemon-mirror/overlay/
-                           GlassworksFramework.apk (config_screenBrightnessDark 0: the backlight goes fully off)
+                           GlassworksFramework.apk (config_screenBrightnessSettingMinimum 0: the backlight goes fully off)
   --screenshot <png>       default: ./mirror-after.png
 first boot only (writes no partition), for a Mirror already on the image whose install stopped after the flash:
   --first-boot             the install's last steps: wait for adb, the first boot (it checks the image's

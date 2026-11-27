@@ -100,7 +100,7 @@ export interface SystemPatch {
   settingsOverlay?: Uint8Array;
   /**
    * GlassworksFramework.apk (frames/lululemon-mirror/overlay/framework): the framework's
-   * config_screenBrightnessDark 0, so the app's backlight-off sleep turns the backlight off, not to 1/255.
+   * config_screenBrightnessSettingMinimum 0, so the app's backlight-off sleep turns the backlight off, not to 10/255.
    * Without it, the image's own floor stays.
    */
   frameworkOverlay?: Uint8Array;
@@ -127,14 +127,15 @@ export const SETTINGS_OVERLAY = {
 
 /**
  * The Mirror's framework overlay (frames/lululemon-mirror/overlay/build.sh, framework/): the image's
- * framework-res has config_screenBrightnessDark 1, and DisplayPowerController clamps every brightness to
- * min(config_screenBrightnessSettingMinimum, config_screenBrightnessDim, config_screenBrightnessDark), so a
- * window's BRIGHTNESS_OVERRIDE_OFF left the backlight at 1/255. The overlay makes it 0; the slider's floor (10) stays.
+ * framework-res has config_screenBrightnessSettingMinimum 10, and Android 6's PowerManagerService clamps every
+ * brightness to it, a window's BRIGHTNESS_OVERRIDE_OFF too, so the backlight-off sleep left the backlight at 10/255.
+ * The overlay makes it 0, as stock 1.24.0 has it. The system slider can then reach 0 too; the app lifts the awake
+ * window to its visible floor when the system value is below it (ScreenPolicy.awakeBrightness).
  * Trusted by where it is, as SETTINGS_OVERLAY.
  */
 export const FRAMEWORK_OVERLAY = {
   path: '/vendor/overlay/GlassworksFramework.apk',
-  sha256: 'd3b4200afd7ae6bf34b0bd452df91bafadec66301dd44cb05bfcac88b811c562',
+  sha256: 'ea1c0b32fff5841adccaedffa6d9165d56edd0b37ebd4c169402318bfcf6f04f',
 } as const;
 
 const sha256Hex = async (b: Uint8Array) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', b as Uint8Array<ArrayBuffer>))].map((x) => x.toString(16).padStart(2, '0')).join('');

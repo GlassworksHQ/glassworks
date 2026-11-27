@@ -126,7 +126,7 @@ describe('a first boot with nothing to tap: the settings overlay and the saved W
     expect(await zipEntry(OVERLAY, 'META-INF/TESTKEY.RSA')).toBeDefined(); // v1-signed with AOSP's public test key (Android 6 reads no v2)
   });
 
-  it('the committed framework overlay is the pinned build, for "android", with config_screenBrightnessDark 0', async () => {
+  it('the committed framework overlay is the pinned build, for "android", with config_screenBrightnessSettingMinimum 0', async () => {
     const sha = hex(new Sha256().update(FRAMEWORK).digest());
     expect(sha, 'rebuild with frames/lululemon-mirror/overlay/build.sh and update FRAMEWORK_OVERLAY.sha256').toBe(FRAMEWORK_OVERLAY.sha256);
     const manifest = (await zipEntry(FRAMEWORK, 'AndroidManifest.xml'))!;
@@ -137,7 +137,7 @@ describe('a first boot with nothing to tap: the settings overlay and the saved W
     // one resource: the name idmap matches against framework-res, and its value as a Res_value
     // (size 8, res0 0, TYPE_INT_DEC 0x10, data 0), as `aapt2 dump resources` shows it
     const arsc = Buffer.from((await zipEntry(FRAMEWORK, 'resources.arsc'))!);
-    expect(arsc.includes('config_screenBrightnessDark')).toBe(true);
+    expect(arsc.includes('config_screenBrightnessSettingMinimum')).toBe(true);
     expect(arsc.includes(Buffer.from('integer', 'utf16le'))).toBe(true); // the type pool is UTF-16
     const value = Buffer.from([8, 0, 0, 0x10, 0, 0, 0, 0]);
     expect(arsc.indexOf(value)).toBeGreaterThan(0);

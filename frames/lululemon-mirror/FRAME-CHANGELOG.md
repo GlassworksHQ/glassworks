@@ -20,5 +20,6 @@ is the release notes, and its first line is what Home Assistant's Frame update c
   the same for who it lets in over USB: your browser's key replaces the one built into their system image, and the
   shared key in their userdata.
 - **The screen goes fully dark when Glassworks turns the backlight off.** The image's lowest backlight level
-  used to leave a faint glow; Kiln now adds a small overlay that lets the backlight reach zero, while the
-  brightness slider keeps its usual lowest setting.
+  used to leave a faint glow; Kiln now adds a small overlay that lets the backlight reach zero, as the stock
+  software does. While the screen is awake, Glassworks keeps it visible even with the brightness slider all the
+  way down.
