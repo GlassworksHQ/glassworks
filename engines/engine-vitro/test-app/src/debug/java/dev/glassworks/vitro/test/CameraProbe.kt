@@ -117,6 +117,10 @@ internal object CameraProbe {
                 choice?.onSurfaceReady()
             }
 
+            override fun onSurfaceLost() {
+                choice?.onSurfaceLost()
+            }
+
             override fun onError(reason: String) {
                 Log.i(TAG, "error id=$id entity=$entity kind=$kind reason=${reason.replace(Regex("\\s+"), " ").take(200)}")
                 choice?.onError(reason)

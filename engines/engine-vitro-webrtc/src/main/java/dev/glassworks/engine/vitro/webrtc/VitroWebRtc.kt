@@ -104,6 +104,7 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
     private var closed = false
 
     init {
+        player.onSurface = { ready -> if (!closed) { if (ready) listener?.onSurfaceReady() else listener?.onSurfaceLost() } }
         player.listener = object : HaWebRtcPlayer.Listener {
             override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) {
                 if (!closed) listener?.onFirstFrame(sinceStartMs)
@@ -111,10 +112,6 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
 
             override fun onFrameRendered() {
                 if (!closed) listener?.onFrameRendered()
-            }
-
-            override fun onSurfaceReady() {
-                if (!closed) listener?.onSurfaceReady()
             }
 
             override fun onError(error: HaError) {

@@ -716,9 +716,18 @@ internal class LiveCameraFeed(
         }
 
         override fun onSurfaceReady() {
-            if (!current() || slot.surfaceAt >= 0) return
+            if (!current()) return
+            // A new surface (the first, or one after the last went): WebRTC's wait for video starts over from it.
             slot.surfaceAt = SystemClock.elapsedRealtime()
+            if (kind == CameraStreamKind.WEB_RTC) cancelAloneDeadline()
             scheduleRecompute()
+        }
+
+        override fun onSurfaceLost() {
+            if (!current()) return
+            // No surface, no frame on screen: the wait stops until the next one ([onSurfaceReady]).
+            slot.surfaceAt = -1L
+            if (kind == CameraStreamKind.WEB_RTC) cancelAloneDeadline()
         }
 
         override fun onError(reason: String) {

@@ -135,6 +135,33 @@ class HlsCameraStreamTest {
     }
 
     @Test
+    fun offScreenTheProductionDetachClearsThePlayersSurface() {
+        // The real ExoPlayer wrapped to see what it's told; the stream's own default detachOutput.
+        val cleared = ArrayList<String>()
+        val s = HlsCameraStream(
+            activity, main, "camera.porch", "http://192.0.2.10:8123",
+            callWs = { _, done -> done(true, JSONObject().put("url", "/api/hls/t0k3n/master_playlist.m3u8"), null) },
+            newPlayer = { ctx ->
+                val real = TestExoPlayerBuilder(ctx).build().also { players += it }
+                java.lang.reflect.Proxy.newProxyInstance(ExoPlayer::class.java.classLoader, arrayOf(ExoPlayer::class.java)) { _, m, args ->
+                    if (m.name == "clearVideoSurface" && (args == null || args.isEmpty())) cleared += "cleared"
+                    if (args == null) m.invoke(real) else m.invoke(real, *args)
+                } as ExoPlayer
+            },
+            newSource = { FakeMediaSource(FakeTimeline(), ExoPlayerTestRunner.VIDEO_FORMAT) },
+            attachOutput = { p, _ -> p.setVideoSurface(Surface(SurfaceTexture(1))) },
+        )
+        val events = Events()
+        s.listener = events
+        s.start()
+        RobolectricUtil.runMainLooperUntil { events.log.isNotEmpty() }
+        assertTrue(cleared.isEmpty())
+        s.setRendering(false)
+        assertEquals(listOf("cleared"), cleared)
+        s.close()
+    }
+
+    @Test
     fun offScreenBeforeItsFirstFrameItKeepsTheViewUntilThatFrame() {
         val s = stream()
         val events = Events()

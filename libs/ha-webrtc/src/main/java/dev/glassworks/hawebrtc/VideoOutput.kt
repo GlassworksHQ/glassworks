@@ -1,6 +1,5 @@
 package dev.glassworks.hawebrtc
 
-import android.os.Build
 import android.view.View
 import livekit.org.webrtc.EglBase
 import livekit.org.webrtc.VideoSink
@@ -26,9 +25,9 @@ public enum class VideoViewKind {
     /** [SURFACE_VIEW] from API 24, [TEXTURE_VIEW] before. */
     AUTO;
 
-    /** The kind this one is on this device. */
-    internal fun resolved(sdk: Int = Build.VERSION.SDK_INT): VideoViewKind =
-        if (this == AUTO) (if (sdk >= Build.VERSION_CODES.N) SURFACE_VIEW else TEXTURE_VIEW) else this
+    /** The kind this one is on this device ([api]: the running Android's, [Compat]). */
+    internal fun resolved(api: CompatApi = Compat): VideoViewKind =
+        if (this == AUTO) (if (api.surfaceFollowsScroll) SURFACE_VIEW else TEXTURE_VIEW) else this
 }
 
 /**
@@ -54,8 +53,8 @@ internal interface VideoOutput : VideoSink {
     /** The view's surface exists: a frame can be drawn on it. Main thread. */
     val surfaceReady: Boolean
 
-    /** Called on the main thread each time the view gets a surface (again, after one went). */
-    var onSurfaceReady: (() -> Unit)?
+    /** Called on the main thread each time the view gets a surface (true) or loses it (false). */
+    var onSurface: ((ready: Boolean) -> Unit)?
 
     /** Starts the render thread on [egl]'s context (the decoders' textures). Any thread. */
     fun init(egl: EglBase.Context)

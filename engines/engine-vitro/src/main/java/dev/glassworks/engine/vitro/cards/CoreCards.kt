@@ -3458,15 +3458,16 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
     private var latestPicture: String? = null
     /** The live players' views, over [img] and under the caption bar. */
     private val streamHost = FrameLayout(ctx.context).apply {
-        // A player's SurfaceView that arrives under a filter's layer would draw nothing: the layer goes ([applyStateFilter]).
+        // The players come and go (WebRTC, HLS, MJPEG): the filter's layer follows what the host holds now
+        // ([applyFilterLayer]): none over a SurfaceView, which would draw nothing under it, and back for MJPEG.
         setOnHierarchyChangeListener(object : android.view.ViewGroup.OnHierarchyChangeListener {
-            override fun onChildViewAdded(parent: android.view.View?, child: android.view.View?) {
-                if (layerType != LAYER_TYPE_NONE && child != null && holdsSurface(child)) setLayerType(LAYER_TYPE_NONE, null)
-            }
-
-            override fun onChildViewRemoved(parent: android.view.View?, child: android.view.View?) = Unit
+            override fun onChildViewAdded(parent: android.view.View?, child: android.view.View?) = applyFilterLayer()
+            override fun onChildViewRemoved(parent: android.view.View?, child: android.view.View?) = applyFilterLayer()
         })
     }
+
+    /** The `state_filter` (or default grey) for the entity's state now, null for none ([applyStateFilter]). */
+    private var liveFilter: android.graphics.ColorMatrixColorFilter? = null
     private val feed: LiveCameraFeed? = liveEntityId?.let { id ->
         LiveCameraFeed(
             ctx, id, { latestPicture },
@@ -3502,14 +3503,23 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         val css = configured ?: if (s == null || state in STATES_OFF) "grayscale(100%)" else null
         val filter = CssFilter.matrix(css)?.let { android.graphics.ColorMatrixColorFilter(it) }
         img.colorFilter = filter
-        // hui-image filters its whole container, the live video included. A video on a SurfaceView can't be: the
-        // system composites it under the window, and a layer over it would hide it. Its still is filtered.
-        if (isLive) {
-            if (filter != null && !holdsSurface(streamHost)) {
-                streamHost.setLayerType(LAYER_TYPE_HARDWARE, android.graphics.Paint().apply { colorFilter = filter })
-            } else {
-                streamHost.setLayerType(LAYER_TYPE_NONE, null)
-            }
+        liveFilter = filter
+        applyFilterLayer()
+    }
+
+    /**
+     * hui-image filters its whole container, the live video included: the stream host draws through a layer with the
+     * filter. A video on a SurfaceView can't be filtered (the system composites it under the window, and a layer over
+     * it would hide it): its still is, and the layer comes back when a player that draws in the window (MJPEG, a
+     * TextureView) takes its place.
+     */
+    private fun applyFilterLayer() {
+        if (!isLive) return
+        val filter = liveFilter
+        if (filter != null && !holdsSurface(streamHost)) {
+            streamHost.setLayerType(LAYER_TYPE_HARDWARE, android.graphics.Paint().apply { colorFilter = filter })
+        } else if (streamHost.layerType != LAYER_TYPE_NONE) {
+            streamHost.setLayerType(LAYER_TYPE_NONE, null)
         }
     }
 

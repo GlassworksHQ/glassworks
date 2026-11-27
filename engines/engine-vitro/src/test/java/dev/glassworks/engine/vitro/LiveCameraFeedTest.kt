@@ -100,6 +100,11 @@ class LiveCameraFeedTest {
             hasSurface = true
             listener?.onSurfaceReady()
         }
+
+        fun loseSurface() {
+            hasSurface = false
+            listener?.onSurfaceLost()
+        }
     }
 
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
@@ -1208,6 +1213,26 @@ class LiveCameraFeedTest {
         idle()
         ms(LiveCameraFeed.ALONE_TIMEOUT_MS - 100)
         assertEquals(listOf(WEB_RTC), f.runningKinds)
+        ms(100)
+        assertEquals(listOf(HLS), f.runningKinds)
+    }
+
+    @Test
+    fun webRtcAlonesWaitStartsOverOnTheNewestSurface() {
+        CameraVideoBudget.max = 1
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS - 3_000)
+        // The view is hidden and shown again before a first frame: its surface goes and a new one comes.
+        live(WEB_RTC).loseSurface()
+        idle()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
+        assertEquals("no surface, no wait", listOf(WEB_RTC), f.runningKinds)
+        live(WEB_RTC).surface()
+        idle()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS - 100)
+        assertEquals("the wait counts from the new surface", listOf(WEB_RTC), f.runningKinds)
         ms(100)
         assertEquals(listOf(HLS), f.runningKinds)
     }

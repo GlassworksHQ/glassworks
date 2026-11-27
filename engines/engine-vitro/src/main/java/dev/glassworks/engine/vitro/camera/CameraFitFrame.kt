@@ -14,9 +14,10 @@ import android.view.ViewGroup
  * the picture's size is known ([setVideoSize]) the view fills the frame. The frame clips what `cover` puts outside.
  *
  * A player on a SurfaceView ([surfaceShown]) is composited under the window, so it can't fade with its card: while
- * the frame or anything above it is partly transparent (a card's visibility fading it in or out, a view switching),
- * the frame doesn't draw it, which leaves no hole in the window, and the card's still shows, fading with the card as
- * HA fades the whole card, video included. Fully opaque again, the video is back.
+ * anything above the frame is partly transparent, or the frame itself is (a card's visibility fading it in or out,
+ * a view switching), the SurfaceView is made invisible, so its surface goes and the card's still shows, fading with
+ * the card as HA fades the whole card, video included. Fully opaque again, the surface comes back and its player
+ * draws into it. The frame's own alpha 0 is the stream choice hiding a player that loads: that one keeps its surface.
  */
 class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
     var fit: String = fit
@@ -37,10 +38,8 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
     var surfaceShown = true
         private set
 
-    private val checkFade = android.view.ViewTreeObserver.OnPreDrawListener {
-        updateSurfaceShown()
-        true
-    }
+    /** Each frame drawn: whether the surface shows. A change cancels this draw, so no frame shows the video mid-fade. */
+    private val checkFade = android.view.ViewTreeObserver.OnPreDrawListener { !updateSurfaceShown() }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -52,30 +51,31 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
         super.onDetachedFromWindow()
     }
 
-    /** Whether the frame draws its player now: always, but a SurfaceView's only while all above it is opaque. */
+    /** Shows or hides a SurfaceView player as [fading] says. True when that changed something. */
     internal fun updateSurfaceShown(): Boolean {
-        val want = !holdsSurface() || opaqueUpToRoot()
-        if (want != surfaceShown) {
-            surfaceShown = want
-            invalidate()
+        val want = (0 until childCount).none { getChildAt(it) is android.view.SurfaceView } || !fading()
+        var changed = want != surfaceShown
+        surfaceShown = want
+        val visibility = if (want) View.VISIBLE else View.INVISIBLE
+        for (i in 0 until childCount) {
+            val c = getChildAt(i)
+            if (c is android.view.SurfaceView && c.visibility != visibility) {
+                c.visibility = visibility
+                changed = true
+            }
         }
-        return want
+        return changed
     }
 
-    private fun holdsSurface(): Boolean = (0 until childCount).any { getChildAt(it) is android.view.SurfaceView }
-
-    /** This frame and every view above it at alpha 1 (alpha 0 draws nothing anyway). */
-    private fun opaqueUpToRoot(): Boolean {
-        var v: View? = this
+    /** The frame partly transparent, or anything above it below full opacity. */
+    private fun fading(): Boolean {
+        if (alpha > 0f && alpha < 1f) return true
+        var v = parent as? View
         while (v != null) {
-            if (v.alpha < 1f) return false
+            if (v.alpha < 1f) return true
             v = v.parent as? View
         }
-        return true
-    }
-
-    override fun dispatchDraw(canvas: android.graphics.Canvas) {
-        if (surfaceShown) super.dispatchDraw(canvas)
+        return false
     }
 
     fun setVideoSize(width: Int, height: Int) {

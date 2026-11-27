@@ -49,9 +49,6 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         /** Each frame drawn after the first. */
         public fun onFrameRendered() {}
 
-        /** The view has a surface to draw on (again, after it lost one): [surfaceReady] is true. */
-        public fun onSurfaceReady() {}
-
         /** The connection failed and the player is reconnecting (connection [attempt] of a row). */
         public fun onReconnecting(attempt: Int, error: HaError) {}
 
@@ -78,8 +75,15 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
     /** Where the report goes. Main thread. */
     public var listener: Listener? = null
 
+    /**
+     * Called on the main thread when the view gets a surface to draw on (true) or loses it (false): a frame can be on
+     * screen only while it has one. A property rather than a [Listener] member, so listeners compiled against an
+     * earlier release keep working. Main thread.
+     */
+    public var onSurface: ((ready: Boolean) -> Unit)? = null
+
     init {
-        video.onSurfaceReady = { if (!closed) listener?.onSurfaceReady() }
+        video.onSurface = { ready -> if (!closed) onSurface?.invoke(ready) }
     }
 
     /**
@@ -95,7 +99,7 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
 
     /**
      * The view has a surface to draw on: a frame can be on screen from now on. The view gets one once it is laid
-     * out in a window; [Listener.onSurfaceReady] says when. Main thread.
+     * out in a window; [onSurface] says when. Main thread.
      */
     public val surfaceReady: Boolean get() = video.surfaceReady
 

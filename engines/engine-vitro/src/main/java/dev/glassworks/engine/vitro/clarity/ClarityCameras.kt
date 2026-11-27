@@ -325,6 +325,10 @@ internal class MeasuredCameraStream(
                 listener?.onSurfaceReady()
             }
 
+            override fun onSurfaceLost() {
+                listener?.onSurfaceLost()
+            }
+
             override fun onError(reason: String) {
                 ClarityCameras.current?.error(this@MeasuredCameraStream, reason)
                 listener?.onError(reason)

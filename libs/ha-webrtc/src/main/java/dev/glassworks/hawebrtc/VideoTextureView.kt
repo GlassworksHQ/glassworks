@@ -132,16 +132,17 @@ internal class VideoTextureView(
 
     override val surfaceReady: Boolean get() = isAvailable
 
-    override var onSurfaceReady: (() -> Unit)? = null
+    override var onSurface: ((ready: Boolean) -> Unit)? = null
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
         attach(surface)
-        onSurfaceReady?.invoke()
+        onSurface?.invoke(true)
     }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = updateLayout()
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+        onSurface?.invoke(false)
         attached = false
         // A new surface starts empty: transparent again until its first frame.
         drawnOnce = false

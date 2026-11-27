@@ -6,7 +6,6 @@ package dev.glassworks.engine.vitro.camera
 
 import android.content.Context
 import android.os.Handler
-import android.os.Build
 import android.os.SystemClock
 import android.view.SurfaceView
 import android.view.TextureView
@@ -23,6 +22,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
+import dev.glassworks.platform.Platform
 import org.json.JSONObject
 
 /**
@@ -63,9 +63,9 @@ class HlsCameraStream internal constructor(
     /** The player lets go of the [view] (off screen). */
     private val detachOutput: (ExoPlayer, View) -> Unit = { p, _ -> p.clearVideoSurface() },
     /** A [SurfaceView] (true) or a [TextureView]. */
-    surfaceView: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N,
+    surfaceView: Boolean = Platform.surfaceFollowsScroll,
 ) : CameraStream, CameraStreamVideoSize {
-    constructor(host: CameraStreamHost, entityId: String, surfaceView: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) : this(
+    constructor(host: CameraStreamHost, entityId: String, surfaceView: Boolean = Platform.surfaceFollowsScroll) : this(
         host.context, host.main, entityId, host.haBase, host.callWs, ::defaultPlayer, ::defaultSource,
         attachOutput = { p, v -> if (v is SurfaceView) p.setVideoSurfaceView(v) else p.setVideoTextureView(v as TextureView) },
         surfaceView = surfaceView,

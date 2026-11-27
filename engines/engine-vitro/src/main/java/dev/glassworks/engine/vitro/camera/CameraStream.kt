@@ -69,6 +69,9 @@ interface CameraStream {
         /** The view got its surface ([surfaceReady] is true now). */
         fun onSurfaceReady() {}
 
+        /** The view lost its surface (hidden, or detached): nothing it plays is on screen until it gets one again. */
+        fun onSurfaceLost() {}
+
         fun onError(reason: String)
 
         fun onEnded()

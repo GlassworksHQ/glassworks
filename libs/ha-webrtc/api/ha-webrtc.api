@@ -38,6 +38,7 @@ public final class dev/glassworks/hawebrtc/HaWebRtcPlayer {
 	public final fun connectionRestored ()V
 	public final fun getEntityId ()Ljava/lang/String;
 	public final fun getListener ()Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;
+	public final fun getOnSurface ()Lkotlin/jvm/functions/Function1;
 	public final fun getScaling ()Ldev/glassworks/hawebrtc/VideoScaling;
 	public final fun getSurfaceReady ()Z
 	public final fun getVideoHeight ()I
@@ -46,6 +47,7 @@ public final class dev/glassworks/hawebrtc/HaWebRtcPlayer {
 	public static final fun prewarm (Landroid/content/Context;)V
 	public final fun setActive (Z)V
 	public final fun setListener (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;)V
+	public final fun setOnSurface (Lkotlin/jvm/functions/Function1;)V
 	public final fun setRendering (Z)V
 	public final fun setScaling (Ldev/glassworks/hawebrtc/VideoScaling;)V
 	public final fun start ()V
@@ -60,13 +62,11 @@ public abstract interface class dev/glassworks/hawebrtc/HaWebRtcPlayer$Listener 
 	public abstract fun onFirstFrame (JII)V
 	public abstract fun onFrameRendered ()V
 	public abstract fun onReconnecting (ILdev/glassworks/hawebrtc/HaError;)V
-	public abstract fun onSurfaceReady ()V
 }
 
 public final class dev/glassworks/hawebrtc/HaWebRtcPlayer$Listener$DefaultImpls {
 	public static fun onFrameRendered (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;)V
 	public static fun onReconnecting (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;ILdev/glassworks/hawebrtc/HaError;)V
-	public static fun onSurfaceReady (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;)V
 }
 
 public final class dev/glassworks/hawebrtc/HaWebRtcPlayer$Options {
