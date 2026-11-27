@@ -284,6 +284,7 @@ class VitroCardContext(
         touch = touch,
         needsFrontend = needsFrontend,
         islandFailed = islandFailed,
+        islandCardSize = islandCardSize,
         matchedNeedFrontend = matchedNeedFrontend,
         haConnected = haConnected,
         haConnectionEpoch = haConnectionEpoch,

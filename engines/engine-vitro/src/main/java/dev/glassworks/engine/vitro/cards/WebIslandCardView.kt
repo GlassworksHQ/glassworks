@@ -611,7 +611,7 @@ class WebIslandCardView(
         slotId = null
         // What the page asked for once, and won't ask again: the next card keeps it up.
         return Island(
-            keyOf(config, fillViewport), page, id, height, server, walksAllStates, registriesAsked.get(), pageActive,
+            keyOf(config, fillViewport, ctx.viewType), page, id, height, server, walksAllStates, registriesAsked.get(), pageActive,
             islandUrl, documentRan,
         )
     }
@@ -994,11 +994,13 @@ class WebIslandCardView(
         }
 
         /**
-         * What makes two builds of a card the same island: its whole config and whether it fills the view. A
-         * rebuild that only changed the theme, or other cards, hands the island over ([handOff]) instead of opening
-         * a new page.
+         * What makes two builds of a card the same island: the config its page was built with ([islandConfig]: the card's
+         * own, plus what it reads from HA's page in a view of [viewType]) and whether it fills the view. A rebuild that
+         * only changed the theme, or other cards, hands the island over ([handOff]) instead of opening a new page. A
+         * Bubble card's page built for a sections view is never handed to a masonry one (Greptile on #799).
          */
-        fun keyOf(config: CardConfig, fillViewport: Boolean): String = (if (fillViewport) "fill:" else "card:") + config.raw
+        fun keyOf(config: CardConfig, fillViewport: Boolean, viewType: String?): String =
+            (if (fillViewport) "fill:" else "card:") + islandConfig(config.raw, viewType)
 
         /** A handed-off island's slot until the next build takes it: it serves nothing and drops what the page sends. */
         internal val PARKED = object : VitroIslandServer.SlotHandler {

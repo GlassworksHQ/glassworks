@@ -268,7 +268,7 @@ class IframeCardView(
          * same relative `url` on another dashboard is another page). VitroView adopts by it.
          */
         fun keyFor(config: CardConfig, fillViewport: Boolean, url: String): String =
-            WebIslandCardView.keyOf(config, fillViewport) + "\n" + url
+            WebIslandCardView.keyOf(config, fillViewport, viewType = null) + "\n" + url  // an iframe reads nothing of the view
 
         /** [keyFor] for a card about to be built in [ctx]. */
         fun keyFor(ctx: VitroCardContext, config: CardConfig, fillViewport: Boolean): String =

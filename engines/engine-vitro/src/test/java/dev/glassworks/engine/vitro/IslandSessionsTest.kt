@@ -754,6 +754,26 @@ class IslandSessionsTest {
         assertTrue(slots(islands).isEmpty())
     }
 
+    @Test fun aBubblePageBuiltForOneViewIsNeverHandedToAnother() {
+        // Greptile on #799: an island's page carries the layout Bubble picks for its view (islandConfig), but pages were
+        // pooled by the card's own config: after a sections view and then a masonry one, the sections page (large) was
+        // handed to the masonry card. The key is now the config the page was built with.
+        val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
+        val pages = ArrayList<RecordingPage>()
+        val bubble = LovelaceParser.parseCard(JSONObject("""{"type": "custom:bubble-card", "card_type": "button", "button_type": "slider", "entity": "light.a"}"""))
+        val ctx = context(EntityStore(), islands, dark = true, pages).also { it.viewType = "sections" }
+        val handed = WebIslandCardView(ctx, bubble).handOff()!!
+        assertEquals(WebIslandCardView.keyOf(bubble, false, "sections"), handed.key)
+        assertTrue("built large", handed.key.contains("\"card_layout\":\"large\""))
+        assertTrue("a masonry view's card looks it up under another key", WebIslandCardView.keyOf(bubble, false, "masonry") != handed.key)
+        assertTrue(WebIslandCardView.keyOf(bubble, false, null) != handed.key)
+        // A sections view again, or a panel (Bubble's large too): the same page.
+        assertEquals(handed.key, WebIslandCardView.keyOf(bubble, false, "panel"))
+        // A card that reads nothing from the view keeps one key in every view.
+        val other = LovelaceParser.parseCard(JSONObject("""{"type": "custom:acme-card", "entity": "light.a"}"""))
+        assertEquals(WebIslandCardView.keyOf(other, false, "masonry"), WebIslandCardView.keyOf(other, false, "sections"))
+    }
+
     @Test fun aHandedOffIslandMovesToTheNextBuildOfTheCardInItsTheme() {
         val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
         val pages = ArrayList<RecordingPage>()
@@ -775,7 +795,7 @@ class IslandSessionsTest {
         // Until the next build takes it, what the page sends reaches no card.
         slots(islands).values.single().onMessage(JSONObject().put("type", "callService").put("domain", "light").put("service", "turn_off")) {}
         assertTrue(calls.isEmpty())
-        assertEquals(WebIslandCardView.keyOf(config, false), handed.key)
+        assertEquals(WebIslandCardView.keyOf(config, false, null), handed.key)
         assertTrue("the page left the old card", page.view.parent == null)
         old.release() // the old card going does nothing to the page it handed off
         assertFalse(page.closed)
