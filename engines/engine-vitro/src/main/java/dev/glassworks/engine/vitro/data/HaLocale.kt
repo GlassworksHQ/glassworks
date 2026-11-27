@@ -87,12 +87,17 @@ object HaLocale {
         deviceZone = id?.takeIf { it.isNotBlank() }?.let { TimeZone.getTimeZone(it) }
     }
 
-    private val zoneWatched = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** The application the zone receiver is registered with ([watchDeviceZone]). */
+    private var zoneWatchedBy: java.lang.ref.WeakReference<android.content.Context>? = null
 
-    /** Hears the device's zone change from now on, for the process (once; later calls do nothing). */
+    /**
+     * Hears the device's zone change from now on, for the process: once per application (a process has one; tests
+     * make a new one per test, and a receiver on an earlier one would hear nothing). Main thread.
+     */
     fun watchDeviceZone(context: android.content.Context) {
-        if (!zoneWatched.compareAndSet(false, true)) return
         val app = context.applicationContext ?: context
+        if (zoneWatchedBy?.get() === app) return
+        zoneWatchedBy = java.lang.ref.WeakReference(app)
         val receiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(c: android.content.Context?, intent: android.content.Intent?) {
                 deviceZoneChanged(intent?.getStringExtra(android.content.Intent.EXTRA_TIMEZONE))
