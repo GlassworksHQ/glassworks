@@ -105,13 +105,6 @@ interface CameraStreamFactory {
     fun create(entityId: String, kind: CameraStreamKind): CameraStream?
 
     /**
-     * [create] for a camera in front of the dashboard (More Info's): one that plays in a view that animates in and out
-     * on a layer, where a video on a SurfaceView would show nothing or sit off its place. A factory whose players draw
-     * on a SurfaceView gives a TextureView one here.
-     */
-    fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? = create(entityId, kind)
-
-    /**
      * A camera that plays this kind is about to start: what every stream of the kind shares (libwebrtc's factory and
      * EGL) may get ready off the main thread meanwhile. Optional; main thread.
      */

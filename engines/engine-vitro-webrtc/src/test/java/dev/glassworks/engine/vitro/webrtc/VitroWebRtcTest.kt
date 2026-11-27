@@ -28,6 +28,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
@@ -68,6 +69,25 @@ class VitroWebRtcTest {
         assertTrue(stream.view is TextureView)
         assertEquals(0, (stream as CameraStreamVideoSize).videoWidth)
         stream.close()
+    }
+
+    /**
+     * A card's video draws into a TextureView on every Android, WebRTC and HLS alike, never a SurfaceView: a panel whose
+     * screen is rotated (the S1's, Android 10) has a composer that overlays only one video, so a surface per camera
+     * pushed the whole window onto the GPU at video rate. API 29 is the S1's, API 34 a recent tablet's.
+     */
+    @Test
+    @Config(sdk = [29, 34])
+    fun `a card's WebRTC and HLS players draw into a TextureView on Android 10 and 14`() {
+        assertEquals(dev.glassworks.hawebrtc.VideoViewKind.TEXTURE_VIEW, VitroWebRtc.OPTIONS.view)
+        VitroWebRtc.register()
+        val players = CameraPlayers.forHost(host) { null }
+        for (kind in listOf(CameraStreamKind.WEB_RTC, CameraStreamKind.HLS)) {
+            val stream = players.create("camera.front_door", kind)!!
+            assertTrue("$kind: ${stream.view.javaClass.name}", stream.view is TextureView)
+            assertFalse(kind.toString(), stream.view is android.view.SurfaceView)
+            stream.close()
+        }
     }
 
     @Test

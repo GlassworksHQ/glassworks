@@ -129,9 +129,6 @@ class LiveCameraFeedTest {
     private val prewarmed = ArrayList<CameraStreamKind>()
     private val prewarmThreads = ArrayList<Thread>()
 
-    /** The kinds a foreground camera (More Info's) asked its factory for ([CameraStreamFactory.createForeground]). */
-    private val foregroundAsked = ArrayList<CameraStreamKind>()
-
     @Before
     fun setUp() = CameraVideoBudget.reset()
 
@@ -150,11 +147,6 @@ class LiveCameraFeedTest {
                         made += it
                         peakVideo = maxOf(peakVideo, made.count { m -> !m.closed && m.kind != MJPEG })
                     }
-                }
-
-                override fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? {
-                    foregroundAsked += kind
-                    return create(entityId, kind)
                 }
 
                 override fun prewarm() {
@@ -203,22 +195,6 @@ class LiveCameraFeedTest {
     private fun extraDue() = ShadowLooper.idleMainLooper(LiveCameraFeed.EXTRA_DELAY_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
     private fun live(kind: CameraStreamKind) = made.last { it.kind == kind && !it.closed }
     private fun running() = made.filter { !it.closed }.map { it.kind }
-
-    @Test
-    fun moreInfosCameraAsksForAForegroundPlayerAndACardsDoesNot() {
-        val card = feed(context(store()))
-        card.start()
-        idle()
-        assertEquals(listOf(WEB_RTC), running())
-        assertEquals("a card's camera plays on the factory's own player", emptyList<CameraStreamKind>(), foregroundAsked)
-        card.stop()
-        val sheet = LiveCameraFeed(context(store()), "camera.porch", { null }, host = FrameLayout(activity), foreground = true) {}
-        sheet.start()
-        idle()
-        // The sheet slides in on a layer: its players are the ones that follow it (a TextureView, not a SurfaceView).
-        assertEquals(listOf(WEB_RTC), foregroundAsked)
-        sheet.stop()
-    }
 
     @Test
     fun aCameraWithoutTheStreamFeatureGoesStraightToMjpeg() {
