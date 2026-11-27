@@ -342,4 +342,36 @@ class MasonrySlicesTest {
             server.stop()
         }
     }
+
+    // A card hidden now takes no room on the first screen (Greptile on #950): conditionals whose conditions don't hold,
+    // at the top of every column, mustn't push the visible cards under them out of the first pass. Their columns stay
+    // where HA's placement puts them.
+    @Test
+    fun cardsHiddenNowDontPushTheVisibleOnesOutOfTheFirstScreen() {
+        val rows = JSONArray().apply { for (i in 0 until 10) put("sensor.row_$i") }
+        val hidden = JSONObject().put("type", "conditional")
+            .put("conditions", JSONArray().put(JSONObject().put("condition", "state").put("entity", "switch.away").put("state", "on")))
+            .put("card", JSONObject().put("type", "entities").put("entities", rows))
+        val cards = JSONArray().apply {
+            repeat(20) { put(hidden) }
+            for (i in 0 until 40) put(JSONObject().put("type", "markdown").put("content", "visible $i" + "\n\nline".repeat(i % 3)))
+        }
+        val config = JSONObject().put("views", JSONArray().put(JSONObject().put("path", "home").put("cards", cards))).toString()
+        fun store() = EntityStore().apply { putLocal(dev.glassworks.engine.vitro.data.EntityState("switch.away", "off", emptyMap())) }
+
+        // The visible cards a build in one go puts on the first screen.
+        val once = vitroView(config, sliced = false, store = store())
+        layOut(once)
+        val onFirstScreen = cardViews(columns(once)).filter { it.visibility == View.VISIBLE && (it.parent as View).top + it.top < 720 }
+            .map(::nameOf).toSet()
+        assertTrue("visible cards on the first screen: $onFirstScreen", onFirstScreen.size >= 8)
+
+        val vv = vitroView(config, sliced = true, store = store())
+        assertTrue("the rest waits for its chunks", vv.buildInProgress)
+        val first = cardViews(columns(vv)).filter { it.visibility == View.VISIBLE }.map(::nameOf).toSet()
+        assertTrue("every visible card of the first screen, at once: missing ${onFirstScreen - first}", first.containsAll(onFirstScreen))
+        repeat(30) { chunk() }
+        assertFalse(vv.buildInProgress)
+        assertEquals("the columns are HA's, hidden cards and all", layoutDump(once), layoutDump(vv))
+    }
 }

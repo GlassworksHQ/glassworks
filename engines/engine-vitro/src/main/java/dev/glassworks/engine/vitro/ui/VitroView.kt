@@ -2220,6 +2220,10 @@ class VitroView(
         // the rest follow in chunks ([SlicedBuild]), or here too, outside a view build. Every column gets its first
         // card now, so none changes width as the rest arrive. A card left for later holds its place in its column with
         // an empty slot (GONE: no room, no margin), so a card built before the ones above it still lands in order.
+        // A card hidden now ([shownNow]: a conditional whose conditions don't hold, a card's `visibility`) still has
+        // its column, as in HA, but takes no room on the screen: it doesn't count toward it. One hidden now that's
+        // within the first screen is built with it (shown again, it's in place at once); one below it is built in its
+        // turn, and shows from then on if its conditions hold by then.
         val margin = cardMargin(ctx)
         val viewportDp = (if (height > 0) height else resources.displayMetrics.heightPixels) / dp
         val firstScreenDp = viewportDp * FIRST_SCREEN_SHARE
@@ -2227,7 +2231,7 @@ class VitroView(
         placed.forEachIndexed { k, (configIndex, card) ->
             val column = columns[placement[k]]
             val top = tops[placement[k]]
-            tops[placement[k]] += HaCardSize.of(card, ::stateForBuild) * 50.0 + margin[0] + margin[2]
+            if (shownNow(card, ctx)) tops[placement[k]] += HaCardSize.of(card, ::stateForBuild) * 50.0 + margin[0] + margin[2]
             // A live camera below the first screen is made and attached now all the same, in its place: its stream
             // starts with the view, as in a build in one go.
             if (deferred == null || top < firstScreenDp || playsLiveVideo(card)) {
@@ -2710,6 +2714,20 @@ class VitroView(
     private fun contain(card: CardConfig, built: View, ctx: VitroCardContext): View = when {
         built is CardSurface || built is ContainedCard || card.type == "conditional" || built.javaClass == View::class.java -> built
         else -> ContainedCard(ctx, card.type, built) { errorCard(card, ctx) }
+    }
+
+    /**
+     * Whether [card] shows now: the conditions [wrapVisibility] gives its view (its `visibility`, a conditional's
+     * `conditions`) hold for the store's states, the time, the screen's width and the signed-in user, as its view
+     * decides when it's built.
+     */
+    private fun shownNow(card: CardConfig, ctx: VitroCardContext): Boolean {
+        val conds = card.visibility + VisibilityCondition.parseList(card.raw.optJSONArray("conditions"))
+        if (conds.isEmpty()) return true
+        val widthDp = (resources.displayMetrics.widthPixels / dp).toInt()
+        val userId = ctx.haUser().optString("id", "").ifEmpty { null }
+        val nowMs = ctx.now()
+        return conds.all { VisibilityCondition.evaluateAt(it, nowMs, store::get, widthDp, userId) }
     }
 
     private fun wrapVisibility(
