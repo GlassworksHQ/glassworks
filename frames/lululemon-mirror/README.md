@@ -167,7 +167,7 @@ Deep engineering notes from bringing up the Mirror (see [all research notes](../
 - [mirror-abis.md](research/mirror-abis.md) — 64-bit userspace ABI verification
 - [home-app.md](research/home-app.md) — Setting the home screen on Android 6 without touch input
 - [image-patch.md](research/image-patch.md) — System image patching and userdata creation in Kiln
-- [first-boot.md](research/first-boot.md) — Zero-touch first boot (Wi-Fi, portrait rotation, no lock screen)
+- [first-boot.md](research/first-boot.md) — Zero-touch first boot (Wi-Fi, portrait rotation, no lock screen) and the backlight floor overlay
 - [community-image-terms.md](research/community-image-terms.md) — Licensing and distribution notes for the community image
 - [mirror-root.md](research/mirror-root.md) — Root exploration and system-uid analysis
 - [privileged-app.md](research/privileged-app.md) — Privileged system-app permissions and silent updates on Android 6

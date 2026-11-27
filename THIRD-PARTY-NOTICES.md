@@ -385,10 +385,10 @@ All MIT, from this repository:
   the font itself ships in the S1 app's APK (section 1, "Assets in the APK").
 - The S1 app's APK (sections 1 and 2), except the Glassworks core inside it, which is MPL-2.0
   ([its README](pane-api/src/main/java/dev/glassworks/README.md#licence)).
-- The Mirror's settings overlay, `frames/lululemon-mirror/overlay/GlassworksSettings.apk` (resource
-  values only, built by its `build.sh`). It is signed with AOSP's public test key
+- The Mirror's settings and framework overlays, `frames/lululemon-mirror/overlay/GlassworksSettings.apk`
+  and `GlassworksFramework.apk` (resource values only, built by its `build.sh`). Each is signed with AOSP's public test key
   (`build/target/product/security/testkey`, android-6.0.1_r81, Apache-2.0, Copyright The Android Open
-  Source Project), so its signature block carries that public certificate. The private key is
+  Source Project), so each signature block carries that public certificate. The private key is
   downloaded at build time and never committed.
 
 ---

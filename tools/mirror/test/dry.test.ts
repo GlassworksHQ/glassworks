@@ -248,13 +248,14 @@ describe('an APK with no home screen (the first real flash, 2026-11-16)', () => 
 });
 
 describe('a first boot with nothing to tap', () => {
-  it('flashes the settings overlay and lock-screen default into system, and the saved Wi-Fi into userdata', async () => {
+  it('flashes the overlays and lock-screen default into system, and the saved Wi-Fi into userdata', async () => {
     const overlay = new Uint8Array(readFileSync(resolve(__dirname, '../../../frames/lululemon-mirror/overlay/GlassworksSettings.apk')));
-    const img = await dryImage(work, APK.length + overlay.length);
+    const framework = new Uint8Array(readFileSync(resolve(__dirname, '../../../frames/lululemon-mirror/overlay/GlassworksFramework.apk')));
+    const img = await dryImage(work, APK.length + overlay.length + framework.length);
     const lines: string[] = [];
     const d = dryDevices(img.bytes, (l) => lines.push(l));
     await runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: APK, adbKey: KEY, work,
-      settingsOverlay: overlay, wifi: { ssid: 'Home Net', password: 'not-a-real-password' } }, d.deps);
+      settingsOverlay: overlay, frameworkOverlay: framework, wifi: { ssid: 'Home Net', password: 'not-a-real-password' } }, d.deps);
     // the harness's log, shown and kept by whoever runs it: never the network's name or password (CLAUDE.md rule 2)
     expect(lines).toContain('    Wi-Fi: the network you entered');
     expect(lines.join('\n')).not.toContain('Home Net');
@@ -265,6 +266,7 @@ describe('a first boot with nothing to tap', () => {
     writeFileSync(ud, d.lk.parts.get('userdata')!);
     for (const f of [sys, ud]) { const c = fsck(f); expect(clean(c), c.out).toBe(true); }
     expect(Buffer.from(debugfsCat(sys, '/vendor/overlay/GlassworksSettings.apk')).equals(Buffer.from(overlay))).toBe(true);
+    expect(Buffer.from(debugfsCat(sys, '/vendor/overlay/GlassworksFramework.apk')).equals(Buffer.from(framework))).toBe(true);
     expect(new TextDecoder().decode(debugfsCat(sys, '/build.prop'))).toContain('\nro.lockscreen.disable.default=true\n');
     const conf = new TextDecoder().decode(debugfsCat(ud, '/misc/wifi/wpa_supplicant.conf'));
     expect(conf).toMatch(/^update_config=1\n[\s\S]*\nnetwork=\{\n\tssid="Home Net"\n\tpsk=[0-9a-f]{64}\n/);

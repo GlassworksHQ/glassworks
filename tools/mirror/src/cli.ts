@@ -33,6 +33,8 @@ install (WRITES system and userdata):
   --no-settings-overlay    the image's own first boot: leave out frames/lululemon-mirror/overlay/
                            GlassworksSettings.apk and ro.lockscreen.disable.default (Wi-Fi on, no screen
                            timeout, no lock screen, no auto-rotate)
+  --no-framework-overlay   the image's own backlight floor: leave out frames/lululemon-mirror/overlay/
+                           GlassworksFramework.apk (config_screenBrightnessSettingMinimum 0: the backlight goes fully off)
   --screenshot <png>       default: ./mirror-after.png
 first boot only (writes no partition), for a Mirror already on the image whose install stopped after the flash:
   --first-boot             the install's last steps: wait for adb, the first boot (it checks the image's
@@ -59,7 +61,7 @@ function parse(argv: string[]) {
       'dry-run': { type: 'boolean' }, yes: { type: 'boolean' }, 'way-back': { type: 'boolean' }, 'first-boot': { type: 'boolean' }, help: { type: 'boolean' },
       image: { type: 'string' }, refract: { type: 'boolean' }, apk: { type: 'string' }, probe: { type: 'boolean' }, 'adb-key': { type: 'string', multiple: true },
       'ha-url': { type: 'string' }, 'wifi-ssid': { type: 'string' }, 'wifi-pass-file': { type: 'string' },
-      'boot-animation': { type: 'string' }, 'no-boot-animation': { type: 'boolean' }, 'no-settings-overlay': { type: 'boolean' }, 'no-fill': { type: 'boolean' },
+      'boot-animation': { type: 'string' }, 'no-boot-animation': { type: 'boolean' }, 'no-settings-overlay': { type: 'boolean' }, 'no-framework-overlay': { type: 'boolean' }, 'no-fill': { type: 'boolean' },
       screenshot: { type: 'string' }, userdata: { type: 'string' }, 'serial-file': { type: 'string' }, work: { type: 'string' }, keep: { type: 'boolean' },
     },
   }).values;
@@ -200,12 +202,13 @@ export async function cli(argv: string[], log: (l: string) => void = (l) => cons
     const animPath = a['boot-animation'] ?? join(REPO, 'branding/lululemon-mirror/bootanimation.zip');
     const bootAnimation = a['no-boot-animation'] ? undefined : new Uint8Array(readFileSync(animPath));
     const settingsOverlay = a['no-settings-overlay'] ? undefined : new Uint8Array(readFileSync(join(REPO, 'frames/lululemon-mirror/overlay/GlassworksSettings.apk')));
-    const common = { apk, app, bootAnimation, settingsOverlay, haUrl: a['ha-url'], wifi, work, fill: !a['no-fill'] };
+    const frameworkOverlay = a['no-framework-overlay'] ? undefined : new Uint8Array(readFileSync(join(REPO, 'frames/lululemon-mirror/overlay/GlassworksFramework.apk')));
+    const common = { apk, app, bootAnimation, settingsOverlay, frameworkOverlay, haUrl: a['ha-url'], wifi, work, fill: !a['no-fill'] };
     let r;
     if (dry) {
       // the fake image needs room for what the patch writes: the APK, the libraries it unpacks, the
-      // boot animation and the settings overlay (#557)
-      const img = await dryImage(work, await dryRoom(apk, (bootAnimation?.length ?? 0) + (settingsOverlay?.length ?? 0)));
+      // boot animation and the overlays (#557)
+      const img = await dryImage(work, await dryRoom(apk, (bootAnimation?.length ?? 0) + (settingsOverlay?.length ?? 0) + (frameworkOverlay?.length ?? 0)));
       const d = dryDevices(img.bytes, log, { app });
       r = await runInstall({ ...common, image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, adbKey: fakeAdbKey(1, 'dry@run'), screenshot: join(work, 'after.png') }, d.deps);
       log(`\nDry run: LK got ${d.lk.commands.filter((c) => c.startsWith('flash:')).join(', ')}, then reboot; adb ran ${d.after.cmds.length} commands on the first boot.`);

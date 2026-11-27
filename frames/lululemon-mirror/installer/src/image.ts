@@ -98,6 +98,12 @@ export interface SystemPatch {
    * first boot is the image's own.
    */
   settingsOverlay?: Uint8Array;
+  /**
+   * GlassworksFramework.apk (frames/lululemon-mirror/overlay/framework): the framework's
+   * config_screenBrightnessSettingMinimum 0, so the app's backlight-off sleep turns the backlight off, not to 10/255.
+   * Without it, the image's own floor stays.
+   */
+  frameworkOverlay?: Uint8Array;
   /** The device's MAC, written as DEVICE_MAC_PROP (from checkFastboot's `deviceMac`); none: the app picks its own. */
   deviceMac?: string;
   /**
@@ -118,6 +124,21 @@ export const SETTINGS_OVERLAY = {
   path: '/vendor/overlay/GlassworksSettings.apk',
   sha256: '4a8796d33b41da6a7ad44c065d57a5bfcad860794006d52b9977ff19f5f1c342',
 } as const;
+
+/**
+ * The Mirror's framework overlay (frames/lululemon-mirror/overlay/build.sh, framework/): the image's
+ * framework-res has config_screenBrightnessSettingMinimum 10, and Android 6's PowerManagerService clamps every
+ * brightness to it, a window's BRIGHTNESS_OVERRIDE_OFF too, so the backlight-off sleep left the backlight at 10/255.
+ * The overlay makes it 0, as stock 1.24.0 has it. The system slider can then reach 0 too; the app lifts the awake
+ * window to its visible floor when the system value is below it (ScreenPolicy.awakeBrightness).
+ * Trusted by where it is, as SETTINGS_OVERLAY.
+ */
+export const FRAMEWORK_OVERLAY = {
+  path: '/vendor/overlay/GlassworksFramework.apk',
+  sha256: 'ea1c0b32fff5841adccaedffa6d9165d56edd0b37ebd4c169402318bfcf6f04f',
+} as const;
+
+const sha256Hex = async (b: Uint8Array) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', b as Uint8Array<ArrayBuffer>))].map((x) => x.toString(16).padStart(2, '0')).join('');
 
 /**
  * The build.prop key the app takes its Home Assistant identity from when its data is new (PanelDevice.IMAGE_MAC_PROP).
@@ -202,8 +223,12 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   const prop = new TextDecoder().decode(await fs.readFile('/build.prop'));
   if (!prop.includes(`ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`)) throw new Error('this isn\'t the Glass Panes Mirror image Kiln knows (its build fingerprint differs). Nothing was changed.');
   if (o.settingsOverlay) {
-    const got = [...new Uint8Array(await crypto.subtle.digest('SHA-256', o.settingsOverlay as Uint8Array<ArrayBuffer>))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    const got = await sha256Hex(o.settingsOverlay);
     if (got !== SETTINGS_OVERLAY.sha256) throw new Error(`the settings overlay isn't the one Kiln builds (SHA-256 ${got}). Nothing was changed.`);
+  }
+  if (o.frameworkOverlay) {
+    const got = await sha256Hex(o.frameworkOverlay);
+    if (got !== FRAMEWORK_OVERLAY.sha256) throw new Error(`the framework overlay isn't the one Kiln builds (SHA-256 ${got}). Nothing was changed.`);
   }
   if (o.deviceMac !== undefined && !MAC.test(o.deviceMac)) throw new Error('the device id isn\'t a MAC (AA:BB:CC:DD:EE:FF). Nothing was changed.');
   const app = o.app ?? GLASSWORKS;
@@ -258,6 +283,13 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     if (await fs.exists(SETTINGS_OVERLAY.path)) await fs.remove(SETTINGS_OVERLAY.path, { time });
     await fs.writeFile(SETTINGS_OVERLAY.path, o.settingsOverlay, fileAttrs(time));
     log(SETTINGS_OVERLAY.path);
+  }
+
+  if (o.frameworkOverlay) {
+    await fs.mkdirs('/vendor/overlay', dirAttrs(time));
+    if (await fs.exists(FRAMEWORK_OVERLAY.path)) await fs.remove(FRAMEWORK_OVERLAY.path, { time });
+    await fs.writeFile(FRAMEWORK_OVERLAY.path, o.frameworkOverlay, fileAttrs(time));
+    log(FRAMEWORK_OVERLAY.path);
   }
 
   let next = setProp(setProp(prop, 'ro.glassworks.frame.id', MIRROR_FRAME.id), 'ro.glassworks.frame.version', MIRROR_FRAME.version);

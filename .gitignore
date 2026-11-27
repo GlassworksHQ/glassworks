@@ -27,9 +27,10 @@ node_modules/
 .kotlin/
 local.properties
 *.apk
-# the Mirror's settings overlay (3,629 bytes): resource values only, rebuilt byte for byte by its build.sh and
-# pinned by SHA-256 (SETTINGS_OVERLAY). Kiln and CI have no Android SDK to build it.
+# the Mirror's settings (3,629 bytes) and framework (3,299 bytes) overlays: resource values only, rebuilt byte for
+# byte by their build.sh and pinned by SHA-256 (SETTINGS_OVERLAY, FRAMEWORK_OVERLAY). Kiln and CI have no Android SDK to build them.
 !frames/lululemon-mirror/overlay/GlassworksSettings.apk
+!frames/lululemon-mirror/overlay/GlassworksFramework.apk
 *.aab
 .idea/
 *.iml

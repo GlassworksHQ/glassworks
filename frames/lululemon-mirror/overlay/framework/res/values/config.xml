@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The framework's config (frameworks/base/core/res/res/values/config.xml, Android 6.0.1), changed for
+     the Mirror. Name and type as in AOSP 6.0.1 (an integer, a java-symbol in symbols.xml). -->
+<resources>
+    <!-- The lowest brightness Android lets anything set, as stock 1.24.0 has it. PowerManagerService clamps every
+         brightness to it, a window's BRIGHTNESS_OVERRIDE_OFF too, before DisplayPowerController sees it; the
+         image has 10, so the app's backlight-off sleep left the backlight at 10/255. With 0 the sleep turns the
+         backlight off. The system slider can reach 0 as well, as on stock: the app lifts the awake window to its
+         visible floor (ScreenPolicy.VISIBLE_FLOOR) whenever the system value is below it. Android 6: 10 -->
+    <integer name="config_screenBrightnessSettingMinimum">0</integer>
+</resources>

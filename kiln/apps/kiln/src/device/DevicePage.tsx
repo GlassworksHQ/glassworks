@@ -138,9 +138,10 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', 
   const imageAdb = webUsbAdb(keys, frame.timings.authMs);
   const image = new ImageSession({
     frame,
-    // the frame's boot animation and settings APK, staged with Kiln's other assets
+    // the frame's boot animation, settings APK and framework APK, staged with Kiln's other assets
     bootAnimation: staged(flow.assets?.bootAnimation),
     settings: staged(flow.assets?.settings),
+    framework: staged(flow.assets?.framework),
     images: flow.images(),
     // Kiln's download route (PR 347); NEXT_PUBLIC_KILN_PROXY at build time points it elsewhere, e.g. a local Worker
     refract: process.env.NEXT_PUBLIC_KILN_PROXY ?? flow.proxy,
