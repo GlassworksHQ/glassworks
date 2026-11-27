@@ -1456,7 +1456,7 @@ class VitroView(
     }
 
     /** The island an earlier build of [card] gave up, for its new build to take, or null. */
-    private fun adoptIsland(card: CardConfig, fillViewport: Boolean, key: String = WebIslandCardView.keyOf(card, fillViewport)): WebIslandCardView.Island? {
+    private fun adoptIsland(key: String): WebIslandCardView.Island? {
         val queue = islandPool[key] ?: return null
         val island = queue.removeFirstOrNull()
         if (queue.isEmpty()) islandPool.remove(key)
@@ -2276,7 +2276,7 @@ class VitroView(
         }
         // Anything outside Vitro's supported set goes to an island on purpose (CardCompat), decided once per card.
         val built: View = testCards?.invoke(card, ctx) ?: if (card.inIsland(IslandScripts.of(ctx.resources))) {
-            WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
+            WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(WebIslandCardView.keyOf(card, fillViewport, ctx.viewType)))
         } else when (card.type) {
             // Layout containers
             "vertical-stack" -> stackHost(card, ctx, ::applyStackPadding, LinearLayout(context).apply {
@@ -2345,7 +2345,7 @@ class VitroView(
             "shortcut" -> ShortcutCardView(ctx, card)
             "alert" -> SmallCardConfigs.alertError(card)?.let { HaErrorCardView(ctx, it) } ?: AlertCardView(ctx, card)
             "iframe" -> SmallCardConfigs.iframeError(card)?.let { HaErrorCardView(ctx, it) }
-                ?: IframeCardView(ctx, card, fillViewport, adopted = adoptIsland(card, fillViewport, IframeCardView.keyFor(ctx, card, fillViewport)))
+                ?: IframeCardView(ctx, card, fillViewport, adopted = adoptIsland(IframeCardView.keyFor(ctx, card, fillViewport)))
             // Tier 2: Popular HACS Fast-Paths
             // Mushroom's light, fan and cover cards with their controls row; without one, the tile draws them.
             "custom:mushroom-light-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomLightCardView(ctx, card) else TileCardView(ctx, card)
@@ -2380,7 +2380,7 @@ class VitroView(
             "custom:swipe-card" -> SwipeCardView(ctx, card, childBuilder)
             "custom:weather-card" -> LegacyWeatherCardView(ctx, card)
             // Tier 3: Arbitrary unrecognized custom cards -> stripped Micro-Web Island
-            else -> WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
+            else -> WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(WebIslandCardView.keyOf(card, fillViewport, ctx.viewType)))
         }
         (built as? CardSurface)?.let { surface ->
             // A conditional's child keeps its own type.

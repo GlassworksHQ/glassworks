@@ -133,6 +133,22 @@ class IslandParityTest {
         assertEquals(3.0, HaCardSize.of(islandsView[1]), 0.0)
     }
 
+    @Test fun aCardModFontContextKeepsTheIslandSizeCallback() {
+        // A card that sets its own font-family builds its cards (islands too) on withFontFamily's copy of the context,
+        // which dropped islandCardSize: their sizes skipped the server check and the relayout.
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val sizes = ArrayList<Double>()
+        val ctx = VitroCardContext(
+            context = activity, haBase = FakeHaServer.BASE, store = EntityStore(),
+            theme = dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(dev.glassworks.engine.vitro.theme.ThemeCatalog(), true),
+            resources = emptyList(), accessToken = { null }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+            fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            islandCardSize = { _, size -> sizes += size },
+        )
+        ctx.withFontFamily("serif").islandCardSize(islandsView[1], 2.0)
+        assertEquals(listOf(2.0), sizes)
+    }
+
     private fun VitroView.currentRoot(): View? = (0 until childCount).map { getChildAt(it) }
         .firstOrNull { it is ViewGroup && it.visibility == View.VISIBLE }
 
