@@ -17,6 +17,7 @@ import type { PanelShell } from '@glassworks/adb';
 import { AppSession } from '../src/device/appSession';
 import type { BluetoothLike } from '../src/device/channels';
 import { ImageFlow, inPlaceStep, installRoutes } from '../src/device/DevicePage';
+import { imageRail } from '../src/device/ImageScreens';
 import { imageDemo } from '../src/device/imageDemo';
 import { ImageSession, type DeviceProgress, type ImageDeps, type ProgressMark } from '../src/device/imageSession';
 import { memoryInPlaceStore, restorePointZip, type InPlaceStore } from '../src/device/inPlace';
@@ -52,6 +53,10 @@ interface Rig { image: ImageSession; dev: InPlaceSimDevice; store: InPlaceStore;
 /** A session on a simulated stock Mirror; `store` and `progress` carry over to a second browser load or a second run. */
 function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampered?: boolean; refusedBuild?: boolean; systemNotTaken?: boolean; unreadable?: boolean; store?: InPlaceStore; progress?: ReturnType<typeof tab>;
   dev?: InPlaceSimDevice; deps?: Partial<ImageDeps>; code?: Partial<InPlaceCode>;
+  /** the frame's limit on one adb read (its `timings.readMs`) */
+  readMs?: number;
+  /** adb commands the device never answers (it stops answering partway, say) */
+  hangs?: (cmd: string) => boolean;
   /** a write (`flash <partition>`) or a restart (`reboot`) that fails, by what it is and how many such calls came before it */
   fail?: (what: string, n: number) => boolean } = {}): Rig {
   const dev = o.dev ?? sim.device({ lan: o.lan ?? 'ok', tampered: o.tampered, refusedBuild: o.refusedBuild, systemNotTaken: o.systemNotTaken, unreadable: o.unreadable });
@@ -66,8 +71,13 @@ function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampere
       flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { failing(`flash ${p}`); await fb.flashBlob(p, b, on); flashed.push(p); },
       reboot: async () => { failing('reboot'); await fb.reboot(); } };
   };
-  const frame_ = o.code ? { ...frame, imageFlow: { ...frame.imageFlow, inPlace: { ...sim.code, ...o.code } } } : frame;
-  const adb = () => { const a = dev.adb(); return Object.assign(withAppStreams(a, { online: true, radio: false }), { rebootToBootloader: () => a.rebootToBootloader!() }); };
+  const withCode = o.code ? { ...frame, imageFlow: { ...frame.imageFlow, inPlace: { ...sim.code, ...o.code } } } : frame;
+  const frame_ = o.readMs ? { ...withCode, timings: { ...withCode.timings, readMs: o.readMs } } : withCode;
+  const adb = () => {
+    const a = dev.adb();
+    const hung: PanelShell = o.hangs ? { ...a, run: (cmd, signal) => (o.hangs!(cmd) ? new Promise(() => {}) : a.run(cmd, signal)) } : a;
+    return Object.assign(withAppStreams(hung, { online: true, radio: false }), { rebootToBootloader: () => a.rebootToBootloader!() });
+  };
   const app = new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true);
   const apk = mirrorEntry.sim.apk();
   const image = new ImageSession({
@@ -108,11 +118,28 @@ async function toReceive(r: Rig) {
   expect(image.state).toMatchObject({ screen: 'receive', round: 1 });
 }
 
-/** Receive, the second fastboot session, and the restore point saved and checked. */
-async function toRestorePoint(r: Rig) {
-  await r.image.receive();
+/**
+ * Receive (over the Mirror's own Wi-Fi, or Bluetooth), the second fastboot session, and the restore point saved and
+ * checked. `copy`: the person downloads its copy too, which Continue waits for.
+ */
+async function toRestorePoint(r: Rig, via: 'wifi' | 'ble' = 'wifi', copy = true) {
+  if (via === 'wifi') await r.image.receiveWifi();
+  else await r.image.receive();
   expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
   await r.image.connectFastboot();
+  await readyRestorePoint(r);
+  if (copy) await saveCopy(r.image);
+}
+
+/** The person downloads the restore point's copy and says it's saved: Continue opens. */
+async function saveCopy(image: ImageSession) {
+  const zip = await image.restoreZip();
+  await image.confirmCopy();
+  return zip;
+}
+
+/** Waits for the restore point to be saved and checked. */
+async function readyRestorePoint(r: Rig) {
   for (let i = 0; i < 200 && r.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
   expect(r.image.state.screen).toBe('restore-point');
   expect(r.image.state.restorePoint?.status).toBe('ready');
@@ -143,12 +170,131 @@ describe('Glassworks on the stock software', () => {
     expect(log.indexOf('matches what Kiln wrote')).toBeLessThan(log.indexOf('Installing'));
   });
 
-  it('carries on over Bluetooth by itself when the local network drops halfway', async () => {
+  it('on a reinstall over Glassworks (stock\'s hotspot turned off), gives the helper the person\'s network and reaches it there', async () => {
+    // the frame's check runs over adb before the restart (the Mirror's: Glassworks is installed, inplace.test.ts)
+    let asked: PanelShell | undefined;
+    // what Kiln hands the frame's stage (the sim's stand-in ignores the network; inplace.test.ts checks the real one
+    // writes it as Android's Wi-Fi reads it)
+    let staged: Parameters<InPlaceCode['stage']>[0] | undefined;
+    const r = rig({ code: { ownWifiGone: async (p) => { asked = p; return true; }, stage: async (o) => { staged = o; return sim.code.stage(o); } } });
+    r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
+    r.image.pick(RECIPE.id);
+    r.image.choose();
+    r.image.toFastboot();
+    await r.image.restartToFastboot();
+    expect(r.image.state.restarted).toBe(true);
+    expect(asked).toBeTruthy();
+    await r.image.connectFastboot();
+    r.image.understand(true);
+    await r.image.flash();
+    expect(r.image.state).toMatchObject({ screen: 'receive', round: 1 });
+    const log = r.image.state.log.join('\n');
+    expect(log).toContain('own Wi-Fi network is off since its earlier install');
+    expect(log).toContain('the setup agent, this browser\'s adb key, its signing secret and your network, on a fresh userdata');
+    expect(log).not.toContain('HomeNet'); // the person's network stays out of the log
+    expect(staged?.wifi).toEqual({ ssid: 'HomeNet', password: 'correcthorse' });
+    // no "join mirror-<serial>" screen: the Bluetooth way, with the local network the agent joined
+    expect(r.image.state.receive).toMatchObject({ network: null });
+    expect(r.progress.mark).toMatchObject({ at: 'staged', noOwnWifi: true });
+    await toRestorePoint(r, 'ble');
+    expect(r.image.state.receive?.channel).toBe('lan');
+  });
+
+  it('without its own Wi-Fi, the download by hand starts at the Mirror\'s address from before the restart, until Bluetooth says (#944)', async () => {
+    const r = rig({ code: { ownWifiGone: async () => true, lanAddress: async () => '192.0.2.44' } });
+    r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
+    r.image.pick(RECIPE.id);
+    r.image.choose();
+    r.image.toFastboot();
+    await r.image.restartToFastboot();
+    await r.image.connectFastboot();
+    r.image.understand(true);
+    await r.image.flash();
+    expect(r.image.state.receive).toMatchObject({ network: null, pageUrl: 'http://192.0.2.44:18765/', pageGuessed: true });
+    expect(r.progress.mark).toMatchObject({ at: 'staged', noOwnWifi: true, lanHost: '192.0.2.44' });
+    // what the agent says over Bluetooth replaces the guess
+    await toRestorePoint(r, 'ble');
+    expect(r.image.state.receive?.pageGuessed).toBeUndefined();
+  });
+
+  it('a reload on receive keeps the guessed address, but never one that isn\'t an address', async () => {
+    const kept = tab();
+    kept.set({ at: 'staged', image: RECIPE.id, secret: '00'.repeat(32), serial: FAKE_SERIAL, noOwnWifi: true, lanHost: '192.0.2.44' });
+    expect(rig({ progress: kept }).image.state.receive).toMatchObject({ pageUrl: 'http://192.0.2.44:18765/', pageGuessed: true });
+    const changed = tab();
+    changed.set({ at: 'staged', image: RECIPE.id, secret: '00'.repeat(32), serial: FAKE_SERIAL, noOwnWifi: true, lanHost: 'evil.example/x#' });
+    expect(rig({ progress: changed }).image.state.receive).toMatchObject({ pageUrl: null });
+    expect(rig({ progress: changed }).image.state.receive?.pageGuessed).toBeUndefined();
+  });
+
+  it('a Mirror that stops answering the Wi-Fi check still restarts, within the read limit, and keeps the network out of the stage', async () => {
+    // the Mirror's own check (pm list packages) on a shell that never answers it
+    const r = rig({ code: { ownWifiGone: sim.code.ownWifiGone }, readMs: 50, hangs: (c) => c.startsWith('pm list packages') });
+    r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
+    r.image.pick(RECIPE.id);
+    r.image.choose();
+    r.image.toFastboot();
+    const t0 = Date.now();
+    await r.image.restartToFastboot();
+    expect(Date.now() - t0).toBeLessThan(5_000);
+    expect(r.image.state).toMatchObject({ restarted: true, connecting: false });
+    expect(r.image.state.connectError).toBeUndefined();
+    await r.image.connectFastboot();
+    r.image.understand(true);
+    await r.image.flash();
+    // unknown counts as no: the Mirror's own Wi-Fi, as before the check
+    expect(r.image.state.receive).toMatchObject({ network: `mirror-${FAKE_SERIAL}` });
+    expect(r.image.state.log.join('\n')).toContain('the setup agent, this browser\'s adb key and its signing secret, on a fresh userdata');
+    expect(r.progress.mark?.noOwnWifi).toBeUndefined();
+  });
+
+  it('keeps the stage free of the person\'s network when the Mirror\'s own Wi-Fi is still there', async () => {
+    let staged: Parameters<InPlaceCode['stage']>[0] | undefined;
+    const r = rig({ code: { ownWifiGone: async () => false, stage: async (o) => { staged = o; return sim.code.stage(o); } } });
+    r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
+    r.image.pick(RECIPE.id);
+    r.image.choose();
+    r.image.toFastboot();
+    await r.image.restartToFastboot();
+    await r.image.connectFastboot();
+    r.image.understand(true);
+    await r.image.flash();
+    expect(r.image.state.receive).toMatchObject({ network: `mirror-${FAKE_SERIAL}` });
+    expect(r.image.state.log.join('\n')).toContain('the setup agent, this browser\'s adb key and its signing secret, on a fresh userdata');
+    expect(r.progress.mark?.noOwnWifi).toBeUndefined();
+    expect(staged).toBeTruthy();
+    expect(staged?.wifi).toBeUndefined(); // the agent would switch Wi-Fi to client and close stock's hotspot
+  });
+
+  it('a reload on receive keeps knowing the Mirror\'s own Wi-Fi is gone', async () => {
+    const progress = tab();
+    progress.set({ at: 'staged', image: RECIPE.id, secret: '00'.repeat(32), serial: FAKE_SERIAL, noOwnWifi: true });
+    const r = rig({ progress });
+    expect(r.image.state).toMatchObject({ screen: 'receive', resumed: 'staged' });
+    expect(r.image.state.receive).toMatchObject({ network: null });
+  });
+
+  it('asks the person to join the Mirror\'s own Wi-Fi, sees when this computer has, and keeps their Wi-Fi out of the stage', async () => {
+    const r = rig({ deps: { hotspotPollMs: 5 } });
+    r.image.setWifi({ ssid: 'HomeNet', password: 'correcthorse' });
+    await toReceive(r);
+    expect(r.image.state.receive).toMatchObject({ network: `mirror-${FAKE_SERIAL}` });
+    for (let i = 0; i < 100 && !r.image.state.receive?.joined; i++) await new Promise((x) => setTimeout(x, 5));
+    expect(r.image.state.receive).toMatchObject({ stage: 'ready', joined: true });
+    expect(r.image.state.log.join('\n')).toContain('the setup agent, this browser\'s adb key and its signing secret, on a fresh userdata');
+    await toRestorePoint(r);
+    expect(r.image.state.leftHotspot).toBe(true);
+  });
+
+  it('a Wi-Fi transfer that drops offers Bluetooth: Kiln doesn\'t switch on its own, and Bluetooth then goes over Bluetooth alone', async () => {
     const r = rig({ lan: 'drop-midway' });
     await toReceive(r);
-    await toRestorePoint(r);
+    await r.image.receiveWifi();
+    expect(r.image.state.receive).toMatchObject({ stage: 'wifi-unreachable', wifiFailed: 'unreachable' });
+    expect(r.image.state.screen).toBe('receive');
+    await toRestorePoint(r, 'ble');
     expect(r.image.state.receive?.channel).toBe('ble');
-    expect(r.image.state.receive?.fallback).toMatch(/switched to Bluetooth/);
+    expect(r.image.state.receive?.fallback).toBeNull();
   });
 
   it('a second run takes the bundle this browser kept only while the frame says it still fits the device', async () => {
@@ -158,7 +304,7 @@ describe('Glassworks on the stock software', () => {
     await toRestorePoint(first);
     const second = rig({ store, code: { keptMatches: () => true } });
     await toReceive(second);
-    await toRestorePoint(second);
+    await toRestorePoint(second, 'ble');
     expect(second.image.state.receive?.channel).toBe('cache');
     expect(second.image.state.log.join('\n')).toContain('this browser\'s saved copy');
   });
@@ -201,15 +347,42 @@ describe('Glassworks on the stock software', () => {
     expect(r.progress.mark).toMatchObject({ at: 'staged' });
   });
 
-  it('refuses a bundle whose signature doesn\'t match: nothing kept, nothing more written', async () => {
+  it('asks before going on with a bundle whose signature doesn\'t match: nothing kept or written until the person says so', async () => {
     const r = rig({ tampered: true });
     await toReceive(r);
     await r.image.receive();
     expect(r.image.state.screen).toBe('receive');
-    expect(r.image.state.receive).toMatchObject({ stage: 'error' });
-    expect(r.image.state.receive?.error).toMatch(/signature/);
+    expect(r.image.state.receive).toMatchObject({ stage: 'unverified' });
     expect(r.flashed).toEqual(['userdata']);
     expect(await r.store.latestRestore()).toBeUndefined();
+    // Back: the warning goes, and nothing moved on
+    r.image.receiveAgain();
+    expect(r.image.state.receive?.stage).toBe('ready');
+    await r.image.receiveUnverified(); // nothing waits on a decision any more
+    expect(r.image.state.screen).toBe('receive');
+    expect(r.flashed).toEqual(['userdata']);
+  });
+
+  it('Continue anyway takes the bundle with every other check, and the log says the signature wasn\'t checked', async () => {
+    const r = rig({ tampered: true });
+    await toReceive(r);
+    await r.image.receive();
+    expect(r.image.state.receive?.stage).toBe('unverified');
+    await r.image.receiveUnverified();
+    expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+    const log = r.image.state.log.join('\n');
+    expect(log).toContain('went on without the signature');
+    expect(log).not.toContain('and its signature');
+  });
+
+  it('a wrong serial still stops it: only a signature can be waved through', async () => {
+    const r = rig();
+    await toReceive(r);
+    const other = await buildFakeGwsbBundle({ secret: new Uint8Array(32).fill(9), serialno: 'OTHERSERIAL' });
+    await r.image.receiveFile(new NodeBlob([other.bytes as Uint8Array<ArrayBuffer>]) as unknown as Blob);
+    expect(r.image.state.receive).toMatchObject({ stage: 'error', channel: 'file' });
+    expect(r.image.state.receive?.error).toMatch(/another device/);
+    expect(r.flashed).toEqual(['userdata']);
   });
 
   it('stops on an odexed build before any system write', async () => {
@@ -227,7 +400,7 @@ describe('Glassworks on the stock software', () => {
     // a bundle signed with another run's secret, as from an old download
     const old = await buildFakeGwsbBundle({ secret: new Uint8Array(32).fill(9) });
     await r.image.receiveFile(new NodeBlob([old.bytes as Uint8Array<ArrayBuffer>]) as unknown as Blob);
-    expect(r.image.state.receive).toMatchObject({ stage: 'error', channel: 'file' });
+    expect(r.image.state.receive).toMatchObject({ stage: 'unverified', channel: 'file' });
     expect(r.flashed).toEqual(['userdata']);
   });
 
@@ -244,18 +417,149 @@ describe('Glassworks on the stock software', () => {
     expect(r.flashed).toEqual(['userdata']);
   });
 
+  it('Continue waits for a copy of the restore point on the computer before anything is written to the system', async () => {
+    const r = rig();
+    await toReceive(r);
+    await toRestorePoint(r, 'wifi', false);
+    expect(r.image.state.restorePoint?.downloaded).toBe(false);
+    await r.image.continueInstall();
+    expect(r.image.state.screen).toBe('restore-point');
+    expect(r.flashed).toEqual(['userdata']); // the stage alone
+    await r.image.restoreZip();
+    // offered, not counted: a browser can't say the download landed, so the person confirms it
+    expect(r.image.state.restorePoint).toMatchObject({ offered: true, downloaded: false });
+    expect(await r.store.copied(FAKE_SERIAL, r.progress.mark!.digest as string, r.image.state.restorePoint!.digest!)).toBe(false);
+    await r.image.continueInstall();
+    expect(r.flashed).toEqual(['userdata']);
+    await r.image.confirmCopy();
+    expect(r.image.state.restorePoint?.downloaded).toBe(true);
+    expect(await r.store.copied(FAKE_SERIAL, r.progress.mark!.digest as string, r.image.state.restorePoint!.digest!)).toBe(true);
+    await r.image.continueInstall();
+    expect(r.flashed).toEqual(['userdata', 'system', 'userdata']);
+  });
+
   it('offers the restore point as a zip the CLI\'s undo reads: the restore image, its manifest, SHA256SUMS', async () => {
     const r = rig();
     await toReceive(r);
     await toRestorePoint(r);
     const { blob, name } = await r.image.restoreZip();
     expect(name).toMatch(/^glassworks-in-place-\d{8}-\d{6}\.zip$/);
-    expect(r.image.state.restorePoint?.downloaded).toBe(true);
+    expect(r.image.state.restorePoint).toMatchObject({ offered: true, downloaded: true }); // toRestorePoint confirmed the first copy
     const { files } = await readNamedBackupZip(new NodeBlob([await bytesOf(blob) as Uint8Array<ArrayBuffer>]) as unknown as Blob);
-    expect(files.map((f) => f.filename).sort()).toEqual(['manifest.json', 'restore-services.sparse']);
-    const manifest = JSON.parse(new TextDecoder().decode(files.find((f) => f.filename === 'manifest.json')!.data)) as { servicesJar: { restoreSparse: string } };
+    expect(files.map((f) => f.filename).sort()).toEqual(['manifest.json', 'restore-services.sparse', 'services.jar.orig']);
+    const manifest = JSON.parse(new TextDecoder().decode(files.find((f) => f.filename === 'manifest.json')!.data)) as { servicesJar: { restoreSparse: string }; kiln: { files: Record<string, { size: number; sha256: string }> } };
     expect(manifest.servicesJar.restoreSparse).toBe('restore-services.sparse');
+    // each file's size and SHA-256 as made, for the way back's check before it writes
+    for (const f of files.filter((x) => x.filename !== 'manifest.json')) expect(manifest.kiln.files[f.filename]).toEqual({ size: f.data.length, sha256: await sha256Hex(f.data) });
     expect(await sha256Hex(files.find((f) => f.filename === 'restore-services.sparse')!.data)).toBe(r.image.state.restorePoint?.digest);
+  });
+});
+
+describe('Start over', () => {
+  it('on receive: asks first, then forgets the run (its mark too) and opens the first screen, where a new run starts clean', async () => {
+    const r = rig();
+    await toReceive(r);
+    expect(r.image.canStartOver()).toBe(true);
+    r.image.startOver(); // not asked yet: nothing happens
+    r.image.askStartOver();
+    expect(r.image.state.startingOver).toBe(true);
+    r.image.startOver();
+    expect(r.image.state).toMatchObject({ screen: 'image', changed: true, startingOver: false });
+    expect(r.image.state.round).toBeUndefined();
+    expect(r.progress.mark).toBeUndefined();
+    // a reload now opens the first screen, not receive
+    expect(rig({ dev: r.dev, store: r.store, progress: r.progress }).image.state.screen).not.toBe('receive');
+    // and a new run goes through its stage again
+    await toReceive(r);
+  });
+
+  it('on the second fastboot and the restore point, before any system write', async () => {
+    const r = rig();
+    await toReceive(r);
+    await r.image.receiveWifi();
+    expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+    expect(r.image.canStartOver()).toBe(true);
+    await r.image.connectFastboot();
+    for (let i = 0; i < 200 && r.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
+    expect(r.image.state.screen).toBe('restore-point');
+    expect(r.image.canStartOver()).toBe(true);
+    r.image.askStartOver();
+    r.image.startOver();
+    expect(r.image.state.screen).toBe('image');
+    expect(r.flashed).toEqual(['userdata']); // the stage alone: the system was never written
+  });
+
+  it('a restore point still saving for the run before changes nothing in the new run, and Continue waits for the new one', async () => {
+    const inner = memoryInPlaceStore();
+    const gates: (() => void)[] = [];
+    const store: InPlaceStore = { ...inner, putRestore: async (...a: Parameters<InPlaceStore['putRestore']>) => { await new Promise<void>((x) => gates.push(x)); return inner.putRestore(...a); } };
+    const r = rig({ store });
+    await toReceive(r);
+    await r.image.receiveWifi();
+    await r.image.connectFastboot();
+    await vi.waitFor(() => expect(gates).toHaveLength(1)); // the first run's save, held
+    expect(r.image.state.restorePoint?.status).toBe('saving');
+    r.image.askStartOver();
+    r.image.startOver();
+    await toReceive(r);
+    await r.image.receiveWifi();
+    // the stand-in agent signs with the first run's secret (it reads it off its first stage only): taken unverified
+    if (r.image.state.screen === 'receive') await r.image.receiveUnverified();
+    await r.image.connectFastboot();
+    await vi.waitFor(() => expect(gates).toHaveLength(2)); // the new run's save, held too
+    gates[0]!(); // the old save finishes now
+    for (let i = 0; i < 20; i++) await new Promise((x) => setTimeout(x, 5));
+    expect(r.image.state.restorePoint?.status).toBe('saving'); // not the old run's "ready"
+    await r.image.continueInstall();
+    expect(r.image.state.screen).toBe('restore-point');
+    gates[1]!();
+    await readyRestorePoint(r);
+    await saveCopy(r.image);
+    await r.image.continueInstall();
+    expect(r.flashed).toEqual(['userdata', 'userdata', 'system', 'userdata']); // two stages, then this run's writes
+  });
+
+  it('not once a system write began: its error, and a reload after it, offer the restore point instead', async () => {
+    const r = rig({ fail: (what, n) => what === 'flash system' && n === 0 });
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    expect(r.image.state.screen).toBe('error');
+    expect(r.image.canStartOver()).toBe(false);
+    expect(r.progress.mark?.began).toContain('system-in-place');
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress });
+    expect(b.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+    expect(b.image.canStartOver()).toBe(false);
+  });
+
+  it('not after the install restarted into what it wrote: One last click offers the restore point', async () => {
+    const r = rig();
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    await vi.waitFor(() => expect(r.image.state.screen).toBe('adb'));
+    expect(r.image.canStartOver()).toBe(false);
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    expect(screen.queryByRole('button', { name: 'Start over' })).toBeNull();
+    // the way out is the rail's: the restore point, never a silent Back
+    expect(screen.getByRole('button', { name: 'Restore the original system' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    expect(document.querySelector('.foot-lock')!.textContent).toBe('The Mirror’s system is changed');
+  });
+
+  it('the second fastboot screen has no silent Back: Start over says what it resets before it does', async () => {
+    const r = rig();
+    await toReceive(r);
+    await r.image.receiveWifi();
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+    expect(screen.getByText(frame.imageFlow.inPlace!.words['inPlace.startOver'])).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep going' }));
+    expect(r.image.state).toMatchObject({ screen: 'fastboot', round: 2, startingOver: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+    act(() => { fireEvent.click(screen.getAllByRole('button', { name: 'Start over' }).at(-1)!); });
+    expect(r.image.state.screen).toBe('image');
   });
 });
 
@@ -277,6 +581,32 @@ describe('a reload', () => {
     expect(c.image.state.restorePoint?.status).toBe('ready');
   });
 
+  it('on the restore point, a reload asks for the copy again only if this browser has no record of one', async () => {
+    const dev = sim.device({});
+    const store = memoryInPlaceStore();
+    const progress = tab();
+    // no copy before the reload: the restore point, saved again, still waits for it
+    const a = rig({ dev, store, progress });
+    await toReceive(a);
+    await toRestorePoint(a, 'wifi', false);
+    const b = rig({ dev, store, progress });
+    expect(b.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
+    await b.image.connectFastboot();
+    await readyRestorePoint(b);
+    expect(b.image.state.restorePoint?.downloaded).toBe(false);
+    await b.image.continueInstall();
+    expect(b.flashed).toEqual([]);
+    // a copy, then a reload: the same restore point saved again goes on without asking twice
+    await saveCopy(b.image);
+    const c = rig({ dev, store, progress });
+    await c.image.connectFastboot();
+    await readyRestorePoint(c);
+    expect(c.image.state.restorePoint?.downloaded).toBe(true);
+    expect(c.image.state.log.join('\n')).toMatch(/a copy of it was saved from this browser before/);
+    await c.image.continueInstall();
+    expect(c.flashed).toEqual(['system', 'userdata']);
+  });
+
   it('after the system write, a reload doesn\'t write the system again: it goes on from the write that didn\'t finish', async () => {
     const dev = sim.device({});
     const store = memoryInPlaceStore();
@@ -291,7 +621,9 @@ describe('a reload', () => {
     const b = rig({ dev, store, progress });
     expect(b.image.state).toMatchObject({ screen: 'fastboot', round: 2 });
     await b.image.connectFastboot();
-    for (let i = 0; i < 200 && b.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
+    await readyRestorePoint(b);
+    // the copy was downloaded before the reload: Continue doesn't wait for it again
+    expect(b.image.state.restorePoint?.downloaded).toBe(true);
     await b.image.continueInstall();
     expect(b.flashed).toEqual(['userdata']);
     expect(b.image.state.screen).toBe('adb');
@@ -317,7 +649,7 @@ describe('the way back (restore-blocks)', () => {
     const r = rig();
     await toReceive(r);
     await toRestorePoint(r);
-    const zip = await r.image.restoreZip();
+    const zip = await saveCopy(r.image);
     await r.image.continueInstall();
     await r.image.connectAdb();
     return { r, zip };
@@ -336,6 +668,9 @@ describe('the way back (restore-blocks)', () => {
     expect(r.image.state.undo?.at).toBe('done');
     expect(r.flashed.slice(before)).toEqual(['system', 'userdata']);
     expect(r.image.state.log.join('\n')).toContain('as after a factory reset');
+    // the log says which checks ran: everything before the first write, fastboot's OKAY on each write, and no read-back
+    expect(r.image.state.log.join('\n')).toContain('fastboot accepted every write');
+    expect(r.image.state.log.join('\n')).toMatch(/not read back: fastboot can't read a partition, and after the restore the Mirror no longer lets this browser in over adb/);
     expect(device()).toMatchObject({ installed: undefined, owner: undefined }); // the fresh userdata took the app and its owner
   });
 
@@ -416,7 +751,7 @@ describe('the way back (restore-blocks)', () => {
     await fresh.image.pickRestoreZip(new NodeBlob([await bytesOf(zip.blob) as Uint8Array<ArrayBuffer>]) as unknown as Blob, zip.name);
     fresh.image.undoByHand();
     await fresh.image.undoFlash();
-    expect(fresh.image.state.undo?.error).toMatch(/doesn't say which device/);
+    expect(fresh.image.state.undo?.refused).toMatch(/doesn't say which device/);
     expect(fresh.flashed).toEqual([]);
   });
 
@@ -437,7 +772,8 @@ describe('the way back (restore-blocks)', () => {
     await r.image.receive();
     const slow = rig({ dev: { ...r.dev, fastboot: () => { const f = r.dev.fastboot(); return { ...f, flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { await new Promise<void>((x) => { release = x; }); await f.flashBlob(p, b, on); } }; } }, store: r.store, progress: r.progress });
     await slow.image.connectFastboot();
-    for (let i = 0; i < 200 && slow.image.state.restorePoint?.status !== 'ready'; i++) await new Promise((x) => setTimeout(x, 5));
+    await readyRestorePoint(slow);
+    await saveCopy(slow.image);
     const writing = slow.image.continueInstall();
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     await slow.image.startUndo();
@@ -466,6 +802,179 @@ describe('the way back (restore-blocks)', () => {
   });
 });
 
+describe('the way back checks everything it can before it writes', () => {
+  async function installed(o: Parameters<typeof rig>[0] = {}) {
+    const r = rig(o);
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    await r.image.connectAdb();
+    return r;
+  }
+  /** This browser's restore point with one file swapped for `edit`'s; the record in its manifest stays as saved. */
+  async function editKept(r: Rig, edit: (files: { filename: string; data: Uint8Array }[]) => { filename: string; data: Uint8Array }[]) {
+    const kept = (await r.store.latestRestore())!;
+    await r.store.putRestore(kept.serial, kept.digest, edit(kept.files));
+  }
+  const log = (r: Rig) => r.image.state.log.join('\n');
+  /** adb on the same Mirror, with services.jar as `pull` gives it (something other than Kiln changed it, say). */
+  const withJar = (r: Rig, pull: () => Promise<Uint8Array>, run?: (c: string) => { out: string; code: number } | undefined) => async () => {
+    const a = r.adb();
+    const was = a.run.bind(a);
+    return Object.assign(a, { pull, run: async (c: string, s?: AbortSignal) => run?.(c) ?? was(c, s) });
+  };
+
+  it('over adb and in fastboot: each check is in the log, and only then the writes', async () => {
+    const r = await installed();
+    await r.image.startUndo();
+    await r.image.undoRestart();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.at).toBe('done');
+    const l = log(r);
+    expect(l).toContain('services.jar on the Mirror is what the install wrote: the restore point fits');
+    expect(l).toContain('restore point: each of its 2 files has the size and SHA-256 recorded when it was saved');
+    expect(l).toContain('restore point: made on this device');
+    expect(l).toMatch(/restore image: puts back the original services\.jar \(16384 bytes, SHA-256 [0-9a-f]{12}…\) in its own blocks/);
+    expect(l).toContain('restore image: writes no block outside those files');
+    expect(l).toContain('the Mirror\'s files were checked over adb before the restart');
+    // the checks come before the first write
+    expect(l.indexOf('restore image: writes no block outside')).toBeLessThan(l.indexOf('Writing the restore point to system'));
+    expect(l).not.toContain(FAKE_SERIAL);
+  });
+
+  it('by its buttons, with no adb: says the device\'s files weren\'t checked, and checks the rest', async () => {
+    const r = await installed();
+    await r.image.startUndo();
+    r.image.undoByHand();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.at).toBe('done');
+    expect(log(r)).toContain('not checked: the Mirror\'s files as they are now (Kiln didn\'t reach it over adb before this restart)');
+    expect(log(r)).toContain('restore image: writes no block outside those files');
+  });
+
+  it('a file that changed since the restore point was saved: nothing is written, and the screen says why with a way out', async () => {
+    const r = await installed();
+    await editKept(r, (files) => files.map((f) => (f.filename === 'services.jar.orig' ? { ...f, data: f.data.map((x, i) => (i === 0 ? x ^ 1 : x)) } : f)));
+    await r.image.startUndo();
+    r.image.undoByHand();
+    const before = r.flashed.length;
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.refused).toBe('services.jar.orig isn\'t the file Kiln saved in this restore point. Nothing was written.');
+    expect(r.flashed.length).toBe(before);
+    expect(r.progress.mark?.at).not.toBe('undo'); // no checkpoint: the way back didn't begin
+    render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
+    expect(screen.getByRole('heading', { name: 'Kiln won’t write this restore point' })).toBeTruthy();
+    expect(screen.getByText(/services\.jar\.orig isn't the file Kiln saved/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pick another restore point' })).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Choose another install' })); });
+    expect(r.image.state.screen).toBe('choose');
+  });
+
+  it('a restore point missing a file it recorded is refused', async () => {
+    const r = await installed();
+    await editKept(r, (files) => files.filter((f) => f.filename !== 'services.jar.orig'));
+    await r.image.startUndo();
+    r.image.undoByHand();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.refused).toMatch(/^This restore point is missing services\.jar\.orig\./);
+  });
+
+  it('a manifest the frame can\'t read is refused', async () => {
+    const r = await installed();
+    await editKept(r, (files) => files.map((f) => {
+      if (f.filename !== 'manifest.json') return f;
+      const m = JSON.parse(new TextDecoder().decode(f.data)) as Record<string, unknown>;
+      delete m.servicesJar;
+      return { ...f, data: new TextEncoder().encode(JSON.stringify(m)) };
+    }));
+    await r.image.startUndo();
+    r.image.undoByHand();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.refused).toBe('The restore point\'s manifest doesn\'t describe services.jar. Nothing was written.');
+  });
+
+  it('a manifest that names another path is refused before anything reaches the device\'s shell', async () => {
+    const r = await installed();
+    await editKept(r, (files) => files.map((f) => {
+      if (f.filename !== 'manifest.json') return f;
+      const m = JSON.parse(new TextDecoder().decode(f.data)) as { servicesJar: Record<string, unknown> };
+      m.servicesJar.path = '/nope; reboot';
+      return { ...f, data: new TextEncoder().encode(JSON.stringify(m)) };
+    }));
+    const ran: string[] = [];
+    const pulled: string[] = [];
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress, deps: { requestAdb: async () => {
+      const a = await withJar(r, async () => { throw new Error('No such file or directory'); }, (c) => { ran.push(c); return undefined; })();
+      const pull = a.pull;
+      return Object.assign(a, { pull: async (path: string, ...rest: unknown[]) => { pulled.push(path); return (pull as (...x: unknown[]) => Promise<Uint8Array>)(path, ...rest); } });
+    } } });
+    await b.image.startUndo();
+    await b.image.undoRestart();
+    expect(b.image.state.undo?.refused).toBe('The restore point\'s manifest puts services.jar somewhere other than /system/framework/services.jar. Nothing was written.');
+    expect(b.image.state.undo?.restarted).toBeUndefined();
+    expect(ran.filter((c) => c.includes('nope') || c.includes('reboot'))).toEqual([]);
+    expect(pulled).toEqual([]);
+    expect(b.flashed).toEqual([]);
+  });
+
+  it('a restore point from before the record still goes, checked against the original file it keeps', async () => {
+    const r = await installed();
+    await editKept(r, (files) => files.map((f) => {
+      if (f.filename !== 'manifest.json') return f;
+      const m = JSON.parse(new TextDecoder().decode(f.data)) as Record<string, unknown>;
+      delete m.kiln;
+      return { ...f, data: new TextEncoder().encode(JSON.stringify(m)) };
+    }));
+    await r.image.startUndo();
+    r.image.undoByHand();
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.at).toBe('done');
+    expect(log(r)).toMatch(/made before Kiln recorded each file's SHA-256/);
+  });
+
+  it('over adb, a file something else changed since: no restart into fastboot, nothing written', async () => {
+    const r = await installed();
+    const b = rig({ dev: r.dev, store: r.store, progress: r.progress, deps: { requestAdb: withJar(r, async () => new Uint8Array(16384).fill(7)) } });
+    await b.image.startUndo();
+    await b.image.undoRestart();
+    expect(b.image.state.undo).toMatchObject({ at: 'start', refused: 'services.jar on the Mirror has changed since this restore point was made, so the restore may no longer fit it. Nothing was changed.' });
+    expect(b.image.state.undo?.restarted).toBeUndefined();
+    expect(b.flashed).toEqual([]);
+  });
+
+  it('over adb, a file that\'s gone is refused; one Kiln can\'t read is logged as unchecked, and the restore goes on', async () => {
+    const r = await installed();
+    const gone = rig({ dev: r.dev, store: r.store, progress: r.progress, deps: { requestAdb: withJar(r, async () => { throw new Error('No such file or directory'); },
+      (c) => (c.startsWith('ls ') ? { out: `ls: ${c.slice(3)}: No such file or directory\n`, code: 1 } : undefined)) } });
+    await gone.image.startUndo();
+    await gone.image.undoRestart();
+    expect(gone.image.state.undo?.refused).toMatch(/^services\.jar is no longer on the Mirror, so this restore point doesn't fit its system anymore\. Nothing was changed\.$/);
+    const unread = rig({ dev: r.dev, store: r.store, progress: r.progress, deps: { requestAdb: withJar(r, async () => { throw new Error('Permission denied'); }) } });
+    await unread.image.startUndo();
+    await unread.image.undoRestart();
+    expect(unread.image.state.undo).toMatchObject({ at: 'fastboot', restarted: true });
+    expect(log(unread)).toContain('not checked: services.jar (Kiln couldn\'t read it: Permission denied)');
+    await unread.image.undoFlash();
+    expect(unread.image.state.undo?.at).toBe('done');
+    expect(log(unread)).toContain('not checked: the Mirror\'s files as they are now');
+  });
+
+  it('after a write the system didn\'t take, the original file is what the restore expects too', async () => {
+    const r = rig({ systemNotTaken: true });
+    await toReceive(r);
+    await toRestorePoint(r);
+    await r.image.continueInstall();
+    await r.image.connectAdb();
+    expect(r.image.state.notTaken).toBe(true);
+    await r.image.restoreAfterError();
+    await vi.waitFor(() => expect(r.image.state.undo?.source).toBe('browser'));
+    await r.image.undoRestart();
+    expect(log(r)).toContain('services.jar on the Mirror is still the original: the restore writes the same bytes back');
+    await r.image.undoFlash();
+    expect(r.image.state.undo?.at).toBe('done');
+  });
+});
+
 describe('the app\'s install after a reload', () => {
   it('keeps the APK picker, and Connect shut, until an APK passes its checks', async () => {
     const progress = tab();
@@ -476,6 +985,10 @@ describe('the app\'s install after a reload', () => {
     await app.pickApk('not-an-apk.apk', new Uint8Array([1, 2, 3]));
     expect(app.state.apk?.error).toBeTruthy();
     render(<ImageFlow image={r.image} app={app} />);
+    // the resume screen first, with the restore point beside Continue
+    expect(screen.getByRole('heading', { name: 'Pick up where you left off' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Restore the original system' }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     const picker = () => document.querySelector('input[type=file][accept*=".apk"]');
     expect(picker()).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Connect' }).hasAttribute('disabled')).toBe(true);
@@ -587,7 +1100,7 @@ describe('the way back after the review\'s second round', () => {
       const x = rig();
       await toReceive(x);
       await toRestorePoint(x);
-      const z = await x.image.restoreZip();
+      const z = await saveCopy(x.image);
       await x.image.continueInstall();
       await x.image.connectAdb();
       return { r: x, zip: z };
@@ -802,14 +1315,92 @@ describe('routes and screens', () => {
     expect(Object.keys(routesOf(mirrorFrame.id))).toEqual(expect.arrayContaining(['undo', 'undo/connect', 'undo/restore', 'undo/done']));
   });
 
-  it.each(['place-receive-file', 'place-restore-point', 'place-fastboot-again', 'place-undo', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken'] as const)('%s renders, with one ember button at most', async (d) => {
+  it.each(['place-start', 'place-fastboot', 'place-confirm', 'place-receive-file', 'place-restore-point', 'place-restore-offered', 'place-restore-copied', 'place-fastboot-again', 'place-connect', 'place-first-start', 'place-installing',
+    'place-error-write', 'place-undo', 'place-undo-fastboot', 'place-undo-working', 'place-undo-error', 'place-undo-done', 'place-undo-refused', 'place-error-bundle', 'place-error-lost', 'place-error-not-taken'] as const)('%s renders, with one ember button at most', async (d) => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, d, true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
     await act(async () => {});
     expect(document.querySelectorAll('.btn.ember').length).toBeLessThanOrEqual(1);
     expect(document.body.textContent).not.toContain(FAKE_SERIAL);
+    expect(document.body.textContent).not.toContain('Check every part'); // the restore isn't read back, so no screen says it is
   }, 20_000);
+
+  it('place-undo-refused stops on the refusal, with nothing written and the way out', async () => {
+    const { image, app } = await imageDemo(mirrorEntry, 'place-undo-refused', true);
+    expect(image.state.undo?.refused).toMatch(/isn't the file Kiln saved in this restore point\. Nothing was written\./);
+    render(<ImageFlow image={image} app={app} />);
+    await act(async () => {});
+    expect(screen.getByRole('heading', { name: 'Kiln won’t write this restore point' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Choose another install' }).className).toContain('ember');
+  });
+
+  it('the first screen says the whole road up front: every part, in order, the person\'s marked, with how long', async () => {
+    const { image, app } = await imageDemo(mirrorEntry, 'place-start', true);
+    render(<ImageFlow image={image} app={app} />);
+    const road = [...document.querySelectorAll('.road-list li')].map((li) => {
+      const time = li.querySelector('.road-time')?.textContent;
+      // the person's rows carry the marker and, when there is one, the estimate too
+      expect(!!li.querySelector('.road-you')).toBe(li.classList.contains('you'));
+      return `${li.classList.contains('you') ? 'You: ' : ''}${li.querySelector('.road-t')!.textContent}${time ? ` (${time})` : ''}`;
+    });
+    expect(road).toEqual([
+      'You: Put the Mirror in fastboot mode (about 10 minutes)',
+      'Kiln adds a small setup helper. The original system isn’t touched',
+      'You: Join the Mirror’s own Wi-Fi, so Kiln can copy the parts of its system it will change (5–7 minutes)',
+      'You: Fastboot mode once more',
+      'Kiln prepares the changes and checks them',
+      'You: Kiln saves a restore point, and you download a copy',
+      'Kiln writes the changes',
+      'It starts for the first time, and Kiln installs Glassworks (4–5 minutes)',
+      'You: Set it up: Wi-Fi, Home Assistant and panes',
+    ]);
+    expect(document.querySelector('.road-h')!.textContent).toBe('What happens · 20–30 minutes');
+  });
+
+  it('the in-place screens say no plumbing: no bundle, no agent, no SHA-256, no sparse', async () => {
+    for (const d of ['place-start', 'place-fastboot', 'place-confirm', 'place-join-wifi', 'place-joined', 'place-receive-ble', 'place-receive-lan', 'place-wifi-unreachable', 'place-lna-denied',
+      'place-receive-file', 'place-error-bundle', 'place-fastboot-again', 'place-restore-point', 'place-working', 'place-connect', 'place-first-start', 'place-resume', 'place-resume-staged',
+      'place-undo', 'place-undo-fastboot'] as const) {
+      const { image, app } = await imageDemo(mirrorEntry, d, true);
+      render(<ImageFlow image={image} app={app} />);
+      await act(async () => {});
+      // what a person reads: the page without its technical log, which is for help
+      const main = document.querySelector('main')!.cloneNode(true) as HTMLElement;
+      main.querySelectorAll('.details').forEach((x) => x.remove());
+      const rail = document.querySelector('.rail')!.textContent ?? '';
+      expect(`${main.textContent} ${rail}`, d).not.toMatch(/bundle|agent|SHA-256|sparse|Refract/i);
+      cleanup();
+    }
+  }, 60_000);
+
+  it('the wait for the first start has its own row after the restart, and the list never goes back', async () => {
+    const h = handTo();
+    const { image, app } = await imageDemo(mirrorEntry, 'place-working', true, {}, h.handOver);
+    render(<ImageFlow image={image} app={app} />);
+    const cur = () => document.querySelector('.prow.now .plabel')?.textContent;
+    const done = () => [...document.querySelectorAll('.prow.done .plabel')].map((x) => x.textContent);
+    await act(async () => { (image as unknown as { set(p: object): void }).set({ screen: 'working', round: 2, work: { step: 'restart', x: 0 } }); });
+    expect(cur()).toBe('Restart the Mirror');
+    await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'first-boot', x: 0 } }); });
+    expect(cur()).toBe('Let it finish its first start');
+    expect(done()).toEqual(['Prepare the changes and check them', 'Write the new system', 'Start its app storage fresh', 'Restart the Mirror', 'Connect to the Mirror']);
+    expect(screen.getByText('Usually 4–5 minutes')).toBeTruthy();
+    await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'app-install', x: 0 } }); });
+    expect(cur()).toBe('Install Glassworks and hide the original apps');
+    // a step reported late never pulls the list back
+    await act(async () => { (image as unknown as { set(p: object): void }).set({ work: { step: 'in-place', x: 0 } }); });
+    expect(cur()).toBe('Install Glassworks and hide the original apps');
+  }, 20_000);
+
+  it('the way back has its own rail, not the install\'s', () => {
+    const at = (undo: { at: 'start' | 'fastboot' | 'working' | 'error' | 'done' }) =>
+      imageRail({ screen: 'undo', undo, picked: RECIPE.id, files: [], wifi: { ssid: '', password: '' }, understood: false, log: [] } as never, mirrorFrame, false, true);
+    expect(at({ at: 'start' }).map((x) => x.name)).toEqual(['Restore point', 'Fastboot', 'Restore', 'Done']);
+    expect(at({ at: 'working' }).map((x) => x.mark)).toEqual(['done', 'done', 'now', 'todo']);
+    expect(at({ at: 'error' })[2]!.mark).toBe('bad');
+    expect(at({ at: 'done' }).every((x) => x.mark === 'done')).toBe(true);
+  });
 
   it('place-error-lost stops on the lost bundle after a write, with the way back as its one action', async () => {
     const { image, app } = await imageDemo(mirrorEntry, 'place-error-lost', true, {}, handTo().handOver);
@@ -819,13 +1410,27 @@ describe('routes and screens', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   }, 20_000);
 
-  it('the restore point\'s Continue opens only once it is saved and checked', async () => {
+  it('the restore point\'s Continue opens once it is saved and checked, and the person confirms a copy is on the computer', async () => {
     const h = handTo();
     const { image, app } = await imageDemo(mirrorEntry, 'place-restore-point', true, {}, h.handOver);
     render(<ImageFlow image={image} app={app} />);
-    expect(screen.getByRole('button', { name: 'Continue' }).hasAttribute('disabled')).toBe(false);
     expect(screen.getByText(/Saved in this browser/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Download a copy' }));
+    const go = () => screen.getByRole('button', { name: 'Continue' });
+    expect(go().hasAttribute('disabled')).toBe(true);
+    // why, in one line beside it
+    expect(go().getAttribute('aria-describedby')).toBe('continue-why');
+    expect(document.getElementById('continue-why')!.textContent).toBe('Continue opens once a copy is on this computer.');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Download a copy' })); });
+    // the browser can't say the download landed: Continue waits for the person to say it's saved
+    const saved = await vi.waitFor(() => screen.getByRole('checkbox', { name: 'I have the .zip saved on this computer' }));
+    expect(go().hasAttribute('disabled')).toBe(true);
+    expect(document.getElementById('continue-why')!.textContent).toBe('Continue opens once you confirm the copy is saved.');
+    expect(screen.getByRole('button', { name: 'Download again' })).toBeTruthy();
+    await act(async () => { fireEvent.click(saved); });
+    await vi.waitFor(() => expect(go().hasAttribute('disabled')).toBe(false));
+    expect(go().className).toContain('ember');
+    expect(document.getElementById('continue-why')).toBeNull();
+    expect(screen.getByText('A copy is on this computer')).toBeTruthy();
   });
 });
 

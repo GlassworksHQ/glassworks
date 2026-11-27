@@ -144,6 +144,7 @@ function flashWorld(k: Knobs): World {
   function load(): Page {
     let standard: StandardSession | undefined;
     const f = new ImageSession({ ...deps, handOver: (p) => { standard = standardOn(p, { sleep: fastSleep }); void standard.handOver(p); } });
+    f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
     const clicks = new Clicks();
     return {
       look(): Look {
@@ -416,6 +417,7 @@ function inPlaceWorld(k: Knobs): World {
   function load(): Page {
     let standard: StandardSession | undefined;
     const f = new ImageSession({ ...deps, handOver: (p) => { standard = standardOn(p, { sleep: fastSleep }); void standard.handOver(p); } });
+    f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
     const clicks = new Clicks();
     return {
       look(): Look {
@@ -437,12 +439,16 @@ function inPlaceWorld(k: Knobs): World {
           case 'receive': {
             const st = s.receive?.stage;
             if (st === 'error' || st === 'file-fallback') return { end: 'error' };
+            // a device with its own Wi-Fi: Continue on the join screen, and Use Bluetooth when that Wi-Fi didn't bring it
+            if (s.receive?.network && (st === 'waiting-boot' || st === 'ready')) return clicks.act(`receive-wifi-${st}`, () => f.receiveWifi());
+            if (st === 'wifi-unreachable') return clicks.act('receive-bluetooth', () => f.receive());
             if (st === 'waiting-boot' || st === 'ready' || st === 'lna-denied') return clicks.act(`receive-${st}`, () => f.receive());
             return 'wait';
           }
           case 'restore-point':
             if (s.restorePoint?.status === 'error') return { end: 'error' };
-            return s.restorePoint?.status === 'ready' ? clicks.act('restore-point', () => f.continueInstall()) : 'wait';
+            // the person downloads the copy (Continue waits for it), then continues
+            return s.restorePoint?.status === 'ready' ? clicks.act('restore-point', () => f.restoreZip().then(() => f.confirmCopy()).then(() => f.continueInstall())) : 'wait';
           case 'adb':
             if (s.connectError && clicks.has('adb')) return { end: 'error' };
             return clicks.act('adb', () => f.connectAdb());

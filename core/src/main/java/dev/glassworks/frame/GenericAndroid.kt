@@ -53,6 +53,8 @@ class GenericAndroid(
 
     override val cameraMaxPixels = deviceFrame?.cameraMaxPixels
 
+    override val cameraSensorDegrees = deviceFrame?.cameraSensorDegrees
+
     /** A device frame's own ([SleepMode.BACKLIGHT_OFF] on the lululemon Mirror); Android's screen off on any other device. */
     override val sleepMode: SleepMode = deviceFrame?.sleepMode ?: SleepMode.LOCK
 

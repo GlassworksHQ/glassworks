@@ -131,8 +131,13 @@ function watch(e: Entry) {
 
 export const registry = {
   get: (): Entry | undefined => current,
-  /** Makes `e` the current session (a new install, or the first visit), and closes the one it replaces. */
-  set(e: Entry): Entry {
+  /**
+   * Makes `e` the current session (a new install, or the first visit), and closes the one it replaces. `quiet`: called
+   * while a component renders (FrameWizard's snapshot, on a frame's first visit), so the other listeners (LeaveGuard,
+   * the picker) hear of it right after that render instead of during it, which React refuses ("Cannot update a
+   * component while rendering a different component").
+   */
+  set(e: Entry, o: { quiet?: boolean } = {}): Entry {
     if (current && current.session !== e.session) {
       keep(current, current.session.store.state);
       current.session.close();
@@ -144,7 +149,7 @@ export const registry = {
     watch(e); // first, so `history` keeps what the session starts from
     if (earlier) e.session.store.dispatch({ type: 'changed', by: earlier });
     if (saved && !e.session.store.state.backup) e.session.store.dispatch({ type: 'backup', backup: saved });
-    notify();
+    if (o.quiet) queueMicrotask(notify); else notify();
     return e;
   },
   /** Another frame's session, by its base. */

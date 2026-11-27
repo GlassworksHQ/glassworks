@@ -13,7 +13,7 @@
 .brands { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .brand-pick { display: grid; gap: 2px; text-align: left; border: 1px solid var(--edge); border-radius: 12px; padding: 12px; font-size: 14px; background: none; cursor: pointer; }
 .brand-pick small { color: var(--faint); font-size: 12px; }
-.brand-pick[data-state="checked"] { border-color: color-mix(in srgb, var(--ember-b) 55%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ember-b) 35%, transparent); }
+.brand-pick[data-state="checked"] { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
 .num { margin: 0; padding-left: 20px; display: grid; gap: 10px; font-size: 14px; color: var(--muted); }
 .num b { color: var(--fg); font-weight: 500; }
 .num small { display: block; color: var(--faint); font-size: 13px; margin-top: 2px; }

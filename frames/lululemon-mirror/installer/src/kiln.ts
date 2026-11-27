@@ -55,7 +55,7 @@ export const kilnFrame: DeviceFrame = {
     wifiOn: (p, sleep) => wifiOn(p, sleep),
     images: workerImages,
     proxy: IMAGE_PROXY.base,
-    assets: { bootAnimation: d.assets.bootAnimation, settings: d.assets.settings },
+    assets: { bootAnimation: d.assets.bootAnimation, settings: d.assets.settings, framework: d.assets.framework },
     // Stock-in-place (choices.ts GLASSWORKS_IN_PLACE): the stage, the bundle's check, the build, the app's install
     inPlace: mirrorInPlace(d.words),
     storage: { flashedFlag: d.storage.flashedFlag, inPlaceDb: d.storage.inPlaceDb },

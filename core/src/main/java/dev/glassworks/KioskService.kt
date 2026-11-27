@@ -6,17 +6,21 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkRequest
+import android.net.wifi.WifiManager
 import android.os.SystemClock
 import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.ServiceWork
 import dev.glassworks.platform.Hotspot
 import dev.glassworks.platform.HotspotFailure
+import dev.glassworks.platform.WifiDriverRecovery
 import dev.glassworks.platform.WifiRadio
 import dev.glassworks.platform.NetworkUp
 import dev.glassworks.platform.Platform
@@ -62,6 +66,8 @@ open class KioskService : Service() {
     private var codeOverlay: CodeOverlay? = null
     private lateinit var foreground: KioskForeground
     private var hotspotNetworks: ConnectivityManager.NetworkCallback? = null
+    private var wifiRecovery: WifiDriverRecovery? = null
+    private var wifiStates: BroadcastReceiver? = null
 
     /** The scan before each hotspot start, into the runtime's list the setup page reads. */
     private val scanFirst = dev.glassworks.setup.HotspotScanStep(
@@ -118,6 +124,7 @@ open class KioskService : Service() {
         SetupChannelServer.start(this, glassworks)
         secretHandover = SecretHandoverServer.create(this).also { it.start() }
         startSetupHotspot()
+        watchWifiDriver()
         Log.i("Glassworks", "KioskService started")
     }
 
@@ -153,6 +160,9 @@ open class KioskService : Service() {
                 if (!WifiRadio.ensureOn(this)) Log.w(HOTSPOT_TAG, "Wi-Fi is off, and it didn't come on")
                 scanFirst(start)
             },
+            // Rule 1's own start finds Wi-Fi off (the Mirror's driver failed at boot): on first, and the saved network
+            // gets its minutes before the hotspot takes the radio.
+            switchRadioOn = { WifiRadio.switchedOff(this) && WifiRadio.ensureOn(this) },
         )
         glassworks.setupHotspot = hs
         val cb = object : ConnectivityManager.NetworkCallback() {
@@ -165,7 +175,41 @@ open class KioskService : Service() {
         hs.start()
     }
 
+    /**
+     * Switches Wi-Fi back on when Android failed to load its driver at boot, where the app may ([WifiDriverRecovery]:
+     * the lululemon Mirror's stock Android loses that race once the apps are optimized). The broadcast is sticky, so
+     * a failure from before the service started counts too.
+     */
+    @Suppress("DEPRECATION") // setWifiEnabled: the call this is about, where the app may (mayEnable)
+    private fun watchWifiDriver() {
+        val wifi = applicationContext.getSystemService(WifiManager::class.java) ?: return
+        val schedule: (Long, () -> Unit) -> () -> Unit = { delay, run -> val r = Runnable(run); main.postDelayed(r, delay); { main.removeCallbacks(r) } }
+        val recovery = WifiDriverRecovery(
+            mayEnable = { WifiRadio.mayEnable(this) },
+            state = { wifi.wifiState },
+            enable = { wifi.setWifiEnabled(true) },
+            schedule = schedule,
+            log = { Log.i(WIFI_TAG, it) },
+        )
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                recovery.onState(
+                    // -1 without the extra: never read as a failure.
+                    i.getIntExtra(WifiManager.EXTRA_WIFI_STATE, -1),
+                    i.getIntExtra(WifiManager.EXTRA_PREVIOUS_WIFI_STATE, -1),
+                )
+            }
+        }
+        runCatching { registerReceiver(receiver, IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION), null, main) }
+            .onSuccess { wifiRecovery = recovery; wifiStates = receiver }
+            .onFailure { Log.w(WIFI_TAG, "can't follow Wi-Fi's state", it) }
+    }
+
     override fun onDestroy() {
+        wifiStates?.let { runCatching { unregisterReceiver(it) } }
+        wifiStates = null
+        wifiRecovery?.close()
+        wifiRecovery = null
         hotspotNetworks?.let { cb -> runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) } }
         hotspotNetworks = null
         glassworks.setupHotspot?.close() // stops it, and puts back what it changed
@@ -265,6 +309,7 @@ open class KioskService : Service() {
 
     companion object {
         private const val HOTSPOT_TAG = "Glassworks.Hotspot"
+        private const val WIFI_TAG = "Glassworks.Wifi"
         private const val CHANNEL = "kiosk"
         private const val NOTIFICATION_ID = 1
         private const val REQ_KIOSK_SETTINGS = 10  // distinct PendingIntent request codes

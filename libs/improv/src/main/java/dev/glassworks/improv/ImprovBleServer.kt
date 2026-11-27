@@ -88,6 +88,10 @@ public class ImprovBleServer(
     private var advertisedOnce = false
     /** A legacy refresh waits for the last client to leave ([updateAdvertisement]). */
     private var refreshPending = false
+    /** A failed legacy refresh's tries ([REFRESH_RETRY_MS]): each runs again now, or after the last client leaves. */
+    private val refreshRetry = RefreshRetry(main, REFRESH_RETRY_MS) {
+        if (running && !advertising) { if (devices.isNotEmpty()) refreshPending = true else restartLegacyAdvertising() }
+    }
 
     private val values = ConcurrentHashMap<UUID, ByteArray>()
     private val chars = HashMap<UUID, BluetoothGattCharacteristic>()
@@ -217,6 +221,7 @@ public class ImprovBleServer(
         btReceiver = null
         stopAdvertising()
         main.removeCallbacks(inFlightTimeout)
+        refreshRetry.reset()
         queue.clear()
         inFlight = false
         server?.let { s ->
@@ -326,7 +331,9 @@ public class ImprovBleServer(
         val set = advSet
         if (Compat.hasAdvertisingSets && set != null) {
             set.setAdvertisingData(advData())
-        } else if (useLegacyAdvertise && advertising) {
+        } else if (useLegacyAdvertise && (advertising || advertisedOnce)) {
+            // a failed refresh's retry is on its way, and starts with the data as it is then
+            if (!advertising && refreshRetry.pending) return
             // The legacy API can't update in place, so the new service data means stop and start again. Not while a
             // client is connected: on Android 6 stopping the advertiser dropped the connected client ~270 ms later
             // (Mirror, 2026-11-25), so the Wi-Fi result never reached it. The client has the state from the
@@ -380,6 +387,7 @@ public class ImprovBleServer(
             main.post {
                 advertising = true
                 advertisedOnce = true
+                refreshRetry.reset()
                 listener.onAdvertising(true, "startAdvertising (legacy API)")
             }
         }
@@ -387,9 +395,17 @@ public class ImprovBleServer(
         override fun onStartFailure(errorCode: Int) {
             main.post {
                 val why = "startAdvertising failed: ${advertiseError(errorCode)}"
-                // A refresh that fails leaves the GATT server and its clients up; the next refresh tries again.
-                if (advertisedOnce) Log.w(logTag, "$why (refreshing the advertisement)")
-                else listener.onAdvertising(false, why)
+                when {
+                    !advertisedOnce -> listener.onAdvertising(false, why)
+                    !running -> Unit
+                    // A refresh that fails leaves the GATT server and its clients up but nothing advertised: try again
+                    // a few times, then say so, so setup doesn't claim it can still be found (#944)
+                    else -> {
+                        val wait = refreshRetry.failed()
+                        if (wait != null) Log.w(logTag, "$why (refreshing the advertisement; try ${refreshRetry.tries} of ${refreshRetry.size} in $wait ms)")
+                        else listener.onAdvertising(false, "$why (refreshing the advertisement, after ${refreshRetry.size} tries)")
+                    }
+                }
             }
         }
     }
@@ -501,6 +517,8 @@ public class ImprovBleServer(
     public companion object {
         /** Logcat tag for this server; set it before starting to use your app's own. */
         @Volatile public var logTag: String = "ImprovBle"
+        /** How long a failed legacy refresh waits before each new try; after the last, the server reports the failure. */
+        internal val REFRESH_RETRY_MS: LongArray = longArrayOf(1_000L, 2_000L, 4_000L)
         internal val U_STATE: UUID = UUID.fromString(Improv.STATE_UUID)
         internal val U_ERROR: UUID = UUID.fromString(Improv.ERROR_UUID)
         internal val U_RPC: UUID = UUID.fromString(Improv.RPC_COMMAND_UUID)

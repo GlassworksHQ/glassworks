@@ -169,4 +169,18 @@ class SetupHotspotPolicyTest {
     fun `no time left while off`() {
         assertNull(p.leftMs(0))
     }
+
+    @Test
+    fun `a radio switched on as rule 1 starts sends it back to waiting, not an asked hotspot`() {
+        val p = SetupHotspotPolicy(0)
+        assertTrue(p.update(connected = false, now = 3 * 60_000L).on)
+        p.radioSwitchedOn(3 * 60_000L)
+        assertEquals(SetupHotspotPolicy.State.Waiting(3 * 60_000L), p.state)
+        assertNull("not a stop: it never started", p.lastStop)
+
+        val asked = SetupHotspotPolicy(0)
+        assertTrue(asked.ask(connected = false, now = 0))
+        asked.radioSwitchedOn(0)
+        assertTrue(asked.state is SetupHotspotPolicy.State.On)
+    }
 }

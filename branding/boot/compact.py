@@ -1,10 +1,9 @@
 """The compact boot animation: a bootanimation-compact.zip small enough to replace a stock
 bootanimation.zip in place, for a frame whose `boot.compactBudget` is that file's size.
 
-The Mirror's stock-in-place install will write it over /system/media/bootanimation.zip in that file's
-own ext4 blocks, so it may not grow past the stock file (22,901 bytes on stock 1.24.0). stock.ts
-padZipToExactLength pads a zip to the stock file's exact length (the zip comment); the stock install
-doesn't write this zip yet.
+The Mirror's stock-in-place install writes it over /system/media/bootanimation.zip in that file's own
+ext4 blocks, so it may not grow past the stock file (22,901 bytes on stock 1.24.0). stock.ts
+padZipToExactLength pads it to the stock file's exact length (the zip comment).
 
 What it is: one full-screen frame, the full boot animation's resting frame (the Glassworks stack, the
 wordmark and the device line) without its grain, held until boot completes. Full-screen like stock's

@@ -1,24 +1,28 @@
-/* What goes on the device (issue 579): the image cards and the owner line. Brand tokens only; ember marks the pick, as on the picker. */
+/* What goes on the device (issue 579): the image cards and the owner line. Brand tokens only; the pick is an ink ring, as on the picker (ember is the action, docs/design/kiln/system.md). */
 .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .cards.one { grid-template-columns: minmax(0, 1fr); }
 .more { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .card {
-  display: grid; gap: 10px; align-content: start; text-align: left; cursor: pointer;
+  position: relative; display: grid; gap: 10px; align-content: start; text-align: left; cursor: pointer;
   padding: 16px; border-radius: 16px; border: 1px solid var(--edge); background: var(--well); color: inherit; font: inherit;
 }
 .card:hover { border-color: color-mix(in srgb, var(--fg) 24%, transparent); }
-.card[data-state="checked"] {
-  border-color: color-mix(in srgb, var(--ember-b) 55%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ember-b) 35%, transparent), 0 14px 40px -24px color-mix(in srgb, var(--ember-b) 80%, transparent);
-}
-.card[data-state="checked"] :global(.rd) { border: 4.5px solid var(--ember-b); }
+/* the radio covers the whole card; the project link sits above it */
+.pick { position: absolute; inset: 0; z-index: 0; border: 0; padding: 0; margin: 0; background: none; border-radius: inherit; cursor: pointer; }
+.pick:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
+.card > :not(.pick) { pointer-events: none; }
+.above { position: relative; z-index: 1; pointer-events: auto; }
+.card[data-state="checked"] { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink), 0 14px 40px -26px color-mix(in srgb, var(--night) 45%, transparent); background: var(--glass); }
+.card[data-state="checked"] :global(.rd) { border: 4.5px solid var(--ink); }
 .head { display: flex; align-items: center; gap: 10px; }
 .head :global(.pill) { margin-left: auto; }
 .name { font-weight: 500; font-size: 18px; letter-spacing: -0.01em; }
 .summary { color: var(--muted); font-size: 14px; }
-.facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; margin: 0; font-size: 13px; }
-.facts dt { color: var(--faint); }
-.facts dd { margin: 0; color: var(--muted); }
+/* the frame's advice: the recommended way in ink (never a status color), and its trade in plain text */
+.rec { color: var(--ink); background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.trade { font-size: 14px; color: var(--fg); }
+.facts { display: flex; flex-wrap: wrap; gap: 2px 0; margin: 0; font-size: 13px; color: var(--muted); }
+.facts > span:not(:last-child)::after { content: "·"; margin: 0 8px; color: var(--faint); }
 .facts :global(.link) { font-size: inherit; }
 .whose { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .whose :global(.link) { font-size: inherit; }

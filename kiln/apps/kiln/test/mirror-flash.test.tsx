@@ -28,7 +28,7 @@ afterEach(() => cleanup());
 
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
-function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down' | 'bad'; settingsOverlay?: Uint8Array; serial?: string; refract?: string | null } = {}) {
+function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down' | 'bad'; settingsOverlay?: Uint8Array; frameworkOverlay?: Uint8Array; serial?: string; refract?: string | null } = {}) {
   let fails = o.flashFails ?? 0;
   const calls: string[] = [];
   const built: Parameters<ImageMaker['build']>[0][] = [];
@@ -58,8 +58,10 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
   const adb = new FirstBootMirror();
   const requestFastboot = vi.fn(async () => fb);
   const f = new ImageSession({ frame: mirrorFrame, simulated: true, images, ...(o.refract === null ? {} : { refract: o.refract ?? 'https://proxy.test' }), requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
-    ...(o.settingsOverlay ? { settings: async () => o.settingsOverlay } : {}) });
-  f.choose(); // Glassworks, first and picked
+    ...(o.settingsOverlay ? { settings: async () => o.settingsOverlay } : {}),
+    ...(o.frameworkOverlay ? { framework: async () => o.frameworkOverlay } : {}) });
+  f.pick(mirrorFrame.imageFlow.recipes[0]!.id); // the full image, not the recommended in-place way
+  f.choose();
   return { f, mirror, calls, adb, requestFastboot, built };
 }
 
@@ -108,14 +110,16 @@ describe('installing Glassworks over fastboot', () => {
     expect(adb.cmds.filter((c) => c.includes('--es url'))).toEqual([]);
   });
 
-  it('builds the settings overlay into the images; Glassworks\' Wi-Fi is set-up\'s, not the image\'s', async () => {
+  it('builds the overlays into the images; Glassworks\' Wi-Fi is set-up\'s, not the image\'s', async () => {
     const overlay = new Uint8Array([1, 2, 3]);
-    const { f, mirror, built } = setup({ settingsOverlay: overlay });
+    const framework = new Uint8Array([4, 5, 6]);
+    const { f, mirror, built } = setup({ settingsOverlay: overlay, frameworkOverlay: framework });
     await f.download();
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     expect(built).toHaveLength(1);
     expect(built[0]!.settings).toBe(overlay);
+    expect(built[0]!.framework).toBe(framework);
     expect(built[0]!.wifi).toBeUndefined();
   });
 
@@ -187,7 +191,7 @@ describe('installing Glassworks over fastboot', () => {
   it('Done says when another launcher is still a home app, and its button hides it again', async () => {
     const { image: flash } = await showImage('flash-done-chooser');
     expect(flash.state.firstBoot?.home.result).toBe('chooser');
-    expect(screen.getByText('Glassworks isn\'t the only home screen yet.')).toBeTruthy();
+    expect(screen.getByText('Glassworks isn’t the only home screen yet')).toBeTruthy();
     expect(screen.getByText(/no touchscreen, hide the other launcher again or plug in a USB mouse/)).toBeTruthy();
   });
 
@@ -195,10 +199,10 @@ describe('installing Glassworks over fastboot', () => {
     const { image: flash } = await showImage('flash-done-no-home');
     expect(flash.state.firstBoot?.home).toEqual({ result: 'none', left: ['com.android.launcher3'] });
     expect(flash.state.firstBoot?.hidden).toEqual([]);
-    expect(screen.getByText('This Glassworks build has no home screen.')).toBeTruthy();
-    expect(screen.getByText((_, el) => el?.tagName === 'SPAN' && /^com\.android\.launcher3 stays its home screen\./.test(el.textContent ?? ''))).toBeTruthy();
+    expect(screen.getByText('This Glassworks build has no home screen')).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.tagName === 'DIV' && /^com\.android\.launcher3 stays its home screen\./.test(el.textContent ?? ''))).toBeTruthy();
     expect(screen.queryByText('Hide the other launcher again')).toBeNull();
-    expect(screen.queryByText('Glassworks isn\'t the only home screen yet.')).toBeNull();
+    expect(screen.queryByText('Glassworks isn’t the only home screen yet')).toBeNull();
   });
 
   it('the fastboot card plays the Mirror\'s recovery steps and names the button to hold (#521), first: most Mirrors still run lululemon\'s software', async () => {
@@ -208,10 +212,19 @@ describe('installing Glassworks over fastboot', () => {
     expect(embers()).toEqual(['Connect']);
     expect(screen.getByRole('button', { name: 'Already running Glassworks or Glass Panes? Restart over USB' })).toBeTruthy();
     expect(screen.getByRole('img', { name: /lululemon Studio Mirror in recovery mode: Unscrew the stand and the back, Lift off the back, Plug in the power cord, Plug in the micro-USB, Hold VOL−, Switch the power on\. VOL− \(SW3\)/ })).toBeTruthy();
-    expect(screen.getByText(/hold VOL− \(SW3\) — the one of its two buttons closer to the top edge/)).toBeTruthy();
-    expect(screen.getByText(/Keep holding while you switch the Mirror on/)).toBeTruthy();
-    expect(screen.getByText(/Plug the power cord back into its socket in that recess/)).toBeTruthy();
-    expect(screen.getByText(/Hold only VOL−, since pressing VOL\+ or both buttons starts other modes/)).toBeTruthy();
+    // the by-hand steps, numbered, each one ticked off by the person as they go
+    const steps = [...document.querySelectorAll('.isteps li')].map((li) => li.querySelector('.itext')!.textContent);
+    expect(steps).toHaveLength(7);
+    expect(steps[5]).toMatch(/^Press and hold VOL− \(SW3\) on the small green board at the top end: of its two buttons, the one closer to the top edge\.$/);
+    expect(steps[6]).toMatch(/^Keep holding while you switch the Mirror on/);
+    expect(steps[3]).toMatch(/^Plug the power cord back in/);
+    expect(screen.getByText(/Hold only VOL−: VOL\+ or both buttons start other modes/)).toBeTruthy();
+    const first = screen.getByRole('button', { name: 'Step 1' });
+    fireEvent.click(first);
+    expect(first.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Step 1, done' })).toBe(first);
+    // before the browser's list opens: what to pick in it
+    expect(document.querySelector('.ask')!.textContent).toContain('Pick Android, which is the Mirror');
   });
 
   it('asks for the fastboot device inside the click, before anything is awaited', () => {
@@ -237,7 +250,12 @@ describe('installing Glassworks over fastboot', () => {
     const { image: flash } = await imageDemo(mirrorEntry, 'flash-error', true);
     expect(flash.state).toMatchObject({ screen: 'error', error: expect.stringMatching(/FAILed/) });
     render(<ImageFlow image={flash} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('x'); } }, true)} />);
-    expect(screen.getByText(/The Mirror is still in fastboot mode, so leave it plugged in\. Click Try again to reconnect/)).toBeTruthy();
+    expect(screen.getByText('The Mirror is still in fastboot mode, so leave it plugged in.')).toBeTruthy();
+    expect(screen.getByText('Click Try again. Kiln reconnects and picks up from fastboot.')).toBeTruthy();
+    // the raw error is there for help, on request
+    expect(screen.queryByText(/FAILed/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+    expect(screen.getByText(/FAILed/)).toBeTruthy();
     // one ember, Try again, on the step that stopped: fastboot, not the download two steps back
     expect(embers()).toEqual(['Try again']);
     expect(screen.getByRole('button', { name: 'Back to download' })).toBeTruthy();
@@ -309,8 +327,7 @@ describe('every flash demo screen', () => {
     const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-confirm', true);
     render(<ImageFlow image={flash} app={mirror} />);
     expect(screen.getByText('This replaces lululemon’s software for good')).toBeTruthy();
-    expect(screen.getByText(/Kiln can't create a backup before replacing it.*return to the plain Glass Panes image/s)).toBeTruthy();
-    expect(screen.getByText("Reversible to the community image, not to lululemon's software.")).toBeTruthy(); // #146
+    expect(screen.getByText(/Kiln can't create a backup before replacing it.*return to the plain Glass Panes image.*Reversible to the community image, not to lululemon's software\./s)).toBeTruthy(); // #146
     expect((screen.getByText('Install Glassworks') as HTMLButtonElement).disabled).toBe(true);
   });
 });
