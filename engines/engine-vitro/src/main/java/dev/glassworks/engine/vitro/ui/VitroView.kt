@@ -393,7 +393,7 @@ class VitroView(
         val run = Runnable { runSlice(this) }
         private var scheduled: (() -> Unit)? = null
 
-        /** The next chunk; the first waits for the first screen to be drawn ([postSlice]). */
+        /** The next chunk; the first waits for the first screen to be drawn twice ([postSlice]). */
         fun schedule() {
             scheduled = postSlice(run, slices <= 1)
         }
@@ -405,19 +405,23 @@ class VitroView(
     }
 
     /**
-     * Runs [task] as soon as the main thread is free, or, [afterFrame], once the next frame has been drawn (the first
-     * chunk, so the first screen is drawn before any card below it is made), and returns what cancels it. An
-     * asynchronous message: a view that changed (cards just added) holds ordinary messages back until its next frame
-     * is drawn, and these chunks don't wait for one. The frame still runs between two chunks when it's due: its own
-     * message is asynchronous too, and older. Tests give their own.
+     * Runs [task] as soon as the main thread is free, or, [afterFrames], once the first screen has been drawn and drawn
+     * again (the first chunk: what the first screen does on its next pass, a graph sized now, an image, comes before
+     * any card below it), and returns what cancels it. An asynchronous message: a view that changed (cards just
+     * added) holds ordinary messages back until its next frame is drawn, and these chunks don't wait for one. The
+     * frame still runs between two chunks when it's due: its own message is asynchronous too, and older. Tests give
+     * their own.
      */
-    internal var postSlice: (Runnable, Boolean) -> (() -> Unit) = { task, afterFrame ->
+    internal var postSlice: (Runnable, Boolean) -> (() -> Unit) = { task, afterFrames ->
         fun send() = mainHandler.sendMessage(android.os.Message.obtain(mainHandler, task).apply { isAsynchronous = true })
-        // The frame callback runs before the frame's layout and draw; what it sends runs after them.
-        val frame = android.view.Choreographer.FrameCallback { send() }
-        if (afterFrame) android.view.Choreographer.getInstance().postFrameCallback(frame) else send()
+        val choreographer = android.view.Choreographer.getInstance()
+        // A frame callback runs before its frame's layout and draw; what the second one sends runs after that frame.
+        val second = android.view.Choreographer.FrameCallback { send() }
+        val first = android.view.Choreographer.FrameCallback { choreographer.postFrameCallback(second) }
+        if (afterFrames) choreographer.postFrameCallback(first) else send()
         val cancel = {
-            android.view.Choreographer.getInstance().removeFrameCallback(frame)
+            choreographer.removeFrameCallback(first)
+            choreographer.removeFrameCallback(second)
             mainHandler.removeCallbacks(task)
         }
         cancel
@@ -2934,11 +2938,11 @@ class VitroView(
         internal const val SLICE_BUDGET_MS = 16L
 
         /**
-         * The longest chunk of cards below a masonry view's first screen ([SlicedBuild]): under the 50 ms a task may
-         * take before it counts as long (RAIL's input budget, which Clarity's main-thread probe uses too). One card that
-         * takes longer is still made whole.
+         * The longest chunk of cards below a masonry view's first screen ([SlicedBuild]): with the frame that lays its
+         * cards out, under the 50 ms a task may wait before the main thread counts as busy (RAIL's input budget, which
+         * Clarity's main-thread probe uses too). One card that takes longer is still made whole.
          */
-        internal const val REST_SLICE_BUDGET_MS = 48L
+        internal const val REST_SLICE_BUDGET_MS = 24L
 
         /**
          * How far down a masonry view its first pass builds ([buildMasonryLayout]), as a share of the viewport's height:

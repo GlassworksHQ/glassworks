@@ -152,13 +152,13 @@ class MasonrySlicesTest {
         assertFalse("not built yet: the page isn't ready until its last card", vv.currentViewBuilt)
         assertTrue("no metrics until the view is built", metrics.isEmpty())
         assertEquals("one chunk waits", 1, queued.size)
-        assertEquals("the first chunk waits for the first screen to be drawn", listOf(true), firstAfterFrame)
+        assertEquals("the first chunk waits for the first screen to be drawn (twice)", listOf(true), firstAfterFrame)
 
-        // A chunk: up to 48 ms of cards, at 5 ms a look, then the next one queued.
+        // A chunk: up to 24 ms of cards, at 5 ms a look, then the next one queued.
         val before = attached(row).sum()
         chunk()
         val added = attached(row).sum() - before
-        assertTrue("a chunk adds several cards: $added", added in 2..10)
+        assertTrue("a chunk adds several cards: $added", added in 2..6)
         assertEquals("the chunks after it don't wait for frames", listOf(true, false), firstAfterFrame)
         repeat(20) { chunk() }
         assertFalse(vv.buildInProgress)
