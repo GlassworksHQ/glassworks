@@ -28,6 +28,8 @@ export const START_CONFIRMATION_LOG_STRING =
 
 /** Which `MirrorApService` the synthetic jar carries (see buildSyntheticStockServicesJar). */
 export type MirrorApVariant = 'stock' | 'none' | 'unexpected';
+/** Which `UsbService` it carries: AOSP 6.0.1's shape, none, or an `allowUsbDebugging` that checks two permissions. */
+export type UsbServiceVariant = 'stock' | 'none' | 'unexpected';
 
 /**
  * Builds a real DEX 035 + ZIP `services.jar` with `UsbDebuggingManager` (so the startConfirmation
@@ -41,18 +43,20 @@ export type MirrorApVariant = 'stock' | 'none' | 'unexpected';
  * Android framework types are provided as local stubs with the exact AOSP descriptors. Each variant is
  * built once per run (d8 is slow); callers get their own copy.
  */
-export function buildSyntheticStockServicesJar(opts: { mirrorAp?: MirrorApVariant } = {}): Uint8Array {
+export function buildSyntheticStockServicesJar(opts: { mirrorAp?: MirrorApVariant; usbService?: UsbServiceVariant } = {}): Uint8Array {
   const mirrorAp = opts.mirrorAp ?? 'stock';
-  const cached = SYNTHETIC_JARS.get(mirrorAp);
+  const usbService = opts.usbService ?? 'stock';
+  const id = `${mirrorAp}/${usbService}`;
+  const cached = SYNTHETIC_JARS.get(id);
   if (cached) return cached.slice();
-  const jar = buildSyntheticJarUncached(mirrorAp);
-  SYNTHETIC_JARS.set(mirrorAp, jar);
+  const jar = buildSyntheticJarUncached(mirrorAp, usbService);
+  SYNTHETIC_JARS.set(id, jar);
   return jar.slice();
 }
 
-const SYNTHETIC_JARS = new Map<MirrorApVariant, Uint8Array>();
+const SYNTHETIC_JARS = new Map<string, Uint8Array>();
 
-function buildSyntheticJarUncached(mirrorAp: MirrorApVariant): Uint8Array {
+function buildSyntheticJarUncached(mirrorAp: MirrorApVariant, usbService: UsbServiceVariant): Uint8Array {
   if (!D8) throw new Error('buildSyntheticStockServicesJar requires d8 (guard call sites with it.skipIf(!HAS_D8))');
   const dir = mkdtempSync(join(tmpdir(), 'gw-stock-dex-'));
   try {
@@ -69,6 +73,7 @@ import android.content.pm.PackageManager;
 public class Context {
   public PackageManager getPackageManager() { return null; }
   public Intent registerReceiver(BroadcastReceiver receiver, IntentFilter filter) { return null; }
+  public void enforceCallingOrSelfPermission(String permission, String message) {}
 }
 `);
     write('android/content/Intent.java', `package android.content;
@@ -118,6 +123,59 @@ public class DevicePolicyManagerService {
   }
 }
 `);
+    // AOSP 6.0.1's UsbService: every call checks MANAGE_USB first (stock 1.24.0's, read with jadx 2026-11-25). The
+    // settings class stands in for the rest of system_server, which checks WRITE_SECURE_SETTINGS elsewhere.
+    if (usbService !== 'none') {
+      const allowBody = usbService === 'stock'
+        ? 'mContext.enforceCallingOrSelfPermission("android.permission.MANAGE_USB", null);'
+        : 'mContext.enforceCallingOrSelfPermission("android.permission.MANAGE_USB", null);\n    mContext.enforceCallingOrSelfPermission("android.permission.WRITE_SECURE_SETTINGS", null);';
+      write('com/android/server/usb/UsbService.java', `package com.android.server.usb;
+import android.content.Context;
+public class UsbService {
+  private final Context mContext;
+  private final UsbDebuggingManager mDeviceManager;
+  public UsbService(Context context, UsbDebuggingManager manager) { mContext = context; mDeviceManager = manager; }
+  public void allowUsbDebugging(boolean alwaysAllow, String publicKey) {
+    ${allowBody}
+    mDeviceManager.allowUsbDebugging(alwaysAllow, publicKey);
+  }
+  public void denyUsbDebugging() {
+    mContext.enforceCallingOrSelfPermission("android.permission.MANAGE_USB", null);
+    mDeviceManager.denyUsbDebugging();
+  }
+}
+`);
+    }
+    // AOSP 6.0.1's AlarmManagerService: its binder is the class's second anonymous class, and setTimeZone checks
+    // SET_TIME_ZONE first and setTime SET_TIME (stock 1.24.0's AlarmManagerService$2, read with jadx 2026-11-25).
+    write('com/android/server/AlarmManagerService.java', `package com.android.server;
+import android.content.Context;
+public class AlarmManagerService {
+  private final Context mContext;
+  private String mZone;
+  private long mNow;
+  private final Runnable mTick = new Runnable() { public void run() {} };
+  final Object mService = new Object() {
+    public boolean setTime(long millis) {
+      mContext.enforceCallingOrSelfPermission("android.permission.SET_TIME", "setTime");
+      mNow = millis;
+      return true;
+    }
+    public void setTimeZone(String tz) {
+      mContext.enforceCallingOrSelfPermission("android.permission.SET_TIME_ZONE", "setTimeZone");
+      setTimeZoneImpl(tz);
+    }
+  };
+  public AlarmManagerService(Context context) { mContext = context; }
+  void setTimeZoneImpl(String tz) { mZone = tz; }
+}
+`);
+    write('com/android/server/SecureSettings.java', `package com.android.server;
+import android.content.Context;
+public class SecureSettings {
+  public static void check(Context context) { context.enforceCallingOrSelfPermission("android.permission.WRITE_SECURE_SETTINGS", null); }
+}
+`);
     if (mirrorAp !== 'none') {
       const ready = mirrorAp === 'stock'
         ? `mContext.registerReceiver(mWifiStateBroadcastReceiver, new IntentFilter("android.net.wifi.WIFI_STATE_CHANGED"));
@@ -148,6 +206,8 @@ public class MirrorApService {
       'android/app/backup/IBackupManager.java', 'com/android/server/usb/UsbDebuggingManager.java',
       'com/android/server/devicepolicy/DevicePolicyManagerService.java',
       ...(mirrorAp !== 'none' ? ['com/android/server/MirrorApService.java'] : []),
+      ...(usbService !== 'none' ? ['com/android/server/usb/UsbService.java'] : []),
+      'com/android/server/SecureSettings.java', 'com/android/server/AlarmManagerService.java',
     ].map((r) => join(dir, 'src', r));
     const clsDir = join(dir, 'classes');
     execFileSync('mkdir', ['-p', clsDir]);

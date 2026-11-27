@@ -45,9 +45,9 @@ describe('the calm moments', () => {
     expect(within(screen.getByRole('group', { name: 'Then, in Home Assistant' })).getByText(/Home Assistant finds it by itself\./)).toBeTruthy();
   });
 
-  it('an error: what happened in the lede, how to fix it in its own callout', async () => {
+  it('an error: whether anything was written, first, then how to fix it in its own callout', async () => {
     await show('error');
-    expect(document.querySelector('.lede')?.textContent).toBe('Nothing was written.');
+    expect(document.querySelector('main .note.ok')?.textContent).toBe('Nothing was written.');
     expect(screen.getByRole('group', { name: 'How to fix it' }).textContent).toMatch(/^How to fix itPlug the cable straight into this computer/);
   });
 });

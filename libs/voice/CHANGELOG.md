@@ -5,6 +5,16 @@ What changed in each release of `dev.glassworks:voice` on Maven Central. Version
 cut from `libs/voice/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
+## [0.2.0] - 2026-11-26
+
+### Changed
+- **LiteRT 1.4.1 replaces TensorFlow Lite 2.16.1 for the wake word.** LiteRT is TensorFlow Lite under its new
+  name, with the same `org.tensorflow.lite` API, and its native library is 16 KB page aligned, so the wake word
+  loads on devices that use 16 KB memory pages (#962). LiteRT is on Google's Maven repository, not on Maven
+  Central, so add `google()` to your repositories. Both libraries ship the same `org.tensorflow.lite` classes:
+  if your app declares an `org.tensorflow:tensorflow-lite*` artifact, move it to the matching
+  `com.google.ai.edge.litert` one, or the build fails on duplicate classes.
+
 ## [0.1.0] - 2026-11-22
 
 ### Added

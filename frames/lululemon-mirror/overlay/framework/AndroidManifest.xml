@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A resource overlay for Android 6's framework (static RRO on package "android", /vendor/overlay): the
+     Mirror's backlight goes fully off when the app asks for it. Built by ../build.sh; Kiln writes the APK
+     to /system/vendor/overlay next to GlassworksSettings.apk. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.glassworks.mirror.framework"
+    android:versionCode="1"
+    android:versionName="1">
+    <overlay android:targetPackage="android" android:priority="1" />
+    <application android:hasCode="false" android:label="Glassworks framework settings for the Mirror" />
+</manifest>

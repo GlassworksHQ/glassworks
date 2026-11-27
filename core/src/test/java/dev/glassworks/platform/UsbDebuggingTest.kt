@@ -5,6 +5,7 @@
 package dev.glassworks.platform
 
 import android.app.Application
+import android.provider.Settings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -184,6 +185,28 @@ class UsbDebuggingAvailableTest {
         assertFalse("can't see who asks", UsbDebugging.available(app))
         shadowOf(app).grantPermissions("android.permission.READ_LOGS")
         assertTrue(UsbDebugging.available(app))
+    }
+
+    @Test fun `an app adb installed answers when the installer opened allowUsbDebugging to a permission it holds`() {
+        shadowOf(app).grantPermissions("android.permission.READ_LOGS", "android.permission.WRITE_SECURE_SETTINGS")
+        assertFalse("no installer said so: stock checks MANAGE_USB", UsbDebugging.available(app))
+        Settings.Global.putString(app.contentResolver, UsbDebugging.ALLOW_PERMISSION_SETTING, "android.permission.WRITE_SECURE_SETTINGS")
+        assertTrue(UsbDebugging.available(app))
+    }
+
+    @Test fun `the named permission must be held, and READ_LOGS too`() {
+        Settings.Global.putString(app.contentResolver, UsbDebugging.ALLOW_PERMISSION_SETTING, "android.permission.WRITE_SECURE_SETTINGS")
+        shadowOf(app).grantPermissions("android.permission.READ_LOGS")
+        assertFalse("not granted", UsbDebugging.available(app))
+        shadowOf(app).denyPermissions("android.permission.READ_LOGS")
+        shadowOf(app).grantPermissions("android.permission.WRITE_SECURE_SETTINGS")
+        assertFalse("can't see who asks", UsbDebugging.available(app))
+    }
+
+    @Test fun `a setting that doesn't name an Android permission counts for nothing`() {
+        shadowOf(app).grantPermissions("android.permission.READ_LOGS", "android.permission.WRITE_SECURE_SETTINGS")
+        Settings.Global.putString(app.contentResolver, UsbDebugging.ALLOW_PERMISSION_SETTING, "yes")
+        assertFalse(UsbDebugging.available(app))
     }
 }
 

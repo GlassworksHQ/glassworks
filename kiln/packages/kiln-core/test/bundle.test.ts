@@ -1,5 +1,6 @@
 // The bundle an agent sends for an in-place install: Kiln refuses it unless it is one whole GWSB bundle, its payload
 // matches its hash, it came from this device, and (with the stage's secret) its signature holds.
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { hmacSha256Hex, memoryBundleCache, parseGwsbBundle, sha256Hex, verifyGwsbBundle } from '../src/bundle';
 import { namedBackupZip } from '../src/backup';
@@ -16,12 +17,15 @@ function frame(meta: Uint8Array, payload: Uint8Array): Uint8Array {
   return out;
 }
 
-/** A bundle as the agent writes it: the meta, then (signed) the HMAC over meta-without-it and the payload. */
+/**
+ * A bundle as the agent writes it (StockBundle): the meta, then (signed) the HMAC over the meta up to that field (no
+ * closing brace) and the payload.
+ */
 async function bundle(o: { meta?: Record<string, unknown>; payload?: Uint8Array; sign?: boolean; secret?: Uint8Array } = {}): Promise<Uint8Array> {
   const payload = o.payload ?? PAYLOAD;
   const base = JSON.stringify({ serialno: 'TESTSERIAL0', servicesSha256: await sha256Hex(PAYLOAD), extents: [[0, 4096]], ...o.meta });
   if (o.sign === false) return frame(new TextEncoder().encode(base), payload);
-  const mac = await hmacSha256Hex(o.secret ?? SECRET, new TextEncoder().encode(base), payload);
+  const mac = await hmacSha256Hex(o.secret ?? SECRET, new TextEncoder().encode(base.slice(0, -1)), payload);
   return frame(new TextEncoder().encode(`${base.slice(0, -1)},"hmacSha256":"${mac}"}`), payload);
 }
 
@@ -47,6 +51,19 @@ describe('parseGwsbBundle', () => {
 });
 
 describe('verifyGwsbBundle', () => {
+  it('passes a bundle signed byte for byte as the probe app signs it (StockBundle.computeHmacHex)', async () => {
+    // The probe's HMAC input is the meta JSON with no hmacSha256 field and no closing brace, then the payload. The first
+    // real Mirror run (2026-11-25) refused every bundle while Kiln put the brace back.
+    const base = `{"version":1,"serialno":"TESTSERIAL0","servicesSha256":"${await sha256Hex(PAYLOAD)}","httpPort":18765`;
+    const mac = createHmac('sha256', Buffer.from(SECRET)).update(base).update(PAYLOAD).digest('hex');
+    const signed = frame(new TextEncoder().encode(`${base},"hmacSha256":"${mac}"}`), PAYLOAD);
+    await expect(verifyGwsbBundle(signed, { secret: SECRET, requireHmac: true, expectedSerial: 'TESTSERIAL0' })).resolves.toBeTruthy();
+    // and the same meta signed with the brace in is someone else's bytes
+    const withBrace = createHmac('sha256', Buffer.from(SECRET)).update(`${base}}`).update(PAYLOAD).digest('hex');
+    const wrong = frame(new TextEncoder().encode(`${base},"hmacSha256":"${withBrace}"}`), PAYLOAD);
+    await expect(verifyGwsbBundle(wrong, { secret: SECRET, requireHmac: true })).rejects.toThrow(/signature doesn't match/);
+  });
+
   it('passes a signed bundle from this device', async () => {
     const p = await verifyGwsbBundle(await bundle(), { secret: SECRET, requireHmac: true, expectedSerial: 'TESTSERIAL0' });
     expect(p.payload).toEqual(PAYLOAD);

@@ -34,7 +34,20 @@ export interface FrameWords {
   };
   /** Done's Silent updates block, by the state `updates` reads. */
   silent: Record<string, SilentWords>;
+  /**
+   * How long things usually take, in words ("about 10 minutes"): `total`, the whole install, and `steps`, by the id of a
+   * step in installer.json's install flow. Only what the frame's docs or measurements say: a step without one shows no time.
+   */
+  time?: FrameTimes;
+  /**
+   * Putting the device in recovery mode by hand, one physical step each, the action in `**bold**`. Connect numbers them
+   * beside the drawing, to tick off. Without them, the drawing's chips alone.
+   */
+  recoverySteps?: string[];
 }
+
+/** How long a frame's install usually takes (FrameWords `time`). `why`: where the times come from. */
+export interface FrameTimes { total?: string; steps?: Record<string, string>; why?: string }
 
 /** The app's install phases, as the frame's setUp reports them: the rows "Installing" shows. `apk`: the frame's name for which APK. */
 export type AppPhase =
@@ -123,6 +136,13 @@ export function frameWords(w: unknown, silent: readonly string[]): FrameWords {
   for (const [k, s] of Object.entries(o.silent ?? {})) {
     need(s, `silent.${k}.`, ['word', 'line']);
     if (!TONES.has(s.tone)) throw new Error(`installer.json words.silent.${k}.tone: one of y, n, w`);
+  }
+  if (o.time !== undefined) {
+    if (o.time.total !== undefined) need(o.time, 'time.', ['total']);
+    need(o.time.steps ?? {}, 'time.steps.', Object.keys(o.time.steps ?? {}));
+  }
+  if (o.recoverySteps !== undefined && (!Array.isArray(o.recoverySteps) || !o.recoverySteps.length || o.recoverySteps.some((x) => typeof x !== 'string' || !x))) {
+    throw new Error('installer.json words.recoverySteps: one non-empty line per step');
   }
   return o;
 }

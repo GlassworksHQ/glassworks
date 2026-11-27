@@ -51,7 +51,8 @@ function create(frame: KilnFrame, demoFrame: DemoFrame | undefined, base: string
 export function FrameWizard({ frame, demo, base }: { frame: KilnFrame; demo?: DemoFrame; base: string }) {
   const current = useCallback((): Entry => {
     const e = registry.get();
-    return e?.base === base && !e.standard ? e : registry.set(create(frame, demo, base, true));
+    // a snapshot runs during render: the registry tells its other listeners once this render is over
+    return e?.base === base && !e.standard ? e : registry.set(create(frame, demo, base, true), { quiet: true });
   }, [frame, demo, base]);
   const entry = useSyncExternalStore(registry.subscribe, current, current);
   const router = useRouter();

@@ -12,11 +12,11 @@ import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, type PaneCard, type SetupState } from '@glassworks/setup-channel';
 import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from '@glassworks/improv-serial';
 import { explain, type Written } from './explain';
-import type { Changed } from './state';
+import { firstStart, type Changed } from './state';
 import type { AppPhase, DemoFrame } from '@glassworks/kiln-core';
 import { Session, type SessionDeps } from './session';
 
-export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'panes', 'panes-busy', 'panes-refused', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
+export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'first-boot', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'panes', 'panes-busy', 'panes-refused', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
   'done', 'done-old-boot', 'undo', 'undo-refused', 'undo-refused-splash', 'undo-apps-back', 'undo-still-on', 'undo-unreadable', 'undo-connect', 'restore', 'undo-done', 'error', 'error-written',
   'error-no-recovery', 'error-secure-boot', 'error-not-this-panel', 'error-usb-unreliable', 'error-download', 'error-release', 'error-no-release', 'error-not-started', 'error-adb-held',
   'error-backup-refused', 'error-nothing-picked', 'error-earlier', 'error-unknown', 'error-unknown-written'] as const;
@@ -302,8 +302,11 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
       progress(0.68, 'flash', 'Writing the new software', 'Writing boot');
       return;
     case 'ask-adb':
-      dispatch({ type: 'setup', setup: { phase: 'waiting', note: 'The panel is starting its new software. The first start takes a minute or two.' } });
+      dispatch({ type: 'setup', setup: firstStart(frame) });
       void session.asks.open('adb', () => new Promise(() => {}), never);
+      return;
+    case 'first-boot': // picked: waiting for the panel's first start
+      dispatch({ type: 'setup', setup: firstStart(frame) });
       return;
     case 'app': // a first install: the panel has no Glassworks yet
     case 'app-update': // Glassworks is on the panel: installing replaces it

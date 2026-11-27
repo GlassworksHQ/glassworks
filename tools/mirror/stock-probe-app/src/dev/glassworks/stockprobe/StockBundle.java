@@ -2,6 +2,7 @@
 package dev.glassworks.stockprobe;
 
 import android.content.Context;
+import android.util.Base64;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -49,6 +50,13 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public final class StockBundle {
     public static final String SERVICES_PATH = "/system/framework/services.jar";
+    /**
+     * Stock's boot animation, which Kiln overwrites in place with its own at the same size and puts back from the
+     * restore point: the bundle carries its bytes (base64), SHA-256 and FIEMAP in {@code "bootAnimation"}. Stock
+     * 1.24.0's is 22,901 bytes; anything past {@link #BOOT_MAX_BYTES} is left out.
+     */
+    public static final String BOOT_ANIMATION_PATH = "/system/media/bootanimation.zip";
+    static final int BOOT_MAX_BYTES = 256 * 1024;
     public static final int VERSION = 1;
     private static final String[] ODEX_PATHS = {
             "/system/framework/oat/arm64/services.odex",
@@ -75,6 +83,10 @@ public final class StockBundle {
         String mirrorVersion;
         String fingerprint;
         String serialno;
+        /** The {@code "bootAnimation"} object, or {@code "null"} when stock has none Kiln can use. */
+        String bootJson = "null";
+        /** Its size when it's there, for descriptions that leave the object out (Bluetooth's META): Kiln then takes a fresh bundle over a kept one without it. */
+        int bootSize;
     }
 
     public final byte[] header;
@@ -90,7 +102,7 @@ public final class StockBundle {
         this.jar = st.jar;
         this.lanIp = lanIp;
         this.hmacHex = computeHmacHex(st, lanIp);
-        this.metaJson = closeMeta(buildMetaBase(st, lanIp, st.fiemapJson, null), hmacHex);
+        this.metaJson = closeMeta(buildMetaBase(st, lanIp, st.fiemapJson, null, true), hmacHex);
         byte[] meta = metaJson.getBytes(StandardCharsets.UTF_8);
         byte[] h = new byte[12 + meta.length];
         h[0] = 'G'; h[1] = 'W'; h[2] = 'S'; h[3] = 'B';
@@ -175,13 +187,13 @@ public final class StockBundle {
      */
     public String bleMetaJson(int chunkSize, boolean chunkLocked) {
         String extra = ",\"bundleSize\":" + size() + ",\"chunkSize\":" + chunkSize + ",\"chunkLocked\":" + chunkLocked;
-        String full = closeMeta(buildMetaBase(st, lanIp, st.fiemapJson, extra), hmacHex);
+        String full = closeMeta(buildMetaBase(st, lanIp, st.fiemapJson, extra, false), hmacHex);
         if (fits512(full)) return full;
         String fiemap = "{\"truncated\":true,\"extentCount\":" + countExtents(st.fiemapJson) + "}";
-        String trunc = closeMeta(buildMetaBase(st, lanIp, fiemap, extra), hmacHex);
+        String trunc = closeMeta(buildMetaBase(st, lanIp, fiemap, extra, false), hmacHex);
         if (fits512(trunc)) return trunc;
         if (hmacHex != null) {
-            String flagged = buildMetaBase(st, lanIp, fiemap, extra) + ",\"hasHmac\":true}";
+            String flagged = buildMetaBase(st, lanIp, fiemap, extra, false) + ",\"hasHmac\":true}";
             if (fits512(flagged)) return flagged;
         }
         // Final compact fallback guaranteed <= 512 bytes (the complete metadata and HMAC always ride
@@ -217,8 +229,12 @@ public final class StockBundle {
         return base + ",\"hmacSha256\":\"" + hmacHex + "\"}";
     }
 
-    /** The metadata JSON up to but not including the trailing hmac field and the closing brace. */
-    private static String buildMetaBase(Static st, String lanIp, String fiemap, String extra) {
+    /**
+     * The metadata JSON up to but not including the trailing hmac field and the closing brace. {@code withBoot}: with
+     * the boot animation (about 30 KB of base64), as the GWSB header and its HMAC carry it; the Bluetooth META
+     * characteristic leaves it out to stay within 512 bytes, as it trims the FIEMAP.
+     */
+    private static String buildMetaBase(Static st, String lanIp, String fiemap, String extra, boolean withBoot) {
         StringBuilder sb = new StringBuilder(512);
         sb.append("{\"version\":").append(VERSION)
           .append(",\"mirrorVersion\":").append(jsonStr(st.mirrorVersion))
@@ -233,6 +249,8 @@ public final class StockBundle {
           .append(",\"fiemap\":").append(fiemap == null ? "null" : fiemap)
           .append(",\"lanIp\":").append(jsonStr(lanIp))
           .append(",\"httpPort\":").append(ProbeServerService.PORT);
+        if (withBoot) sb.append(",\"bootAnimation\":").append(st.bootJson);
+        else if (st.bootSize > 0) sb.append(",\"bootAnimationSize\":").append(st.bootSize);
         if (extra != null) sb.append(extra);
         return sb.toString();
     }
@@ -245,7 +263,7 @@ public final class StockBundle {
         byte[] secret = loadSecret();
         if (secret == null) return null;
         try {
-            byte[] metaBaseBytes = buildMetaBase(st, lanIp, st.fiemapJson, null).getBytes(StandardCharsets.UTF_8);
+            byte[] metaBaseBytes = buildMetaBase(st, lanIp, st.fiemapJson, null, true).getBytes(StandardCharsets.UTF_8);
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(secret, "HmacSHA256"));
             mac.update(metaBaseBytes);   // streaming: no 2.4 MB concat buffer
@@ -322,11 +340,42 @@ public final class StockBundle {
                 if (j != null && j.trim().startsWith("{") && j.trim().endsWith("}")) st.fiemapJson = j.trim();
             } catch (Throwable ignored) {}
         }
+        st.bootJson = bootJson();
+        if (!"null".equals(st.bootJson)) st.bootSize = (int) new File(BOOT_ANIMATION_PATH).length();
         st.mirrorVersion = ProbeServerService.getSysProp("ro.build.version.mirror");
         st.fingerprint = ProbeServerService.getSysProp("ro.build.fingerprint");
         String serial = ProbeServerService.getSysProp("ro.serialno");
         st.serialno = (serial == null || serial.isEmpty()) ? null : serial;
         return st;
+    }
+
+    /**
+     * Stock's boot animation as the {@code "bootAnimation"} object: path, size, SHA-256, FIEMAP (or null without
+     * libfiemap) and the bytes as base64. {@code "null"} when it's missing, unreadable or bigger than
+     * {@link #BOOT_MAX_BYTES}: Kiln then leaves the boot animation as it is.
+     */
+    private static String bootJson() {
+        File f = new File(BOOT_ANIMATION_PATH);
+        if (!f.isFile() || f.length() <= 0 || f.length() > BOOT_MAX_BYTES) return "null";
+        try {
+            byte[] b;
+            try (InputStream in = new FileInputStream(f)) {
+                b = ProbeServerService.readAll(in);
+            }
+            String sha = hex(MessageDigest.getInstance("SHA-256").digest(b));
+            String fiemap = null;
+            if (Fiemap.isAvailable()) {
+                String j = Fiemap.queryJson(BOOT_ANIMATION_PATH);
+                if (j != null && j.trim().startsWith("{") && j.trim().endsWith("}")) fiemap = j.trim();
+            }
+            return "{\"path\":" + jsonStr(BOOT_ANIMATION_PATH)
+                    + ",\"size\":" + b.length
+                    + ",\"sha256\":" + jsonStr(sha)
+                    + ",\"fiemap\":" + (fiemap == null ? "null" : fiemap)
+                    + ",\"base64\":" + jsonStr(Base64.encodeToString(b, Base64.NO_WRAP)) + "}";
+        } catch (Throwable t) {
+            return "null";
+        }
     }
 
     /** First IPv4 address on a Wi-Fi interface (client or SoftAP), else any non-loopback IPv4, else null. */

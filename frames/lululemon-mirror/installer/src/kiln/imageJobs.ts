@@ -61,7 +61,7 @@ export const WIFI_SCRATCH = 'scratch-wifi.raw';
 export interface JobHandle extends SyncHandle { truncate(n: number): void; flush(): void; close(): void }
 
 export interface BuildOptions {
-  apk: Uint8Array; bootAnimation?: Uint8Array; settings?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
+  apk: Uint8Array; bootAnimation?: Uint8Array; settings?: Uint8Array; framework?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
   deviceMac?: string; wifi?: { ssid: string; password: string };
   /** ro.glassworks.api_key.handover=1 (issue 580): a flag, never the key */
   apiKeyHandover?: boolean;
@@ -203,9 +203,9 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
       const pos = { system: 0, userdata: 0 };
       const sink = (k: 'system' | 'userdata') => (b: Uint8Array) => { out[k].write(b, { at: pos[k] }); pos[k] += b.length; };
       try {
-        // Kiln's `settings` is this image's settings overlay (GlassworksSettings.apk)
-        const { settings, ...rest } = o;
-        await buildImages(loaded, { ...rest, ...(settings ? { settingsOverlay: settings } : {}) }, { system: sink('system'), userdata: sink('userdata') }, onProgress);
+        // Kiln's `settings` and `framework` are this image's overlays (GlassworksSettings.apk, GlassworksFramework.apk)
+        const { settings, framework, ...rest } = o;
+        await buildImages(loaded, { ...rest, ...(settings ? { settingsOverlay: settings } : {}), ...(framework ? { frameworkOverlay: framework } : {}) }, { system: sink('system'), userdata: sink('userdata') }, onProgress);
       } catch (e) {
         loaded = undefined;
         throw e;

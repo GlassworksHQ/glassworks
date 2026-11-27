@@ -7,6 +7,7 @@ import type { ImageFile, ImageRecipe } from './images';
 import type { AskCopy, FrameSim, KilnFrame } from './frame';
 import type { StepCredits } from './recipe';
 import type { RecoveryData } from './recovery';
+import type { RestoredFile } from './restore';
 import type { UsbEntry } from './usb';
 
 /** A download that Kiln's route couldn't serve: Kiln's bug, never the person's. */
@@ -68,7 +69,7 @@ export interface ImageMaker {
   /** That Blob against its pinned size and SHA-256, right before it is flashed. Throws WrongImage. */
   check(blob: Blob, want: ImageFile, onProgress: (x: number) => void): Promise<void>;
   /** Builds the frame's images from the fetched one; can run again until discard(). */
-  build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; settings?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
+  build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; settings?: Uint8Array; framework?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
     deviceMac?: string; wifi?: { ssid: string; password: string }; apiKeyHandover?: boolean },
     onProgress: (step: PrepareStep, x: number) => void): Promise<{ system: Blob; userdata: Blob }>;
   /**
@@ -122,6 +123,8 @@ export interface InPlaceCode {
   stage(o: { adbKey: string; userdataBytes: number; secret: Uint8Array; wifi?: { ssid: string; password: string }; assets: Record<string, Uint8Array> }): Promise<Blob>;
   /** Kiln's staged assets the stage puts on the device, by asset name. */
   assets?: readonly string[];
+  /** Kiln's staged assets the `in-place` build uses (`build`'s `assets`, each checked by its SHA-256), by asset name. */
+  buildAssets?: readonly string[];
   /**
    * The `receive` step's check, after Kiln's own (bundle.ts `verifyGwsbBundle`): the bundle is what the agent read off
    * this device. `digest`: its id in the bundle cache; `extents`: where the file it holds sits on the partition, in
@@ -129,7 +132,8 @@ export interface InPlaceCode {
    * a copy this browser kept from an earlier run, whose signature was checked with that run's secret when it came: its
    * signature isn't checked again (the secret is never kept), everything else is.
    */
-  readBundle(bytes: Uint8Array, o: { secret: Uint8Array; serial: string; kept?: boolean }): Promise<{
+  /** `unsigned`: the person chose to go on with a bundle whose signature didn't match (Kiln warned); no signature check. */
+  readBundle(bytes: Uint8Array, o: { secret: Uint8Array; serial: string; kept?: boolean; unsigned?: boolean }): Promise<{
     digest: string;
     extents: readonly { physical: number; length: number }[];
     info: readonly string[];
@@ -145,9 +149,9 @@ export interface InPlaceCode {
    * The `in-place` step: the write images by name (the step's `makes`), and the restore image for every block the
    * surgical one changes. `manifest`: the restore point's description, kept with it and in its download. `files`: other
    * files the restore point keeps (the original file, say), by file name. `partitionBytes`: each partition's size as
-   * fastboot reports it now.
+   * fastboot reports it now. `assets`: the staged files `buildAssets` names, by name.
    */
-  build(bundle: Uint8Array, o: { adbKey: string; userdataBytes: number; partitionBytes: Record<string, number>; serial: string; wifi?: { ssid: string; password: string } }): Promise<{
+  build(bundle: Uint8Array, o: { adbKey: string; userdataBytes: number; partitionBytes: Record<string, number>; serial: string; wifi?: { ssid: string; password: string }; assets?: Record<string, Uint8Array> }): Promise<{
     writes: Record<string, Blob>;
     restore: Blob;
     manifest?: Record<string, unknown>;
@@ -171,6 +175,14 @@ export interface InPlaceCode {
    */
   beforeRestore?(p: PanelShell, o: { onStep: Step }): Promise<void>;
   /**
+   * The files a restore point's image puts back, read from its manifest (the one `build` made, or an earlier build's):
+   * each one's path on the device, its original copy in the restore point, size, SHA-256 and blocks, and what the
+   * install wrote there. Kiln checks the restore image against them before the way back writes anything, and the files
+   * on the device too while adb still lets it in (restore.ts). Throws on a manifest it can't read. None: Kiln checks
+   * only what the restore point records of itself.
+   */
+  restored?(manifest: Record<string, unknown>): readonly RestoredFile[];
+  /**
    * The way back's other writes over fastboot, after the restore image: what the install changed outside the blocks
    * the restore point covers, put back as the device had it (a fresh userdata, say, so nothing `appInstall` set stays).
    * `partitions`: the partitions it writes, whose sizes Kiln reads from fastboot before it calls `build`, and before
@@ -180,9 +192,33 @@ export interface InPlaceCode {
     partitions: readonly string[];
     build(o: { partitionBytes: Record<string, number> }): Promise<{ writes: Record<string, Blob>; what: string }>;
   };
+  /**
+   * Read over adb, when the device lets this browser in before Kiln restarts it into fastboot: whether the Wi-Fi network
+   * the device opens itself (`channels.lan.hotspot`) won't open on it any more, because an earlier install turned it
+   * off. Then that run treats the device as one without a network of its own: the stage gets the person's network,
+   * and the receive step reaches the agent over that network or Bluetooth. Without it, Kiln counts on the hotspot.
+   */
+  ownWifiGone?(p: PanelShell): Promise<boolean>;
+  /**
+   * Read over adb with `ownWifiGone`, when that says yes: the device's address on the person's network now, before
+   * the restart. The agent joins the same network after the stage, so it is likely reached there again, a guess the
+   * receive screen offers for the download by hand when Bluetooth can't say where the agent is. Undefined: not on it.
+   */
+  lanAddress?(p: PanelShell): Promise<string | undefined>;
   /** How the `receive` step reaches the agent: its HTTP port and path on the LAN, its Bluetooth GATT service and characteristics. */
   channels: {
-    lan?: { port: number; path: string; pagePath?: string };
+    lan?: {
+      port: number;
+      path: string;
+      pagePath?: string;
+      /**
+       * The Wi-Fi network the device opens itself while the agent runs, and its address there. `{serial}` in `ssid`
+       * stands for the serial fastboot reported. With it, the receive step asks the person to join that network and
+       * fetches the bundle from `host` directly, with no Bluetooth; and the person's own Wi-Fi goes only into the
+       * final install, never the stage (a device that joins it might not open its own).
+       */
+      hotspot?: { ssid: string; host: string };
+    };
     ble?: { service: string; meta: string; ctrl: string; data: string };
   };
   /** What the in-place screens say (installer.json `device.words`, the `inPlace.*` keys; inPlaceWords() checks them). */
@@ -210,7 +246,7 @@ export interface ImageOverFastboot {
   /** Kiln's download route for the images. */
   proxy: string;
   /** Kiln's staged assets the build adds, by asset name. */
-  assets?: { bootAnimation?: string; settings?: string };
+  assets?: { bootAnimation?: string; settings?: string; framework?: string };
   /** An in-place recipe's code, for a frame that offers one. */
   inPlace?: InPlaceCode;
   /**
@@ -278,7 +314,7 @@ export function deviceWords(w: Record<string, unknown>): Record<DeviceWord, stri
 export const IN_PLACE_WORDS = [
   'inPlace.stage.lede', 'inPlace.receive.lede', 'inPlace.receive.waiting', 'inPlace.receive.lan', 'inPlace.receive.ble',
   'inPlace.receive.file', 'inPlace.restorePoint.lede', 'inPlace.confirm.lede', 'inPlace.appInstall.lede', 'inPlace.wayBack',
-  'inPlace.fastboot.again', 'inPlace.coverNote', 'inPlace.changes',
+  'inPlace.fastboot.again', 'inPlace.coverNote', 'inPlace.changes', 'inPlace.startOver',
 ] as const;
 export type InPlaceWord = (typeof IN_PLACE_WORDS)[number];
 

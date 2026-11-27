@@ -146,11 +146,11 @@ With Vitro on, the S1 app and Glassworks for generic Android play Home Assistant
 
 ### Libraries the app uses directly
 
-- **TensorFlow Lite** 2.16.1: `org.tensorflow:tensorflow-lite:2.16.1`, `org.tensorflow:tensorflow-lite-api:2.16.1`.
-  Apache-2.0, Copyright The TensorFlow Authors. https://github.com/tensorflow/tensorflow (tag
-  `v2.16.1`). Its native library `libtensorflowlite_jni.so` also contains TensorFlow's bundled
-  third-party code, for example ruy (Apache-2.0) and cpuinfo (BSD-2-Clause). Those are listed in the
-  source tree's `third_party/`.
+- **LiteRT** (formerly TensorFlow Lite) 1.4.1: `com.google.ai.edge.litert:litert:1.4.1`,
+  `com.google.ai.edge.litert:litert-api:1.4.1`. Apache-2.0, Copyright The TensorFlow Authors.
+  https://github.com/google-ai-edge/LiteRT (tag `v1.4.1`). Its native library `libtensorflowlite_jni.so`
+  also contains TensorFlow's bundled third-party code, for example ruy (Apache-2.0) and cpuinfo
+  (BSD-2-Clause). Those are listed in the source tree's `third_party/`.
 - **Bouncy Castle** (provider) 1.80: `org.bouncycastle:bcprov-jdk18on:1.80`. MIT (the "Bouncy Castle
   Licence" is the MIT text). Copyright (c) 2000-2023 The Legion of the Bouncy Castle Inc.
   (https://www.bouncycastle.org). Source: https://github.com/bcgit/bc-java (tag `r1rv80`).
@@ -480,10 +480,10 @@ All MIT, from this repository:
   the font itself ships in the S1 app's APK (section 1, "Assets in the APK").
 - The S1 app's APK (sections 1 and 2), except the Glassworks core inside it, which is MPL-2.0
   ([its README](pane-api/src/main/java/dev/glassworks/README.md#licence)).
-- The Mirror's settings overlay, `frames/lululemon-mirror/overlay/GlassworksSettings.apk` (resource
-  values only, built by its `build.sh`). It is signed with AOSP's public test key
+- The Mirror's settings and framework overlays, `frames/lululemon-mirror/overlay/GlassworksSettings.apk`
+  and `GlassworksFramework.apk` (resource values only, built by its `build.sh`). Each is signed with AOSP's public test key
   (`build/target/product/security/testkey`, android-6.0.1_r81, Apache-2.0, Copyright The Android Open
-  Source Project), so its signature block carries that public certificate. The private key is
+  Source Project), so each signature block carries that public certificate. The private key is
   downloaded at build time and never committed.
 
 ---

@@ -2,7 +2,7 @@ export {
   HIDDEN_HOMES, PREVIOUS_HOME, checkMirror, installMirror, parseDfFreeMb, parsePreferredHome, preferredHome, undoMirror,
   type AppVersion, type Check, type HomeWait, type Installed, type MirrorOptions, type MirrorPhase, type MirrorReport, type Removed,
 } from './recipe';
-export { API_KEY_HANDOVER_PROP, DEVICE_MAC_PROP, GLASS_PANES, IMAGE_KIOSK, LABELS, SETTINGS_OVERLAY, apkLibs, buildUserdata, checkMirrorApk, macFromSerial, patchSystem, setProp, wpaPsk, wpaSupplicantConf, type SystemPatch } from './image';
+export { API_KEY_HANDOVER_PROP, DEVICE_MAC_PROP, FRAMEWORK_OVERLAY, GLASS_PANES, IMAGE_KIOSK, LABELS, SETTINGS_OVERLAY, apkLibs, buildUserdata, checkMirrorApk, macFromSerial, patchSystem, setProp, wpaPsk, wpaSupplicantConf, type SystemPatch } from './image';
 export {
   GLASS_PANES_USERDATA, MIRROR_FASTBOOT, MIRROR_ROTATION, displayRotation, setPortrait, focusedActivity, makeOnlyHome, OTHER_HOMES, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, buildImages, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem,
   type FastbootLike, type FastbootReport, type FirstBoot, type HomeCheck, type Loaded, type PrepareStep,
@@ -26,7 +26,7 @@ export {
   type PatchedServicesJar, type StockApPatch, type StockBloatChange, type StockBundleMeta,
 } from './stock';
 export {
-  BundleRefused, ORIGINAL_JAR, RESTORE_SPARSE, STOCK_PROBE_BLE, STOCK_PROBE_LAN, bundleExtents, checkNotOdexed, installInPlace, mirrorInPlace,
+  BundleRefused, ORIGINAL_JAR, RESTORE_SPARSE, STOCK_PROBE_BLE, STOCK_PROBE_LAN, bundleExtents, checkNotOdexed, installInPlace, mirrorInPlace, restoredFiles,
 } from './inplace';
 export {
   DEFAULT_PROBE_APP_PACKAGE, DEFAULT_PROBE_APP_UID, STAGE_SECRET_BYTES, STOCK_PROBE_ASSETS, STOCK_PROBE_LABELS, buildPackagesXml, buildStageUserdata,

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.lang.reflect.InvocationTargetException
@@ -28,9 +29,27 @@ object UsbDebugging {
     private const val MANAGE_USB = "android.permission.MANAGE_USB"
     private const val READ_LOGS = "android.permission.READ_LOGS"
 
-    /** Whether this app can see who asks and answer: Android 6 to 9, holding `MANAGE_USB` and `READ_LOGS` (a privileged app). */
-    fun available(context: Context): Boolean =
-        Build.VERSION.SDK_INT <= 28 && listOf(MANAGE_USB, READ_LOGS).all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+    /**
+     * The global setting an installer writes when it opened `allowUsbDebugging` to another permission than
+     * `MANAGE_USB`, naming that permission: Kiln's in-place install on a stock Android 6 framework changes the check
+     * to `WRITE_SECURE_SETTINGS` and grants that over adb, as it does `READ_LOGS` (an app adb installs can't hold
+     * `MANAGE_USB`). Gone with the rest of the device's data when the stock framework comes back.
+     */
+    const val ALLOW_PERMISSION_SETTING = "glassworks_usb_allow_permission"
+
+    /**
+     * Whether this app can see who asks and answer: Android 6 to 9, holding `READ_LOGS` and the permission
+     * `allowUsbDebugging` checks, `MANAGE_USB` (a privileged app) or the one an installer named in
+     * [ALLOW_PERMISSION_SETTING].
+     */
+    fun available(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT > 28 || !holds(context, READ_LOGS)) return false
+        if (holds(context, MANAGE_USB)) return true
+        val named = try { Settings.Global.getString(context.contentResolver, ALLOW_PERMISSION_SETTING) } catch (_: Exception) { null }
+        return !named.isNullOrBlank() && named.startsWith("android.permission.") && holds(context, named)
+    }
+
+    private fun holds(context: Context, permission: String) = context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
     /**
      * Lets the computer with [publicKey] (its base64 key) in for this connection, if it is the one asking. Null when

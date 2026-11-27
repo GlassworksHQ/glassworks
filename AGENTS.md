@@ -67,7 +67,13 @@ in HA. If a request goes against it, say so and point at the page instead of bui
 1. **Never brick the panel, and always keep a way back.** Read first, write second. Back up every
    partition you are about to write, hash it, and verify writes by reading them back. Prefer
    RAM-only paths (FEL, `fastboot boot`) to flashing. Every user-facing change needs an undo path:
-   `--undo`, `debloat.sh enable`, the installer's restore.
+   `--undo`, `debloat.sh enable`, the installer's restore. One exception, decided (maintainer,
+   2026-11-25): Kiln's restore of a stock lululemon Mirror (the in-place way back) isn't read back
+   after it is written, because nothing can read it then: the Mirror's fastboot has no partition read,
+   and the restore resets app data, so stock's adb no longer trusts Kiln. It is verified before the
+   write instead, as far as Kiln can reach
+   ([kiln/AGENTS.md](kiln/AGENTS.md#rules)). The exception covers only that restore, and only its
+   read-back after the write.
 2. **No secrets or device-unique values anywhere**: not in commits, logs, PR bodies, screenshots or
    test fixtures. That covers HA tokens, API keys, Wi-Fi passwords, Thread datasets and network keys,
    serials, MACs, EUI64s, PAN IDs and vbmeta hashes. Use RFC 5737 addresses (`192.0.2.x`),

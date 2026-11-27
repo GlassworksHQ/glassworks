@@ -118,13 +118,24 @@ export async function wifiSsid(p: PanelShell, signal?: AbortSignal): Promise<{ s
 }
 
 /**
- * The person's language, time zone and clock, on a device whose app is already on (the standard flow's App step on a
+ * The person's language, time zone, 12- or 24-hour clock and the time itself, on a device whose app is already on (the standard flow's App step on a
  * frame whose install put the app on, issue 621). The same commands a frame's provisioning runs after an install, each a `try`: a vendor build
  * that refuses one still gets the rest. Then the app starts again with the language, which it applies itself.
  */
-export async function applySettings(r: Steps, s: { locale?: string; timezone?: string; clock24?: boolean }, app: AppId): Promise<void> {
+export async function applySettings(r: Steps, s: { locale?: string; timezone?: string; clock24?: boolean; now?: number }, app: AppId): Promise<void> {
   if (s.timezone && !/^[A-Za-z0-9_+\-/]+$/.test(s.timezone)) throw new Error(`bad time zone ${s.timezone}`);
   if (s.locale && !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(s.locale)) throw new Error(`bad locale ${s.locale}`);
+  if (s.now !== undefined && !(Number.isSafeInteger(s.now) && s.now > 0)) throw new Error(`bad time ${s.now}`);
+  // the clock, from this computer's, only when the device's is more than a minute off: one that never reached a time server
+  // (no network yet, or none it can reach) starts in 1970. Its own network time takes over when it gets one
+  if (s.now !== undefined) {
+    const dev = Number((await r.try('date +%s')).trim());
+    if (!Number.isFinite(dev) || Math.abs(dev * 1000 - s.now) > 60_000) {
+      r.step('Clock');
+      await r.try(`service call alarm 2 i64 ${s.now}`);
+      r.detail(`now ${(await r.try('date')).trim() || 'unknown'}`);
+    }
+  }
   if (s.timezone) {
     r.step(`Time zone ${s.timezone}`);
     await r.try('settings put global auto_time_zone 0');

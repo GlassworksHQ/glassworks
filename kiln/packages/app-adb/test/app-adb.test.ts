@@ -418,6 +418,21 @@ describe('applySettings', () => {
     ]);
   });
 
+  it('sets the clock from this computer\'s only when the device\'s is more than a minute off', async () => {
+    const at = (secs: string) => {
+      const cmds: string[] = [];
+      return { cmds, p: { run: async (cmd: string) => { cmds.push(cmd); return { out: cmd === 'date +%s' ? secs : '', code: 0 }; }, push: async () => {} } as PanelShell };
+    };
+    const now = 1_795_000_000_000;
+    const off = at('8000\n'); // 1970: never reached a time server
+    await applySettings(new Steps(off.p), { now }, APP);
+    expect(off.cmds.slice(0, 3)).toEqual(['date +%s', `service call alarm 2 i64 ${now}`, 'date']);
+    const near = at(`${now / 1000 + 20}\n`);
+    await applySettings(new Steps(near.p), { now }, APP);
+    expect(near.cmds).toEqual(['date +%s', 'am start -n dev.example.app/.Main']);
+    await expect(applySettings(new Steps(at('').p), { now: 1.5 }, APP)).rejects.toThrow(/bad time/);
+  });
+
   it('leaves what wasn\'t picked as it is, and refuses a value that isn\'t a time zone or a language before running anything', async () => {
     const { cmds, p } = device();
     await applySettings(new Steps(p), { clock24: false }, APP);

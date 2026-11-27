@@ -63,6 +63,8 @@ export interface InstallOptions extends FirstBootOptions {
   bootAnimation?: Uint8Array;
   /** GlassworksSettings.apk: Wi-Fi on, no screen timeout, no lock screen, no auto-rotate on the first boot */
   settingsOverlay?: Uint8Array;
+  /** GlassworksFramework.apk: config_screenBrightnessSettingMinimum 0, so the app's backlight-off sleep turns the backlight off */
+  frameworkOverlay?: Uint8Array;
   /** zeros as RAW blocks, for an LK that refuses FILL */
   fill?: boolean;
   /** the dry run's small image, instead of the Glass Panes one */
@@ -180,7 +182,7 @@ export async function runInstall(o: InstallOptions | FirstBootOptions, d: RunDep
         const sys = fileSink(sysOut), ud = fileSink(udOut);
         try {
           // the Wi-Fi is saved in the new userdata too: Android joins it on the first boot with nothing tapped
-          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(deviceMac ? { deviceMac } : {}), ...(apiKey ? { apiKeyHandover: true } : {}), ...(o.wifi ? { wifi: o.wifi } : {}) },
+          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, frameworkOverlay: o.frameworkOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(deviceMac ? { deviceMac } : {}), ...(apiKey ? { apiKeyHandover: true } : {}), ...(o.wifi ? { wifi: o.wifi } : {}) },
             { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); },
             // image.ts's own lines: the APK's libraries, the unused apps left out, build.prop, services.jar
             (line) => d.log(`    ${line}`));

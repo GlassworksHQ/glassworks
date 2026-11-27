@@ -53,6 +53,28 @@ export class RateMeter {
   }
 }
 
+/**
+ * Whether the agent answers at `url` (its status page) within `timeoutMs`: the computer is on a network that reaches
+ * it. Never throws; a refusal, a timeout or a blocked request all read as no.
+ */
+export async function agentAnswers(url: string, o: { fetchImpl?: typeof fetch; timeoutMs?: number; signal?: AbortSignal } = {}): Promise<boolean> {
+  const fetchImpl = o.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), o.timeoutMs ?? 2500);
+  const onAbort = () => ctrl.abort();
+  o.signal?.addEventListener('abort', onAbort, { once: true });
+  try {
+    const init = { method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store', targetAddressSpace: 'local', signal: ctrl.signal } as RequestInit;
+    const res = await fetchImpl(url, init);
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+    o.signal?.removeEventListener('abort', onAbort);
+  }
+}
+
 export async function fetchBundleOverLan(url: string, opts: LanFetchOptions = {}): Promise<Uint8Array> {
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const timeoutMs = opts.timeoutMs ?? 10_000;

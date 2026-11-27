@@ -102,6 +102,13 @@ class PanelDevice(
         const val IMAGE_MAC_PROP = "ro.glassworks.device.mac"
 
         /**
+         * The same identity as [IMAGE_MAC_PROP], from an installer that can't write build.prop: Kiln's in-place install
+         * on a stock framework writes this global setting over adb, with the MAC its image install would write, so a
+         * device keeps one Home Assistant device whichever way Kiln installs it.
+         */
+        const val INSTALLER_MAC_SETTING = "glassworks_device_mac"
+
+        /**
          * The Home Assistant device identity, and where it came from. It must survive a reinstall or a reflash, or HA
          * sees a new device with new entity ids. The first that exists wins: the [saved] one; the one the image
          * carries ([image], [IMAGE_MAC_PROP]); the Wi-Fi MAC; one derived from the chip's [serial]; one derived from
@@ -843,10 +850,14 @@ class PanelDevice(
     private fun stableMac(): String {
         val hw = try { NetworkInterface.getByName("wlan0")?.hardwareAddress } catch (_: Exception) { null }
         val androidId = try { Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) } catch (_: Exception) { null }
-        val image = systemProperty(IMAGE_MAC_PROP)
-        val (mac, source) = pickMac(prefs.deviceMac, image, hw, systemProperty("ro.serialno"), androidId) {
+        val prop = systemProperty(IMAGE_MAC_PROP)
+        val installer = if (prop.isNotEmpty()) "" else try { Settings.Global.getString(ctx.contentResolver, INSTALLER_MAC_SETTING) ?: "" } catch (_: Exception) { "" }
+        val image = prop.ifEmpty { installer }
+        val (mac, picked) = pickMac(prefs.deviceMac, image, hw, systemProperty("ro.serialno"), androidId) {
             ByteArray(6).also { SecureRandom().nextBytes(it) }
         }
+        // the identity from the global setting reads as such in the log, not as build.prop
+        val source = if (picked == "build.prop" && prop.isEmpty()) "installer setting" else picked
         if (source != "saved") prefs.deviceMac = mac
         EspHomeLog.i(macLine(mac, source, image))
         return mac

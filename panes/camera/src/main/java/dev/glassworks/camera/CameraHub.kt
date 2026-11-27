@@ -21,7 +21,7 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.display.DisplayManager
 import android.media.Image
 import android.media.ImageReader
-import android.media.MediaCodec
+import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
@@ -43,7 +43,16 @@ import java.util.concurrent.TimeUnit
  *
  * A session that sends no frame for [SILENT_MS] is closed and the camera opened again ([ReopenBackoff]): a
  * LEGACY camera's first session can start and never deliver (the Mirror, 2026-11-19, #599). The first frame of a
- * session gets [FIRST_FRAME_MS]: the same camera can also take more than 5 s to start (#674).
+ * session gets [FIRST_FRAME_MS]: the same camera can also take more than 5 s to start (#674). A blank frame
+ * ([blankYuv]: rows that are zero in every plane, or the green zero turns into, Home Assistant's solid green) counts as no frame: the Mirror's stock camera starts
+ * about one session in three that way (2026-11-25), and that session is reopened like a silent one.
+ *
+ * A camera that won't open (another app has it, an error) is tried again after [ConnectBackoff]'s wait, or sooner
+ * once Android says another app freed it, never in bursts: on Android 6 a burst of connects to a camera another app
+ * held crashed the media server (the Mirror, 2026-11-25).
+ *
+ * While streaming, the encoder gets every frame and the reader only one in [readerEvery]: on a LEGACY camera Android's
+ * shim copies each frame it hands the reader on the CPU, which slowed the Mirror's stream to about 7 fps.
  */
 class CameraHub(
     context: Context,
@@ -51,6 +60,8 @@ class CameraHub(
     private val height: Int = HEIGHT,
     /** The frame's cap on the camera's and the stream's size, in pixels ([dev.glassworks.frame.Frame.cameraMaxPixels]). */
     private val maxPixels: Int = MAX_PIXELS,
+    /** The frame's word on how the sensor sits ([dev.glassworks.frame.Frame.cameraSensorDegrees]), over Android's. */
+    private val frameSensorDegrees: Int? = null,
     private val log: (String) -> Unit = { Log.i(TAG, it) },
 ) : FrameSource, StillCamera, EncoderInput, CameraFacts {
     private val app = context.applicationContext
@@ -82,9 +93,8 @@ class CameraHub(
     private var luma = ByteArray(0)
     private var facingFront = true
     private var sensorDegrees = 0
+    /** The range every request asks for ([cameraRange]). */
     private var fpsRange: android.util.Range<Int>? = null
-    /** Presence's range on a LEGACY camera ([presenceRangeFor]), else null. */
-    private var presenceRange: android.util.Range<Int>? = null
     /** The reader's size: [width] x [height] when the camera lists it ([yuvSizeFor]). */
     private var size = width to height
     /** The stream on the open camera, read with [size]: the session never looks the camera up again. */
@@ -96,6 +106,18 @@ class CameraHub(
     private val reopen = ReopenBackoff()
     /** A silent camera isn't opened again before this ([ReopenBackoff]). */
     private var reopenAt = 0L
+    /** Blank frames ([blankYuv]) since the session started or its last good frame. */
+    private var blanks = 0
+    /**
+     * The slowest the camera may run: the floor of the range asked for ([fpsRange]), or with none the
+     * lowest floor the camera lists, since it then picks its own. 0: unknown. Sets [readerEvery].
+     */
+    private var streamFloor = 0
+    private val connect = ConnectBackoff()
+    /** A camera that failed to open or failed while open isn't tried again before this ([ConnectBackoff]). */
+    private var connectAt = 0L
+    /** Waiting for another app to free this camera (any camera, for [ANY_CAMERA]), else null: its freeing ends the wait. */
+    private var freeFor: String? = null
 
     private val wanted get() = sinks.isNotEmpty() || waiters.isNotEmpty() || encoder != null ||
         SystemClock.elapsedRealtime() < lingerUntil
@@ -176,15 +198,20 @@ class CameraHub(
         noteRate()
         if (released) return
         // Nobody wants the camera (privacy, the pane stopping): the next use starts without a backoff.
+        // A camera that failed to open keeps its wait: another app holding it doesn't free it because nobody here wants it.
         if (!wanted) { closeCamera(); reopen.reset(); reopenAt = 0L; return }
-        if (device == null) { if (!opening && SystemClock.elapsedRealtime() >= reopenAt) openCamera(); return }
+        if (device == null) {
+            val now = SystemClock.elapsedRealtime()
+            if (!opening && now >= reopenAt && now >= connectAt) openCamera()
+            return
+        }
         if (session == null && !configuring) startSession()
     }
 
     @SuppressLint("MissingPermission") // the pane opens the hub only with the permission; a refusal is caught
     private fun openCamera() {
         val id = try { pickCamera() } catch (e: Exception) { fail("no camera: ${e.javaClass.simpleName}"); return }
-            ?: run { fail("this device has no camera"); return }
+            ?: run { fail("this device has no camera", waitFor = ANY_CAMERA); return }
         opening = true
         openId = id
         try {
@@ -193,20 +220,21 @@ class CameraHub(
                     opening = false
                     if (released) { camera.close(); thread.quitSafely(); return }
                     device = camera
-                    log("camera $id open (${if (facingFront) "front" else "back"}, ${size.first}x${size.second}${if (presenceRange != null) ", legacy" else ""})")
+                    log("camera $id open (${if (facingFront) "front" else "back"} at $sensorDegrees°, ${size.first}x${size.second}${fpsRange?.let { ", $it fps" } ?: ""})")
                     settle()
                 }
                 override fun onDisconnected(camera: CameraDevice) {
                     opening = false
                     camera.close(); forget(camera)
                     if (released) { thread.quitSafely(); return }
-                    fail("another app took the camera")
+                    fail("another app took the camera", waitFor = id)
                 }
                 override fun onError(camera: CameraDevice, error: Int) {
                     opening = false
                     camera.close(); forget(camera)
                     if (released) { thread.quitSafely(); return }
-                    fail("camera error $error")
+                    val inUse = error == ERROR_CAMERA_IN_USE || error == ERROR_MAX_CAMERAS_IN_USE
+                    fail(if (inUse) "another app has the camera (error $error)" else "camera error $error", waitFor = id.takeIf { inUse })
                 }
             }, handler)
         } catch (e: SecurityException) {
@@ -214,7 +242,9 @@ class CameraHub(
             fail("Android hasn't allowed the camera")
         } catch (e: CameraAccessException) {
             opening = false
-            fail("camera unavailable (${e.reason})")
+            val inUse = e.reason == CameraAccessException.CAMERA_IN_USE || e.reason == CameraAccessException.MAX_CAMERAS_IN_USE ||
+                e.reason == CameraAccessException.CAMERA_DISCONNECTED
+            fail("camera unavailable (${e.reason})", waitFor = id.takeIf { inUse })
         }
     }
 
@@ -226,24 +256,36 @@ class CameraHub(
     }
 
     /**
-     * The range the camera is asked for while streaming ([fpsRangeFor]). Read once and kept: the first
+     * The range the camera is asked for ([cameraRangeFor]). Read once and kept: the first
      * reader may be the stream's start ([streamFps], off the hub's thread, before the camera opens) or
      * [pickCamera] on the hub's thread; `lazy` makes that safe, and the camera's ranges don't change.
      */
-    private val streamRange: IntRange? by lazy {
+    private val cameraRange: IntRange? by lazy {
         try {
             cameraId()?.let { id ->
                 val ranges = manager.getCameraCharacteristics(id).get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
-                fpsRangeFor(ranges?.map { it.lower..it.upper }, H264Encoder.FPS)
+                cameraRangeFor(ranges?.map { it.lower..it.upper })
             }
         } catch (e: Exception) {
             null
         }
     }
 
-    override val streamFps: Int get() = announcedFps(streamRange)
+    override val streamFps: Int get() = announcedFps(cameraRange)
 
-    private class Sizes(val reader: Pair<Int, Int>, val fit: StreamFit)
+    /** The still's rule ([stillRotation]) on the camera the stream would use, with the screen as it stands now. */
+    override val streamTurn: Int get() = try {
+        val s = sizes.kept() ?: read(cameraId())
+        stillRotation(s.sensorDegrees, displayDegrees(), s.front)
+    } catch (e: Exception) {
+        0
+    }
+
+    /** What [read] finds on a camera: its sizes, and how its sensor sits ([sensorOf]) and faces. */
+    private class Sizes(val reader: Pair<Int, Int>, val fit: StreamFit, val sensorDegrees: Int = 0, val front: Boolean = false)
+
+    /** How [c]'s sensor sits: the frame's word ([frameSensorDegrees]) over Android's. */
+    private fun sensorOf(c: CameraCharacteristics): Int = frameSensorDegrees ?: c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
 
     /**
      * The last sizes [read], with the camera they were read from. Dropped when opening a camera fails ([fail]) and
@@ -254,10 +296,23 @@ class CameraHub(
 
     /** Runs on the hub's thread, as [openId] changes. */
     private val availability = object : CameraManager.AvailabilityCallback() {
-        override fun onCameraAvailable(cameraId: String) = changed(cameraId)
+        override fun onCameraAvailable(cameraId: String) { changed(cameraId); freed(cameraId) }
         override fun onCameraUnavailable(cameraId: String) = changed(cameraId)
 
         private fun changed(cameraId: String) { if (cameraId != openId) sizes.drop() }
+
+        /** The camera another app held is free: try it now, or once [ConnectBackoff.MIN_GAP_MS] after the last failure. */
+        private fun freed(cameraId: String) {
+            val waiting = freeFor ?: return
+            if (waiting != ANY_CAMERA && waiting != cameraId) return
+            freeFor = null
+            val now = SystemClock.elapsedRealtime()
+            val at = connect.freed(now)
+            if (at >= connectAt) return
+            connectAt = at
+            log("camera: $cameraId is free again; opening ${if (at <= now) "now" else "in ${(at - now + 999) / 1000} s"}")
+            handler.postDelayed(::settle, at - now)
+        }
     }
 
     // On the hub's thread, not the caller's: it is the process's first call to the camera service, and the panes are
@@ -280,15 +335,20 @@ class CameraHub(
             val sensor = if (c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) != CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY) null
                 else map?.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width.toLong() * it.height }?.let { it.width to it.height }
             val yuv = map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }
-            val surfaces = map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }
-            val reader = yuvSizeFor(yuv, width to height, maxPixels, sensor) { streamFitFor(it, surfaces, H264Encoder::encodes) is StreamFit.Size }
+            // The stream's camera output is the GPU step's texture ([TurnedInput]); the encoder takes the picture turned.
+            val surfaces = map?.getOutputSizes(SurfaceTexture::class.java)?.map { it.width to it.height }
+            val degrees = sensorOf(c)
+            val front = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+            val turn = stillRotation(degrees, displayDegrees(), front)
+            val encodes = { w: Int, h: Int -> turnedSize(w, h, turn).let { (tw, th) -> H264Encoder.encodes(tw, th) } }
+            val reader = yuvSizeFor(yuv, width to height, maxPixels, sensor) { streamFitFor(it, surfaces, encodes) is StreamFit.Size }
             if (sensor != null) {
                 log("camera: LEGACY, sensor ${sensor.first}x${sensor.second}, YUV ${yuv?.joinToString { "${it.first}x${it.second}" }}")
                 // No reader size bounds the shim's preview then: it takes the smallest sensor-shaped size that covers
                 // the reader, which is already the smallest there is, or with none its largest preview size.
                 if (!legacyAspect(reader, sensor)) log("camera: no size of the sensor's shape up to $maxPixels px; the preview may run larger than ${reader.first}x${reader.second}")
             }
-            Sizes(reader, streamFitFor(reader, surfaces, H264Encoder::encodes))
+            Sizes(reader, streamFitFor(reader, surfaces, encodes), degrees, front)
         }
     }
 
@@ -333,15 +393,13 @@ class CameraHub(
         val id = cameraId() ?: return null
         val c = manager.getCameraCharacteristics(id)
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-        sensorDegrees = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-        fpsRange = streamRange?.let { android.util.Range(it.first, it.last) }
+        sensorDegrees = sensorOf(c)
+        fpsRange = cameraRange?.let { android.util.Range(it.first, it.last) }
+        streamFloor = cameraRange?.first
+            ?: c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.minOfOrNull { it.lower } ?: 0
         val read = sizes.kept(id) ?: read(id) // throws to openCamera, which retries
         size = read.reader
         openFit = read.fit
-        val legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
-        presenceRange = if (!legacy) null else presenceRangeFor(
-            c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { it.lower..it.upper }, CameraPresence.DEFAULT_FPS.toInt(),
-        )?.let { android.util.Range(it.first, it.last) }
         return id
     }
 
@@ -366,14 +424,21 @@ class CameraHub(
                     session = s
                     try {
                         val template = if (encoder != null) CameraDevice.TEMPLATE_RECORD else CameraDevice.TEMPLATE_PREVIEW
-                        val req = camera.createCaptureRequest(template).apply {
-                            targets.forEach(::addTarget)
-                            // While streaming, the encoder's rate when the camera offers it (less CPU, a true a=framerate).
-                            if (encoder != null) fpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
-                            // Presence alone on a LEGACY camera: fewer frames for the shim to copy.
-                            else presenceRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+                        fun request(to: List<Surface>) = camera.createCaptureRequest(template).apply {
+                            to.forEach(::addTarget)
+                            fpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+                        }.build()
+                        val every = readerEvery(streaming = encoder != null, streamFloor)
+                        if (every <= 1 || encoder == null) {
+                            s.setRepeatingRequest(request(targets), null, handler)
+                        } else {
+                            // Android's shim reads back only the outputs a request names (AOSP 6.0.1
+                            // SurfaceTextureRenderer.drawIntoSurfaces), so the encoder alone runs at full rate.
+                            val plain = request(listOf(encoder))
+                            s.setRepeatingBurst(List(every - 1) { plain } + request(targets), null, handler)
+                            log("camera: streaming; the reader gets 1 frame in $every")
                         }
-                        s.setRepeatingRequest(req.build(), null, handler)
+                        blanks = 0
                         deadline.started(SystemClock.elapsedRealtime())
                         sinks.forEach { it.sink.started() }
                         watchSilence(gen, deadline.nextCheck(SystemClock.elapsedRealtime()))
@@ -397,22 +462,41 @@ class CameraHub(
         // The reader can be closed between the callback being posted and now: then there is no image.
         val image = try { r.acquireLatestImage() } catch (e: IllegalStateException) { null } ?: return
         try {
-            val now = SystemClock.elapsedRealtime()
-            deadline.frame(now)
-            reopen.reset()
-            val due = sinks.filter { now - it.lastMs >= (1000f / it.fps).toLong() }
-            if (due.isNotEmpty()) {
-                val frame = try { lumaOf(image) } catch (e: IllegalStateException) { null }
-                if (frame != null) for (s in due) { s.lastMs = now; s.sink.frame(frame) }
-            }
-            if (waiters.isNotEmpty()) {
-                val jpeg = try { jpegOf(image) } catch (e: Exception) { log("still failed: ${e.javaClass.simpleName}"); null }
-                waiters.forEach { it.jpeg = jpeg; it.latch.countDown() }
-                waiters.clear()
-            }
+            val blank = try { blankOf(image) } catch (e: IllegalStateException) { return }
+            onFrame(SystemClock.elapsedRealtime(), blank, luma = { lumaOf(image) }, jpeg = { jpegOf(image) })
         } finally {
             image.close()
         }
+    }
+
+    /**
+     * One image from the reader, on the hub's thread. A [blank] one is no frame: it doesn't hold off the silence
+     * watchdog, reach presence or answer a still, so a still waits for a good frame or fails after [STILL_WAIT_MS].
+     */
+    internal fun onFrame(now: Long, blank: Boolean, luma: () -> LumaFrame, jpeg: () -> ByteArray) {
+        if (blank) {
+            if (++blanks == 1) log("camera: blank frame (zero or drawn-green rows); not used")
+            return
+        }
+        blanks = 0
+        deadline.frame(now)
+        reopen.reset()
+        connect.reset()
+        val due = sinks.filter { now - it.lastMs >= (1000f / it.fps).toLong() }
+        if (due.isNotEmpty()) {
+            val frame = try { luma() } catch (e: IllegalStateException) { null }
+            if (frame != null) for (s in due) { s.lastMs = now; s.sink.frame(frame) }
+        }
+        if (waiters.isNotEmpty()) {
+            val still = try { jpeg() } catch (e: Exception) { log("still failed: ${e.javaClass.simpleName}"); null }
+            waiters.forEach { it.jpeg = still; it.latch.countDown() }
+            waiters.clear()
+        }
+    }
+
+    private fun blankOf(image: Image): Boolean {
+        val (y, u, v) = image.planes
+        return blankYuv(image.width, image.height, y.buffer, y.rowStride, u.buffer, v.buffer, u.rowStride, u.pixelStride)
     }
 
     /** The Y plane, copied once into a buffer the hub reuses: presence reads it before [FrameSink.frame] returns. */
@@ -454,7 +538,7 @@ class CameraHub(
             val now = SystemClock.elapsedRealtime()
             val left = deadline.left(now)
             if (left > 0) { watchSilence(gen, deadline.nextCheck(now)); return@postDelayed }
-            val why = deadline.why(now)
+            val why = deadline.why(now) + if (blanks > 0) ", $blanks blank" else ""
             val wait = reopen.silence()
             log("camera: reopen ${reopen.attempt} ${if (wait == 0L) "now" else "in ${wait / 1000} s"} ($why)")
             // Before the reopen's started() gives presence a new grace, so the silence is reported, not skipped.
@@ -465,15 +549,22 @@ class CameraHub(
         }, delayMs)
     }
 
-    /** Tells presence the camera is gone, answers waiting stills, and tries again later while it is still wanted. */
-    private fun fail(why: String) {
+    /**
+     * Tells presence the camera is gone, answers waiting stills, and tries again after [ConnectBackoff]'s wait while it
+     * is still wanted. [waitFor]: the camera another app holds ([ANY_CAMERA]: none was there), whose freeing ends the wait.
+     */
+    private fun fail(why: String, waitFor: String? = null) {
         log("camera: $why")
         sizes.drop()
         closeCamera()
         sinks.forEach { it.sink.lost(why) }
         waiters.forEach { it.latch.countDown() }
         waiters.clear()
-        handler.postDelayed(::settle, RETRY_MS)
+        val wait = connect.failed(SystemClock.elapsedRealtime())
+        connectAt = SystemClock.elapsedRealtime() + wait
+        freeFor = waitFor
+        log("camera: try ${connect.attempt} failed; next in ${wait / 1000} s${if (waitFor != null) " or once the camera is free" else ""}")
+        handler.postDelayed(::settle, wait)
     }
 
     private fun forget(camera: CameraDevice) {
@@ -512,7 +603,6 @@ class CameraHub(
         const val JPEG_QUALITY = 85
         const val STILL_WAIT_MS = 2_000L
         const val LINGER_MS = 10_000L
-        const val RETRY_MS = 5_000L
         /** A session that sends no frame this long is reopened: [CameraPresence.STALE_MS], so both see one silence. */
         const val SILENT_MS = CameraPresence.STALE_MS
         /** A session's first frame may take this long: [CameraPresence.FIRST_FRAME_MS], for the same reason. */
@@ -520,7 +610,30 @@ class CameraHub(
         const val DETACH_WAIT_MS = 1_000L
         const val SIZES_UNREADABLE = "The panel couldn't read the camera's sizes"
         const val NO_CAMERA = "The panel has no camera now"
+
+        /** [fail]'s waitFor when there was no camera: any camera that appears ends the wait. */
+        private const val ANY_CAMERA = "*"
+
+        // CameraDevice.StateCallback's errors for a camera someone else holds.
+        private const val ERROR_CAMERA_IN_USE = CameraDevice.StateCallback.ERROR_CAMERA_IN_USE
+        private const val ERROR_MAX_CAMERAS_IN_USE = CameraDevice.StateCallback.ERROR_MAX_CAMERAS_IN_USE
+
+        /** The reader's rate while the camera streams: presence still sees motion, the encoder keeps the rest. */
+        const val STREAM_READER_FPS = 3
     }
+}
+
+/**
+ * Which of a session's repeating requests carry the frame reader: 1 is every one, else 1 in that many, the rest only the
+ * stream's encoder. Every one unless the camera is [streaming]: a LEGACY camera's shim copies each frame it gives the
+ * reader on the CPU (the Mirror's stream fell to about 7 fps with the reader in every request, 26 fps without it,
+ * 2026-11-25), and presence needs no more on any camera. The reader gets at least [CameraHub.STREAM_READER_FPS] even at the camera's
+ * slowest, [minFps] (the floor of its rate), so presence and the silence watchdog always have frames. A floor too low
+ * for that, or unknown (0), keeps the reader in every request, as before. At most 1 in 30.
+ */
+internal fun readerEvery(streaming: Boolean, minFps: Int): Int {
+    if (!streaming || minFps <= 0) return 1
+    return (minFps / CameraHub.STREAM_READER_FPS).coerceIn(1, 30)
 }
 
 /**
@@ -544,6 +657,41 @@ internal class ReopenBackoff(private val firstMs: Long = FIRST_MS, private val c
     companion object {
         const val FIRST_MS = 10_000L
         const val CAP_MS = 300_000L
+    }
+}
+
+/**
+ * How long a camera that failed to open (another app holds it, an error) or failed while open waits before it is tried
+ * again: [firstMs], doubling up to [capMs]. A good frame [reset]s it. When Android says another app freed the camera,
+ * it is tried at once, but never sooner than [minGapMs] after the last failure ([freed]), so connects never come in a
+ * burst. One thread.
+ */
+internal class ConnectBackoff(
+    private val firstMs: Long = FIRST_MS,
+    private val capMs: Long = CAP_MS,
+    private val minGapMs: Long = MIN_GAP_MS,
+) {
+    /** Failures since the last good frame; the try's number in the log. */
+    var attempt = 0
+        private set
+    private var failedAt: Long? = null
+
+    /** A failure at [now]: the wait before the next try. */
+    fun failed(now: Long): Long {
+        attempt++
+        failedAt = now
+        return (firstMs shl minOf(attempt - 1, 20)).coerceAtMost(capMs)
+    }
+
+    /** When to try a camera another app freed at [now]. */
+    fun freed(now: Long): Long = failedAt?.let { maxOf(now, it + minGapMs) } ?: now
+
+    fun reset() { attempt = 0; failedAt = null }
+
+    companion object {
+        const val FIRST_MS = 5_000L
+        const val CAP_MS = 60_000L
+        const val MIN_GAP_MS = 2_000L
     }
 }
 

@@ -3,6 +3,7 @@
 // before the flash that reads Home Assistant's ESPHome key from the running app over adb, the way on
 // when Kiln can't reach it, and what Done says. Same design as the rest of Kiln (docs/design/kiln).
 // The key never reaches these screens: ImageState holds its 4-hex fingerprint at most.
+import { Foot } from '../components/Nav';
 import { cap, pickInList, type DeviceFrame } from '@glassworks/kiln-core';
 import type { ImageSession, ImageState, KeyStep } from './imageSession';
 import { lines, rich } from './rich';
@@ -59,10 +60,10 @@ function Connect({ f, s }: P) {
       {!reading && <p className="small">{`Then click Connect and ${pickInList(d)}.`}</p>}
       {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-      <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => f.skipKeep()}>First-time install? Enter fastboot manually</button></span>
+      <Foot busy={reading || s.connecting}>
+        <button type="button" className="btn ghost" onClick={() => f.skipKeep()}>First-time install? Enter fastboot manually</button>
         <button type="button" className="btn ember" disabled={reading || s.connecting} onClick={() => void f.readKey()}>{reading ? 'Reading…' : 'Connect'}</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -85,10 +86,10 @@ function Restarted({ f, s }: P) {
       {k.state === 'held' && <p className="small">Keep this tab open until Done, or Home Assistant asks once after the install.</p>}
       {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-      <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => f.skipKeep()}>Still showing Glassworks? Enter fastboot manually</button></span>
+      <Foot busy={s.connecting}>
+        <button type="button" className="btn ghost" onClick={() => f.skipKeep()}>Still showing Glassworks? Enter fastboot manually</button>
         <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.connectFastboot()}>Connect</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -109,12 +110,12 @@ function Unreachable({ f, s }: P) {
       </p>
       <HaAsksOnce d={d} />
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-      <div className="foot">
-        <span className="links">{old
-          ? <button type="button" className="link" onClick={() => f.skipKeep()}>Enter fastboot manually</button>
-          : <button type="button" className="link" onClick={() => f.toKeep()}>Try again</button>}</span>
+      <Foot busy={s.connecting}>
+        {old
+          ? <button type="button" className="btn ghost" onClick={() => f.skipKeep()}>Enter fastboot manually</button>
+          : <button type="button" className="btn ghost" onClick={() => f.toKeep()}>Try again</button>}
         <button type="button" className="btn ember" disabled={s.connecting} onClick={() => (old ? void f.restartOld() : f.skipKeep())}>{old ? 'Restart into fastboot' : 'Continue with install'}</button>
-      </div>
+      </Foot>
     </section>
   );
 }

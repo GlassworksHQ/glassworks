@@ -18,8 +18,11 @@ import type { StandardFrame } from '../standard/frame';
 import type { StandardSession } from '../standard/session';
 import type { Session } from './session';
 import { HomeAssistant, Panes, Radio, RadioNext, Wifi } from '../setup/steps';
-import { eta, milestones, type Setup, type WizardState } from './state';
+import { eta, firingSteps, type Setup, type WizardState } from './state';
 import x from './screens.module.css';
+import { Foot } from '../components/Nav';
+import { BrowserAsk, Hands, Instructions, Note, Progress, Usually, Wait, type ProgressRow } from '../components/Kit';
+import { rich } from '../device/rich';
 
 type P = { s: WizardState; session: Session; frame: KilnFrame };
 /** The standard flow's screens (every frame's steps after its install): any frame's session, the frame as the flow reads it. */
@@ -30,24 +33,38 @@ function os(): 'win' | 'linux' | 'other' {
   return /Android/.test(ua) ? 'other' : /Windows/.test(ua) ? 'win' : /Linux/.test(ua) ? 'linux' : 'other';
 }
 
-/** 2 · Connect: the animation is the instruction. The picker opens inside the click. */
+/**
+ * 2 · Connect: the drawing, and beside it the frame's numbered steps to tick off (its `recoverySteps`), so both fit the
+ * first screen. The picker opens inside the click.
+ */
 export function Connect({ s, session, frame }: P) {
   const driver = useMemo(() => { const o = os(); return o === 'other' ? undefined : frame.drivers[o]; }, [frame]);
+  const steps = frame.recoverySteps;
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h" className="huge">Enter recovery mode</h2>
+      <h2 id="h">Put the panel in recovery mode</h2>
       <p className="lede">{s.flow === 'undo'
         ? 'Put the panel into recovery mode so Kiln can restore your saved backup.'
         : `Nothing changes on ${frame.the} yet. Kiln backs up your original software first, before writing anything.`}</p>
-      <Recovery data={frame.recovery} />
-      <p className="small">Next, click Connect and pick <code>{frame.felPick}</code> in the browser list (that&apos;s your panel in recovery mode).{s.flow === 'undo' ? '' : s.changed === 'unknown' ? ' Kiln can\'t tell whether an earlier attempt in this tab changed the panel.' : s.changed ? ' An earlier attempt already changed the panel.' : ''}</p>
+      {/* how long the whole install takes, from the frame's words, in the same line as a choice card's */}
+      {s.flow !== 'undo' && <Usually time={frame.time?.total} />}
+      {steps?.length
+        ? <div className="howto">
+            <div className="howto-art"><Recovery data={frame.recovery} /></div>
+            <Instructions steps={steps.map((x) => rich(x))} label="Recovery mode, by hand" />
+          </div>
+        : <Recovery data={frame.recovery} />}
+      {s.flow !== 'undo' && s.changed && <Note tone="info">{s.changed === 'unknown' ? 'Kiln can’t tell whether an earlier attempt in this tab changed the panel.' : 'An earlier attempt already changed the panel.'}</Note>}
+      <BrowserAsk listed={frame.felPick} short={frame.short} the={frame.the ?? `the ${frame.short}`}>
+        It shows a list of devices. Pick <code>{frame.felPick}</code>, which is your panel in recovery mode, then click Connect.
+      </BrowserAsk>
       {driver && <p className="small">{driver} <a className="link" href={frame.help.drivers} target="_blank" rel="noopener">Setup guide</a></p>}
       <LastRun />
       <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
-      <div className="foot">
+      <Foot busy={!!s.busy}>
         <span className="links">
           <Dialog.Root>
-            <Dialog.Trigger className="link">Show me a photo</Dialog.Trigger>
+            <Dialog.Trigger className="btn ghost">Show me a photo</Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="overlay" />
               <Dialog.Content className="sheet" style={{ width: 'min(640px, calc(100vw - 32px))' }}>
@@ -58,16 +75,17 @@ export function Connect({ s, session, frame }: P) {
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
-          {s.flow === 'undo' && <><span aria-hidden="true">·</span><button type="button" className="link" disabled={!!s.busy} onClick={() => void session.click('undo', () => session.openUndo())}>Back</button></>}
+          {/* an earlier attempt changed the panel (a reload mid-write): going back is as near as installing again */}
+          {s.flow === 'install' && s.changed && s.changed !== 'unknown' && <button type="button" className="btn ghost" disabled={!!s.busy} onClick={() => void session.click('undo', () => session.openUndo())}>Undo with your backup</button>}
         </span>
         <button type="button" className="btn ember" disabled={!!s.busy} onClick={() => void session.click('connect', () => session.connectFel())}>Connect</button>
-      </div>
+      </Foot>
     </section>
   );
 }
 
 /** 3 · Your turn: a sheet over the step when the browser needs a click. */
-export function YourTurn({ s, session, asks }: { s: WizardState; session: StandardSession; asks: Partial<Record<AskKind, AskCopy>> }) {
+export function YourTurn({ s, session, asks, the = 'the panel' }: { s: WizardState; session: StandardSession; asks: Partial<Record<AskKind, AskCopy>>; the?: string }) {
   const ask = s.ask;
   const copy = ask && asks[ask.kind];
   return (
@@ -79,9 +97,11 @@ export function YourTurn({ s, session, asks }: { s: WizardState; session: Standa
             <span className="label"><span className="pulse" />Your turn</span>
             <Dialog.Title asChild><h3>{copy.title}</h3></Dialog.Title>
             <Dialog.Description>{copy.body} Your browser asks for a fresh confirmation whenever a USB device switches modes, so pick <code>{copy.pick}</code> in the list.</Dialog.Description>
-            <button type="button" className="btn ember pulsing" disabled={ask.busy} onClick={() => void session.asks.click()}>Choose the panel</button>
-            {ask.busy && <p className="status work" role="status">Select the panel in the browser list…</p>}
+            <button type="button" className="btn ember pulsing" disabled={ask.busy} onClick={() => void session.asks.click()}>{`Choose ${the}`}</button>
+            {ask.busy && <p className="status work" role="status">{`Select ${the} in the browser list…`}</p>}
             {ask.error && <p className="status err" role="alert">{ask.error}</p>}
+            {/* set-up's connect only: after a reload with the device off, the person isn't stuck in the sheet */}
+            {ask.kind === 'connect' && !ask.busy && session.asks.declinable() && <button type="button" className="link" onClick={() => session.asks.decline()}>Not now</button>}
           </>}
         </Dialog.Content>
       </Dialog.Portal>
@@ -112,32 +132,27 @@ function TechLog({ s }: { s: WizardState }) {
   );
 }
 
-/** 4 · Install: the firing. One line, the bar, a short plain log; the technical log one click away. */
+/** 4 · Install: the firing. Every step with its mark and its word, what the person does (nothing), the log on request. */
 export function Firing({ s, frame }: P) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  const steps = milestones(s, frame.short);
+  const steps = firingSteps(s, frame.short);
+  const at = steps.findIndex((m) => !m.done);
+  const undo = s.flow === 'undo';
+  // how long a step usually takes, where the frame's words say: the restart is the install's first boot
+  const time = (m: (typeof steps)[number]) => (!undo && m.step ? frame.time?.steps?.[m.step] : undefined);
+  const rows: ProgressRow[] = steps.map((m, i) => ({ id: m.text, label: m.text, state: m.done ? 'done' : i === at ? 'now' : 'next', ...(time(m) ? { time: time(m) } : {}) }));
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h" className="huge">Keep it plugged in</h2>
-      <div style={{ display: 'grid', gap: 8 }}>
-        <div className="spread"><span>{s.progress.title}</span><span className="small">{eta(s, now)}</span></div>
-        <div className="bar" role="progressbar" aria-label={s.progress.title} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(s.progress.overall * 100)}>
-          <i style={{ width: `${Math.max(2, s.progress.overall * 100)}%` }} />
-        </div>
-      </div>
-      <ul className="plain">
-        {steps.map((m) => <li key={m.text}><span className={m.done ? 'ok' : 'go'}>{m.done ? '✓' : '→'}</span> {m.text}</li>)}
-      </ul>
+      <h2 id="h">{undo ? 'Putting your original software back' : 'Installing Glassworks'}</h2>
+      <Hands the={frame.the ?? `the ${frame.short}`} />
+      <Progress rows={rows} label={s.progress.title} aside={eta(s, now)} />
       {/* what keeps the person safe while it writes (issue 672): the backup comes first, and every write is read back */}
-      <p className="small">{s.flow === 'undo' ? 'Kiln reads every write back to check it.'
+      <Note tone={!undo && (s.progress.phase === 'boot' || s.progress.phase === 'backup') ? 'info' : 'ok'}>{undo ? 'Kiln reads every write back to check it.'
         : s.progress.phase === 'boot' || s.progress.phase === 'backup' ? `Kiln backs up the ${frame.short} before it writes anything.`
-        : 'Your backup is saved in this browser. Kiln reads every write back to check it.'}</p>
-      <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
-      <div className="foot">
-        <span />
-        <TechLog s={s} />
-      </div>
+        : 'Your backup is saved in this browser. Kiln reads every write back to check it.'}</Note>
+      <BuiltOn credits={stepCredits(frame.id, frame.credits, undo ? ['boot'] : undefined)} />
+      <TechLog s={s} />
     </section>
   );
 }
@@ -192,17 +207,11 @@ function Installing({ frame, setup }: { frame: Pick<StandardFrame, 'app'>; setup
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{setup.apply ? 'Language and time' : setup.update ? `Updating ${frame.app}` : `Installing ${frame.app}`}</h2>
-      <p className="lede">Keep the panel plugged in while this finishes. It usually takes about a minute.</p>
-      <ol className="join">
-        {rows.map((r, i) => (
-          <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>
-            {r.text(frame.app)}{i === at && sub && <span className="sub-step">{sub}</span>}
-          </li>
-        ))}
-      </ol>
+      <Hands the="the panel">Keep the panel plugged in while this finishes. It usually takes about a minute.</Hands>
+      <Progress live={false} label={setup.apply ? 'Language and time' : `Installing ${frame.app}`}
+        rows={rows.map((r, i): ProgressRow => ({ id: r.id, label: r.text(frame.app), state: i < at ? 'done' : i === at ? 'now' : 'next', ...(i === at && sub ? { note: sub } : {}) }))} />
       {note && <p className="small" aria-hidden="true">{note}</p>}
       <p className="visually-hidden" role="status">{says}</p>
-      <div className="bar wait"><i /></div>
     </section>
   );
 }
@@ -260,13 +269,13 @@ function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { p
         {frame.touch && !setup.apply && <label className="check"><input type="checkbox" checked={keyboard} onChange={(e) => setKeyboard(e.target.checked)} disabled={busy} /> On-screen keyboard</label>}
       </div>
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
-      <div className="foot">
+      <Foot>
         {setup.apply ? <span /> : <span className="small">Takes about a minute.</span>}
         <button type="button" className="btn ember" disabled={busy || !!s.busy}
           onClick={() => void session.click('install-app', () => session.installApp({ locale: locale || undefined, timezone: tz || undefined, clock24: clock === '24', keyboard }))}>
           {setup.apply ? 'Continue' : setup.update ? 'Update and continue' : `Install ${frame.app}`}
         </button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -276,8 +285,7 @@ export function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }>
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{connecting ? 'Connecting to the panel' : 'Starting the panel'}</h2>
-      <p className="lede">{setup.note}</p>
-      <div className="bar wait"><i /></div>
+      <Wait what={setup.note} typical={setup.typical} note="Nothing to do. Kiln goes on by itself when it’s ready." />
     </section>
   );
 }
@@ -342,10 +350,10 @@ export function Done({ s, session, frame, children }: SP & { children?: ReactNod
       {d.managePage && <ManagePageRow href={d.managePage} the={`the ${frame.short}`} />}
       {s.flow === 'install' && <BuiltOn credits={stepCredits(frame.id, frame.credits)} />}
       {s.flow === 'install' && <StarOnGitHub />}
-      <div className="foot">
-        {s.flow === 'install' && session.canUndo ? <button type="button" className="link" onClick={() => void session.undo()}>Undo</button> : <span />}
+      <Foot back={null}>
+        {s.flow === 'install' && session.canUndo ? <button type="button" className="btn ghost" onClick={() => void session.undo()}>Undo</button> : <span />}
         <Link className={`btn ${d.backup ? 'ghost' : 'ember'}`} href="/">Back to Kiln</Link>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -372,16 +380,16 @@ export function Undo({ s, session, frame }: P) {
         </div>
       )}
       <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.undoFromFile(f); }} />
-      <div className="foot">
+      {u.source !== 'browser' && <p className="small">{u.file ?? 'No backup saved in this browser — choose a backup .zip file to continue.'}</p>}
+      <Foot back={{ href: '/' }} busy={!!s.busy}>
         <span className="links">
-          {u.source !== 'browser' && <><span>{u.file ?? 'No backup saved in this browser — choose a backup .zip file to continue.'}</span><span aria-hidden="true">·</span></>}
-          {u.source === 'file' && u.inBrowser && <><button type="button" className="link" disabled={u.checking || u.locked || !!s.busy} onClick={() => void session.undoFromBrowser()}>Use saved backup</button><span aria-hidden="true">·</span></>}
-          <button type="button" className="link" disabled={u.checking || u.locked || !!s.busy} onClick={() => file.current?.click()}>{u.source === 'file' ? 'Choose a different file' : 'Use a backup file'}</button>
+          {u.source === 'file' && u.inBrowser && <button type="button" className="btn ghost" disabled={u.checking || u.locked || !!s.busy} onClick={() => void session.undoFromBrowser()}>Use saved backup</button>}
+          <button type="button" className="btn ghost" disabled={u.checking || u.locked || !!s.busy} onClick={() => file.current?.click()}>{u.source === 'file' ? 'Choose a different file' : 'Use a backup file'}</button>
         </span>
         <button type="button" className="btn ember" disabled={!u.ready || !!s.busy} onClick={() => void session.click('undo-continue', () => session.undoContinue())}>
           {keep && !u.appsBack ? frame.undo.keep.button : 'Continue'}
         </button>
-      </div>
+      </Foot>
       <p className="small">Prefer the command line? <code>{frame.help.undoCli}</code></p>
     </section>
   );
@@ -398,24 +406,26 @@ export function Failure({ s, session, help }: { s: WizardState; session: Standar
   };
   return (
     <section className="card err" aria-labelledby="h" role="alert">
+      <span className="err-mark" aria-hidden="true">!</span>
       <h2 id="h">{f.title}</h2>
       {f.happened && f.fix ? <>
-        <p className="lede">{f.happened}</p>
+        {/* whether the device is safe, always first (docs/design/kiln/system.md, errors) */}
+        <Note tone={f.wrote ? 'info' : 'ok'} role="status">{f.happened}</Note>
         <div className={x.fix} role="group" aria-labelledby="fix-h">
           <b id="fix-h">How to fix it</b>
           <span>{f.fix}</span>
         </div>
       </> : <p className="lede">{f.body}</p>}
       <Collapsible.Root open={open} onOpenChange={setOpen} className="tech">
-        <div className="foot">
+        <Foot back={null}>
           <span className="links">
-            <Collapsible.Trigger className="link">{open ? 'Hide help' : 'More help'}</Collapsible.Trigger>
-            {f.wrote && <><span aria-hidden="true">·</span><button type="button" className="link" onClick={retry}>Try again</button></>}
+            <Collapsible.Trigger className="btn ghost">{open ? 'Hide help' : 'More help'}</Collapsible.Trigger>
+            {f.wrote && <button type="button" className="btn ghost" onClick={retry}>Try again</button>}
           </span>
           {f.wrote
             ? <button type="button" className="btn ember" onClick={() => void session.undo()}>Undo with your backup</button>
             : <button type="button" className="btn ember" onClick={retry}>Try again</button>}
-        </div>
+        </Foot>
         <Collapsible.Content className="more">
           <ol className="tips">{f.tips.map(([b, t]) => <li key={b}><b>{b}</b> {t}</li>)}</ol>
           {f.raw && <pre className="raw">{f.raw}</pre>}

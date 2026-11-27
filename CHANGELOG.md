@@ -31,6 +31,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
+### Changed
+- **Kiln is easier to move around in.** Every installer screen has a Back button in the same place when going back is
+  safe, and says why when it isn't. Done steps on the side rail are links back to them. Reopening Kiln partway through
+  an install shows where you stopped and what's already on the device, with Continue and a way out. Start over asks
+  first, in a dialog that says what starts again and what stays. On a phone, a slim step bar opens the full list of
+  steps, and the main button stays at the bottom of the screen.
+
 ### Fixed
 - **App updates fail fast when Android blocks unknown-source installs, and S1 Plus setup allows them for fallback updates.** On a panel without the root update service, starting an update when "Install unknown apps" is off used to open a dead-end Android dialog and wait 10 minutes to time out. Glassworks now reports the missing permission right away, and both Kiln and `install.sh` allow "Install unknown apps" on the S1 Plus so fallback updates can show Android's confirmation screen.
 - **Radio firmware sensor says `none` instead of `v1` when no root helper is installed.** Panels without a root helper previously showed `(installed: v1)` in the Radio firmware sensor alongside the Radio helper sensor saying no helper was installed.

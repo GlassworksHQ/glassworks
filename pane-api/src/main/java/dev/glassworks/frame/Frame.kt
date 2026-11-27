@@ -58,6 +58,13 @@ interface Frame {
      */
     val cameraMaxPixels: Int? get() = null
 
+    /**
+     * How the camera's sensor really sits (frame.json's `camera.sensorDegrees`), for a device whose camera reports its
+     * mounting wrong; null (the default) to go by Android's `SENSOR_ORIENTATION`. The lululemon Mirror's says 0, and
+     * its stills came out upside down.
+     */
+    val cameraSensorDegrees: Int? get() = null
+
     /** The device's own settings screens, best first. [systemSettings] picks the first that opens. */
     /**
      * The boot animation's last frame and where it sits on the screen (px), so the app's first screen

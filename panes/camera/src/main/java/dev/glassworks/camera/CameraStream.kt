@@ -55,8 +55,8 @@ class CameraStream(
     private val host: () -> String?,
     private val snapshot: () -> ByteArray?,
     private val log: (String) -> Unit = { Log.i(TAG, it) },
-    private val encoders: EncoderFactory = EncoderFactory { size, au, failed ->
-        H264Encoder(size.width, size.height, onAccessUnit = au, onFailure = failed)
+    private val encoders: EncoderFactory = EncoderFactory { size, turn, fps, au, failed ->
+        H264Encoder(size.width, size.height, turn = turn, fps = fps, onAccessUnit = au, onFailure = failed)
     },
     /** Tests use free ports and no WS-Discovery. */
     private val rtspPort: Int = RTSP_PORT,
@@ -84,6 +84,9 @@ class CameraStream(
         }
         this.signIn = signIn
         val name = identity().name
+        // Read once: every encoder of this server and what ONVIF advertises agree for the server's life.
+        val turn = hub.streamTurn
+        val fps = hub.streamFps.takeIf { it > 0 } ?: H264Encoder.FPS
         var ve: ViewerEncoder? = null
         val r = RtspServer(
             rtspPort, { this.signIn }, { n -> ve?.viewers(n); if (n > 0) log("streaming to $n") },
@@ -92,12 +95,16 @@ class CameraStream(
         ve = ViewerEncoder(
             hub, encoders, egress, onAccessUnit = { au, key -> r.onAccessUnit(au, key) }, watched = { r.hasClients() },
             clock = android.os.SystemClock::elapsedRealtime, after = { ms, go -> main.postDelayed(go, ms) }, log = log,
+            turn = turn, fps = fps,
         )
         val o = OnvifServer(
             port = onvifPort,
             host = { host() ?: "0.0.0.0" },
             info = { identity().let { OnvifDeviceInfo(Build.MANUFACTURER, Build.MODEL, it.firmware, onvifMac(it.panelMac).replace(":", ""), Build.DEVICE, onvifMac(it.panelMac), it.name) } },
-            stream = { OnvifStreamInfo("rtsp://${host() ?: "0.0.0.0"}:$rtspPort/live", size.width, size.height, H264Encoder.FPS, H264Encoder.bitrateFor(size.width, size.height) / 1000) },
+            stream = {
+                val (w, h) = turnedSize(size.width, size.height, turn)
+                OnvifStreamInfo("rtsp://${host() ?: "0.0.0.0"}:$rtspPort/live", w, h, fps, H264Encoder.bitrateFor(w, h) / 1000)
+            },
             credentials = { this.signIn },
             snapshot = snapshot,
             onLog = { log("ONVIF: $it") },

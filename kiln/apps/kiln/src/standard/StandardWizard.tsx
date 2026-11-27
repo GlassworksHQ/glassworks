@@ -40,7 +40,7 @@ export function StandardWizard({ session, base, before, outcome }: { session: St
         : s.screen === 'done' ? <Done {...sp}>{outcome}</Done>
         : s.screen === 'error' ? <Failure s={s} session={session} />
         : <Waiting setup={{ phase: 'waiting', note: '' }} />}
-      <YourTurn s={s} session={session} asks={{ connect: f.connect }} />
+      <YourTurn s={s} session={session} asks={{ connect: f.connect }} the={f.the} />
       <p className="visually-hidden" aria-live="polite">{announce(s, f)}</p>
     </Shell>
   );

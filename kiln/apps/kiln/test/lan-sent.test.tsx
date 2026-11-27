@@ -50,13 +50,15 @@ describe('the panel\'s page after the Wi-Fi is sent', () => {
   it('the panel answering later that it never left is still an error, with Try again', () => {
     const { container } = render(<Wifi busy={false} steps={steps} setup={sent('lan', 'err')} />);
     expect(screen.getByRole('heading').textContent).toBe('Couldn\'t join Example-Home');
-    expect(container.querySelector('ol li')?.textContent).toBe('Sent to the panel');
+    expect(container.querySelector('.plist .prow.done .plabel')?.textContent).toBe('Send it to the panel');
+    expect(container.querySelector('.plist .prow.bad .plabel')?.textContent).toBe('The panel joins the network');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
   it('Kiln over USB still follows the join step by step', () => {
     const { container } = render(<Wifi busy={false} steps={steps} setup={sent(undefined, 'join')} />);
     expect(screen.getByRole('heading').textContent).toBe('Joining Example-Home…');
-    expect([...container.querySelectorAll('ol li')].map((li) => li.textContent)).toEqual(['Sent to the panel over USB', 'The panel joins the network', 'Connected']);
+    expect([...container.querySelectorAll('.plist .prow')].map((li) => `${li.className.replace('prow ', '')} ${li.querySelector('.plabel')!.textContent}`))
+      .toEqual(['done Send it to the panel over USB', 'now The panel joins the network', 'next Check it’s connected']);
   });
 });
