@@ -26,7 +26,9 @@ dependencies {
     // VoiceAssistantController implements its VoiceAssistantHandler, and WakeWordCatalog returns its WakeWordInfo.
     api(project(":esphome-api"))
     // Wake word inference, microWakeWord and the legacy openWakeWord (ships every ABI; the APK keeps the one built).
-    implementation("org.tensorflow:tensorflow-lite:2.16.1")
+    // LiteRT, TensorFlow Lite's new name: the same org.tensorflow.lite API, and its libtensorflowlite_jni.so is 16 KB
+    // page aligned, which TensorFlow Lite 2.16.1's wasn't (#962). Stay on 1.x: LiteRT 2.x needs minSdk 24.
+    implementation("com.google.ai.edge.litert:litert:1.4.1")
     // @ChecksSdkIntAtLeast for lint; class-retention, nothing at runtime.
     compileOnly("androidx.annotation:annotation:1.11.0")
 

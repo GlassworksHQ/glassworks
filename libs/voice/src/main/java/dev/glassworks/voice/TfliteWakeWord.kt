@@ -11,7 +11,7 @@ import java.nio.channels.FileChannel
 /** Thrown when a model isn't on the device, or couldn't be downloaded ([failure] says why). */
 internal class ModelsMissingException(message: String, val failure: ModelFailure = ModelFailure.Missing) : Exception(message)
 
-/** TensorFlow Lite couldn't run a model that is there: its native library is missing, or it refused the model. */
+/** LiteRT (TensorFlow Lite) couldn't run a model that is there: its native library is missing, or it refused the model. */
 internal class WakeEngineException(message: String, cause: Throwable) : Exception(message, cause)
 
 /**

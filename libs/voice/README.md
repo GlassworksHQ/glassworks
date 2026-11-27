@@ -100,8 +100,8 @@ dependencies {
 ```
 
 An Android library (AAR), minSdk 23 (Android 6). It brings in `dev.glassworks:esphome-api`, whose
-`VoiceAssistantHandler` it implements, and TensorFlow Lite 2.16.1 (with its native library for every
-ABI). A Kotlin build needs Kotlin 2.0 or newer.
+`VoiceAssistantHandler` it implements, and LiteRT 1.4.1 (TensorFlow Lite under its new name), with its
+native library for every ABI, 16 KB page aligned. A Kotlin build needs Kotlin 2.0 or newer.
 
 ## Tests
 

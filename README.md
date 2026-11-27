@@ -157,7 +157,7 @@ Code in this repository is licensed under **MIT** ([LICENSE](LICENSE)), except f
 | GNU C library, GCC runtime | LGPL-2.1-or-later, GPL-3.0 with GCC exception | Unmodified runtime libraries from Ubuntu 22.04 for the radio tools |
 | Simple Keyboard | Apache-2.0 | Optional on-screen keyboard |
 | GeckoView | MPL-2.0 | Embedded browser engine dependency |
-| TensorFlow Lite, Media3 ExoPlayer, ZXing | Apache-2.0 | Wake word inference, audio playback, and QR codes |
+| LiteRT (TensorFlow Lite), Media3 ExoPlayer, ZXing | Apache-2.0 | Wake word inference, audio playback, and QR codes |
 | TFLite Micro audio frontend, kissfft | Apache-2.0, BSD-3-Clause | Ported to Kotlin for wake word audio feature extraction |
 | microWakeWord models | Apache-2.0 | **Not shipped.** Downloaded on demand by the panel |
 | Bouncy Castle | MIT-style | ESPHome API Noise encryption |
