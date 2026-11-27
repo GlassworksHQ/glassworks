@@ -90,18 +90,24 @@ how the wake word was measured, is in [docs/esphome.md](../../docs/esphome.md) a
 
 ## Gradle
 
-On Maven Central as `dev.glassworks:voice` ([changelog](CHANGELOG.md)).
+On Maven Central as `dev.glassworks:voice` ([changelog](CHANGELOG.md)). Its LiteRT dependency comes from
+Google's Maven repository, so add `google()` too.
 
 ```kotlin
-repositories { mavenCentral() }
+repositories {
+    mavenCentral()
+    google()
+}
 dependencies {
-    implementation("dev.glassworks:voice:0.1.0")
+    implementation("dev.glassworks:voice:0.2.0")
 }
 ```
 
 An Android library (AAR), minSdk 23 (Android 6). It brings in `dev.glassworks:esphome-api`, whose
-`VoiceAssistantHandler` it implements, and TensorFlow Lite 2.16.1 (with its native library for every
-ABI). A Kotlin build needs Kotlin 2.0 or newer.
+`VoiceAssistantHandler` it implements, and LiteRT 1.4.1 (TensorFlow Lite under its new name), with its
+native library for every ABI, 16 KB page aligned. LiteRT and `org.tensorflow:tensorflow-lite` ship the same
+`org.tensorflow.lite` classes, so an app that uses this library can't also declare a TensorFlow Lite
+artifact: move it to the matching `com.google.ai.edge.litert` one. A Kotlin build needs Kotlin 2.0 or newer.
 
 ## Tests
 

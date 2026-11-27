@@ -39,7 +39,7 @@ longest matching prefix wins; a class nothing matches is the core's. On the S1:
 
 | Library | Used by | So |
 |---|---|---|
-| TensorFlow Lite (and `libtensorflowlite_jni.so`) | `voice/` only | Assist's |
+| LiteRT, formerly TensorFlow Lite (and `libtensorflowlite_jni.so`) | `voice/` only | Assist's |
 | XZ | `radio/` only | the radio's |
 | ZXing | the sign-in QR code | the core's |
 | BouncyCastle | `libs/esphome-api` (Noise) and Sendspin | shared |

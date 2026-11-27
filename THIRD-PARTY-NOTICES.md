@@ -99,11 +99,11 @@ build if one is missing here.
 
 ### Libraries the app uses directly
 
-- **TensorFlow Lite** 2.16.1: `org.tensorflow:tensorflow-lite:2.16.1`, `org.tensorflow:tensorflow-lite-api:2.16.1`.
-  Apache-2.0, Copyright The TensorFlow Authors. https://github.com/tensorflow/tensorflow (tag
-  `v2.16.1`). Its native library `libtensorflowlite_jni.so` also contains TensorFlow's bundled
-  third-party code, for example ruy (Apache-2.0) and cpuinfo (BSD-2-Clause). Those are listed in the
-  source tree's `third_party/`.
+- **LiteRT** (formerly TensorFlow Lite) 1.4.1: `com.google.ai.edge.litert:litert:1.4.1`,
+  `com.google.ai.edge.litert:litert-api:1.4.1`. Apache-2.0, Copyright The TensorFlow Authors.
+  https://github.com/google-ai-edge/LiteRT (tag `v1.4.1`). Its native library `libtensorflowlite_jni.so`
+  also contains TensorFlow's bundled third-party code, for example ruy (Apache-2.0) and cpuinfo
+  (BSD-2-Clause). Those are listed in the source tree's `third_party/`.
 - **Bouncy Castle** (provider) 1.80: `org.bouncycastle:bcprov-jdk18on:1.80`. MIT (the "Bouncy Castle
   Licence" is the MIT text). Copyright (c) 2000-2023 The Legion of the Bouncy Castle Inc.
   (https://www.bouncycastle.org). Source: https://github.com/bcgit/bc-java (tag `r1rv80`).

@@ -392,7 +392,7 @@ Wake word readiness is reported in three places: the **Assist** settings page (o
 | `Model check failed` | Downloaded file failed SHA-256 verification (often a captive portal or intercepting proxy) and was rejected. |
 | `Model not saved` | Storage is full or not writable; free up space. |
 | `Model missing` | A custom legacy openWakeWord model is selected that cannot be fetched automatically; choose an official wake word. |
-| `Engine failed` | TensorFlow Lite failed to initialize; check logs and report an issue. |
+| `Engine failed` | LiteRT (TensorFlow Lite) failed to initialize; check logs and report an issue. |
 | `Microphone not allowed` | Android's Microphone permission is denied; grant it in Android app settings. |
 | `Microphone unavailable` | No microphone hardware, another app is holding the mic, or repeated audio reads failed; recovers automatically once available. |
 
@@ -495,7 +495,7 @@ The test suite exercises `EspHomeApiTest` (end-to-end against real `aioesphomeap
 ## Licensing
 
 - Glassworks' ESPHome API and voice libraries are **MIT** licensed; `MicroFrontend.kt` retains its upstream **Apache-2.0** (TFLite Micro) and **BSD-3-Clause** (kissfft) licenses.
-- Official **microWakeWord models** and **TensorFlow Lite** are **Apache-2.0** (models are downloaded on demand, not bundled).
+- Official **microWakeWord models** and **LiteRT** (TensorFlow Lite) are **Apache-2.0** (models are downloaded on demand, not bundled).
 - Legacy **openWakeWord pre-trained models** are **CC BY-NC-SA 4.0** (non-commercial, share-alike) and are never bundled in the repository or APKs.
 - **BouncyCastle** is licensed under the MIT-style Bouncy Castle License.
 
