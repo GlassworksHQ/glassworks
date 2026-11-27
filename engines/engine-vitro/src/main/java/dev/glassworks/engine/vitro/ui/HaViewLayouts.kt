@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.ui
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -77,7 +78,8 @@ internal class MasonryColumnsLayout(context: Context, private val maxColumnPx: I
             // `.column:not(:has(> *:not([hidden]))) { flex-grow: 0 }`: a column whose cards are all hidden takes no
             // room, and the others share it; a card shown again (a visibility change lays this out again) brings its
             // column back.
-            fun hasShown(c: View) = c is ViewGroup && (0 until c.childCount).any { c.getChildAt(it).visibility != GONE }
+            // A GONE child isn't a column: the cards a build stages there ([CardStage]) take no room.
+            fun hasShown(c: View) = c.visibility != GONE && c is ViewGroup && (0 until c.childCount).any { c.getChildAt(it).visibility != GONE }
             val shown = (0 until childCount).count { hasShown(getChildAt(it)) }
             val inner = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
             val w = if (shown == 0) 0 else min(maxColumnPx, inner / shown).coerceAtLeast(0)
@@ -188,6 +190,16 @@ internal class CardColumn(context: Context, private val firstTopPx: Int, private
         orientation = VERTICAL
     }
 
+    /**
+     * Puts [card], taken from a [CardStage] ([CardStage.take]), at [index] with [lp]: it stays attached to the window,
+     * so it neither detaches nor attaches again (its subscriptions, island page and players carry on). The caller lays
+     * the column out once its cards are in.
+     */
+    fun place(card: View, index: Int, lp: LayoutParams) {
+        attachViewToParent(card, index, lp)
+        card.requestLayout()
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val unbounded = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
         var first = true
@@ -200,5 +212,22 @@ internal class CardColumn(context: Context, private val firstTopPx: Int, private
             first = false
         }
         super.onMeasure(widthMeasureSpec, unbounded)
+    }
+}
+
+/**
+ * Where a masonry build keeps the cards it made below the first screen until they go to their columns together
+ * ([CardColumn.place]): GONE inside the view's own tree, so its cards are attached to the window (what they open
+ * follows their view, and goes with it) but take no measure, layout or draw, and a chunk's frame doesn't lay out
+ * the cards already on the dashboard again.
+ */
+internal class CardStage(context: Context) : FrameLayout(context) {
+    init {
+        visibility = GONE
+    }
+
+    /** Hands [card] on without a detach: it moves on to [CardColumn.place] attached. */
+    fun take(card: View) {
+        detachViewFromParent(card)
     }
 }

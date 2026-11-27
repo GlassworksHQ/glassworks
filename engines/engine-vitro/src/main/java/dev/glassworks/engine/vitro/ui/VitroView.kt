@@ -357,11 +357,12 @@ class VitroView(
     private var buildingIndex = -1
 
     /**
-     * A card of a masonry view still to be added ([SlicedBuild]): [make] builds it, [attach] puts it in its column in
-     * place of the empty slot that held its place there. A card is never built without being attached in the same
-     * step, so whatever it opens (an island's page, its subscriptions, a camera) goes with its view when the view goes.
+     * A card of a masonry view still to be added ([SlicedBuild]): [make] builds it; [place] puts it in its column in
+     * place of the empty slot that held its place there, taken from the build's [CardStage] ([staged]) or straight.
+     * A card is never out of its view's tree: built, it waits in the stage, inside the view, so whatever it opens (an
+     * island's page, its subscriptions, a camera) goes with the view when the view goes.
      */
-    private class CardStep(val make: () -> View, val attach: (View) -> Unit)
+    private class CardStep(val make: () -> View, val place: (card: View, staged: Boolean) -> Unit)
 
     /**
      * The cards below a masonry view's first screen, in config order, collected while [buildViewTree] runs:
@@ -369,15 +370,22 @@ class VitroView(
      */
     private var pendingSteps: MutableList<CardStep>? = null
 
+    /** Where the masonry view [buildViewTree] builds keeps its later cards until they're placed ([CardStage]). */
+    private var pendingStage: CardStage? = null
+
     /**
      * A masonry view on screen whose cards below its first screen are still being added. Home Assistant's masonry
      * view (`hui-masonry-view.ts` `_createColumns`) puts its columns up first and adds every card in 16 ms slices with
      * a frame between, which on a panel draws the first screen over many frames and stretches the whole build.
      * Vitro builds the first screen in one pass instead ([buildMasonryLayout]: the cards whose column, decided from
      * the config, puts them within it by HA's card sizes), so the first frame shows it whole. Once that screen has
-     * been drawn twice (it settles first: [postSlice]), it adds the rest in chunks of at most [REST_SLICE_BUDGET_MS]
-     * that don't wait for frames: each runs as soon as the main thread is free, frames and input in between. The finished view is the one a build in one go makes, as every card's column
-     * is decided before any is built ([HaMasonry.place]). What waits for the whole view (the islands no card took
+     * been drawn twice (it settles first: [postSlice]), it makes the rest in chunks of at most [REST_SLICE_BUDGET_MS]
+     * that don't wait for frames: each runs as soon as the main thread is free, frames and input in between. A chunk's
+     * cards wait in the view's [CardStage], laid out by nothing, and all of them go to their columns in one pass when
+     * the last chunk is made ([placeStaged]): one layout of the dashboard for the whole rest, not one per chunk (on the
+     * S1, a frame after each chunk laid the dashboard out again, and doubled the time to a quiet main thread). Once the
+     * view is scrolled, what's made so far is placed at once and each chunk places its own. The finished view is the
+     * one a build in one go makes, as every card's column is decided before any is built ([HaMasonry.place]). What waits for the whole view (the islands no card took
      * back, the readiness and metrics, the rebuild for guessed states) waits for its last chunk ([finishBuild]).
      */
     private inner class SlicedBuild(
@@ -387,8 +395,16 @@ class VitroView(
         steps: List<CardStep>,
         /** The view's card layers ([cacheCardAsLayer]): a card a later chunk adds counts against the same budget. */
         val layers: CardLayerBudget,
+        /** Where the chunks' cards wait to be placed. */
+        val stage: CardStage?,
     ) {
         val steps = ArrayDeque(steps)
+
+        /** The cards made and waiting in [stage], in config order. */
+        val staged = ArrayList<Pair<CardStep, View>>()
+
+        /** The view was scrolled: what's made goes to its column at once. */
+        var placeAtOnce = false
         var slices = 0
         var longestMs = 0L
         val run = Runnable { runSlice(this) }
@@ -449,6 +465,9 @@ class VitroView(
         building = null
         b.unschedule()
         b.steps.clear()
+        // The staged cards are in the view's tree (its stage): they go with it.
+        b.staged.clear()
+        (viewCache[b.index] as? ScrollView)?.setOnScrollChangeListener(null)
         if (dropPartial) dropView(b.index, keepIslands = false)
     }
 
@@ -465,6 +484,7 @@ class VitroView(
         val made = ArrayList<Pair<CardStep, View>>()
         buildingIndex = b.index
         buildingLayers = b.layers
+        android.os.Trace.beginSection("Vitro chunk")
         try {
             // A card whose build ends this one (a re-entrant render or drop) leaves the rest unmade.
             while (building === b && b.steps.isNotEmpty()) {
@@ -472,12 +492,23 @@ class VitroView(
                 val step = b.steps.removeFirst()
                 made += step to step.make()
             }
+            android.os.Trace.beginSection("Vitro chunk: ${made.size} cards")
+            android.os.Trace.endSection()
         } finally {
+            android.os.Trace.endSection()
             buildingIndex = -1
             buildingLayers = null
         }
         if (building !== b) return
-        for ((step, card) in made) step.attach(card)
+        val stage = b.stage
+        if (stage == null || b.placeAtOnce) {
+            for ((step, card) in made) step.place(card, false)
+        } else {
+            // Into the stage: in the view's tree, attached, but GONE, so nothing lays them out yet.
+            for ((step, card) in made) stage.addView(card)
+            b.staged += made
+        }
+        if (b.steps.isEmpty()) placeStaged(b)
         val added = made.map { it.second }
         b.longestMs = maxOf(b.longestMs, sliceClock() - began)
         // Islands of the cards just added run only while their view is on screen, as [updateIslandsShown] sets them.
@@ -488,10 +519,48 @@ class VitroView(
         }
         if (b.steps.isEmpty()) {
             building = null
+            b.stage?.let { (it.parent as? android.view.ViewGroup)?.removeView(it) }
+            (viewCache[b.index] as? ScrollView)?.setOnScrollChangeListener(null)
             finishBuild(b.index, b.viewCfg, b.startedAt, cached = false, slices = b.slices, longestSliceMs = b.longestMs)
         } else {
             b.schedule()
         }
+    }
+
+    /** Where the shortest column's placed cards end, in [scroll]'s content (what a scroll down reaches first). */
+    private fun placedBottom(scroll: ScrollView, b: SlicedBuild): Int {
+        val row = b.stage?.parent as? android.view.ViewGroup ?: return 0
+        val r = Rect()
+        var bottom = Int.MAX_VALUE
+        for (i in 0 until row.childCount) {
+            val column = row.getChildAt(i) as? CardColumn ?: continue
+            r.set(0, 0, column.width, column.height)
+            scroll.offsetDescendantRectToMyCoords(column, r)
+            bottom = minOf(bottom, r.bottom)
+        }
+        return if (bottom == Int.MAX_VALUE) 0 else bottom
+    }
+
+    /**
+     * The cards [b] has made and staged go to their columns, in config order, in one pass: they stay attached as they
+     * move ([CardStage.take], [CardColumn.place]), and the dashboard is laid out once for all of them.
+     */
+    private fun placeStaged(b: SlicedBuild) {
+        val stage = b.stage ?: return
+        if (b.staged.isEmpty()) return
+        android.os.Trace.beginSection("Vitro place: ${b.staged.size} cards")
+        try {
+            for ((step, card) in b.staged) {
+                stage.take(card)
+                step.place(card, true)
+            }
+            b.staged.clear()
+            (stage.parent as? View)?.requestLayout()
+        } finally {
+            android.os.Trace.endSection()
+        }
+        // Their islands were paused in the stage: they run as their view does.
+        updateIslandsShown()
     }
 
     /** The card layers of the view being built ([cacheCardAsLayer]); null outside a build. */
@@ -1456,6 +1525,7 @@ class VitroView(
         }
         var steps: List<CardStep> = emptyList()
         var stepLayers: CardLayerBudget? = null
+        var stepStage: CardStage? = null
         val clockAtStart = sliceClock()
         val viewRoot = if (cached != null) {
             cached
@@ -1471,6 +1541,7 @@ class VitroView(
             pendingPinned = pinned
             val deferred = ArrayList<CardStep>()
             pendingSteps = deferred
+            pendingStage = null
             guessedStates.clear()
             // The view's old tree, if it has one, goes first: its islands wait for this build to take them back.
             dropView(index, keepIslands = true)
@@ -1479,9 +1550,11 @@ class VitroView(
             val layers = CardLayerBudget(cardLayerBudgetBytes())
             buildingLayers = layers
             clarity?.buildStarted(index)
+            android.os.Trace.beginSection("Vitro first pass")
             val built = try {
                 buildViewTree(viewCfg, cardCtx)
             } finally {
+                android.os.Trace.endSection()
                 pendingPinned = null
                 pendingSteps = null
                 buildingIndex = -1
@@ -1490,6 +1563,8 @@ class VitroView(
             layers.roots += built
             steps = deferred
             stepLayers = layers
+            stepStage = pendingStage
+            pendingStage = null
             viewCache[index] = built
             builtScripts[index] = IslandScripts.of(cardCtx.resources)
             contentHost.addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -1531,8 +1606,16 @@ class VitroView(
         // now, the rest once that screen is drawn.
         updateIslandsShown()
         updateCardsHidden()
-        val b = SlicedBuild(index, viewCfg, t0, steps, stepLayers ?: CardLayerBudget(cardLayerBudgetBytes()))
+        val b = SlicedBuild(index, viewCfg, t0, steps, stepLayers ?: CardLayerBudget(cardLayerBudgetBytes()), stepStage)
         building = b
+        // Scrolled down to where a column's placed cards end, while the rest is being made: what's made so far goes to
+        // its place now, and so does each chunk's. A small scroll (a card taking focus) changes nothing.
+        (viewRoot as? ScrollView)?.setOnScrollChangeListener { v, _, y, _, oldY ->
+            if (y > oldY && building === b && !b.placeAtOnce && y + v.height >= placedBottom(v as ScrollView, b)) {
+                b.placeAtOnce = true
+                placeStaged(b)
+            }
+        }
         runSlice(b, start = clockAtStart, budgetMs = SLICE_BUDGET_MS)
     }
 
@@ -2219,7 +2302,8 @@ class VitroView(
         // puts its top within it. Those are made and attached now, so the view's first frame shows that screen whole;
         // the rest follow in chunks ([SlicedBuild]), or here too, outside a view build. Every column gets its first
         // card now, so none changes width as the rest arrive. A card left for later holds its place in its column with
-        // an empty slot (GONE: no room, no margin), so a card built before the ones above it still lands in order.
+        // an empty slot (GONE: no room, no margin), so a card built before the ones above it still lands in order; made,
+        // it waits in the view's stage ([CardStage]) until the cards go to their slots together ([placeStaged]).
         // A card hidden now ([shownNow]: a conditional whose conditions don't hold, a card's `visibility`) still has
         // its column, as in HA, but takes no room on the screen: it doesn't count toward it. One hidden now that's
         // within the first screen is built with it (shown again, it's in place at once); one below it is built in its
@@ -2228,6 +2312,7 @@ class VitroView(
         val viewportDp = (if (height > 0) height else resources.displayMetrics.heightPixels) / dp
         val firstScreenDp = viewportDp * FIRST_SCREEN_SHARE
         val tops = DoubleArray(count) { 4.0 }
+        var stage: CardStage? = null
         placed.forEachIndexed { k, (configIndex, card) ->
             val column = columns[placement[k]]
             val top = tops[placement[k]]
@@ -2239,10 +2324,11 @@ class VitroView(
             } else {
                 val slot = View(context).apply { visibility = GONE }
                 column.addView(slot, cardMarginParams(ctx, widthDp))
-                deferred += CardStep({ make(configIndex, card) }) { v ->
+                if (stage == null) stage = CardStage(context).also { row.addView(it, LinearLayout.LayoutParams(0, 0)); pendingStage = it }
+                deferred += CardStep({ make(configIndex, card) }) { v, staged ->
                     val at = column.indexOfChild(slot)
                     column.removeViewAt(at)
-                    column.addView(v, at, cardMarginParams(ctx, widthDp))
+                    if (staged) column.place(v, at, cardMarginParams(ctx, widthDp)) else column.addView(v, at, cardMarginParams(ctx, widthDp))
                 }
             }
         }

@@ -109,15 +109,21 @@ class MasonrySlicesTest {
 
     /** The card views in [row]'s columns (not the slots still waiting for theirs). */
     private fun cardViews(row: MasonryColumnsLayout): List<View> =
-        (0 until row.childCount).flatMap { c -> (row.getChildAt(c) as ViewGroup).let { col -> (0 until col.childCount).map { col.getChildAt(it) } } }
-            .filterNot(::isSlot)
+        columnsOf(row).flatMap { col -> (0 until col.childCount).map { col.getChildAt(it) } }.filterNot(::isSlot)
+
+    /** [row]'s columns, not the stage where a build's later cards wait. */
+    private fun columnsOf(row: MasonryColumnsLayout): List<ViewGroup> =
+        (0 until row.childCount).map { row.getChildAt(it) }.filterNot { it is dev.glassworks.engine.vitro.ui.CardStage }.map { it as ViewGroup }
 
     /** The cards attached to [row]'s columns, by column. */
-    private fun attached(row: MasonryColumnsLayout): List<Int> = (0 until row.childCount).map { c ->
-        (row.getChildAt(c) as ViewGroup).let { col -> (0 until col.childCount).count { !isSlot(col.getChildAt(it)) } }
+    private fun attached(row: MasonryColumnsLayout): List<Int> = columnsOf(row).map { col ->
+        (0 until col.childCount).count { !isSlot(col.getChildAt(it)) }
     }
 
     /** The name a test card shows (`heavy 12`). */
+    /** The cards made and waiting in the view's stage, to be placed together. */
+    private fun staged(vv: VitroView): Int = all(vv).filterIsInstance<dev.glassworks.engine.vitro.ui.CardStage>().sumOf { it.childCount }
+
     private fun nameOf(card: View): String =
         all(card).filterIsInstance<TextView>().firstNotNullOf { Regex("""\w+ \d+""").find(it.text)?.value }
 
@@ -162,15 +168,24 @@ class MasonrySlicesTest {
         assertEquals("one chunk waits", 1, queued.size)
         assertEquals("the first chunk waits for the first screen to be drawn (twice)", listOf(true), firstAfterFrame)
 
-        // A chunk: up to 24 ms of cards, at 5 ms a look, then the next one queued.
+        // A chunk: up to 24 ms of cards, at 5 ms a look, then the next one queued. Its cards wait in the stage: no
+        // column changes, so nothing on the dashboard is laid out again for them.
         val before = attached(row).sum()
+        val stagedBefore = staged(vv)
         chunk()
-        val added = attached(row).sum() - before
-        assertTrue("a chunk adds several cards: $added", added in 2..6)
+        assertEquals("the columns are as they were", before, attached(row).sum())
+        val added = staged(vv) - stagedBefore
+        assertTrue("a chunk makes several cards: $added", added in 2..6)
         assertEquals("the chunks after it don't wait for frames", listOf(true, false), firstAfterFrame)
-        repeat(20) { chunk() }
+        while (queued.size > 0 && vv.buildInProgress) {
+            val chunked = staged(vv)
+            chunk()
+            if (vv.buildInProgress) assertEquals("still in the stage", before, attached(row).sum())
+            if (vv.buildInProgress) assertTrue(staged(vv) > chunked)
+        }
         assertFalse(vv.buildInProgress)
-        assertEquals(80, attached(row).sum())
+        assertEquals("all of them placed in one pass with the last chunk", 80, attached(row).sum())
+        assertTrue("the stage is gone", all(vv).none { it is dev.glassworks.engine.vitro.ui.CardStage })
         assertTrue(vv.currentViewBuilt)
         assertEquals("one report, once the last card is in", 1, metrics.size)
         assertFalse(metrics.single().cacheHit)
@@ -373,5 +388,62 @@ class MasonrySlicesTest {
         repeat(30) { chunk() }
         assertFalse(vv.buildInProgress)
         assertEquals("the columns are HA's, hidden cards and all", layoutDump(once), layoutDump(vv))
+    }
+
+    // Scrolled while the rest is being made: what's made so far goes to its place at once, and each chunk after that
+    // places its own cards, so the user never scrolls into an empty column that has cards waiting.
+    @Test
+    fun aScrollPlacesWhatsMadeAtOnce() {
+        val vv = vitroView(dashboard("heavy" to 80), sliced = true)
+        val row = columns(vv)
+        chunk()
+        val waiting = staged(vv)
+        assertTrue("cards wait in the stage: $waiting", waiting > 0)
+        val before = attached(row).sum()
+        layOut(vv)
+        // A small scroll, short of where the columns' placed cards end: nothing moves.
+        vv.currentScroll()!!.scrollTo(0, 20)
+        assertEquals(waiting, staged(vv))
+        // Down to where the shortest column ends.
+        vv.currentScroll()!!.scrollTo(0, 2000)
+        assertEquals("nothing waits any more", 0, staged(vv))
+        assertEquals("the cards made so far are in their columns", before + waiting, attached(row).sum())
+        chunk()
+        assertEquals("a chunk after the scroll places its cards", 0, staged(vv))
+        assertTrue(attached(row).sum() > before + waiting)
+        repeat(30) { chunk() }
+        assertFalse(vv.buildInProgress)
+        assertEquals(80, attached(row).sum())
+    }
+
+    // A card a chunk made waits in the stage, inside the view's tree: a build dropped then (a view switch) releases its
+    // island's page and its subscriptions with the rest of the view.
+    @Test
+    fun aDroppedBuildReleasesWhatItsStagedCardsOpened() {
+        val iframe = JSONObject().put("type", "iframe").put("url", "https://example.com/").put("aspect_ratio", "60%")
+        val tile = JSONObject().put("type", "tile").put("entity", "light.porch")
+        val heavy = cards("heavy", 60).put(iframe).put(tile).apply { for (i in 0 until 10) put(JSONObject().put("type", "markdown").put("content", "after $i")) }
+        val config = JSONObject().put("views", JSONArray()
+            .put(JSONObject().put("path", "heavy").put("title", "HEAVY").put("cards", heavy))
+            .put(JSONObject().put("path", "light").put("title", "LIGHT").put("cards", cards("light", 2)))).toString()
+        val store = EntityStore()
+        val server = dev.glassworks.engine.vitro.island.VitroIslandServer(session = { FakeHaServer.BASE to FakeHaServer.TOKEN })
+        val pages = ArrayList<RecordingPage>()
+        try {
+            val vv = vitroView(config, sliced = true, store = store, islands = server to { _ -> RecordingPage(activity).also { pages += it } })
+            while (vv.buildInProgress && pages.isEmpty() && queued.isNotEmpty()) chunk()
+            assertEquals("the iframe was made in a chunk, and waits in the stage", 1, pages.size)
+            assertTrue(vv.buildInProgress)
+            assertTrue(all(vv).filterIsInstance<IframeCardView>().single().parent is dev.glassworks.engine.vitro.ui.CardStage)
+            while (vv.buildInProgress && store.listenerCount("light.porch") == 0 && queued.isNotEmpty()) chunk()
+            assertTrue("the tile, staged too, follows its entity", vv.buildInProgress && store.listenerCount("light.porch") > 0)
+
+            assertTrue(vv.navigateToView("light"))
+            ShadowLooper.idleMainLooper()
+            assertTrue("no island page is left open", pages.all { it.closed })
+            assertEquals("nothing follows the tile's entity any more", 0, store.listenerCount("light.porch"))
+        } finally {
+            server.stop()
+        }
     }
 }
