@@ -6,6 +6,7 @@ import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.Looper
+import android.os.Trace
 import android.view.TextureView
 import livekit.org.webrtc.EglBase
 import livekit.org.webrtc.EglRenderer
@@ -81,6 +82,7 @@ internal class VideoTextureView(
 
     /** Stops the render thread. Any thread but the render thread; blocks until it has stopped. */
     override fun release() {
+        paced?.let { pacer?.pacing?.unregister(it) }
         handoff.beginShutdown()
         try {
             renderer.release()
@@ -112,7 +114,31 @@ internal class VideoTextureView(
 
     override fun onFrame(frame: VideoFrame) {
         frameSize(frame.rotatedWidth, frame.rotatedHeight)
-        if (draws()) renderer.onFrame(frame)
+        if (!draws()) return
+        val p = pacer
+        val client = paced
+        // The first frame goes at once: it's what says the stream plays.
+        if (p != null && client != null && p.pacing.offer(client, frame, System.nanoTime(), immediate = !drawnOnce)) {
+            p.ensureTicking()
+        } else {
+            renderer.onFrame(frame)
+        }
+    }
+
+    /**
+     * Where its frames are drawn on a shared tick with every other paced view's ([HaWebRtcPlayer.Options.pacedMaxFps],
+     * [FramePacing]), or null: each frame as it comes. Set once, by [pace], before frames come.
+     */
+    @Volatile private var pacer: VsyncPacer? = null
+
+    /** This view on [pacer]: a tick draws its waiting frame, unless it has gone off screen meanwhile. */
+    @Volatile private var paced: FramePacing<VideoFrame>.Client? = null
+
+    /** Its frames go through [pacer] from now on. Once, before [init]. */
+    fun pace(pacer: VsyncPacer) {
+        check(this.pacer == null) { "paced already" }
+        paced = pacer.pacing.register { f -> if (draws()) renderer.onFrame(f) }
+        this.pacer = pacer
     }
 
     /** Whether a frame coming in now is drawn: while [rendering], and the first one in any case. */
@@ -165,9 +191,14 @@ internal class VideoTextureView(
         val w = frameWidth
         val h = frameHeight
         if (w > 0 && h > 0) {
-            drawnOnce = true
-            updateOpaque()
-            onDrawn?.onDrawn(w, h)
+            Trace.beginSection(TRACE_SHOWN)
+            try {
+                drawnOnce = true
+                updateOpaque()
+                onDrawn?.onDrawn(w, h)
+            } finally {
+                Trace.endSection()
+            }
         }
     }
 
@@ -193,6 +224,10 @@ internal class VideoTextureView(
         updateOpaque()
     }
 
+    private companion object {
+        /** A trace section for each new picture the view shows (main thread, inside the window's draw). */
+        const val TRACE_SHOWN = "ha-webrtc frame shown"
+    }
 }
 
 /**

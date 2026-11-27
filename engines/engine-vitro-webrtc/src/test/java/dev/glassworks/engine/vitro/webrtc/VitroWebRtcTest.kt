@@ -95,6 +95,7 @@ class VitroWebRtcTest {
         assertEquals(dev.glassworks.hawebrtc.VideoScaling.STRETCH, VitroWebRtc.OPTIONS.scaling)
         assertEquals("muted", false, VitroWebRtc.OPTIONS.stream.audio)
         assertEquals("paused means closed, as HLS", 0L, VitroWebRtc.OPTIONS.stream.idleTeardownMs)
+        assertEquals("the cards' cameras redraw the window together, at most 30 times a second", 30, VitroWebRtc.OPTIONS.pacedMaxFps)
     }
 
     @Test

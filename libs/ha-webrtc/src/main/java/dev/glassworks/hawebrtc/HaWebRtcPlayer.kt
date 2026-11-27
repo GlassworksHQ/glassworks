@@ -39,6 +39,14 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         public val scaling: VideoScaling = VideoScaling.FIT,
         /** The view the picture draws into: a TextureView unless asked ([VideoViewKind]). */
         public val view: VideoViewKind = VideoViewKind.TEXTURE_VIEW,
+        /**
+         * Above 0, and with a TextureView: the picture's frames are drawn on a shared tick with every other player's
+         * that asks for the same, at most this many ticks a second and no faster than the fastest of those cameras
+         * needs. Each TextureView frame makes the window draw again, so several cameras then redraw it once per tick
+         * between them, not once per camera frame. A player playing alone isn't paced. 0 (the default): each frame is
+         * drawn as it comes. A SurfaceView's frames don't redraw the window and aren't paced.
+         */
+        public val pacedMaxFps: Int = 0,
     )
 
     /** What the player reports, on the main thread. */
@@ -60,7 +68,9 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
     private val main = Handler(Looper.getMainLooper())
     private val video: VideoOutput = when (options.view.resolved()) {
         VideoViewKind.SURFACE_VIEW -> VideoSurfaceView(context, options.scaling)
-        else -> VideoTextureView(context, options.scaling)
+        else -> VideoTextureView(context, options.scaling).apply {
+            if (options.pacedMaxFps > 0) pace(VsyncPacer.forFps(options.pacedMaxFps))
+        }
     }
     private var thread: HandlerThread? = null
     private var worker: Handler? = null

@@ -45,7 +45,13 @@ object VitroWebRtc {
         // composer that overlays only one video, so a surface per camera pushed the whole window onto the GPU at video
         // rate and scrolling slowed down. In the window, the video also fades, clips and filters with its card.
         view = VideoViewKind.TEXTURE_VIEW,
+        // Each camera's frame makes the window draw again: paced, four cameras redraw it once per tick between them
+        // (at most 30 a second, fewer for slower cameras), not 40 or more times a second on clocks of their own.
+        pacedMaxFps = PACED_MAX_FPS,
     )
+
+    /** The most window redraws a second the dashboard's TextureView cameras cause between them ([OPTIONS]). */
+    internal const val PACED_MAX_FPS = 30
 
     internal class Factory(private val host: CameraStreamHost) : CameraStreamFactory {
         override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
