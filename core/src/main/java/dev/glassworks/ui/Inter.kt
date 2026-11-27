@@ -32,14 +32,25 @@ object Inter {
 
     /** Reads the font file; tests point it at the source tree (Robolectric runs without app resources). */
     var load: (Context) -> ByteArray = { c -> c.resources.openRawResource(R.font.inter).use { it.readBytes() } }
-        set(v) { field = v; cache.clear(); data = null; failed = false }
+        set(v) { field = v; cache.clear(); byWeightAndSize.clear(); data = null; failed = false }
 
     private val cache = HashMap<String, Typeface>()
+
+    /** [typeface]'s answers by weight and optical size, without formatting the variation string on every call. */
+    private val byWeightAndSize = HashMap<Int, Typeface>()
     private var data: ByteBuffer? = null
     private var failed = false
 
     /** [weight] at [sizeSp]; [opticalSize] overrides the optical size (the boot's text uses 14 at every size). */
     fun typeface(context: Context, weight: Int, sizeSp: Float, opticalSize: Int? = null): Typeface {
+        val opsz = opticalSize ?: opticalSize(sizeSp)
+        if (weight !in 0..0xFFFFFF || opsz !in 0..0xFF) return typefaceByKey(context, weight, sizeSp, opticalSize)
+        val fast = (weight shl 8) or opsz
+        byWeightAndSize[fast]?.let { return it }
+        return typefaceByKey(context, weight, sizeSp, opticalSize).also { byWeightAndSize[fast] = it }
+    }
+
+    private fun typefaceByKey(context: Context, weight: Int, sizeSp: Float, opticalSize: Int?): Typeface {
         val key = opticalSize?.let { String.format(Locale.ROOT, "'wght' %d, 'opsz' %d", weight, it) } ?: variation(weight, sizeSp)
         cache[key]?.let { return it }
         val tf = build(context, weight, key) ?: fallback(weight)

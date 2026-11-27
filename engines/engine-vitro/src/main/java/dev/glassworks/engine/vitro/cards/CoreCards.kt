@@ -43,6 +43,7 @@ import dev.glassworks.engine.vitro.model.VisibilityCondition
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.HaErrorSeverity
+import dev.glassworks.engine.vitro.ui.LocalRelayout
 import dev.glassworks.engine.vitro.ui.errorCardContent
 import dev.glassworks.engine.vitro.ui.TimestampText
 import dev.glassworks.engine.vitro.ui.showRelativeOr
@@ -112,12 +113,46 @@ internal object HaMotion {
  * as the view's foreground so it draws over whatever background the view already has. Cards never scale on press.
  */
 internal fun applyHaRipple(view: View, cornerRadiusPx: Float, isDark: Boolean) {
-    val mask = GradientDrawable().apply {
-        cornerRadius = cornerRadiusPx
-        setColor(Color.WHITE)
+    view.foreground = HaRipple(cornerRadiusPx, isDark)
+}
+
+/**
+ * [applyHaRipple]'s foreground: the same [RippleDrawable], made the first time the view is touched, focused or hovered
+ * (its hotspot set, or a state the ripple shows), so a dashboard's hundreds of tiles and rows don't each build one
+ * they may never show. At rest neither draws anything; once made, it's the ripple itself that draws and animates.
+ */
+internal class HaRipple(private val cornerRadiusPx: Float, private val isDark: Boolean) : android.graphics.drawable.DrawableWrapper(null) {
+    /** The ripple, made now if it isn't yet ([DrawableWrapper.setDrawable] hands it this drawable's bounds and state). */
+    internal fun ripple(): android.graphics.drawable.Drawable = drawable ?: RippleDrawable(
+        ColorStateList.valueOf(if (isDark) 0x22FFFFFF else 0x1A000000),
+        null,
+        GradientDrawable().apply {
+            cornerRadius = cornerRadiusPx
+            setColor(Color.WHITE)
+        },
+    ).also { drawable = it }
+
+    override fun isStateful(): Boolean = true
+
+    override fun onStateChange(state: IntArray): Boolean {
+        if (drawable == null) {
+            if (state.none { it == android.R.attr.state_pressed || it == android.R.attr.state_focused || it == android.R.attr.state_hovered }) return false
+            ripple()
+            return true
+        }
+        return super.onStateChange(state)
     }
-    val tint = ColorStateList.valueOf(if (isDark) 0x22FFFFFF else 0x1A000000)
-    view.foreground = RippleDrawable(tint, null, mask)
+
+    // A touch sets the hotspot before the pressed state: the ripple starts from where the finger is.
+    override fun setHotspot(x: Float, y: Float) {
+        ripple().setHotspot(x, y)
+    }
+
+    override fun setHotspotBounds(left: Int, top: Int, right: Int, bottom: Int) {
+        ripple().setHotspotBounds(left, top, right, bottom)
+    }
+
+    override fun getOpacity(): Int = drawable?.opacity ?: android.graphics.PixelFormat.TRANSPARENT
 }
 
 /** HA's `hold_action` for a card: the configured one, else `more-info` when there's an entity to show. */
@@ -228,22 +263,42 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         private set
 
     /** HA's `ha-tile-badge`: a 16 px disc with a 12 px white icon, over the icon's top-right ([renderTileBadge]). */
+    // Made the first time a state shows them ([badge]), as most tiles never do.
     private val tileBadgeFill = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFFFF9800.toInt()) }
-    private val tileBadgeIcon = MdiIconView(ctx.context).apply { setIcon("mdi:exclamation-thick", Color.WHITE) }
-    private val unavailableBadge = FrameLayout(ctx.context).apply {
-        visibility = GONE
-        background = tileBadgeFill
-        addView(tileBadgeIcon, LayoutParams(ctx.px(12f), ctx.px(12f), Gravity.CENTER))
-    }
+    private var tileBadgeIcon: MdiIconView? = null
+    private var unavailableBadge: FrameLayout? = null
 
     /** `show_entity_picture`: the entity's picture in the icon's place (a 36 px rounded square), once it has loaded. */
-    private val pictureView = ImageView(ctx.context).apply {
+    private var pictureView: ImageView? = null
+    private var pictureUrl: String? = null
+
+    /** The box the icon, the picture and the badge share; null for a Mushroom template card, which has neither. */
+    private var iconFrame: FrameLayout? = null
+
+    /** The badge, made (hidden, over the icon's top-right) the first time it shows. */
+    private fun badge(): FrameLayout = unavailableBadge ?: FrameLayout(ctx.context).apply {
+        visibility = GONE
+        background = tileBadgeFill
+        val icon = MdiIconView(ctx.context).apply { setIcon("mdi:exclamation-thick", Color.WHITE) }
+        tileBadgeIcon = icon
+        addView(icon, LayoutParams(ctx.px(12f), ctx.px(12f), Gravity.CENTER))
+        // Last in the box, over the icon and the picture.
+        iconFrame?.addView(this, LayoutParams(ctx.px(16f), ctx.px(16f), Gravity.TOP or Gravity.END).apply {
+            topMargin = -ctx.px(3f); rightMargin = -ctx.px(3f)
+        })
+        unavailableBadge = this
+    }
+
+    /** The picture, made (hidden, over the icon and under the badge) the first time one loads. */
+    private fun picture(): ImageView = pictureView ?: ImageView(ctx.context).apply {
         scaleType = ImageView.ScaleType.FIT_XY
         visibility = GONE
         isClickable = false
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        // Right after the icon's box: under a badge made before it.
+        iconFrame?.addView(this, 1, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        pictureView = this
     }
-    private var pictureUrl: String? = null
 
     /** The zones this tile follows for its badge ([followZones]); declared before the first draw, in the constructor. */
     private val followedZones = HashSet<String>()
@@ -351,15 +406,13 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             addView(iconBadge, LinearLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         }
         // ha-tile-badge: a 16 px orange disc with a 12 px exclamation over the shape's top-right while unavailable.
+        // The picture and the badge join it when first shown ([picture], [badge]).
         val iconFrame = FrameLayout(ctx.context).apply {
             clipChildren = false
             clipToPadding = false
             addView(iconWrap, LayoutParams(MATCH_PARENT, MATCH_PARENT))
-            addView(pictureView, LayoutParams(MATCH_PARENT, MATCH_PARENT))
-            addView(unavailableBadge, LayoutParams(ctx.px(16f), ctx.px(16f), Gravity.TOP or Gravity.END).apply {
-                topMargin = -ctx.px(3f); rightMargin = -ctx.px(3f)
-            })
         }
+        this.iconFrame = iconFrame
         row.clipChildren = false
         row.clipToPadding = false
         row.addView(iconFrame, LinearLayout.LayoutParams(badgeSize, badgeSize).apply {
@@ -585,7 +638,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         else -> sb.setValue(lastBrightness?.let { brightnessFraction(it) } ?: sb.value, active = true)
                     }
                 }
-                selectBox?.text = s?.let { HaDisplay.stateLabel(it) ?: it.state } ?: "…"
+                selectBox?.setTextIfChanged(s?.let { HaDisplay.stateLabel(it) ?: it.state } ?: "…")
                 featureBinders.forEach { it(s) }
                 // A feature the entity doesn't support draws nothing; with none shown, HA's features box stays, empty,
                 // with its 12 px bottom padding, and the info centres above it.
@@ -801,7 +854,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         // HA's number: the step's decimals, then the unit unless the buttons are narrow.
                         fun fill(g: NumberButtons, v: Double?, name: String) {
                             val number = v?.let { HaDisplay.formatFixed(it, digits) }
-                            g.value.text = number?.let { if (g.narrow) it else "$it $unit" } ?: "–"
+                            g.value.setTextIfChanged(number?.let { if (g.narrow) it else "$it $unit" } ?: "–")
                             // HA's spin button, named after the target, with its unit always.
                             g.value.contentDescription = "$name, " + (number?.let { "$it $unit" } ?: "–")
                         }
@@ -1120,7 +1173,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                                 ctx.callService("counter", if (sign > 0) "increment" else "decrement", data(), null)
                                 val cur = pending ?: st?.state?.toDoubleOrNull() ?: return
                                 pending = clamp(cur + sign * stepOf(st), st)
-                                value.text = format(pending!!, st)
+                                value.setTextIfChanged(format(pending!!, st))
                                 return
                             }
                             val cur = pending ?: st?.state?.toDoubleOrNull() ?: return
@@ -1129,7 +1182,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                             val lo = lowOf(st) ?: 0.0
                             val next = clamp(lo + Math.round((cur + sign * step - lo) / step) * step, st)
                             pending = next
-                            value.text = format(next, st)
+                            value.setTextIfChanged(format(next, st))
                             setValue(next)
                         }
                         fun stepButton(iconName: String, sign: Int, label: String) = LinearLayout(ctx.context).apply {
@@ -1153,7 +1206,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                         rootCol.addView(stepper, lp())
                         featureBinders += { s ->
                             pending = null
-                            value.text = s?.state?.toDoubleOrNull()?.let { format(it, s) } ?: "–"
+                            value.setTextIfChanged(s?.state?.toDoubleOrNull()?.let { format(it, s) } ?: "–")
                         }
                     }
                 }
@@ -1466,7 +1519,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     private fun renderState(s: EntityState?) {
         // HA's tile names an entity on a device "<device> <entity>" (the device alone for its main entity).
-        titleView.text = config.name(s) ?: config.entity?.let(HaDisplay::deviceEntityName) ?: s?.friendlyName ?: config.entity.orEmpty()
+        titleView.setTextIfChanged(config.name(s) ?: config.entity?.let(HaDisplay::deviceEntityName) ?: s?.friendlyName ?: config.entity.orEmpty())
         val hideState = config.raw.optBoolean("hide_state", false)
         stateView.visibility = if (hideState) GONE else VISIBLE
         when {
@@ -1481,7 +1534,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             // sensor's, a scene's or a button's state relative.
             config.type.startsWith("custom:mushroom-") ->
                 ctx.showRelativeOr(stateView, s, s?.let { mushroomStateLine(config.type, it) } ?: "…", TimestampText.MUSHROOM)
-            else -> stateView.text = s?.formattedState() ?: "…"
+            else -> stateView.setTextIfChanged(s?.formattedState() ?: "…")
         }
         if (isTile) renderPicture(s)
         updateBadge(s, active = s?.isActive == true)
@@ -1520,16 +1573,18 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
      */
     private fun renderTileBadge(s: EntityState?) {
         fun show(icon: String?, color: Int?) {
-            unavailableBadge.visibility = VISIBLE
+            val badge = badge()
+            badge.visibility = VISIBLE
             tileBadgeFill.setColor(color ?: ctx.theme.primaryColor)
-            if (icon != null) { tileBadgeIcon.visibility = VISIBLE; tileBadgeIcon.setIcon(icon, Color.WHITE) }
-            else tileBadgeIcon.visibility = INVISIBLE
+            val glyph = tileBadgeIcon!!
+            if (icon != null) { glyph.visibility = VISIBLE; glyph.setIcon(icon, Color.WHITE) }
+            else glyph.visibility = INVISIBLE
         }
-        unavailableBadge.contentDescription = null
+        unavailableBadge?.contentDescription = null
         when {
-            s == null || s.state == "unknown" -> unavailableBadge.visibility = GONE
+            s == null || s.state == "unknown" -> unavailableBadge?.visibility = GONE
             s.state == "unavailable" -> show("mdi:exclamation-thick", HaStateColor.property(ctx, "orange-color") ?: 0xFFFF9800.toInt())
-            !isTile -> unavailableBadge.visibility = GONE
+            !isTile -> unavailableBadge?.visibility = GONE
             s.domain == "person" || s.domain == "device_tracker" -> {
                 followZones(s)
                 val zone = if (s.state == "home" || s.state == "not_home") null else zoneOf(s)
@@ -1540,14 +1595,14 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             s.domain == "climate" || s.domain == "humidifier" -> {
                 val attribute = if (s.domain == "climate") "hvac_action" else "action"
                 val action = s.attributes[attribute] as? String
-                if (action.isNullOrEmpty() || action == "off") { unavailableBadge.visibility = GONE; return }
+                if (action.isNullOrEmpty() || action == "off") { unavailableBadge?.visibility = GONE; return }
                 val mode = (if (s.domain == "climate") CLIMATE_ACTION_MODE else HUMIDIFIER_ACTION_MODE)[action]
                 // No mode for the action: HA's `stateColorCss(stateObj, undefined)` is the entity's own state color.
                 show(HaDisplay.attributeIcon(s, attribute, action), HaStateColor.of(ctx, s, mode ?: s.state))
                 // role="img", named by the action ("Heating").
-                unavailableBadge.contentDescription = HaDisplay.attributeLabel(s, attribute, action) ?: action
+                badge().contentDescription = HaDisplay.attributeLabel(s, attribute, action) ?: action
             }
-            else -> unavailableBadge.visibility = GONE
+            else -> unavailableBadge?.visibility = GONE
         }
     }
 
@@ -1587,7 +1642,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         val url = raw?.let { if (s?.domain == "camera") cameraUrl(it, 80) else it }
         if (url == pictureUrl) return
         pictureUrl = url
-        pictureView.setImageDrawable(null)
+        pictureView?.setImageDrawable(null)
         showPicture(false)
         if (url == null) return
         ctx.loadImage(url, this) { bmp ->
@@ -1599,7 +1654,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 "media_player" -> 4f
                 else -> 12f
             } * ctx.dp
-            pictureView.setImageDrawable(RoundedCoverDrawable(bmp, radius))
+            picture().setImageDrawable(RoundedCoverDrawable(bmp, radius))
             showPicture(true)
         }
     }
@@ -1610,7 +1665,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
      */
     private fun showPicture(on: Boolean) {
         pictureShown = on
-        pictureView.visibility = if (on) VISIBLE else GONE
+        if (on) picture().visibility = VISIBLE else pictureView?.visibility = GONE
         iconBadge.visibility = if (on) INVISIBLE else VISIBLE
         if (on) {
             badgeAnimator?.cancel()
@@ -1622,8 +1677,15 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     private var pictureShown = false
 
+    /** Not on screen yet since it was built: the first attach finds the state `init` just drew. */
+    private var attachedBefore = false
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        val first = !attachedBefore
+        attachedBefore = true
+        // The first time, only a line that counts on its own ("5 minutes ago") is drawn again, at the time it shows.
+        if (first && !TimestampText.isTicking(stateView)) return
         // Back on screen: the state line catches up and ticks again.
         if (mushroom == null) config.entity?.let { id -> ctx.store[id]?.let { guarded("tick") { renderState(it) } } }
     }
@@ -2446,6 +2508,16 @@ internal class HaSwitchView(private val ctx: VitroCardContext) : View(ctx.contex
  */
 class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ctx) {
     init {
+        // A section in system traces (Perfetto): what one entities card costs to build, rows and first renders included.
+        android.os.Trace.beginSection("Vitro entities card: ${config.raw.optJSONArray("entities")?.length() ?: 0} rows")
+        try {
+            build(config)
+        } finally {
+            android.os.Trace.endSection()
+        }
+    }
+
+    private fun build(config: CardConfig) {
         // hui-entities-card: a 20 / 16 / 24 header (24 px title) whose content is pulled up 8 px, then 40 px rows
         // 8 px apart in a `0 16px 16px` box (16 px all round without a header).
         val col = LinearLayout(ctx.context).apply {
@@ -2503,7 +2575,11 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         } else {
             col.setPadding(0, ctx.px(16f), 0, ctx.px(16f))
         }
+        // While the rows are built, each one's first render would refresh the header switch and the filter again for
+        // every row before it: they run once, when the card is complete.
+        var building = true
         fun refreshMaster() {
+            if (building) return
             val sw = masterSwitch ?: return
             val ids = headerToggleIds()
             val shown = (explicitToggle ?: (shownToggleIds().size >= 2)) && ids.isNotEmpty()
@@ -2543,6 +2619,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             }
         }
         fun refreshFilter() {
+            if (building) return
             rowViews.forEachIndexed { i, row -> row.visibility = if (rowVisible[i]) VISIBLE else GONE }
             fixGaps()
             refreshMaster()
@@ -2565,15 +2642,20 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             }
-            val valueView = textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
-                maxLines = 1
-                gravity = Gravity.END
-            }
-            val switchView = HaSwitchView(ctx)
             val isSwitchable = rowCfg.entity.substringBefore('.') in SWITCH_DOMAINS
             val isCover = rowCfg.entity.startsWith("cover.")
             // A slider, a dropdown or HA's plain buttons (EntityRowControls), for the domains HA draws with one.
             val control = EntityRowControls.build(ctx, rowCfg, { nameView.text.toString() }, { row.contentWidth })
+            // The row's end: its control, a toggle, cover buttons or the state text. Only the one it shows is made.
+            val switchView = if (control == null && isSwitchable) HaSwitchView(ctx) else null
+            val valueView = if (control == null && !isSwitchable && !isCover) {
+                textView(ctx, 14f, ctx.theme.primaryTextColor, Inter.REGULAR).apply {
+                    maxLines = 1
+                    gravity = Gravity.END
+                }
+            } else {
+                null
+            }
             // HA's `.secondary` line: 14 px, as HA's page draws it (the locale-* cases measure it).
             val secondaryView = if (control?.hideName != true && rowCfg.secondaryInfo !in setOf(null, "", "none")) {
                 textView(ctx, 14f, ctx.theme.secondaryTextColor).apply {
@@ -2613,7 +2695,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                     row.addView(control.view, (control.view.layoutParams as? LinearLayout.LayoutParams)
                         ?: LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
                 }
-                isSwitchable -> row.addView(switchView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+                isSwitchable -> row.addView(switchView!!, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
                 // ha-cover-controls: 48 px icon buttons (24 px icons) with a space between them (inline buttons), the
                 // group 8 px into the row's end padding, so a cover row is 48 px tall where a plain one is 40.
                 isCover -> COVER_BUTTONS.forEachIndexed { i, (iconName, service) ->
@@ -2636,23 +2718,19 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                         if (i == COVER_BUTTONS.lastIndex) marginEnd = -ctx.px(8f)
                     })
                 }
-                else -> row.addView(valueView, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+                else -> row.addView(valueView!!, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
             }
 
             // HA's entity rows: the row opens more-info; only the switch itself toggles.
             val tap = rowCfg.tapAction ?: ActionConfig("more-info")
             row.setOnClickListener { ctx.performAction(tap, rowCfg.entity) }
             row.bindHoldAction(ctx, rowCfg.holdAction ?: ActionConfig("more-info"), rowCfg.entity)
-            if (isSwitchable) {
-                switchView.isClickable = true
-                switchView.setOnClickListener { ctx.performAction(ActionConfig("toggle"), rowCfg.entity) }
+            switchView?.apply {
+                isClickable = true
+                setOnClickListener { ctx.performAction(ActionConfig("toggle"), rowCfg.entity) }
             }
 
-            observe(rowCfg.entity) { s ->
-                if (stateFilter != null) {
-                    rowVisible[idx] = s != null && s.state in stateFilter
-                    refreshFilter()
-                }
+            fun renderRow(s: EntityState?) {
                 val active = s?.isActive == true
                 val tint = when {
                     control != null -> controlRowTint(ctx, s)
@@ -2663,7 +2741,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 // Only a text that changed is set: setText lays the row out again even for the same words.
                 nameView.setTextIfChanged(rowCfg.nameFor(s) ?: s?.displayName ?: rowCfg.entity)
                 // ha-entity-toggle's label: "Toggle Desk lamp".
-                if (isSwitchable) switchView.contentDescription = "Toggle ${nameView.text}"
+                switchView?.contentDescription = "Toggle ${nameView.text}"
                 // A dropdown row shows its name in the field (HA's `hide-name`): the row, which opens More Info,
                 // is named by it for TalkBack.
                 if (control?.hideName == true) row.contentDescription = nameView.text
@@ -2675,14 +2753,21 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 }
                 when {
                     control != null -> control.update(s)
-                    isSwitchable -> {
-                        switchView.setOn(active)
-                        refreshMaster()
-                    }
+                    // The header switch follows its entities through its own subscriptions (below), not the rows'.
+                    switchView != null -> switchView.setOn(active)
                     isCover -> Unit
                     // hui-sensor-entity-row and hui-simple-entity-row draw a timestamp with hui-timestamp-display.
-                    else -> ctx.showTimestampOr(valueView, s, s?.formattedState() ?: "…")
+                    valueView != null -> ctx.showTimestampOr(valueView, s, s?.formattedState() ?: "…")
                 }
+            }
+
+            observe(rowCfg.entity) { s ->
+                if (stateFilter != null) {
+                    rowVisible[idx] = s != null && s.state in stateFilter
+                    refreshFilter()
+                }
+                // What follows changes only the row's content: the row's own visibility (the filter's) is set above.
+                row.updateContent { renderRow(s) }
             }
             gapRows += row
             return row
@@ -2799,6 +2884,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
         rows.filter { it.rowType == "button" && it.countsForHeaderToggle() }.forEach { toggleRows += it.entity to { true } }
         // Every toggle entity keeps the header switch current, a button row's included (its own row doesn't).
         if (masterSwitch != null) toggleRows.map { it.first }.distinct().forEach { id -> observe(id) { refreshMaster() } }
+        building = false
         refreshFilter()
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
     }
@@ -2881,7 +2967,28 @@ private class EntityRowLayout(context: android.content.Context, private val endP
     var contentWidth: Int = 0
         private set
 
+    /** Null while LinearLayout's constructor runs (it asks for a layout before this class is set up). */
+    private var local: LocalRelayout? = null
+
+    init {
+        local = LocalRelayout(this)
+    }
+
+    /**
+     * Runs [update], a state change to what's inside the row (its icon, texts, control): a value whose width changes
+     * lays out this row again, not the dashboard, as long as the row keeps its height ([LocalRelayout]).
+     */
+    fun updateContent(update: () -> Unit) {
+        val l = local
+        if (l == null) update() else l.run(update)
+    }
+
+    override fun requestLayout() {
+        if (local?.take() != true) super.requestLayout()
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        local?.onMeasure(widthMeasureSpec, heightMeasureSpec)
         contentWidth = (MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight).coerceAtLeast(0)
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
