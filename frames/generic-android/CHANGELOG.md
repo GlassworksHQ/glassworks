@@ -31,7 +31,8 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **One volume for everything the panel plays.** A new **Sound** page, in the panel's settings and on the Manage
   page, sets the volume for voice replies, timers, notifications, Music Assistant and the dashboard, with a mute
   switch. The device's volume buttons and Home Assistant's *Speaker* volume and mute control it too, and the Music
-  page's slider is now **Music volume**.
+  page's slider is now **Music volume**. On the few devices whose volume Android keeps fixed, such as some TV boxes,
+  it sets everything but the dashboard's own sound.
 - **Critical alerts play at full volume**, even when the panel is turned down or muted.
 
 ### Changed

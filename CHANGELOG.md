@@ -15,7 +15,7 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 **Upgrading from 0.4.x**
 
 1. Check the panel's *Radio helper* sensor in Home Assistant. If it says the boot image needs refreshing, run a full
-   Kiln install once more and skip the steps below ([the frame's
+   Kiln install once more in place of step 3, and still do steps 2 and 4 ([the frame's
    notes](https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/FRAME-CHANGELOG.md) explain why).
 2. Update Home Assistant to 2026.11 or newer, so it can give the panel its encryption key.
 3. Install 1.0.0 from the panel's update card. A panel on 0.4.1 to 0.4.3 gets 0.4.4 first, then 1.0.0. A panel on
