@@ -66,13 +66,15 @@ class MasonrySlicesTest {
         layers: VitroView.CardLayers? = null,
         store: EntityStore = EntityStore(),
         islands: Pair<dev.glassworks.engine.vitro.island.VitroIslandServer, (String) -> dev.glassworks.engine.Page?>? = null,
+        realScheduler: Boolean = false,
+        beforeLoad: (VitroView) -> Unit = {},
     ): VitroView {
         val vv = VitroView(activity, store, 0xFF000000.toInt())
         layers?.let { vv.cardLayers = it }
         if (sliced) {
             var t = 0L
             vv.sliceClock = { t += 5; t }
-            vv.postSlice = { task, afterFrame ->
+            if (!realScheduler) vv.postSlice = { task, afterFrame ->
                 firstAfterFrame += afterFrame
                 queued += task
                 val cancel = { queued.remove(task); Unit }
@@ -89,6 +91,7 @@ class MasonrySlicesTest {
             )
         }
         activity.setContentView(vv)
+        beforeLoad(vv)
         vv.setDashboard(LovelaceParser.parseDashboard(JSONObject(dashboard)), null)
         return vv
     }
@@ -445,5 +448,63 @@ class MasonrySlicesTest {
         } finally {
             server.stop()
         }
+    }
+
+    // One chunk a frame, each after its frame has drawn: a chunk is an ordinary message, which a pending frame's
+    // barrier holds back, posted from a frame callback. Sent asynchronously, chunks passed the barrier and starved the
+    // frames (on the S1, only 39 of 106 chunks back to back had a frame between them).
+    @Test
+    fun everyChunkWaitsForAFrame() {
+        // The real scheduler, watched: each chunk notes that it ran, and asks to hear of the next frame; the next chunk
+        // must find that a frame came between.
+        var framed = true
+        var chunks = 0
+        var withoutFrame = 0
+        val vv = vitroView(dashboard("heavy" to 80), sliced = true, realScheduler = true) { v ->
+            val real = v.postSlice
+            v.postSlice = { task, afterFrames ->
+                real(Runnable {
+                    chunks++
+                    if (!framed) withoutFrame++
+                    framed = false
+                    android.view.Choreographer.getInstance().postFrameCallback { framed = true }
+                    task.run()
+                }, afterFrames)
+            }
+        }
+        assertFalse("a chunk is an ordinary message", vv.chunkMessage(Runnable {}).isAsynchronous)
+        assertTrue(vv.buildInProgress)
+        var guard = 0
+        while (vv.buildInProgress && guard++ < 500) ShadowLooper.idleMainLooper(16, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertFalse(vv.buildInProgress)
+        assertTrue("several chunks: $chunks", chunks >= 4)
+        assertEquals("every chunk came after a frame", 0, withoutFrame)
+        assertEquals(80, attached(columns(vv)).sum())
+    }
+
+    // A card that takes long to make starts a chunk: after other cards it would run their budget over.
+    @Test
+    fun aHeavyCardStartsAChunk() {
+        val rows = JSONArray().apply { for (i in 0 until 12) put("sensor.row_$i") }
+        val heavy = cards("heavy", 70).apply {
+            for (i in 0 until 6) put(JSONObject().put("type", "entities").put("title", "Rows $i").put("entities", rows))
+            for (i in 0 until 6) put(JSONObject().put("type", "markdown").put("content", "after $i"))
+        }
+        val config = JSONObject().put("views", JSONArray().put(JSONObject().put("path", "heavy").put("cards", heavy))).toString()
+        val vv = vitroView(config, sliced = true)
+        fun stage() = all(vv).filterIsInstance<dev.glassworks.engine.vitro.ui.CardStage>().single()
+        var checked = 0
+        while (vv.buildInProgress && queued.isNotEmpty()) {
+            val from = stage().childCount
+            chunk()
+            if (!vv.buildInProgress) break
+            val made = (from until stage().childCount).map { stage().getChildAt(it) }
+            val heavyAt = made.indices.filter { made[it] is dev.glassworks.engine.vitro.cards.EntitiesCardView }
+            // A big entities card is the first card of its chunk, and the only big one in it.
+            assertTrue("chunk ${made.map { it.javaClass.simpleName }}", heavyAt.isEmpty() || heavyAt == listOf(0))
+            checked += heavyAt.size
+        }
+        assertTrue("several big entities cards were made in chunks: $checked", checked >= 3)
+        assertFalse(vv.buildInProgress)
     }
 }

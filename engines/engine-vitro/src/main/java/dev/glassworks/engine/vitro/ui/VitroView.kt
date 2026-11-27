@@ -362,7 +362,7 @@ class VitroView(
      * A card is never out of its view's tree: built, it waits in the stage, inside the view, so whatever it opens (an
      * island's page, its subscriptions, a camera) goes with the view when the view goes.
      */
-    private class CardStep(val make: () -> View, val place: (card: View, staged: Boolean) -> Unit)
+    private class CardStep(val card: CardConfig, val make: () -> View, val place: (card: View, staged: Boolean) -> Unit)
 
     /**
      * The cards below a masonry view's first screen, in config order, collected while [buildViewTree] runs:
@@ -379,8 +379,9 @@ class VitroView(
      * a frame between, which on a panel draws the first screen over many frames and stretches the whole build.
      * Vitro builds the first screen in one pass instead ([buildMasonryLayout]: the cards whose column, decided from
      * the config, puts them within it by HA's card sizes), so the first frame shows it whole. Once that screen has
-     * been drawn twice (it settles first: [postSlice]), it makes the rest in chunks of at most [REST_SLICE_BUDGET_MS]
-     * that don't wait for frames: each runs as soon as the main thread is free, frames and input in between. A chunk's
+     * been drawn twice (it settles first: [postSlice]), it makes the rest in chunks of at most [REST_SLICE_BUDGET_MS],
+     * one a frame, each after its frame has been drawn; a card that takes long to make starts a chunk ([isHeavyCard]).
+     * A chunk's
      * cards wait in the view's [CardStage], laid out by nothing, and all of them go to their columns in one pass when
      * the last chunk is made ([placeStaged]): one layout of the dashboard for the whole rest, not one per chunk (on the
      * S1, a frame after each chunk laid the dashboard out again, and doubled the time to a quiet main thread). Once the
@@ -422,20 +423,20 @@ class VitroView(
     }
 
     /**
-     * Runs [task] as soon as the main thread is free, or, [afterFrames], once the first screen has been drawn and drawn
+     * Runs [task] once the next frame has been drawn, or, [afterFrames], once the first screen has been drawn and drawn
      * again (the first chunk: what the first screen does on its next pass, a graph sized now, an image, comes before
-     * any card below it), and returns what cancels it. An asynchronous message: a view that changed (cards just
-     * added) holds ordinary messages back until its next frame is drawn, and these chunks don't wait for one. The
-     * frame still runs between two chunks when it's due: its own message is asynchronous too, and older. Tests give
-     * their own.
+     * any card below it), and returns what cancels it. One chunk a frame: a frame callback runs before its frame's
+     * layout and draw, and the ordinary message it sends ([chunkMessage]) runs after them, so every chunk leaves the
+     * next frame its turn (an asynchronous message would pass the frame's barrier and starve it: on the S1, only 39 of
+     * 106 chunks back to back had a frame between them). A chunk's frame is cheap: its cards wait in the stage, laid
+     * out by nothing ([CardStage]). Tests give their own.
      */
     internal var postSlice: (Runnable, Boolean) -> (() -> Unit) = { task, afterFrames ->
-        fun send() = mainHandler.sendMessage(android.os.Message.obtain(mainHandler, task).apply { isAsynchronous = true })
+        fun send() = mainHandler.sendMessage(chunkMessage(task))
         val choreographer = android.view.Choreographer.getInstance()
-        // A frame callback runs before its frame's layout and draw; what the second one sends runs after that frame.
         val second = android.view.Choreographer.FrameCallback { send() }
         val first = android.view.Choreographer.FrameCallback { choreographer.postFrameCallback(second) }
-        if (afterFrames) choreographer.postFrameCallback(first) else send()
+        choreographer.postFrameCallback(if (afterFrames) first else second)
         val cancel = {
             choreographer.removeFrameCallback(first)
             choreographer.removeFrameCallback(second)
@@ -444,8 +445,15 @@ class VitroView(
         cancel
     }
 
+    /** The message a chunk runs in: an ordinary one, which a pending frame's barrier holds back ([postSlice]). */
+    internal fun chunkMessage(task: Runnable): android.os.Message = android.os.Message.obtain(mainHandler, task)
+
     /** The view build still adding cards ([SlicedBuild]), or null. */
     private var building: SlicedBuild? = null
+
+    /** How many chunks this view has run ([runSlice]). Tests. */
+    internal var chunksRun = 0
+        private set
 
     /**
      * The clock a chunk's budget is read on ([SLICE_BUDGET_MS], [REST_SLICE_BUDGET_MS]). Tests set one that moves: Robolectric's stands still
@@ -479,6 +487,7 @@ class VitroView(
      */
     private fun runSlice(b: SlicedBuild, start: Long = sliceClock(), budgetMs: Long = REST_SLICE_BUDGET_MS) {
         if (building !== b) return
+        chunksRun++
         val began = sliceClock()
         b.slices++
         val made = ArrayList<Pair<CardStep, View>>()
@@ -489,6 +498,8 @@ class VitroView(
             // A card whose build ends this one (a re-entrant render or drop) leaves the rest unmade.
             while (building === b && b.steps.isNotEmpty()) {
                 if ((made.isNotEmpty() || start != began) && sliceClock() - start > budgetMs) break
+                // A card that takes long to make starts a chunk of its own budget: after other cards, it'd run it over.
+                if (made.isNotEmpty() && isHeavyCard(b.steps.first().card)) break
                 val step = b.steps.removeFirst()
                 made += step to step.make()
             }
@@ -525,6 +536,16 @@ class VitroView(
         } else {
             b.schedule()
         }
+    }
+
+    /**
+     * A card that takes long to make, so a chunk starts with it ([runSlice]): a graph, a map, a logbook, a calendar or a
+     * forecast, an entities card of many rows (a 20-row one took 54-91 ms on the S1), or a stack or grid holding one.
+     */
+    private fun isHeavyCard(card: CardConfig): Boolean = when {
+        card.type in HEAVY_CARD_TYPES -> true
+        card.type == "entities" -> (card.raw.optJSONArray("entities")?.length() ?: 0) >= HEAVY_ENTITY_ROWS
+        else -> card.childCards.any(::isHeavyCard)
     }
 
     /** Where the shortest column's placed cards end, in [scroll]'s content (what a scroll down reaches first). */
@@ -2325,7 +2346,7 @@ class VitroView(
                 val slot = View(context).apply { visibility = GONE }
                 column.addView(slot, cardMarginParams(ctx, widthDp))
                 if (stage == null) stage = CardStage(context).also { row.addView(it, LinearLayout.LayoutParams(0, 0)); pendingStage = it }
-                deferred += CardStep({ make(configIndex, card) }) { v, staged ->
+                deferred += CardStep(card, { make(configIndex, card) }) { v, staged ->
                     val at = column.indexOfChild(slot)
                     column.removeViewAt(at)
                     if (staged) column.place(v, at, cardMarginParams(ctx, widthDp)) else column.addView(v, at, cardMarginParams(ctx, widthDp))
@@ -3056,6 +3077,12 @@ class VitroView(
          * HA's card sizes only estimate a card's height, so a little more than the screen, not to leave its foot empty.
          */
         internal const val FIRST_SCREEN_SHARE = 1.25
+
+        /** Cards that take long to make ([isHeavyCard]): each starts a chunk of its own. */
+        private val HEAVY_CARD_TYPES = setOf("history-graph", "statistics-graph", "map", "logbook", "calendar", "weather-forecast")
+
+        /** An entities card with this many rows or more takes long to make ([isHeavyCard]). */
+        private const val HEAVY_ENTITY_ROWS = 10
 
         /** Whether a card is drawn through a hardware layer: never when it casts a shadow, which the layer's bounds would clip. */
         internal fun cardLayerWanted(themeElevationDp: Float, viewElevation: Float): Boolean =
