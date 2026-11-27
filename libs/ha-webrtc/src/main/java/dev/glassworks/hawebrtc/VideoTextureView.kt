@@ -256,11 +256,22 @@ internal val TEXTURE_RELEASER: Executor = Executors.newSingleThreadExecutor { r 
 /**
  * The scale of a picture drawn stretched over a [viewWidth] by [viewHeight] view, so it shows as [scaling] asks: for
  * [VideoScaling.FIT] the axis with room to spare shrinks. [VideoScaling.FILL] crops in the renderer instead, so both
- * stay 1, as they do for [VideoScaling.STRETCH] and before the first frame.
+ * stay 1, as they do for [VideoScaling.STRETCH] and before the first frame. A view sized to the picture's shape in
+ * whole pixels is a fraction of a pixel off it; a letterbox of [FIT_SNAP_PX] or less in all is drawn over instead,
+ * so no sliver of what is behind the view shows along its edges.
  */
 internal fun fitScale(scaling: VideoScaling, frameWidth: Int, frameHeight: Int, viewWidth: Int, viewHeight: Int): Pair<Float, Float> {
     if (scaling != VideoScaling.FIT || frameWidth <= 0 || frameHeight <= 0 || viewWidth <= 0 || viewHeight <= 0) return 1f to 1f
     val frame = frameWidth.toFloat() / frameHeight
     val view = viewWidth.toFloat() / viewHeight
-    return if (frame > view) 1f to view / frame else frame / view to 1f
+    return if (frame > view) {
+        val sy = view / frame
+        1f to (if (viewHeight * (1f - sy) <= FIT_SNAP_PX) 1f else sy)
+    } else {
+        val sx = frame / view
+        (if (viewWidth * (1f - sx) <= FIT_SNAP_PX) 1f else sx) to 1f
+    }
 }
+
+/** The widest letterbox, in pixels over both edges, that [fitScale] draws over. */
+internal const val FIT_SNAP_PX = 2f
