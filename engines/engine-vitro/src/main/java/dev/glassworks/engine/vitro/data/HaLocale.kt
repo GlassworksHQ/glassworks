@@ -104,9 +104,9 @@ object HaLocale {
             }
         }
         val filter = android.content.IntentFilter(android.content.Intent.ACTION_TIMEZONE_CHANGED)
-        // A system broadcast: delivered to an unexported receiver too.
-        if (android.os.Build.VERSION.SDK_INT >= 33) app.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
-        else app.registerReceiver(receiver, filter)
+        // A protected system broadcast: Android 14's exported flag isn't needed for a receiver that hears only those
+        // (as ScreenPolicy's screen on and off).
+        app.registerReceiver(receiver, filter)
     }
 
     fun addListener(l: () -> Unit) { listeners += l }
