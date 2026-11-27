@@ -52,12 +52,25 @@ interface CameraStream {
 
     val closeWhenHidden: Boolean get() = false
 
+    /**
+     * The view has a surface a frame can be drawn on (it got one once laid out in a window). The choice's own wait for
+     * video ([dev.glassworks.engine.vitro.cards.LiveCameraFeed.ALONE_TIMEOUT_MS]) counts from then: a view built long
+     * before it is drawn (a heavy view's build) doesn't use the wait up. True for a player that doesn't say.
+     */
+    val surfaceReady: Boolean get() = true
+
     var listener: Listener?
 
     interface Listener {
         fun onFirstFrame(sinceStartMs: Long)
 
         fun onFrameRendered()
+
+        /** The view got its surface ([surfaceReady] is true now). */
+        fun onSurfaceReady() {}
+
+        /** The view lost its surface (hidden, or detached): nothing it plays is on screen until it gets one again. */
+        fun onSurfaceLost() {}
 
         fun onError(reason: String)
 
@@ -90,6 +103,13 @@ enum class CameraStreamKind { WEB_RTC, HLS, MJPEG }
  */
 interface CameraStreamFactory {
     fun create(entityId: String, kind: CameraStreamKind): CameraStream?
+
+    /**
+     * [create] for a camera in front of the dashboard (More Info's): one that plays in a view that animates in and out
+     * on a layer, where a video on a SurfaceView would show nothing or sit off its place. A factory whose players draw
+     * on a SurfaceView gives a TextureView one here.
+     */
+    fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? = create(entityId, kind)
 
     /**
      * A camera that plays this kind is about to start: what every stream of the kind shares (libwebrtc's factory and

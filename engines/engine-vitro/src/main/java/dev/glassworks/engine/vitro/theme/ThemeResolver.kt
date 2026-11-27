@@ -399,7 +399,9 @@ object ThemeResolver {
         "primary-color" to "#009ac7",
         "accent-color" to "#ff9800",
         "primary-background-color" to "#111111",
-        "secondary-background-color" to "#202020",
+        // HA's dark theme (frontend 20261028.5, `darkColorStyles`): #282828, not the neutral-10 #202020. Bubble Card's
+        // buttons draw on it (tablet Vitro run 3: #202020 here, #282828 in HA).
+        "secondary-background-color" to "#282828",
         "card-background-color" to "#1c1c1c",
         "ha-card-background" to "var(--card-background-color)",
         "primary-text-color" to "#e1e1e1",

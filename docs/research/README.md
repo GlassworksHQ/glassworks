@@ -295,6 +295,12 @@ This page is the index of every note. Notes about one device live with its frame
 | [kiln-install.md](../../frames/generic-android/research/kiln-install.md) | Which adb commands install Glassworks, grant it what it needs and set the home screen on Android 6, 7 and 8+, and what tells Kiln a device's brand before USB debugging is on (read, untested on a device, #403) |
 | [screen-lock.md](../../frames/generic-android/research/screen-lock.md) | Which adb command tells Kiln, without root, that a device has a PIN, pattern or password: `dumpsys lock_settings` (verified on Android 8.0, 11 and 15 emulators, 2026-11-18, #522) |
 
+### Google Pixel Tablet ([`frames/google-pixel-tablet/`](../../frames/google-pixel-tablet/README.md#research-notes))
+
+| Note | Question |
+|---|---|
+| [window-layers.md](../../frames/google-pixel-tablet/research/window-layers.md) | Which SurfaceFlinger layer holds an app window's frames on Android 17: the ViewRootImpl's `VRI-<package>/<activity>#n`, not the window's own layer, and how Clarity reads Vitro's frames there (verified on the Pixel Tablet, 2026-11-26) |
+
 User-facing guides stay one level up, in [docs/](../README.md).
 
 ### Ground rules for these notes

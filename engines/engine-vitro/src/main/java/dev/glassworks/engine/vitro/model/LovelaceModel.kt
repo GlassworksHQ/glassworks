@@ -1361,7 +1361,8 @@ object HaCardSize {
             "iframe" -> 1 + (raw.optString("aspect_ratio", "").replace("%", "").ifEmpty { "50" }.toDoubleOrNull() ?: 50.0) / 25
             "entity-filter" -> of(EntityFilterConfig.innerCard(card))
             in MUSHROOM_BASE_CARDS -> mushroomSize(card, state(card)).toDouble()
-            else -> intSize(card).toDouble()
+            // A custom card an island drew: its own getCardSize, as HA asks it ([IslandCardSizes]).
+            else -> dev.glassworks.engine.vitro.compat.IslandCardSizes.size(raw) ?: intSize(card).toDouble()
         }
     }
 

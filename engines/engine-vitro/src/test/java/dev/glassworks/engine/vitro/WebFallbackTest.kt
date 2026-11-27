@@ -337,6 +337,125 @@ class WebFallbackTest {
         assertEquals(listOf("$base/wall-test/plain"), pageFallback()!!.loads)
     }
 
+    // ---- The first decision waits for the resources (tablet Vitro run 3) ----
+
+    /**
+     * A VitroView as the engine sets it up for a cold start: the first build waits for the resources' answer. Records
+     * each view it hands to HA's frontend, and each view it builds.
+     */
+    private class ColdView(val vv: VitroView, val web: MutableList<String>, val built: MutableList<Int>)
+
+    private fun coldView(dashboard: JSONObject, path: String, holdMs: Long = 5_000): ColdView {
+        val store = EntityStore().apply { putLocal(EntityState("light.lounge_lamp", "on", mapOf("friendly_name" to "Lounge"))) }
+        val vv = VitroView(activity, store, Color.BLACK)
+        vv.holdFirstBuildForStatesMs = 0
+        vv.holdFirstBuildForResourcesMs = holdMs
+        val web = ArrayList<String>()
+        val built = ArrayList<Int>()
+        vv.onWebView = { v, reason -> web += "${v.path}: $reason" }
+        vv.onMetrics = { built += vv.currentViewIndex }
+        vv.contextFactory = { theme ->
+            VitroCardContext(
+                context = activity, haBase = base, store = store, theme = theme, resources = vv.resourcesList,
+                accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            )
+        }
+        activity.setContentView(vv)
+        vv.setDashboard(LovelaceParser.parseDashboard(dashboard), path)
+        idle()
+        return ColdView(vv, web, built)
+    }
+
+    private val bubbleScript = LovelaceResource("/hacsfiles/Bubble-Card/bubble-card.js?hacstag=343", "module")
+
+    @Test fun aColdStartDecidesOnceTheResourcesAreKnown() {
+        // The config lands before the resources (Bubble's modules check holds them back): the view whose sub-button only
+        // Bubble's island draws went to HA's frontend ("no Lovelace resource loads Bubble Card's script"), then came
+        // back once they landed. Now it waits, and the first decision is the one that stands.
+        val c = coldView(views(living, bubbleSubButtons), "bubble")
+        assertEquals("nothing is decided before the resources", emptyList<String>(), c.web)
+        assertEquals(emptyList<Int>(), c.built)
+        assertFalse(c.vv.currentViewBuilt)
+        c.vv.resourcesList = LovelaceResourceList(listOf(bubbleScript), bubbleModules = false)
+        idle()
+        assertEquals("an island draws it: Vitro's view", emptyList<String>(), c.web)
+        assertEquals(listOf(1), c.built)
+        assertTrue(c.vv.currentViewBuilt)
+    }
+
+    @Test fun aColdStartThatGoesToHomeAssistantsFrontendBuildsNoOtherView() {
+        // Without Bubble's script the view goes to HA's frontend once the answer says so, and the dashboard's first
+        // view, which the page never showed, isn't built behind it (tablet Vitro run 3 built `bubble` there).
+        val c = coldView(views(living, bubbleSubButtons), "bubble")
+        c.vv.resourcesList = LovelaceResourceList(emptyList(), bubbleModules = false)
+        idle()
+        assertEquals(1, c.web.size)
+        assertTrue(c.web.single(), c.web.single().startsWith("bubble: a Bubble card Vitro doesn't draw as Bubble does"))
+        assertEquals(emptyList<Int>(), c.built)
+        // Resources that change later rebuild the view the page went to HA's frontend for, not the first one.
+        c.vv.resourcesList = LovelaceResourceList(listOf(LovelaceResource("/local/other.js", "module")), bubbleModules = false)
+        idle()
+        assertEquals(2, c.web.size)
+        assertEquals(emptyList<Int>(), c.built)
+    }
+
+    @Test fun aRebuildDuringTheWaitKeepsTheRequestedView() {
+        // Greptile on #952: the user's light or dark choice (or any rebuild) landing while the requested view waits for
+        // the resources rendered the index before it, which took the wait over: the page then opened the first view.
+        val c = coldView(views(living, bubblePlain), "plain")
+        assertEquals(1, c.vv.currentViewIndex)
+        c.vv.setUserTheme(null, dark = !c.vv.darkMode)
+        idle()
+        assertEquals("nothing built while it waits", emptyList<Int>(), c.built)
+        assertEquals(1, c.vv.currentViewIndex)
+        c.vv.resourcesList = LovelaceResourceList(listOf(bubbleScript), bubbleModules = false)
+        idle()
+        assertEquals("the requested view, once", listOf(1), c.built)
+        assertEquals(emptyList<String>(), c.web)
+    }
+
+    @Test fun theViewTabsTakeHomeAssistantsHeaderColorNotTheCards() {
+        // HA's hui-root toolbar: --app-header-background-color, which HA's theme sets to --sidebar-background-color and
+        // that to --card-background-color. A theme with transparent cards (--ha-card-background) keeps its toolbar
+        // (Greptile on #952: the tabs took the card-only color, and went transparent).
+        val vv = VitroView(activity, EntityStore(), Color.BLACK)
+        fun theme(vararg vars: Pair<String, String>, dark: Boolean = true) = dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(
+            dev.glassworks.engine.vitro.theme.ThemeCatalog(themes = mapOf("t" to dev.glassworks.engine.vitro.theme.ThemeCatalog.ThemeDefinition(base = mapOf(*vars)))),
+            dark, "t",
+        )
+        val glass = theme("ha-card-background" to "transparent")
+        assertEquals("the card itself is transparent", Color.TRANSPARENT, glass.cardBackgroundColor and 0xFF000000.toInt())
+        assertEquals("HA's dark --card-background-color", 0xFF1C1C1C.toInt(), vv.headerBackground(glass))
+        assertEquals(0xFFFFFFFF.toInt(), vv.headerBackground(theme("ha-card-background" to "rgba(0, 0, 0, 0)", dark = false)))
+        // A theme's own header, or its sidebar, wins, as in HA.
+        assertEquals(0xFF123456.toInt(), vv.headerBackground(theme("ha-card-background" to "transparent", "app-header-background-color" to "#123456")))
+        assertEquals(0xFF654321.toInt(), vv.headerBackground(theme("sidebar-background-color" to "#654321")))
+        assertEquals(0xFF222233.toInt(), vv.headerBackground(theme("card-background-color" to "#222233")))
+    }
+
+    @Test fun aColdStartWithoutAnAnswerBuildsAfterTheWait() {
+        val c = coldView(views(living, bubblePlain), "plain", holdMs = 2_000)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_900))
+        assertEquals(emptyList<Int>(), c.built)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200))
+        assertEquals("built as if there were none", listOf(1), c.built)
+        assertTrue(c.vv.resourcesKnown)
+        // A later answer is a change like any other: the view is built again.
+        c.vv.resourcesList = LovelaceResourceList(listOf(bubbleScript), bubbleModules = false)
+        idle()
+        assertEquals(listOf(1, 1), c.built)
+    }
+
+    @Test fun anEmptyFirstAnswerReleasesTheWait() {
+        // The list the view assumed (none) is still an answer: the held build goes ahead.
+        val c = coldView(views(living, bubblePlain), "plain")
+        c.vv.resourcesList = emptyList()
+        idle()
+        assertEquals(listOf(1), c.built)
+        assertEquals(emptyList<String>(), c.web)
+    }
+
     @Test fun bubbleFallbackFollowsTheIslandsScriptsAndBubblesModules() {
         fun view(card: String) = LovelaceParser.parseView(0, JSONObject("""{"cards": [$card]}"""))
         val sub = view("""{"type": "custom:bubble-card", "entity": "switch.fan", "sub_button": [{"entity": "switch.fan"}]}""")
@@ -713,6 +832,84 @@ class WebFallbackTest {
         server.dashboardConfig = autoEntitiesView("""{"domain": "cover"}""")
         assertNull("the config alone is native", WebFallback.viewReason(LovelaceParser.parseView(0, server.dashboardConfig.getJSONArray("views").getJSONObject(0))))
         page().load("$base/wall-test/auto")
+        awaitMain("fallback") { pageFallback() != null }
+        assertEquals(listOf("$base/wall-test/auto"), pageFallback()!!.loads)
+    }
+
+    // A slow Home Assistant, or a slow panel: HA's first `subscribe_entities` event (every state) lands late. Held back
+    // ([FakeHaServer.holdEntitySnapshot]) and sent by the test, before or after the view's wait for it runs out.
+
+    /** The page has asked HA for every entity (an auto-entities view follows them all). */
+    private fun awaitEveryEntitySubscribed() =
+        awaitMain("every entity subscribed") { server.commands("subscribe_entities").any { !it.has("entity_ids") } }
+
+    /** HA's held first event for every entity: its snapshot, on the newest connection. */
+    private fun sendHeldSnapshot() {
+        val id = server.sockets.last().received.last { it.optString("type") == "subscribe_entities" && !it.has("entity_ids") }.optInt("id")
+        server.pushEvent(id, JSONObject().put("a", server.initialEntities))
+    }
+
+    /** The view's wait for its first states runs out ([VitroView.holdFirstBuildForStatesMs]): it builds without them. */
+    private fun waitRunsOut() = shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_500))
+
+    @Test fun anAutoEntitiesViewWaitsForItsStatesAndIsReadyWithItsRows() {
+        // Built before its states, an auto-entities view would match nothing, and say it's ready with no rows.
+        withEntity("cover.garage", "closed")
+        server.holdEntitySnapshot = true
+        server.dashboardConfig = autoEntitiesView("""{"domain": "light"}""")
+        val p = page()
+        p.load("$base/wall-test/auto")
+        awaitEveryEntitySubscribed()
+        idle()
+        assertTrue("not ready before its states", host.messages("ready").isEmpty())
+
+        sendHeldSnapshot()
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertNull("no fallback page", pageFallback())
+        assertTrue("its rows are there when it's ready", hasText(vitroView(p), "Lounge Lamp"))
+    }
+
+    @Test fun anAutoEntitiesViewWhoseLateStatesMatchARowVitroDoesntDrawOpensInHomeAssistantsFrontend() {
+        withEntity("cover.garage", "closed")
+        server.holdEntitySnapshot = true
+        server.dashboardConfig = autoEntitiesView("""{"domain": "cover"}""")
+        page().load("$base/wall-test/auto")
+        awaitEveryEntitySubscribed()
+        idle()
+        assertNull(pageFallback())
+
+        sendHeldSnapshot()
+        awaitMain("fallback") { pageFallback() != null }
+        assertEquals(listOf("$base/wall-test/auto"), pageFallback()!!.loads)
+    }
+
+    @Test fun statesThatLandAfterTheWaitRanOutFillAnAutoEntitiesViewBuiltWithout() {
+        withEntity("cover.garage", "closed")
+        server.holdEntitySnapshot = true
+        server.dashboardConfig = autoEntitiesView("""{"domain": "light"}""")
+        val p = page()
+        p.load("$base/wall-test/auto")
+        awaitEveryEntitySubscribed()
+        waitRunsOut()
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertFalse("built without states: nothing matched yet", hasText(vitroView(p), "Lounge Lamp"))
+
+        sendHeldSnapshot()
+        awaitMain("the matched row") { hasText(vitroView(p), "Lounge Lamp") }
+        assertNull("no fallback page", pageFallback())
+    }
+
+    @Test fun statesThatLandAfterTheWaitRanOutAndMatchARowVitroDoesntDrawOpenTheViewInHomeAssistantsFrontend() {
+        withEntity("cover.garage", "closed")
+        server.holdEntitySnapshot = true
+        server.dashboardConfig = autoEntitiesView("""{"domain": "cover"}""")
+        page().load("$base/wall-test/auto")
+        awaitEveryEntitySubscribed()
+        waitRunsOut()
+        awaitMain("ready") { host.messages("ready").isNotEmpty() }
+        assertNull("nothing matched yet: native", pageFallback())
+
+        sendHeldSnapshot()
         awaitMain("fallback") { pageFallback() != null }
         assertEquals(listOf("$base/wall-test/auto"), pageFallback()!!.loads)
     }

@@ -332,6 +332,19 @@ class FakeHA(unittest.TestCase):
         self.assertIsNone(live._stream)
         self.assertEqual({e: v["state"] for e, v in live.states.items()}, {e: v["state"] for e, v in D.states().items()})
 
+    def test_a_missing_local_file_is_a_404_as_ha_answers_it(self):
+        """HA serves /local/ from config/www and HACS /hacsfiles/ from its folder: a missing file is a 404, not the
+        frontend's app shell. Bubble Card's modules file (`/local/bubble/bubble-modules.yaml`) is the one a client
+        checks for (tablet Vitro run 3: every Bubble card went to an island on the fake's 200)."""
+        for path in ("/local/bubble/bubble-modules.yaml", "/local/nothing.js", "/hacsfiles/none/none.js"):
+            with self.subTest(path):
+                status, _, body, _ = self.http("GET", path)
+                self.assertEqual((status, body), (404, b""))
+        # A frontend route is still the app shell.
+        status, _, body, _ = self.http("GET", "/lovelace/0")
+        self.assertEqual(status, 200)
+        self.assertIn(b"<", body)
+
     def test_no_ffmpeg_is_a_500_with_why(self):
         """Only the fake running, without ffmpeg (run.sh checks first): a segment request gets a 500
         that says why, and the request thread goes on (it used to end in SystemExit)."""

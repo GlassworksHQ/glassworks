@@ -91,6 +91,20 @@ class LiveCameraFeedTest {
         }
 
         fun fail() = listener?.onError("test")
+
+        /** Its view has a surface (a player built before its view is laid out has none yet). */
+        var hasSurface = true
+        override val surfaceReady: Boolean get() = hasSurface
+
+        fun surface() {
+            hasSurface = true
+            listener?.onSurfaceReady()
+        }
+
+        fun loseSurface() {
+            hasSurface = false
+            listener?.onSurfaceLost()
+        }
     }
 
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
@@ -106,11 +120,17 @@ class LiveCameraFeedTest {
     private var pendingCaps: ArrayList<(Boolean, Any?, JSONObject?) -> Unit>? = null
     private val nullFor = HashSet<CameraStreamKind>()
     private val throwFor = HashSet<CameraStreamKind>()
+
+    /** Kinds whose players start without a surface (their view not laid out yet). */
+    private val noSurfaceFor = HashSet<CameraStreamKind>()
     private val closesWhenHiddenFor = HashSet<CameraStreamKind>()
 
     /** The kinds whose factory was asked to get ready, in order. */
     private val prewarmed = ArrayList<CameraStreamKind>()
     private val prewarmThreads = ArrayList<Thread>()
+
+    /** The kinds a foreground camera (More Info's) asked its factory for ([CameraStreamFactory.createForeground]). */
+    private val foregroundAsked = ArrayList<CameraStreamKind>()
 
     @Before
     fun setUp() = CameraVideoBudget.reset()
@@ -124,11 +144,17 @@ class LiveCameraFeedTest {
                 override fun create(entityId: String, kind: CameraStreamKind): CameraStream? {
                     if (kind in nullFor) return null
                     return FakeStream(kind, activity).also {
+                        it.hasSurface = kind !in noSurfaceFor
                         it.throwOnStart = kind in throwFor
                         it.closesWhenHidden = kind in closesWhenHiddenFor
                         made += it
                         peakVideo = maxOf(peakVideo, made.count { m -> !m.closed && m.kind != MJPEG })
                     }
+                }
+
+                override fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? {
+                    foregroundAsked += kind
+                    return create(entityId, kind)
                 }
 
                 override fun prewarm() {
@@ -177,6 +203,22 @@ class LiveCameraFeedTest {
     private fun extraDue() = ShadowLooper.idleMainLooper(LiveCameraFeed.EXTRA_DELAY_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
     private fun live(kind: CameraStreamKind) = made.last { it.kind == kind && !it.closed }
     private fun running() = made.filter { !it.closed }.map { it.kind }
+
+    @Test
+    fun moreInfosCameraAsksForAForegroundPlayerAndACardsDoesNot() {
+        val card = feed(context(store()))
+        card.start()
+        idle()
+        assertEquals(listOf(WEB_RTC), running())
+        assertEquals("a card's camera plays on the factory's own player", emptyList<CameraStreamKind>(), foregroundAsked)
+        card.stop()
+        val sheet = LiveCameraFeed(context(store()), "camera.porch", { null }, host = FrameLayout(activity), foreground = true) {}
+        sheet.start()
+        idle()
+        // The sheet slides in on a layer: its players are the ones that follow it (a TextureView, not a SurfaceView).
+        assertEquals(listOf(WEB_RTC), foregroundAsked)
+        sheet.stop()
+    }
 
     @Test
     fun aCameraWithoutTheStreamFeatureGoesStraightToMjpeg() {
@@ -1152,6 +1194,47 @@ class LiveCameraFeedTest {
         assertTrue(made.first { it.kind == WEB_RTC }.closed)
         assertEquals(listOf(HLS), f.runningKinds)
         assertEquals(1, CameraVideoBudget.inUse)
+    }
+
+    @Test
+    fun webRtcAlonesWaitForVideoCountsFromItsSurfaceNotItsStart() {
+        // One slot, and a player started while its view is still being built: no surface yet.
+        CameraVideoBudget.max = 1
+        noSurfaceFor += WEB_RTC
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        // A long build: the wait hasn't started.
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS * 2)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        // Laid out: the wait counts from here.
+        live(WEB_RTC).surface()
+        idle()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS - 100)
+        assertEquals(listOf(WEB_RTC), f.runningKinds)
+        ms(100)
+        assertEquals(listOf(HLS), f.runningKinds)
+    }
+
+    @Test
+    fun webRtcAlonesWaitStartsOverOnTheNewestSurface() {
+        CameraVideoBudget.max = 1
+        val f = feed(context(store()))
+        f.start()
+        idle()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS - 3_000)
+        // The view is hidden and shown again before a first frame: its surface goes and a new one comes.
+        live(WEB_RTC).loseSurface()
+        idle()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS)
+        assertEquals("no surface, no wait", listOf(WEB_RTC), f.runningKinds)
+        live(WEB_RTC).surface()
+        idle()
+        ms(LiveCameraFeed.ALONE_TIMEOUT_MS - 100)
+        assertEquals("the wait counts from the new surface", listOf(WEB_RTC), f.runningKinds)
+        ms(100)
+        assertEquals(listOf(HLS), f.runningKinds)
     }
 
     @Test

@@ -55,6 +55,9 @@ class MasonrySlicesTest {
     /** The chunks waiting for the main thread ([VitroView.postSlice]), oldest first. */
     private val queued = ArrayDeque<Runnable>()
 
+    /** For each chunk posted, whether it waits for the next frame. */
+    private val firstAfterFrame = ArrayList<Boolean>()
+
     /** A view of [dashboard]; [sliced]: on a clock that moves 5 ms per look, else on Robolectric's (one pass). */
     private fun vitroView(
         dashboard: String,
@@ -68,7 +71,8 @@ class MasonrySlicesTest {
         if (sliced) {
             var t = 0L
             vv.sliceClock = { t += 5; t }
-            vv.postSlice = { task ->
+            vv.postSlice = { task, afterFrame ->
+                firstAfterFrame += afterFrame
                 queued += task
                 val cancel = { queued.remove(task); Unit }
                 cancel
@@ -148,12 +152,14 @@ class MasonrySlicesTest {
         assertFalse("not built yet: the page isn't ready until its last card", vv.currentViewBuilt)
         assertTrue("no metrics until the view is built", metrics.isEmpty())
         assertEquals("one chunk waits", 1, queued.size)
+        assertEquals("the first chunk waits for the first screen to be drawn", listOf(true), firstAfterFrame)
 
         // A chunk: up to 48 ms of cards, at 5 ms a look, then the next one queued.
         val before = attached(row).sum()
         chunk()
         val added = attached(row).sum() - before
         assertTrue("a chunk adds several cards: $added", added in 2..10)
+        assertEquals("the chunks after it don't wait for frames", listOf(true, false), firstAfterFrame)
         repeat(20) { chunk() }
         assertFalse(vv.buildInProgress)
         assertEquals(80, attached(row).sum())
@@ -263,5 +269,37 @@ class MasonrySlicesTest {
             "the last chunk's own card keeps its layer",
             generateSequence(last as View) { it.parent as? View }.takeWhile { it !== vv }.any { it.layerType == View.LAYER_TYPE_HARDWARE },
         )
+    }
+
+    // #960's budget holds across chunks: the cards a later chunk adds claim their layers from the view's one budget, as
+    // they're laid out, after the first screen's (laid out first), and the view's layers never pass the limit.
+    @Test
+    fun cardsALaterChunkAddsCountAgainstTheViewsLayerBudget() {
+        val big = JSONObject().put("type", "markdown").put("content", "# Big\n\nA\n\nB\n\nC\n\nD\n\nE\n\nF\n\nG\n\nH\n\nI")
+        val config = JSONObject().put("views", JSONArray().put(JSONObject().put("path", "heavy").put("cards", JSONArray().apply { repeat(80) { put(big) } }))).toString()
+        for (mode in VitroView.CardLayers.values()) {
+            val vv = vitroView(config, sliced = true, layers = mode)
+            layOut(vv)
+            val firstScreen = cardViews(columns(vv)).toSet()
+            assertTrue("$mode: a first screen, then chunks", vv.buildInProgress && firstScreen.size < 80)
+            while (vv.buildInProgress) {
+                chunk()
+                layOut(vv)
+            }
+            val cards = cardViews(columns(vv))
+            assertEquals(80, cards.size)
+            assertTrue("$mode: every card is big", cards.all { VitroView.isBigCard(it.width, it.height, 1440, 720) })
+            val layered = cards.filter { it.layerType == View.LAYER_TYPE_HARDWARE }
+            val limit = if (mode == VitroView.CardLayers.BIG) VitroView.BIG_LAYER_BUDGET_BYTES else 1440L * 720 * VitroView.HWUI_CACHE_BYTES_PER_PIXEL / 2
+            val used = layered.sumOf { VitroView.layerBytes(it.width, it.height) }
+            assertTrue("$mode: $used bytes of layers within $limit", used <= limit)
+            assertTrue("$mode: not every card has one", layered.size < cards.size)
+            assertTrue("$mode: the next card wouldn't have fit", used + VitroView.layerBytes(cards[0].width, cards[0].height) > limit)
+            // Laid out first, the first screen's cards claimed first: every one of them that the budget allows has its
+            // layer before any card a chunk added.
+            val firstLayered = firstScreen.count { it.layerType == View.LAYER_TYPE_HARDWARE }
+            val firstFit = (limit / VitroView.layerBytes(cards[0].width, cards[0].height)).toInt().coerceAtMost(firstScreen.size)
+            assertEquals("$mode: the first screen's cards hold the first layers", firstFit, firstLayered)
+        }
     }
 }

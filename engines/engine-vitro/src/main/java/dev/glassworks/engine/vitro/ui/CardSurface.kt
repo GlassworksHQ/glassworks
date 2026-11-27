@@ -161,6 +161,10 @@ class VitroCardContext(
      * ([dev.glassworks.engine.vitro.compat.IslandFrontend]). Main thread. The default (tests, no engine) does nothing.
      */
     val needsFrontend: (card: CardConfig, tags: List<String>, owners: List<String>) -> Unit = { _, _, _ -> },
+    /** An island's card answered `getCardSize()` with [size] (main thread): HA's masonry view weighs it by that. */
+    val islandCardSize: (card: CardConfig, size: Double) -> Unit = { card, size ->
+        dev.glassworks.engine.vitro.compat.IslandCardSizes.record(card.raw, size)
+    },
     /**
      * A web island's [card] threw on something an island page doesn't have and drew nothing ([reason] names it): its
      * view goes to HA's frontend, as for [needsFrontend]. Main thread. The default (tests, no engine) does nothing.
@@ -280,6 +284,7 @@ class VitroCardContext(
         touch = touch,
         needsFrontend = needsFrontend,
         islandFailed = islandFailed,
+        islandCardSize = islandCardSize,
         matchedNeedFrontend = matchedNeedFrontend,
         haConnected = haConnected,
         haConnectionEpoch = haConnectionEpoch,

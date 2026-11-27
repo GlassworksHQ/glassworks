@@ -257,6 +257,10 @@ internal class ClarityCameras(private val now: () -> Double) {
                 inner.create(entityId, kind)?.let { MeasuredCameraStream(it, entityId, kind) }
                     ?.also { ClarityCameras.current?.opened(it) }
 
+            override fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? =
+                inner.createForeground(entityId, kind)?.let { MeasuredCameraStream(it, entityId, kind) }
+                    ?.also { ClarityCameras.current?.opened(it) }
+
             override fun prewarm() = inner.prewarm()
         }
 
@@ -317,6 +321,14 @@ internal class MeasuredCameraStream(
                 listener?.onFrameRendered()
             }
 
+            override fun onSurfaceReady() {
+                listener?.onSurfaceReady()
+            }
+
+            override fun onSurfaceLost() {
+                listener?.onSurfaceLost()
+            }
+
             override fun onError(reason: String) {
                 ClarityCameras.current?.error(this@MeasuredCameraStream, reason)
                 listener?.onError(reason)
@@ -341,6 +353,8 @@ internal class MeasuredCameraStream(
     override fun setRendering(rendering: Boolean) = inner.setRendering(rendering)
 
     override val closeWhenHidden: Boolean get() = inner.closeWhenHidden
+
+    override val surfaceReady: Boolean get() = inner.surfaceReady
 
     override fun close() {
         ClarityCameras.current?.closed(this)

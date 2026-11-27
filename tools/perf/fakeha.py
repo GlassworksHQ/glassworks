@@ -747,6 +747,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_bytes(200, body[1], body[0], cache=cache)
         if path.startswith(("/frontend_latest/", "/frontend_es5/", "/static/")) or path in ("/service_worker.js", "/sw-modern.js", "/sw-legacy.js"):
             return self.static(path)
+        if path.startswith(("/local/", "/hacsfiles/")):
+            # HA serves /local/ from its config's www folder and HACS /hacsfiles/ from its own: a file the home
+            # doesn't serve (its http_get above) is a 404 there, never the app shell. A 200 page for a missing file
+            # made Vitro take Bubble Card's absent modules file as present (tablet Vitro run 3, 2026-11-26).
+            return self.send_bytes(404, b"", "text/plain")
         # Every other path is a frontend route (a dashboard, a view): the app shell, as HA serves it.
         return self.send_bytes(200, Handler.index, "text/html; charset=utf-8")
 

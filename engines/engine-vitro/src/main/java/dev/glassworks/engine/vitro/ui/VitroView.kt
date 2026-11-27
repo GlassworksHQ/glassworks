@@ -105,6 +105,7 @@ import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatChecker
 import dev.glassworks.engine.vitro.compat.BubbleFallback
 import dev.glassworks.engine.vitro.compat.IslandBudget
+import dev.glassworks.engine.vitro.compat.IslandCardSizes
 import dev.glassworks.engine.vitro.compat.IslandFrontend
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.WebFallback
@@ -257,14 +258,76 @@ class VitroView(
      */
     @Volatile var resourcesList: List<LovelaceResource> = emptyList()
         set(v) {
+            val firstAnswer = !resourcesKnown
+            resourcesKnown = true
+            val held = resourceHold
+            resourceHold = null
+            if (held != null) mainHandler.removeCallbacks(held.timeout)
             // A list equals another with the same resources; whether Bubble's modules apply changes the routes too.
-            if (field == v && (field as? LovelaceResourceList)?.bubbleModules == (v as? LovelaceResourceList)?.bubbleModules) return
+            if (field == v && (field as? LovelaceResourceList)?.bubbleModules == (v as? LovelaceResourceList)?.bubbleModules) {
+                // The first answer is what a held first build waited for, even when it's the empty list it assumed.
+                if (firstAnswer && held != null && dashboard === held.config) renderView(held.index, forceRebuild = false, pushHistory = false)
+                return
+            }
             field = v
             // The islands load the resources into their page: new resources need new pages, pooled ones too.
             dropBuiltViews(keepIslands = false)
             closePooledIslands()
-            dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+            // The view the page is on: the one a first build held for this answer, or the one that went to HA's
+            // frontend (never the index before it, which the page never showed: tablet Vitro run 3 built it behind HA).
+            val index = held?.takeIf { dashboard === it.config }?.index ?: webViewIndex ?: currentViewIndex
+            dashboard?.let { renderView(index, forceRebuild = true, pushHistory = held == null) }
         }
+
+    /**
+     * Whether Home Assistant has answered for this server's Lovelace resources ([resourcesList] set since
+     * [resetForServer]). Until then nothing that routes on them is decided: which cards go to an island, and whether a
+     * view goes to HA's frontend ([holdFirstBuildForResourcesMs]).
+     */
+    @Volatile var resourcesKnown: Boolean = false
+        private set
+
+    /**
+     * How long a first build waits for the resources' answer ([resourcesKnown]; 0: it doesn't). The engine sets it.
+     * They're asked before the dashboard's config, but a dashboard that loads Bubble Card hears them only after the
+     * modules check ([dev.glassworks.engine.vitro.data.BubbleModules]: a command, a subscription and a file), and the
+     * config lands first. Without the wait, a view of Bubble cards that only an island draws went to HA's frontend
+     * ("no Lovelace resource loads Bubble Card's script") and came back once they landed (tablet Vitro run 3). Past
+     * the wait it builds with what it has, and the answer rebuilds it.
+     */
+    var holdFirstBuildForResourcesMs: Long = 0
+
+    /** A first build waiting for the resources ([holdFirstBuildForResourcesMs]): its view, its config, its timer. */
+    private class ResourceHold(val index: Int, val config: DashboardConfig, val timeout: Runnable)
+
+    private var resourceHold: ResourceHold? = null
+
+    /** The view the page last handed to HA's frontend ([onWebView]), until a view is built again. */
+    private var webViewIndex: Int? = null
+
+    /**
+     * True when view [index]'s first build waits for the resources' answer: none yet for this server, and the view
+     * isn't built. Past [holdFirstBuildForResourcesMs] it builds without them.
+     */
+    private fun holdForResources(index: Int, cfg: DashboardConfig): Boolean {
+        if (resourcesKnown || holdFirstBuildForResourcesMs <= 0 || viewCache[index] != null) return false
+        resourceHold?.let { h ->
+            if (h.index == index && h.config === cfg) return true
+            mainHandler.removeCallbacks(h.timeout)
+        }
+        lateinit var hold: ResourceHold
+        hold = ResourceHold(index, cfg, Runnable {
+            if (resourceHold !== hold) return@Runnable
+            resourceHold = null
+            // No answer in time (a Home Assistant that never sends one): built as if it had none, from now on.
+            resourcesKnown = true
+            Log.w(TAG, "No Lovelace resources after $holdFirstBuildForResourcesMs ms: building without them")
+            if (dashboard === cfg) renderView(index, forceRebuild = false, pushHistory = false)
+        })
+        resourceHold = hold
+        mainHandler.postDelayed(hold.timeout, holdFirstBuildForResourcesMs)
+        return true
+    }
     var lastMetrics: VitroMetrics = VitroMetrics()
         private set
 
@@ -321,6 +384,8 @@ class VitroView(
         val viewCfg: ViewConfig,
         val startedAt: Long,
         steps: List<CardStep>,
+        /** The view's card layers ([cacheCardAsLayer]): a card a later chunk adds counts against the same budget. */
+        val layers: CardLayerBudget,
     ) {
         val steps = ArrayDeque(steps)
         var slices = 0
@@ -328,8 +393,9 @@ class VitroView(
         val run = Runnable { runSlice(this) }
         private var scheduled: (() -> Unit)? = null
 
+        /** The next chunk; the first waits for the first screen to be drawn ([postSlice]). */
         fun schedule() {
-            scheduled = postSlice(run)
+            scheduled = postSlice(run, slices <= 1)
         }
 
         fun unschedule() {
@@ -339,13 +405,21 @@ class VitroView(
     }
 
     /**
-     * Runs [task] as soon as the main thread is free, and returns what cancels it. An asynchronous message: a view
-     * that changed (cards just added) holds ordinary messages back until its next frame is drawn, and these chunks
-     * don't wait for one. The frame still runs between two chunks when it's due. Tests give their own.
+     * Runs [task] as soon as the main thread is free, or, [afterFrame], once the next frame has been drawn (the first
+     * chunk, so the first screen is drawn before any card below it is made), and returns what cancels it. An
+     * asynchronous message: a view that changed (cards just added) holds ordinary messages back until its next frame
+     * is drawn, and these chunks don't wait for one. The frame still runs between two chunks when it's due: its own
+     * message is asynchronous too, and older. Tests give their own.
      */
-    internal var postSlice: (Runnable) -> (() -> Unit) = { task ->
-        mainHandler.sendMessage(android.os.Message.obtain(mainHandler, task).apply { isAsynchronous = true })
-        val cancel = { mainHandler.removeCallbacks(task) }
+    internal var postSlice: (Runnable, Boolean) -> (() -> Unit) = { task, afterFrame ->
+        fun send() = mainHandler.sendMessage(android.os.Message.obtain(mainHandler, task).apply { isAsynchronous = true })
+        // The frame callback runs before the frame's layout and draw; what it sends runs after them.
+        val frame = android.view.Choreographer.FrameCallback { send() }
+        if (afterFrame) android.view.Choreographer.getInstance().postFrameCallback(frame) else send()
+        val cancel = {
+            android.view.Choreographer.getInstance().removeFrameCallback(frame)
+            mainHandler.removeCallbacks(task)
+        }
         cancel
     }
 
@@ -387,6 +461,7 @@ class VitroView(
         b.slices++
         val made = ArrayList<Pair<CardStep, View>>()
         buildingIndex = b.index
+        buildingLayers = b.layers
         try {
             // A card whose build ends this one (a re-entrant render or drop) leaves the rest unmade.
             while (building === b && b.steps.isNotEmpty()) {
@@ -396,6 +471,7 @@ class VitroView(
             }
         } finally {
             buildingIndex = -1
+            buildingLayers = null
         }
         if (building !== b) return
         for ((step, card) in made) step.attach(card)
@@ -414,6 +490,9 @@ class VitroView(
             b.schedule()
         }
     }
+
+    /** The card layers of the view being built ([cacheCardAsLayer]); null outside a build. */
+    private var buildingLayers: CardLayerBudget? = null
     var onViewSelected: ((ViewConfig) -> Unit)? = null
 
     /**
@@ -539,6 +618,45 @@ class VitroView(
         Log.i(TAG, "${card.type}: $reason")
         mainHandler.post { leaveForFrontend() }
     }
+
+    /**
+     * An island's [card] answered `getCardSize()` with [size] ([IslandCardSizes]). A masonry view places its cards by
+     * those sizes, as HA's does: the view on screen is laid out again (its islands kept) when the answer moves a card
+     * to another column or changes how many columns stay, and other built masonry views with the card are when next
+     * shown. A view that places its cards the same stays as it is.
+     */
+    fun islandCardSize(card: CardConfig, size: Double, generation: Int = serverGeneration) {
+        // A size an island of another Home Assistant reported, queued before [resetForServer]: not this one's card.
+        if (generation != serverGeneration) return
+        val cfg = dashboard
+        val width = (resources.displayMetrics.widthPixels / dp).toInt()
+        fun holds(v: ViewConfig) = v.cards.any { root -> holdsCard(root, card.raw.toString()) }
+        val masonry = cfg?.views?.withIndex()?.filter { (i, v) -> viewCache[i] != null && isMasonry(v) && holds(v) }.orEmpty()
+        val before = masonry.associate { (i, v) -> i to HaMasonry.place(v.cards, width, ::stateForBuild).let { (p, n) -> p.toList() to n } }
+        if (!IslandCardSizes.record(card.raw, size)) return
+        for ((i, v) in masonry) {
+            val after = HaMasonry.place(v.cards, width, ::stateForBuild).let { (p, n) -> p.toList() to n }
+            if (after == before[i]) continue
+            Log.i(TAG, "View '${v.path ?: i}': ${card.type} weighs $size (its getCardSize): its masonry columns are placed again")
+            if (i == currentViewIndex && webViewIndex == null) renderView(i, forceRebuild = true, pushHistory = false) else staleViews += i
+        }
+    }
+
+    /**
+     * Which Home Assistant the islands' reports are about: [resetForServer] moves it on, and a report made under an
+     * older one ([islandCardSize]) is dropped (Sourcery on #952). The engine reads it as it builds each card's context.
+     */
+    @Volatile var serverGeneration: Int = 0
+        private set
+
+    /** A view [buildViewTree] lays out as masonry (its last case): not a panel, sections, sidebar or layout-card view. */
+    private fun isMasonry(v: ViewConfig): Boolean =
+        !(v.type == "panel" && v.cards.isNotEmpty()) && !(v.type == "sections" && v.sections.isNotEmpty()) &&
+            v.type != "sidebar" && v.layoutCardType == null
+
+    /** True when [card], or a card inside it, has the config [raw]. */
+    private fun holdsCard(card: CardConfig, raw: String): Boolean =
+        card.raw.toString() == raw || CardRouter.producedCards(card, perEntity = false).any { holdsCard(it.value, raw) }
 
     /**
      * The views that go to HA's frontend now ([fallbackReason]) leave: built ones go, islands and all (they never show
@@ -705,7 +823,14 @@ class VitroView(
         islandLosses.clear()
         gaveUpIslands.clear()
         gaveUpViews.clear()
+        serverGeneration++
+        IslandCardSizes.clear()
+        resourceHold?.let { mainHandler.removeCallbacks(it.timeout) }
+        resourceHold = null
+        webViewIndex = null
         resourcesList = emptyList()
+        // Another server's resources are its own answer's: none is known until it comes.
+        resourcesKnown = false
         // Nothing of the old server stays on screen while the new one connects: not its tabs, not its backdrop, and
         // a backdrop image still loading from it doesn't land afterwards.
         tabBar.removeAllViews()
@@ -1035,11 +1160,22 @@ class VitroView(
         }
     }
 
+    /**
+     * HA's toolbar behind the view tabs (`hui-root`'s `.header`, frontend 20261028.5): `--app-header-background-color`,
+     * with no fallback of its own. HA's theme sets it to `--sidebar-background-color`, which it sets to
+     * `--card-background-color`: the theme variable, never the card-only `--ha-card-background` or a card-mod style, so
+     * a theme with transparent cards keeps its toolbar (Greptile on #952). Past those, HA's own card background.
+     */
+    internal fun headerBackground(theme: dev.glassworks.engine.vitro.theme.ResolvedTheme): Int =
+        listOf("app-header-background-color", "sidebar-background-color", "card-background-color")
+            .firstNotNullOfOrNull { ThemeResolver.parseColor(theme.vars[it]) }
+            ?: if (theme.dark) 0xFF1C1C1C.toInt() else 0xFFFFFFFF.toInt()
+
     private fun rebuildTabs(config: DashboardConfig) {
         tabBar.removeAllViews()
         tabs.clear()
         val theme = ThemeResolver.resolve(themeCatalog, darkMode)
-        tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
+        tabScroll.setBackgroundColor(headerBackground(theme))
         // Like HA, subviews have no tab: they are reached by navigation and come back with their back arrow. A view
         // hidden from this user gets one, shown only while it's on screen ([applyTabVisibility]).
         config.views.forEachIndexed { idx, v ->
@@ -1093,7 +1229,7 @@ class VitroView(
 
     private fun highlightTab(selected: Int, theme: ResolvedTheme) {
         // The strip itself follows the theme too (a light/dark switch, a cached view's own theme).
-        tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
+        tabScroll.setBackgroundColor(headerBackground(theme))
         applyTabVisibility(selected)
         for (t in tabs) {
             val active = t.viewIndex == selected
@@ -1139,13 +1275,13 @@ class VitroView(
      * True when the view on screen has been built: not waiting for its first states, nor still adding its cards
      * ([SlicedBuild]). The page counts it ready then.
      */
-    val currentViewBuilt: Boolean get() = viewCache[currentViewIndex] != null && building?.index != currentViewIndex
+    val currentViewBuilt: Boolean get() = resourceHold == null && viewCache[currentViewIndex] != null && building?.index != currentViewIndex
 
     /**
      * True when the view on screen has a tree on screen, its cards all added or still being added ([SlicedBuild]):
      * Clarity's harness counts it past HA's launch screen, as HA's masonry view is once its columns are there.
      */
-    internal val currentViewOnScreen: Boolean get() = viewCache[currentViewIndex] != null
+    internal val currentViewOnScreen: Boolean get() = resourceHold == null && viewCache[currentViewIndex] != null
 
     /**
      * The page is gone: a view waiting for its first states isn't built later (a late build would make cards, and
@@ -1155,6 +1291,8 @@ class VitroView(
         cancelBuild(dropPartial = false)
         holding?.cancel?.invoke()
         holding = null
+        resourceHold?.let { mainHandler.removeCallbacks(it.timeout) }
+        resourceHold = null
         stateRebuilds.values.forEach { it() }
         stateRebuilds.clear()
     }
@@ -1175,8 +1313,11 @@ class VitroView(
         holding?.cancel?.invoke()
         holding = null
         val refs = CardRouter.referencedEntities(viewCfg)
-        fun known() = refs.all { store[it] != null || store.isMissing(it) }
-        if (refs.isEmpty() || known()) return false
+        // A view that picks its entities at run time (auto-entities) names none of them: it waits for HA's answer for
+        // every entity, as HA's frontend draws a view once hass has every state. Built before, it matches nothing.
+        val all = CardRouter.followsAllEntities(viewCfg)
+        fun known() = refs.all { store[it] != null || store.isMissing(it) } && (!all || store.answeredAll)
+        if ((refs.isEmpty() && !all) || known()) return false
         val config = dashboard
         lateinit var timeout: Runnable
         lateinit var mine: Wait
@@ -1200,7 +1341,8 @@ class VitroView(
             if (checkQueued.compareAndSet(false, true)) mainHandler.post(check)
         }
         // Each unknown entity's listener hears its state land, and HA's answer that it doesn't exist (markSnapshot).
-        val unsubs = refs.filter { store[it] == null }.map { id -> store.subscribe(id) { queueCheck() } }
+        val unsubs = refs.filter { store[it] == null }.map { id -> store.subscribe(id) { queueCheck() } } +
+            listOfNotNull(if (all) store.subscribeSnapshot { queueCheck() } else null)
         mine = Wait(index) {
             unsubs.forEach { it() }
             mainHandler.removeCallbacks(timeout)
@@ -1257,16 +1399,31 @@ class VitroView(
         building?.let { b ->
             if (b.index != index || forceRebuild || index in staleViews) cancelBuild(dropPartial = b.index != index)
         }
+        // Whether the view goes to HA's frontend, and which of its cards go to islands, is decided once the resources
+        // are known: the decision made then is the one that stands. The connecting screen stays meanwhile.
+        if (holdForResources(index, cfg)) {
+            // The view the page waits on is the current one: a rebuild meanwhile (the user's light or dark choice, a
+            // theme, the header) renders it, not the index before, which would take the wait over (Greptile on #952).
+            // Whether it goes to HA's frontend is still decided once the resources are known.
+            currentViewIndex = index
+            for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
+            for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE
+            updateIslandsShown()
+            updateCardsHidden()
+            return
+        }
         // Before anything is selected or built: the page leaves for HA's frontend, and this view stays as it was. No
         // build follows, so no island a rebuild gave up waits for one.
         onWebView?.let { show ->
             fallbackReason(viewCfg)?.let { reason ->
                 cancelBuild(dropPartial = true)
                 closePooledIslands()
+                webViewIndex = index
                 show(viewCfg, reason)
                 return
             }
         }
+        webViewIndex = null
         val t0 = SystemClock.elapsedRealtime()
         val prev = currentViewIndex
         if (pushHistory && !forceRebuild && prev != index && cfg.views.getOrNull(prev) != null) {
@@ -1295,6 +1452,7 @@ class VitroView(
             return
         }
         var steps: List<CardStep> = emptyList()
+        var stepLayers: CardLayerBudget? = null
         val clockAtStart = sliceClock()
         val viewRoot = if (cached != null) {
             cached
@@ -1315,6 +1473,8 @@ class VitroView(
             dropView(index, keepIslands = true)
             staleViews -= index
             buildingIndex = index
+            val layers = CardLayerBudget(cardLayerBudgetBytes())
+            buildingLayers = layers
             clarity?.buildStarted(index)
             val built = try {
                 buildViewTree(viewCfg, cardCtx)
@@ -1322,8 +1482,11 @@ class VitroView(
                 pendingPinned = null
                 pendingSteps = null
                 buildingIndex = -1
+                buildingLayers = null
             }
+            layers.roots += built
             steps = deferred
+            stepLayers = layers
             viewCache[index] = built
             builtScripts[index] = IslandScripts.of(cardCtx.resources)
             contentHost.addView(built, LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -1333,6 +1496,7 @@ class VitroView(
                     clipToPadding = false
                 }
                 pinned.forEach { (v, lp) -> frame.addView(v, lp) }
+                layers.roots += frame
                 overlayFrames[index] = frame
                 overlayLayer.addView(frame, LayoutParams(MATCH_PARENT, MATCH_PARENT))
             }
@@ -1364,7 +1528,7 @@ class VitroView(
         // now, the rest once that screen is drawn.
         updateIslandsShown()
         updateCardsHidden()
-        val b = SlicedBuild(index, viewCfg, t0, steps)
+        val b = SlicedBuild(index, viewCfg, t0, steps, stepLayers ?: CardLayerBudget(cardLayerBudgetBytes()))
         building = b
         runSlice(b, start = clockAtStart, budgetMs = SLICE_BUDGET_MS)
     }
@@ -1508,7 +1672,7 @@ class VitroView(
     }
 
     /** The island an earlier build of [card] gave up, for its new build to take, or null. */
-    private fun adoptIsland(card: CardConfig, fillViewport: Boolean, key: String = WebIslandCardView.keyOf(card, fillViewport)): WebIslandCardView.Island? {
+    private fun adoptIsland(key: String): WebIslandCardView.Island? {
         val queue = islandPool[key] ?: return null
         val island = queue.removeFirstOrNull()
         if (queue.isEmpty()) islandPool.remove(key)
@@ -2157,14 +2321,20 @@ class VitroView(
      * browser's SurfaceView, whose picture shows through the hole its window leaves for it, and a layer draws that
      * hole as its own pixels. The island then stays blank while its page draws and sizes the card. The 160 px an island
      * holds before its page reports a size is already big on the S1, so every masonry island was blank there.
+     *
+     * And only while the view's layers fit its budget ([CardLayerBudget], [cardLayerBudgetBytes]), first laid out first:
+     * the layers stay in HWUI's GPU cache, and once they fill it, Skia purges the masks and atlases every card draws
+     * with and makes them again each frame. On the S1, heavy's masonry columns made 39 entities cards big (36 MB of
+     * layers): the path-mask cache went and issuing a scrolling frame's draw commands took 18 ms instead of 6.7.
      */
     private fun cacheCardAsLayer(cardView: View, card: CardConfig, ctx: VitroCardContext) {
         if (!cardLayerWanted(ctx.theme.cardElevationDp, cardView.elevation) || playsLiveVideo(card)) return
+        val budget = buildingLayers ?: CardLayerBudget(cardLayerBudgetBytes())
         fun want(v: View, w: Int, h: Int): Int = when {
             islandsIn(v).isNotEmpty() -> LAYER_TYPE_NONE
-            cardLayers == CardLayers.ALL || isBigCard(w, h, width, height) -> LAYER_TYPE_HARDWARE
+            (cardLayers == CardLayers.ALL || isBigCard(w, h, width, height)) && budget.claim(v, w, h) -> LAYER_TYPE_HARDWARE
             else -> LAYER_TYPE_NONE
-        }
+        }.also { if (it == LAYER_TYPE_NONE) budget.release(v) }
         if (cardLayers == CardLayers.ALL) cardView.setLayerType(want(cardView, 0, 0), null)
         // Again when the card's size changes: a big card by its new size, and an island a card made later (an
         // auto-entities child, a conditional's) takes the card off its layer. A card whose size can't change (a fixed
@@ -2204,6 +2374,48 @@ class VitroView(
                 forTotalMem(total).also { deviceMode = it }
             }
         }
+    }
+
+    /**
+     * The bytes a view's card layers may take: [BIG_LAYER_BUDGET_BYTES] on a 2 GB panel ([CardLayers.BIG]), and half of
+     * HWUI's GPU cache with [CardLayers.ALL], so Skia keeps room for what every card draws with.
+     */
+    private fun cardLayerBudgetBytes(): Long = when (cardLayers) {
+        CardLayers.BIG -> BIG_LAYER_BUDGET_BYTES
+        CardLayers.ALL -> resources.displayMetrics.let { it.widthPixels.toLong() * it.heightPixels } * HWUI_CACHE_BYTES_PER_PIXEL / 2
+    }
+
+    /**
+     * One built view's card layers and the bytes they take ([layerBytes]), against [limit] ([cacheCardAsLayer]). A card claims its
+     * layer's bytes when it's laid out at a size that wants one, and gets it only if every layer of the view still fits.
+     * A card that leaves the view ([roots]: its tree and its pinned cards) or loses its layer ([liftLayersAbove]) gives
+     * its share back. Main thread.
+     */
+    internal class CardLayerBudget(val limit: Long) {
+        private val held = LinkedHashMap<View, Long>()
+
+        /** The view's tree and its pinned cards' frame, once built: a card under neither has left the view. */
+        val roots = ArrayList<View>(2)
+
+        /** The bytes the view's layers take now. */
+        val used: Long get() = held.values.sum()
+
+        /** [card] wants a layer of [w] x [h] px ([layerBytes]): true when it fits beside the others (its own earlier share replaced). */
+        fun claim(card: View, w: Int, h: Int): Boolean {
+            held.remove(card)
+            held.keys.retainAll { it.layerType == View.LAYER_TYPE_HARDWARE && (roots.isEmpty() || inView(it)) }
+            val bytes = layerBytes(w, h)
+            if (used + bytes > limit) return false
+            held[card] = bytes
+            return true
+        }
+
+        /** [card] draws without a layer: its share is free. */
+        fun release(card: View) {
+            held.remove(card)
+        }
+
+        private fun inView(v: View): Boolean = generateSequence(v) { it.parent as? View }.any { p -> roots.any { it === p } }
     }
 
     /** [layout] is HA's `layout` for this card ([VitroCardContext.cardLayout]): `"grid"` straight in a section. */
@@ -2352,7 +2564,7 @@ class VitroView(
         }
         // Anything outside Vitro's supported set goes to an island on purpose (CardCompat), decided once per card.
         val built: View = testCards?.invoke(card, ctx) ?: if (card.inIsland(IslandScripts.of(ctx.resources))) {
-            WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
+            WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(WebIslandCardView.keyOf(card, fillViewport, ctx.viewType)))
         } else when (card.type) {
             // Layout containers
             "vertical-stack" -> stackHost(card, ctx, ::applyStackPadding, LinearLayout(context).apply {
@@ -2421,7 +2633,7 @@ class VitroView(
             "shortcut" -> ShortcutCardView(ctx, card)
             "alert" -> SmallCardConfigs.alertError(card)?.let { HaErrorCardView(ctx, it) } ?: AlertCardView(ctx, card)
             "iframe" -> SmallCardConfigs.iframeError(card)?.let { HaErrorCardView(ctx, it) }
-                ?: IframeCardView(ctx, card, fillViewport, adopted = adoptIsland(card, fillViewport, IframeCardView.keyFor(ctx, card, fillViewport)))
+                ?: IframeCardView(ctx, card, fillViewport, adopted = adoptIsland(IframeCardView.keyFor(ctx, card, fillViewport)))
             // Tier 2: Popular HACS Fast-Paths
             // Mushroom's light, fan and cover cards with their controls row; without one, the tile draws them.
             "custom:mushroom-light-card" -> if (HaGridSize.mushroomHasControls(card.type, card.raw, stateForBuild(card))) MushroomLightCardView(ctx, card) else TileCardView(ctx, card)
@@ -2456,7 +2668,7 @@ class VitroView(
             "custom:swipe-card" -> SwipeCardView(ctx, card, childBuilder)
             "custom:weather-card" -> LegacyWeatherCardView(ctx, card)
             // Tier 3: Arbitrary unrecognized custom cards -> stripped Micro-Web Island
-            else -> WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(card, fillViewport))
+            else -> WebIslandCardView(ctx, card, fillViewport = fillViewport, adopted = adoptIsland(WebIslandCardView.keyOf(card, fillViewport, ctx.viewType)))
         }
         (built as? CardSurface)?.let { surface ->
             // A conditional's child keeps its own type.
@@ -2747,6 +2959,35 @@ class VitroView(
 
         internal fun isBigCard(w: Int, h: Int, rootW: Int, rootH: Int): Boolean =
             rootW > 0 && rootH > 0 && w.toLong() * h >= BIG_CARD_SHARE * rootW.toLong() * rootH
+
+        /**
+         * A card layer's GPU memory: RGBA 8888 at the size Skia allocates it, each side rounded up as its approximate fit
+         * does (`GrResourceProvider::MakeApprox`). A 348 x 314 entities card takes 512 x 512, 1 MB: measured on Android 10,
+         * 16 layers held 16.3 MB.
+         */
+        internal fun layerBytes(w: Int, h: Int): Long = approxSide(w).toLong() * approxSide(h) * 4
+
+        /** Skia's approximate fit: at least 16, the next power of two up to 1024, then the next half step of one. */
+        internal fun approxSide(px: Int): Int {
+            val v = maxOf(16, px)
+            if (v and (v - 1) == 0) return v
+            val ceil = Integer.highestOneBit(v) shl 1
+            if (v <= 1024) return ceil
+            val mid = (ceil shr 1) + (ceil shr 2)
+            return if (v <= mid) mid else ceil
+        }
+
+        /**
+         * What a view's card layers may take on a 2 GB panel ([CardLayers.BIG]): the S1 may give layers about 8 MB
+         * (816b3b4de measured every card's layer at 17 MB of GPU memory there, too much).
+         */
+        internal const val BIG_LAYER_BUDGET_BYTES = 8L * 1024 * 1024
+
+        /**
+         * HWUI's GPU cache per pixel of the display (Android 10's `SURFACE_SIZE_MULTIPLIER`, 12 x 4 bytes; later versions
+         * allow more): about 50 MB at 1440 x 720, shared by every layer, mask, glyph atlas and image the app draws.
+         */
+        internal const val HWUI_CACHE_BYTES_PER_PIXEL = 48L
 
         private const val TAG = "Glassworks.Vitro"
         private const val PERIODIC_CHECK_MS = 60_000L
