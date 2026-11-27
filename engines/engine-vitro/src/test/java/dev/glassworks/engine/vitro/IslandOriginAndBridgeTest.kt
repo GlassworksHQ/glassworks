@@ -219,7 +219,7 @@ class IslandOriginAndBridgeTest {
 
         init {
             out.write(
-                ("GET /__vitro/ws/$id HTTP/1.1\r\nHost: 127.0.0.1:${server.port}\r\nOrigin: http://127.0.0.1:${server.port}\r\n" +
+                ("GET ${server.capPath}/__vitro/ws/$id HTTP/1.1\r\nHost: 127.0.0.1:${server.port}\r\nOrigin: http://127.0.0.1:${server.port}\r\n" +
                     "Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
                     "Sec-WebSocket-Version: 13\r\n\r\n").toByteArray(),
             )

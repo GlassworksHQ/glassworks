@@ -207,7 +207,7 @@ class WebIslandCardView(
             lateinit var idRef: String
             val handler = object : VitroIslandServer.SlotHandler {
                 override val html: String
-                    get() = buildIslandHtml(ctx, config, fillViewport, slotId = idRef)
+                    get() = buildIslandHtml(ctx, config, fillViewport, slotId = idRef, base = server.capPath)
 
                 override fun onConnected(send: (JSONObject) -> Unit) {
                     // The snapshot goes first: no patch for this socket can be queued before it (the observer
@@ -563,7 +563,9 @@ class WebIslandCardView(
                 // A card's `navigate` action / `history.pushState` + `location-changed` inside the island:
                 // the path is a dashboard path (`/lovelace/1`), handed to Vitro's own navigation. `replace`: HA's
                 // `navigate(path, {replace: true})` (`navigation_replace`), no step in the history.
-                val path = msg.optString("path", "").trim()
+                // Never with the island server's capability: Home Assistant (and its page's address) never see it.
+                val raw = msg.optString("path", "").trim()
+                val path = ctx.islandServer?.withoutCap(raw) ?: raw
                 val go = if (msg.optBoolean("replace", false)) ctx.navigateReplace else ctx.navigate
                 if (path.isNotEmpty() && !path.startsWith("/__vitro/")) ctx.main.post { go(path) }
             }
@@ -1184,23 +1186,39 @@ function vitroSeedStorage(store, origin, seed) {
 
         private const val BUBBLE_TYPE = "custom:bubble-card"
 
+        /**
+         * The address the island page loads a Lovelace resource from: one on Home Assistant (a path, `/local/card.js`)
+         * under the island server's capability [base], so the browser holds the card at an address that has it and the
+         * card's own imports carry it too. A resource on another site, or HA's own full URL, is as written.
+         */
+        internal fun resourceUrl(url: String, base: String): String =
+            if (url.startsWith("/") && !url.startsWith("//")) base + url else url
+
+        /**
+         * The island page for [config]. [base]: the island server's capability (`VitroIslandServer.capPath`), which
+         * every address the page builds for the server's proxy and bridge starts with ("" in tests without a server).
+         */
         fun buildIslandHtml(
             ctx: VitroCardContext,
             config: CardConfig,
             fillViewport: Boolean = false,
             slotId: String = "s0",
+            base: String = "",
         ): String {
             val tag = config.type.removePrefix("custom:")
             val themeCss = themeCss(ctx, fillViewport)
             val resourceScripts = ctx.resources.joinToString("\n") { r ->
                 val inlineJs = decodeInlineModule(r.url)
+                val src = resourceUrl(r.url, base)
                 when {
                     inlineJs != null -> "<script type=\"module\">\n${inlineJs.replace(SCRIPT_END, "<\\\\/$1")}\n</script>"
-                    r.type == "css" -> """<link rel="stylesheet" href=${htmlAttr(r.url)}>"""
-                    r.type == "module" -> """<script type="module" src=${htmlAttr(r.url)}></script>"""
-                    else -> """<script src=${htmlAttr(r.url)}></script>"""
+                    r.type == "css" -> """<link rel="stylesheet" href=${htmlAttr(src)}>"""
+                    r.type == "module" -> """<script type="module" src=${htmlAttr(src)}></script>"""
+                    else -> """<script src=${htmlAttr(src)}></script>"""
                 }
             }
+            // `/` as it is (JSONObject.quote writes `\/`): the page's own addresses read plainly.
+            val baseJson = JSONObject.quote(base).replace("\\/", "/").replace("<", "\\u003c")
             val cfgJson = islandConfig(config.raw, ctx.viewType).toString()
             val haCfgJson = ctx.haConfig().toString()
             val haUserJson = islandUser(ctx.haUser())?.toString() ?: "null"
@@ -1221,6 +1239,7 @@ function vitroSeedStorage(store, origin, seed) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="same-origin">
 ${storageSeedScript(ctx)}
 <style id="vitro-theme">
 $themeCss</style>
@@ -1765,6 +1784,14 @@ $resourceScripts
 <body>
 <div id="mount"></div>
 <script type="module">
+// The island server's capability: the proxy and the bridge answer only under it (or a request this page's address is
+// the Referer of). The page's address, kept: a card's history.pushState must not take it away (see wireEvents).
+const VITRO_BASE = $baseJson;
+const VITRO_PAGE = location.pathname + location.search;
+// A path on Home Assistant, as a card means it: this page's own addresses without the capability.
+function vitroHaPath(p) {
+  return VITRO_BASE && typeof p === 'string' && (p === VITRO_BASE || p.startsWith(VITRO_BASE + '/')) ? (p.slice(VITRO_BASE.length) || '/') : p;
+}
 const rawStates = {};
 let haConfig = $haCfgJson;
 const haUser = $haUserJson;
@@ -2347,7 +2374,7 @@ function vitroCallApiRaw(method, path, parameters, headers) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(parameters);
   }
-  return fetch('/api/' + String(path || '').replace(/^\/+/, ''), init);
+  return fetch(VITRO_BASE + '/api/' + String(path || '').replace(/^\/+/, ''), init);
 }
 
 async function vitroCallApi(method, path, parameters, headers) {
@@ -2559,7 +2586,11 @@ const hassBase = {
   sendWS(msg) { vitroCallWS(msg).catch(() => {}); },
   callApi: vitroCallApi,
   callApiRaw: vitroCallApiRaw,
-  fetchWithAuth(path, init) { return fetch(path, init || {}); },
+  // A path on Home Assistant goes through the proxy under the capability; a full URL as it is.
+  fetchWithAuth(path, init) {
+    const p = typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') ? VITRO_BASE + path : path;
+    return fetch(p, init || {});
+  },
   localize: makeLocalize(),
   formatEntityState: vitroFormatState,
   formatEntityStateToParts: vitroStateParts,
@@ -2601,7 +2632,7 @@ let cardEl = null;
 
 function connectBridge() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  sock = new WebSocket(proto + '//' + location.host + '/__vitro/ws/' + ${JSONObject.quote(slotId)});
+  sock = new WebSocket(proto + '//' + location.host + VITRO_BASE + '/__vitro/ws/' + ${JSONObject.quote(slotId)});
   sock.onopen = () => {
     bridgeOpened = true;
     while (outQueue.length) sock.send(outQueue.shift().line);
@@ -2740,7 +2771,7 @@ function connectBridge() {
 
 // Connects again unless the slot is gone: a closed island's page stops here instead of retrying for good.
 function retryBridge() {
-  fetch('/__vitro/ws/' + ${JSONObject.quote(slotId)}, { cache: 'no-store' }).then(
+  fetch(VITRO_BASE + '/__vitro/ws/' + ${JSONObject.quote(slotId)}, { cache: 'no-store' }).then(
     (r) => { if (r.status !== 404) connectBridge(); },
     () => setTimeout(retryBridge, 1500),
   );
@@ -2907,7 +2938,7 @@ function linkTarget(ev) {
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
     // A fragment of this very document (a card's own table of contents): the browser scrolls to it, as on HA's page.
     if (u.origin === location.origin && u.pathname === location.pathname && u.search === location.search && u.hash) return null;
-    return u.origin === location.origin ? u.pathname + u.search + u.hash : u.href;
+    return u.origin === location.origin ? vitroHaPath(u.pathname) + u.search + u.hash : u.href;
   }
   return null;
 }
@@ -2952,8 +2983,12 @@ function wireEvents() {
   });
   // HA's navigate(): history.pushState (replaceState with `replace`), then `location-changed` on window.
   window.addEventListener('location-changed', (ev) => {
-    const p = (ev && ev.detail && ev.detail.path) || (location.pathname + location.search);
-    navigateTo(p, Boolean(ev && ev.detail && ev.detail.replace));
+    const p = (ev && ev.detail && ev.detail.path) || (vitroHaPath(location.pathname) + location.search);
+    // The page keeps its own address: the one its requests name as their Referer, which holds the capability.
+    if (location.pathname + location.search !== VITRO_PAGE) {
+      try { history.replaceState(history.state, '', VITRO_PAGE); } catch (e) {}
+    }
+    navigateTo(vitroHaPath(p), Boolean(ev && ev.detail && ev.detail.replace));
   });
   window.addEventListener('hass-navigate', (ev) => {
     const p = ev && ev.detail && ev.detail.path;

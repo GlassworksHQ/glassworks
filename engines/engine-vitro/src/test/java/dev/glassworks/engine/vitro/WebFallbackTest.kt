@@ -508,16 +508,23 @@ class WebFallbackTest {
         val islandUrl = fallback.pages[i].loads.single()
         assertTrue("its own page loads", islandHost.allowsLoad(islandUrl))
         assertTrue(islandHost.allowsLoad("about:blank"))
-        val origin = islandUrl.substringBefore("/__vitro/")
+        // The island page is under the island server's capability (`/<cap>/__vitro/island/<id>`).
+        val inside = islandUrl.substringBefore("/__vitro/")
+        val origin = Regex("^http://[^/]+").find(islandUrl)!!.value
         assertFalse("another host that starts like the island's", islandHost.allowsLoad("$origin.example.com/"))
         assertFalse("a calendar event's link", islandHost.allowsLoad("https://www.example.com/events/1.html"))
         assertFalse("nothing but a web address is opened elsewhere", islandHost.allowsLoad("javascript:alert(1)"))
-        // Another document the island server proxies from HA: HA's own page for it, never the card's window.
-        assertFalse("a proxied HA document", islandHost.allowsLoad("$origin/local/help.html"))
+        // Another document the island server proxies from HA: HA's own page for it, never the card's window, and
+        // never with the capability (HA's page never sees it), whether the card's link had it or not.
+        assertFalse("a proxied HA document", islandHost.allowsLoad("$inside/local/help.html"))
+        assertFalse("a proxied HA document by its absolute path", islandHost.allowsLoad("$origin/local/help.html"))
         idle()
         assertEquals("the island stays on its page", listOf(islandUrl), fallback.pages[i].loads)
         // Web addresses open in the panel's page, as a native card's url action does, in the order they came.
-        assertEquals(listOf("$origin.example.com/", "https://www.example.com/events/1.html", "$base/local/help.html"), pageFallback()?.loads)
+        assertEquals(
+            listOf("$origin.example.com/", "https://www.example.com/events/1.html", "$base/local/help.html", "$base/local/help.html"),
+            pageFallback()?.loads,
+        )
     }
 
     @Test fun aBuiltInCardNestedInAStackOrAutoEntitiesCounts() {
