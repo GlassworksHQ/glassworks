@@ -148,8 +148,8 @@ describe('the real frames', () => {
     });
     // the legacy build ships every pane the Mirror has the hardware for, so frame.json rates them (not "planned")
     expect(support('lululemon-mirror')).toMatchObject({
-      assist: ['alpha', false], timers: ['alpha', false], sendspin: ['alpha', false], notifications: ['alpha', false],
-      diagnostics: ['alpha', false], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['alpha', false], camera: ['alpha', false],
+      assist: ['stable', false], timers: ['stable', false], sendspin: ['stable', false], notifications: ['stable', false],
+      diagnostics: ['stable', false], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['stable', false], camera: ['stable', false],
     });
     expect(support('generic-android')).toMatchObject({
       notifications: ['stable', true], diagnostics: ['stable', true], 'time-zone': ['no', true], 'wall-base': ['no', false],

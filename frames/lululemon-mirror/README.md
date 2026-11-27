@@ -147,13 +147,13 @@ If your Mirror already runs the Glass Panes image and you only want to install t
 
 | Pane | Support | Notes |
 |---|---|---|
-| **Assist** | Alpha | Uses the built-in microphone for local wake word detection. |
-| **Timers** | Alpha | On-screen voice timers paired with Assist. |
-| **Sendspin** | Alpha | Synced Music Assistant playback over the Mirror's stereo speakers. |
-| **Notifications** | Alpha | Because the Mirror has no touchscreen, high/critical alerts without a tag or timeout dismiss automatically after 2 minutes. |
-| **Camera** | Alpha | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. The live video stream costs memory and can make the dashboard reload ([Known issues](#known-issues)). |
-| **Bluetooth proxy** | Alpha | Uses the built-in Bluetooth LE radio once location permission is granted. |
-| **Diagnostics** | Alpha | Reports uptime and memory (no CPU temperature sensor on this board). |
+| **Assist** | Stable | Uses the built-in microphone for local wake word detection. |
+| **Timers** | Stable | On-screen voice timers paired with Assist. |
+| **Sendspin** | Stable | Synced Music Assistant playback over the Mirror's stereo speakers. |
+| **Notifications** | Stable | Because the Mirror has no touchscreen, high/critical alerts without a tag or timeout dismiss automatically after 2 minutes. |
+| **Camera** | Stable | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. The live video stream costs memory and can make the dashboard reload ([Known issues](#known-issues)). |
+| **Bluetooth proxy** | Stable | Uses the built-in Bluetooth LE radio once location permission is granted. |
+| **Diagnostics** | Stable | Reports uptime and memory (no CPU temperature sensor on this board). |
 | **Zigbee / Thread radio** | Not supported | No 802.15.4 radio hardware. |
 | **Time zone** | Not supported | Aqara S1 Plus only. |
 | **Wall base** | Not supported | Aqara S1 Plus only. |
