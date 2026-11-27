@@ -5,8 +5,13 @@
 package dev.glassworks.engine.vitro.camera
 
 import android.content.Context
+import android.graphics.Rect
+import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewParent
+import dev.glassworks.engine.vitro.ui.VideoRedraw
+import dev.glassworks.platform.Platform
 
 /**
  * Holds one stream's view and fits it in its own bounds as CSS `object-fit` fits HA's `<video>` or `<img>`:
@@ -45,6 +50,18 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
         for (i in 0 until childCount) {
             getChildAt(i).measure(MeasureSpec.makeMeasureSpec(cw, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(ch, MeasureSpec.EXACTLY))
         }
+    }
+
+    /**
+     * Android 6 and 7: its child changed, and when that's a video's TextureView (a new frame), the card guards above
+     * hear it as one ([VideoRedraw]) and don't record themselves again for it. Android 8 and later tell them which
+     * view changed instead.
+     */
+    @Deprecated("ViewGroup's, deprecated in API 26, where onDescendantInvalidated takes over")
+    override fun invalidateChildInParent(location: IntArray, dirty: Rect): ViewParent? {
+        if (!Platform.hasDescendantInvalidated && childCount == 1 && getChildAt(0) is TextureView) VideoRedraw.from(this)
+        @Suppress("DEPRECATION")
+        return super.invalidateChildInParent(location, dirty)
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {

@@ -41,7 +41,7 @@ internal class LibWebRtcPeer(
         }
     }
 
-    private val drawn: (Int, Int) -> Unit = { w, h -> if (!closed.get() && receiving) events.onFrame(w, h) }
+    private val drawn = FrameDrawn { w, h -> if (!closed.get() && receiving) events.onFrame(w, h) }
 
     init {
         val servers = config.iceServers.map { s ->

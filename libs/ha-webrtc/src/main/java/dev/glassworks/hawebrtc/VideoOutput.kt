@@ -31,6 +31,14 @@ public enum class VideoViewKind {
 }
 
 /**
+ * A picture on screen, with its size ([VideoOutput.onDrawn]). An interface of its own, not a Kotlin function type,
+ * whose call would box both sizes on every frame.
+ */
+internal fun interface FrameDrawn {
+    fun onDrawn(width: Int, height: Int)
+}
+
+/**
  * What the player draws libwebrtc's frames into, a [VideoTextureView] or a [VideoSurfaceView]: the frames go in as a
  * [VideoSink], [onDrawn] says each one is on screen.
  */
@@ -45,7 +53,7 @@ internal interface VideoOutput : VideoSink {
      * Called on the main thread each time a new picture is on screen, with its size (rotation applied). A frame the
      * renderer drops, with no surface to draw on, isn't one.
      */
-    var onDrawn: ((width: Int, height: Int) -> Unit)?
+    var onDrawn: FrameDrawn?
 
     /** False: frames aren't drawn (off screen), once one has been. Any thread reads it. */
     var rendering: Boolean

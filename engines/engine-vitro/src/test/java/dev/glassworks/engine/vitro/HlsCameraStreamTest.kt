@@ -20,6 +20,8 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.test.utils.ExoPlayerTestRunner
+import androidx.media3.exoplayer.drm.DrmSessionManager
+import androidx.media3.test.utils.FakeSampleStream
 import androidx.media3.test.utils.FakeMediaSource
 import androidx.media3.test.utils.FakeTimeline
 import androidx.media3.test.utils.TestExoPlayerBuilder
@@ -48,9 +50,11 @@ class HlsCameraStreamTest {
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
     private val main = Handler(Looper.getMainLooper())
 
-    private class Events : CameraStream.Listener {
+    private class Events(private val wants: Boolean = true) : CameraStream.Listener {
         val log = ArrayList<String>()
         var frames = 0
+
+        override val wantsFrames: Boolean get() = wants
 
         override fun onFirstFrame(sinceStartMs: Long) {
             log += "first"
@@ -255,10 +259,56 @@ class HlsCameraStreamTest {
     }
 
     @Test
+    fun eachFrameIsReportedOnlyWhileTheListenerWantsIt() {
+        for (wants in listOf(true, false)) {
+            // Ten seconds of 30 fps video from where the fake timeline's window starts: the first frame, then the rest.
+            @Suppress("DEPRECATION")
+            val s = stream(source = {
+                FakeMediaSource(
+                    FakeTimeline(), DrmSessionManager.DRM_UNSUPPORTED,
+                    { _, _ ->
+                        (0 until 300).map { FakeSampleStream.FakeSampleStreamItem.oneByteSample(START_US + it * 33_333L, C.BUFFER_FLAG_KEY_FRAME) } +
+                            FakeSampleStream.FakeSampleStreamItem.END_OF_STREAM_ITEM
+                    },
+                    ExoPlayerTestRunner.VIDEO_FORMAT,
+                )
+            })
+            val events = Events(wants)
+            s.listener = events
+            s.start()
+            RobolectricUtil.runMainLooperUntil { events.log.isNotEmpty() }
+            assertEquals(listOf("first"), events.log)
+            // A second of playback on the player's clock.
+            val p = players.last()
+            RobolectricUtil.runMainLooperUntil { p.currentPosition >= 1_000 }
+            ShadowLooper.idleMainLooper()
+            if (wants) assertTrue("the later frames, each reported (${events.frames})", events.frames >= 20)
+            else assertEquals("not wanted: none reported, nothing posted for them", 0, events.frames)
+            s.close()
+        }
+    }
+
+    @Test
+    fun aLiveCameraStartsOnHalfASecondOfMediaByTime() {
+        // ExoPlayer's defaults wait for 2.5 s of media before the first frame; HA's hls.js plays its first fragment.
+        assertEquals(500, HlsCameraStream.BUFFER_FOR_PLAYBACK_MS)
+        assertTrue(HlsCameraStream.BUFFER_AFTER_REBUFFER_MS <= HlsCameraStream.MIN_BUFFER_MS)
+        assertTrue(HlsCameraStream.MIN_BUFFER_MS < HlsCameraStream.MAX_BUFFER_MS)
+        // Builds (DefaultLoadControl checks its durations' order), and the player takes it.
+        HlsCameraStream.loadControl()
+        HlsCameraStream.defaultPlayer(activity).release()
+    }
+
+    @Test
     fun theLiveConfigurationIsHlsJsCatchUp() {
         val item: MediaItem = HlsCameraStream.mediaItem("http://192.0.2.10:8123/api/hls/x/master_playlist.m3u8")
         assertEquals(2f, item.liveConfiguration.maxPlaybackSpeed)
         assertEquals("application/x-mpegURL", item.localConfiguration?.mimeType)
         assertEquals("http://192.0.2.10:8123/api/hls/x/master_playlist.m3u8", HlsCameraStream.absolute("http://192.0.2.10:8123/", "/api/hls/x/master_playlist.m3u8"))
+    }
+
+    private companion object {
+        /** Where FakeTimeline's window starts in its period: its default position. */
+        val START_US = FakeTimeline.TimelineWindowDefinition.DEFAULT_WINDOW_OFFSET_IN_FIRST_PERIOD_US
     }
 }
