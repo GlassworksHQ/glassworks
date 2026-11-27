@@ -88,15 +88,9 @@ public class ImprovBleServer(
     private var advertisedOnce = false
     /** A legacy refresh waits for the last client to leave ([updateAdvertisement]). */
     private var refreshPending = false
-    /** Tries of a failed legacy refresh so far ([REFRESH_RETRY_MS]); a start that succeeds clears it. */
-    private var refreshRetries = 0
-    /** [retryRefresh] is posted. */
-    private var retryPosted = false
-    /** A failed legacy refresh's next try: again now, or after the last client leaves. */
-    private val retryRefresh = Runnable {
-        retryPosted = false
-        if (!running || advertising) return@Runnable
-        if (devices.isNotEmpty()) refreshPending = true else restartLegacyAdvertising()
+    /** A failed legacy refresh's tries ([REFRESH_RETRY_MS]): each runs again now, or after the last client leaves. */
+    private val refreshRetry = RefreshRetry(main, REFRESH_RETRY_MS) {
+        if (running && !advertising) { if (devices.isNotEmpty()) refreshPending = true else restartLegacyAdvertising() }
     }
 
     private val values = ConcurrentHashMap<UUID, ByteArray>()
@@ -227,9 +221,7 @@ public class ImprovBleServer(
         btReceiver = null
         stopAdvertising()
         main.removeCallbacks(inFlightTimeout)
-        main.removeCallbacks(retryRefresh)
-        retryPosted = false
-        refreshRetries = 0
+        refreshRetry.reset()
         queue.clear()
         inFlight = false
         server?.let { s ->
@@ -341,7 +333,7 @@ public class ImprovBleServer(
             set.setAdvertisingData(advData())
         } else if (useLegacyAdvertise && (advertising || advertisedOnce)) {
             // a failed refresh's retry is on its way, and starts with the data as it is then
-            if (!advertising && retryPosted) return
+            if (!advertising && refreshRetry.pending) return
             // The legacy API can't update in place, so the new service data means stop and start again. Not while a
             // client is connected: on Android 6 stopping the advertiser dropped the connected client ~270 ms later
             // (Mirror, 2026-11-25), so the Wi-Fi result never reached it. The client has the state from the
@@ -395,9 +387,7 @@ public class ImprovBleServer(
             main.post {
                 advertising = true
                 advertisedOnce = true
-                refreshRetries = 0
-                main.removeCallbacks(retryRefresh)
-                retryPosted = false
+                refreshRetry.reset()
                 listener.onAdvertising(true, "startAdvertising (legacy API)")
             }
         }
@@ -410,15 +400,10 @@ public class ImprovBleServer(
                     !running -> Unit
                     // A refresh that fails leaves the GATT server and its clients up but nothing advertised: try again
                     // a few times, then say so, so setup doesn't claim it can still be found (#944)
-                    refreshRetries < REFRESH_RETRY_MS.size -> {
-                        val wait = REFRESH_RETRY_MS[refreshRetries++]
-                        Log.w(logTag, "$why (refreshing the advertisement; try $refreshRetries of ${REFRESH_RETRY_MS.size} in $wait ms)")
-                        retryPosted = true
-                        main.postDelayed(retryRefresh, wait)
-                    }
                     else -> {
-                        refreshRetries = 0 // a later refresh starts over, if the listener keeps the server up
-                        listener.onAdvertising(false, "$why (refreshing the advertisement, after ${REFRESH_RETRY_MS.size} tries)")
+                        val wait = refreshRetry.failed()
+                        if (wait != null) Log.w(logTag, "$why (refreshing the advertisement; try ${refreshRetry.tries} of ${refreshRetry.size} in $wait ms)")
+                        else listener.onAdvertising(false, "$why (refreshing the advertisement, after ${refreshRetry.size} tries)")
                     }
                 }
             }
