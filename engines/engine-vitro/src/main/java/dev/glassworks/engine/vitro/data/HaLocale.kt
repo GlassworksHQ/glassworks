@@ -70,14 +70,46 @@ object HaLocale {
     /** The panel's locale, as the browser HA's frontend runs in would report it. Tests replace it. */
     @Volatile var deviceLocale: () -> Locale = { Locale.getDefault() }
 
-    /** The panel's time zone (HA's `LOCAL_TIME_ZONE`). Tests replace it. */
-    @Volatile var deviceTimeZone: () -> TimeZone = { TimeZone.getDefault() }
+    /**
+     * The panel's time zone (HA's `LOCAL_TIME_ZONE`). Read once and kept: `TimeZone.getDefault()` copies the zone,
+     * its whole transition table included, on every call, and the store reads it for timestamps as states land.
+     * [deviceZoneChanged] replaces it when the device's zone changes ([watchDeviceZone]). Tests replace it.
+     */
+    @Volatile var deviceTimeZone: () -> TimeZone = { deviceZone ?: TimeZone.getDefault().also { deviceZone = it } }
+
+    @Volatile private var deviceZone: TimeZone? = null
+
+    /**
+     * The device's zone changed (`ACTION_TIMEZONE_CHANGED`, its new zone's [id] when the broadcast names it): the zone
+     * kept is that one, or the device's default read afresh at the next use.
+     */
+    fun deviceZoneChanged(id: String?) {
+        deviceZone = id?.takeIf { it.isNotBlank() }?.let { TimeZone.getTimeZone(it) }
+    }
+
+    private val zoneWatched = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Hears the device's zone change from now on, for the process (once; later calls do nothing). */
+    fun watchDeviceZone(context: android.content.Context) {
+        if (!zoneWatched.compareAndSet(false, true)) return
+        val app = context.applicationContext ?: context
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context?, intent: android.content.Intent?) {
+                deviceZoneChanged(intent?.getStringExtra(android.content.Intent.EXTRA_TIMEZONE))
+            }
+        }
+        val filter = android.content.IntentFilter(android.content.Intent.ACTION_TIMEZONE_CHANGED)
+        // A system broadcast: delivered to an unexported receiver too.
+        if (android.os.Build.VERSION.SDK_INT >= 33) app.registerReceiver(receiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        else app.registerReceiver(receiver, filter)
+    }
 
     fun addListener(l: () -> Unit) { listeners += l }
     fun removeListener(l: () -> Unit) { listeners -= l }
 
     /** Back to the browser's defaults: a new connection, or tests. */
     fun reset() {
+        deviceZone = null
         synchronized(lock) {
             write(FrontendLocale(language = deviceLanguage()))
             serverTimeZone = null

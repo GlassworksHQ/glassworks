@@ -41,10 +41,16 @@ class CalendarCardTest {
     private val asked = ArrayList<JSONObject>()
 
     @Before
-    fun zone() = TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    fun zone() {
+        TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+        dev.glassworks.engine.vitro.data.HaLocale.deviceZoneChanged(null) // as the device's broadcast says it
+    }
 
     @After
-    fun back() = TimeZone.setDefault(tz)
+    fun back() {
+        TimeZone.setDefault(tz)
+        dev.glassworks.engine.vitro.data.HaLocale.deviceZoneChanged(null)
+    }
 
     private fun card(config: String): CalendarCardView {
         val store = EntityStore()

@@ -35,10 +35,16 @@ class HaGraphTest {
     private val tz = TimeZone.getDefault()
 
     @Before
-    fun utc() = TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+    fun utc() {
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+        dev.glassworks.engine.vitro.data.HaLocale.deviceZoneChanged(null) // as the device's broadcast says it
+    }
 
     @After
-    fun restore() = TimeZone.setDefault(tz)
+    fun restore() {
+        TimeZone.setDefault(tz)
+        dev.glassworks.engine.vitro.data.HaLocale.deviceZoneChanged(null)
+    }
 
     @Test
     fun historyStreamMessageIsTheFrontendsOwn() {
