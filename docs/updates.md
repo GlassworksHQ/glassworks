@@ -1,6 +1,6 @@
 # Updates and restoring stock software
 
-Glassworks updates right from Home Assistant, just like any other smart home device. On rooted panels and modern Android tablets, updates install completely hands-free, and every supported device has a way back. On the Aqara S1 Plus and on Android tablets and phones, that means the device's original software. On the lululemon Studio Mirror, whose bootloader can't read lululemon's software back for a backup, it means the community Glass Panes image.
+Glassworks updates right from Home Assistant, just like any other smart home device. On rooted panels and modern Android tablets, updates install completely hands-free, and every supported device has a way back. On the Aqara S1 Plus and on Android tablets and phones, that means the device's original software. On the lululemon Studio Mirror, whose bootloader can't read lululemon's software back for a backup, it means the community Glass Panes image after the image install, or lululemon's own system from a restore point after the experimental install on the stock software.
 
 ## Updating Glassworks from Home Assistant
 
@@ -53,7 +53,7 @@ Both Kiln (**Finish setting up**) and the command-line installer detect this aut
 
 ## Undoing and restoring stock software
 
-Every Glassworks install has a way back. On most devices that's the software it came with; on the lululemon Studio Mirror it's the community Glass Panes image, as explained [below](#lululemon-studio-mirror).
+Every Glassworks install has a way back. On most devices that's the software it came with; on the lululemon Studio Mirror it's the community Glass Panes image, or lululemon's system if you installed on the stock software, as explained [below](#lululemon-studio-mirror).
 
 ### Aqara S1 Plus
 
@@ -80,4 +80,4 @@ Installing the Glassworks image over fastboot replaces lululemon's software for 
 
 Going back to lululemon's own software isn't possible after the image install.
 
-The experimental install on the stock software keeps lululemon's system instead. Before it writes anything, Kiln saves a restore point of the exact parts it changes, from your Mirror's own copy. To go back, choose **Restore the original system** on Kiln's Done screen or open [Kiln's Mirror undo page](https://kiln.glassworks.dev/lululemon-mirror/undo). Kiln writes the restore point back, which puts lululemon's system back as it was, and resets the Mirror's app data ([details](../frames/lululemon-mirror/README.md#keeping-lululemons-system)).
+The experimental install on the stock software keeps lululemon's system instead. Before it writes to the system, Kiln saves a restore point of the exact parts it changes, from your Mirror's own copy. To go back, choose **Restore the original system** on Kiln's Done screen or open [Kiln's Mirror undo page](https://kiln.glassworks.dev/lululemon-mirror/undo). Kiln writes the restore point back, which puts lululemon's system back as it was, and resets the Mirror's app data ([details](../frames/lululemon-mirror/README.md#keeping-lululemons-system)). If you installed this way more than once, keep and use the restore point from the first install: a later one saves the system with Glassworks' changes already in it.

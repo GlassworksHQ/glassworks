@@ -2,7 +2,7 @@
 
 The panel keeps a few secrets so it can work with nobody at the screen. Each one is sealed with
 AES-256-GCM before it is written. The key lives in the Android Keystore and never leaves it. Every
-release since 0.9.0 seals them, and it has been checked on real panels.
+release since 0.9.0 seals them.
 
 ## What is sealed
 

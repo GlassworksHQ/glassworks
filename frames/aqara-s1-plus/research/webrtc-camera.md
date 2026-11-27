@@ -202,7 +202,7 @@ The tools for the next run:
 - the runner logs when each tap and swipe went out and how long `input` took (`gestures_sent`).
 
 **The LAN path, as a diagnostic.** The panel's routing table (`/proc/net/route`, read 2026-11-13) has
-`wlan0` on the Mac's subnet (192.0.2.0/24 here, the Mac at 192.0.2.102), so it can likely reach the Mac without
+`wlan0` on the Mac's subnet (redacted here: 192.0.2.0/24, with the Mac at 192.0.2.102), so it can likely reach the Mac without
 adb. That isn't tested yet: a connection test from the panel isn't a read-only step. run.sh's
 `--webrtc-transport lan-turn` (the same relay over TCP to the Mac's address) and `lan-udp` (no
 relay: UDP between panel and Mac, as a real setup) take adb out of the video's path, for a
