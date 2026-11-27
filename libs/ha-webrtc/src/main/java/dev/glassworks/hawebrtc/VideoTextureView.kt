@@ -6,6 +6,7 @@ import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.Looper
+import android.os.Trace
 import android.view.TextureView
 import livekit.org.webrtc.EglBase
 import livekit.org.webrtc.EglRenderer
@@ -165,9 +166,14 @@ internal class VideoTextureView(
         val w = frameWidth
         val h = frameHeight
         if (w > 0 && h > 0) {
-            drawnOnce = true
-            updateOpaque()
-            onDrawn?.onDrawn(w, h)
+            Trace.beginSection(TRACE_SHOWN)
+            try {
+                drawnOnce = true
+                updateOpaque()
+                onDrawn?.onDrawn(w, h)
+            } finally {
+                Trace.endSection()
+            }
         }
     }
 
@@ -193,6 +199,10 @@ internal class VideoTextureView(
         updateOpaque()
     }
 
+    private companion object {
+        /** A trace section for each new picture the view shows (main thread, inside the window's draw). */
+        const val TRACE_SHOWN = "ha-webrtc frame shown"
+    }
 }
 
 /**

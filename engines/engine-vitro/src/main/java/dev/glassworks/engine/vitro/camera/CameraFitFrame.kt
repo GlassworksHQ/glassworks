@@ -6,6 +6,7 @@ package dev.glassworks.engine.vitro.camera
 
 import android.content.Context
 import android.graphics.Rect
+import android.os.Trace
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
@@ -18,7 +19,8 @@ import dev.glassworks.platform.Platform
  * `contain` (letterboxed, the video's default), `cover` (cropped) or `fill` (stretched, the image's default). Until
  * the picture's size is known ([setVideoSize]) the view fills the frame. The frame clips what `cover` puts outside.
  *
- * Its player draws into a TextureView, so the video fades, clips and filters with its card as HA's `<video>` does.
+ * Its player draws into a TextureView, so the video fades, clips and filters with its card as HA's `<video>` does;
+ * the view's one overlay camera ([CameraOverlay]) into a SurfaceView, whose hole in the window the frame's clip shapes.
  */
 class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
     var fit: String = fit
@@ -31,6 +33,18 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
 
     private var videoW = 0
     private var videoH = 0
+
+    /**
+     * Its picture crops itself to its view for `cover` ([CameraStreamCrop]: a SurfaceView's): the view then gets the
+     * frame's size, not a larger one the frame clips. Main thread.
+     */
+    var childCrops: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            requestLayout()
+            coverMayHaveChanged()
+        }
 
     /**
      * The picture fills the whole frame, no letterbox: `cover`, `fill`, a video whose shape is the frame's (within
@@ -87,6 +101,20 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
     }
 
     /**
+     * Android 8 and later: a change inside passes up to the window. A video frame's (its TextureView's, on every frame)
+     * is a `vitro camera invalidate` trace section, the card guards' part of it included.
+     */
+    override fun onDescendantInvalidated(child: View, target: View) {
+        if (target !is TextureView) return super.onDescendantInvalidated(child, target)
+        Trace.beginSection(TRACE_INVALIDATE)
+        try {
+            super.onDescendantInvalidated(child, target)
+        } finally {
+            Trace.endSection()
+        }
+    }
+
+    /**
      * Android 6 and 7: its child changed, and when that's a video's TextureView (a new frame), the card guards above
      * hear it as one ([VideoRedraw]) and don't record themselves again for it. Android 8 and later tell them which
      * view changed instead.
@@ -117,7 +145,7 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
      * the stretch this costs is under 0.2% of a 720p picture.
      */
     internal fun fitted(w: Int, h: Int): Pair<Int, Int> {
-        if (videoW <= 0 || videoH <= 0 || w <= 0 || h <= 0 || fit == FILL) return w to h
+        if (videoW <= 0 || videoH <= 0 || w <= 0 || h <= 0 || fit == FILL || (fit == COVER && childCrops)) return w to h
         val scaleW = w.toFloat() / videoW
         val scaleH = h.toFloat() / videoH
         val scale = if (fit == COVER) maxOf(scaleW, scaleH) else minOf(scaleW, scaleH)
@@ -130,6 +158,8 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
         const val CONTAIN = "contain"
         const val COVER = "cover"
         const val FILL = "fill"
+
+        private const val TRACE_INVALIDATE = "vitro camera invalidate"
 
         /** How close, in pixels, a fitted axis may come to the frame before it takes the frame's size ([fitted]). */
         internal const val SNAP_PX = 2

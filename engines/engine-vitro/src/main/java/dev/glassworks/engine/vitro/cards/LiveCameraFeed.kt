@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.cards
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.Log
+import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -14,7 +15,9 @@ import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.camera.CameraFitFrame
 import dev.glassworks.engine.vitro.camera.CameraKnowledge
 import dev.glassworks.engine.vitro.camera.CameraStream
+import dev.glassworks.engine.vitro.camera.CameraOverlay
 import dev.glassworks.engine.vitro.camera.CameraStreamChoice
+import dev.glassworks.engine.vitro.camera.CameraStreamCrop
 import dev.glassworks.engine.vitro.camera.CameraStreamKind
 import dev.glassworks.engine.vitro.camera.CameraStreamVideoSize
 import dev.glassworks.engine.vitro.camera.CameraVideoBudget
@@ -433,6 +436,8 @@ internal class LiveCameraFeed(
     fun stop() {
         running = false
         live -= this
+        cancelLayoutWait()
+        CameraOverlay.forget(this)
         stopPolling()
         cancelVideoRetry()
         cancelTimers()
@@ -659,6 +664,12 @@ internal class LiveCameraFeed(
         }
         for (p in plan) {
             if (p.kind == CameraStreamKind.MJPEG && mjpegDown) continue
+            // Whether this camera is its view's overlay is known once its card is laid out ([CameraOverlay]): WebRTC
+            // opens then, the other kinds (and MJPEG over the still) meanwhile.
+            if (slots[p.kind] == null && overlayFor(p.kind) == null) {
+                openAfterLayout()
+                continue
+            }
             val slot = slots[p.kind] ?: open(p.kind) ?: continue
             slot.frame.alpha = if (p.visible) 1f else 0f
             if (p.visible && slot.hasFrame) sizeFrom(slot, force = true)
@@ -693,16 +704,60 @@ internal class LiveCameraFeed(
         }
     }
 
+    /**
+     * Whether [kind]'s player draws into a SurfaceView, the view's one overlay ([CameraOverlay]): More Info's camera
+     * always, a card's when it's the largest on screen as its view first lays its cameras out. Null: its card isn't
+     * laid out yet, so it isn't known. Only for a player that can ([CameraStreamFactory.supportsOverlay]: WebRTC's).
+     */
+    private fun overlayFor(kind: CameraStreamKind): Boolean? {
+        if (!CameraOverlay.enabled || ctx.cameraPlayers?.supportsOverlay(kind) != true) return false
+        if (foreground) return true
+        val h = host ?: return false
+        return CameraOverlay.choose(this, h) {
+            live.mapNotNull { f -> f.host?.takeIf { f.stream && !f.foreground && f.running }?.let { f to it } }
+        }
+    }
+
+    private var layoutWait: View.OnLayoutChangeListener? = null
+
+    /** The plan runs again once [host] is laid out (after the whole layout pass: posted). */
+    private fun openAfterLayout() {
+        val h = host ?: return
+        if (layoutWait != null) return
+        val wait = object : View.OnLayoutChangeListener {
+            override fun onLayoutChange(v: View, l: Int, t: Int, r: Int, b: Int, oldL: Int, oldT: Int, oldR: Int, oldB: Int) {
+                cancelLayoutWait()
+                if (running) scheduleRecompute()
+            }
+        }
+        layoutWait = wait
+        h.addOnLayoutChangeListener(wait)
+        // Laid out already (attached since): the next layout may be far off, so look again after this turn.
+        if (h.isAttachedToWindow && h.width > 0 && !h.isLayoutRequested) ctx.main.post { if (layoutWait === wait) wait.onLayoutChange(h, 0, 0, 0, 0, 0, 0, 0, 0) }
+    }
+
+    private fun cancelLayoutWait() {
+        val w = layoutWait ?: return
+        layoutWait = null
+        host?.removeOnLayoutChangeListener(w)
+    }
+
     private fun open(kind: CameraStreamKind): Slot? {
         val players = ctx.cameraPlayers
         val target = host
-        val created = if (players == null || target == null) null else guard(kind) { players.create(entityId, kind) }
+        val overlay = overlayFor(kind) == true
+        val created = if (players == null || target == null) null else guard(kind) { players.create(entityId, kind, overlay) }
         if (created == null) {
             // No player for it here (or it threw): that kind failed, as HA's player reports `hasVideo: false`.
             failed(kind)
             return null
         }
         val frame = CameraFitFrame(requireNotNull(target).context, CameraFitFrame.fitFor(fitMode, kind))
+        // An overlay's picture is a layer under the window, which the frame's clip doesn't crop: for `cover` it crops
+        // itself to a view the frame's size, so it never reaches under the cards around it.
+        if (created.view is SurfaceView && frame.fit == CameraFitFrame.COVER) {
+            frame.childCrops = guard(kind) { (created as? CameraStreamCrop)?.cropToView(true) } == true
+        }
         val slot = Slot(created, frame)
         // A letterboxed picture leaves the still showing in its bands: it's hidden only once the picture fills the frame.
         frame.onCoverChanged = { if (slots[kind] === slot) updateStill() }

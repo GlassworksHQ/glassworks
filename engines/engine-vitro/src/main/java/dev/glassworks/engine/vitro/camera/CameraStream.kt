@@ -104,6 +104,16 @@ interface CameraStreamVideoSize {
 }
 
 /**
+ * Optional on a [CameraStream] whose picture is an overlay (a SurfaceView, [CameraOverlay]): [cropToView] true crops
+ * the picture to its view itself (CSS `cover`), so the card's frame sizes the view to itself rather than larger than
+ * itself and clipped. A SurfaceView's picture is a layer under the window: the frame's clip shapes the hole it shows
+ * through, but not the layer, which would reach under the cards around it. Returns false when it can't. Main thread.
+ */
+interface CameraStreamCrop {
+    fun cropToView(crop: Boolean): Boolean
+}
+
+/**
  * The kinds of live stream, in HA's order of preference: WebRTC, then HLS (both from `camera/capabilities`'
  * `frontend_stream_types`), then the MJPEG proxy stream every camera has.
  */
@@ -116,6 +126,16 @@ enum class CameraStreamKind { WEB_RTC, HLS, MJPEG }
  */
 interface CameraStreamFactory {
     fun create(entityId: String, kind: CameraStreamKind): CameraStream?
+
+    /**
+     * As [create], [overlay] true asking for a picture the system composites as a layer of its own (a SurfaceView)
+     * rather than one drawn in the window ([CameraOverlay]). A factory that can't ([supportsOverlay] false) makes its
+     * usual one.
+     */
+    fun create(entityId: String, kind: CameraStreamKind, overlay: Boolean): CameraStream? = create(entityId, kind)
+
+    /** Whether [create] can make [kind]'s picture an overlay. Optional; false by default. */
+    fun supportsOverlay(kind: CameraStreamKind): Boolean = false
 
     /**
      * A camera that plays this kind is about to start: what every stream of the kind shares (libwebrtc's factory and

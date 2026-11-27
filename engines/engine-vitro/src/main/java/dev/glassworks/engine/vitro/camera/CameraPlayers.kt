@@ -17,6 +17,11 @@ class CameraPlayers(private val factories: Map<CameraStreamKind, CameraStreamFac
 
     override fun create(entityId: String, kind: CameraStreamKind): CameraStream? = factories[kind]?.create(entityId, kind)
 
+    override fun create(entityId: String, kind: CameraStreamKind, overlay: Boolean): CameraStream? =
+        factories[kind]?.create(entityId, kind, overlay)
+
+    override fun supportsOverlay(kind: CameraStreamKind): Boolean = factories[kind]?.supportsOverlay(kind) == true
+
     /** [kind]'s player gets ready ([CameraStreamFactory.prewarm]): a camera is about to play it. */
     fun prewarm(kind: CameraStreamKind) {
         factories[kind]?.prewarm()
