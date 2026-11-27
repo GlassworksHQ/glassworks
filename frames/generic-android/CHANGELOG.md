@@ -37,6 +37,12 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
+### Changed
+- **Vitro dashboards open faster and stay smoother while values change.** With Vitro on, big dashboards build their
+  cards with less work, history graphs and sensor graphs read their history in the background, and a value that keeps
+  changing, such as a power sensor or a clock with seconds, no longer makes the whole dashboard lay itself out again.
+  Nothing looks different.
+
 ### Fixed
 - **Glassworks no longer crashes on devices with 16 KB memory pages.** The wake word engine's native library was
   built for 4 KB pages. On a device that uses 16 KB pages, the app crashed as soon as the wake word started and
