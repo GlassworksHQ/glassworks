@@ -37,6 +37,34 @@ class MicrophoneTest {
         return made.get()
     }
 
+    /** The arrays the first [n] frames came in. */
+    private fun frameArrays(reuse: Boolean, n: Int = 3): List<ShortArray> {
+        val got = java.util.Collections.synchronizedList(ArrayList<ShortArray>())
+        val done = CountDownLatch(n)
+        val mic = Microphone(
+            gain = 1f,
+            allowed = { true },
+            onError = {},
+            onFrame = { got += it; done.countDown() },
+            reuseFrame = reuse,
+        )
+        mic.start()
+        try {
+            assertTrue("it read $n frames", done.await(5, TimeUnit.SECONDS))
+        } finally {
+            mic.stop()
+        }
+        return got.take(n)
+    }
+
+    @Test
+    fun aConsumerThatCopiesGetsOneArrayAndOneThatKeepsGetsNewOnes() {
+        val reused = frameArrays(reuse = true)
+        assertTrue("one array for every frame", reused.all { it === reused[0] })
+        val kept = frameArrays(reuse = false)
+        assertEquals("a new array each frame", kept.size, kept.map { System.identityHashCode(it) }.toSet().size)
+    }
+
     @Test
     fun withoutThePermissionItMakesNoRecorder() {
         assertEquals(0, recordersMade(allowed = false))

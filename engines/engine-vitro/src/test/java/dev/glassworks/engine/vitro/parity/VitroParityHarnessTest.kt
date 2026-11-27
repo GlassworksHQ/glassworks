@@ -80,7 +80,9 @@ class VitroParityHarnessTest {
                 shared?.let { haVersion = it.haVersion }
                 // Each corpus starts from the harness's own zone: one without a zone doesn't inherit the last one's.
                 TimeZone.setDefault(tz)
+                dev.glassworks.engine.vitro.data.HaLocale.deviceZoneChanged(null)
                 shared?.haConfig?.optString("time_zone")?.takeIf { it.isNotBlank() }?.let { TimeZone.setDefault(TimeZone.getTimeZone(it)) }
+                dev.glassworks.engine.vitro.data.HaLocale.deviceZoneChanged(null)
                 val cases = ParityCase.loadAll(root).filter { ParityFiles.onlyCases == null || it.id in ParityFiles.onlyCases!! }
                 val baseline = ParityBaseline(File(root, "baseline.json"))
                 val open = ParityOpen(File(root, "open.json"))
@@ -107,6 +109,7 @@ class VitroParityHarnessTest {
             }
         } finally {
             TimeZone.setDefault(tz)
+            dev.glassworks.engine.vitro.data.HaLocale.deviceZoneChanged(null)
             Locale.setDefault(locale)
         }
         // Cases and frames that pass the ID checks can still pair up to nothing (a case only for s1, run on tablet).

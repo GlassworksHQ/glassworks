@@ -219,6 +219,7 @@ class VisualParityWave2Test {
     fun clockFormatsInHomeAssistantsTimeZoneWhenTheUserPicksIt() {
         val prev = java.util.TimeZone.getDefault()
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
+        dev.glassworks.engine.vitro.data.HaLocale.deviceZoneChanged(null)
         // HA 2026.11's clock with no `time_zone` of its own uses the user's choice (resolveTimeZone): here HA's.
         dev.glassworks.engine.vitro.data.HaLocale.set(dev.glassworks.engine.vitro.data.FrontendLocale(timeZone = "server"), notify = false)
         try {
@@ -250,6 +251,7 @@ class VisualParityWave2Test {
     fun theClockDateUsesTheSameZoneAsItsTime() {
         val prev = java.util.TimeZone.getDefault()
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
+        dev.glassworks.engine.vitro.data.HaLocale.deviceZoneChanged(null)
         dev.glassworks.engine.vitro.data.HaLocale.set(dev.glassworks.engine.vitro.data.FrontendLocale(timeZone = "server"), notify = false)
         try {
             // 20:00 UTC on a Monday is already Tuesday in Tokyo: the date must say so, from the very first render.

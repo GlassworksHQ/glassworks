@@ -530,6 +530,29 @@ class VitroIslandServerTest {
     }
 
     @Test
+    fun aBodyOfDeclaredLengthIsReadIntoOneArrayOfThatSize() {
+        val body = ByteArray(100_000) { (it % 251).toByte() }
+        assertTrue(body.contentEquals(VitroIslandServer.readCapped(java.io.ByteArrayInputStream(body), 1 shl 20, expected = body.size.toLong())))
+        // Shorter than declared: what came. Longer: all of it, still under the cap.
+        assertEquals(40, VitroIslandServer.readCapped(java.io.ByteArrayInputStream(ByteArray(40)), 1 shl 20, expected = 100).size)
+        val long = ByteArray(5_000) { 7 }
+        assertTrue(long.contentEquals(VitroIslandServer.readCapped(java.io.ByteArrayInputStream(long), 1 shl 20, expected = 1_000)))
+        // A declared length over the cap reads as an unknown one, and fails at the cap.
+        try {
+            VitroIslandServer.readCapped(java.io.ByteArrayInputStream(ByteArray(3_000)), 2_048, expected = 3_000)
+            org.junit.Assert.fail("over the cap")
+        } catch (e: IOException) {
+            assertTrue(e.message.orEmpty().contains("over"))
+        }
+        try {
+            VitroIslandServer.readCapped(java.io.ByteArrayInputStream(ByteArray(3_000)), 2_048, expected = 1_000)
+            org.junit.Assert.fail("longer than declared and over the cap")
+        } catch (e: IOException) {
+            assertTrue(e.message.orEmpty().contains("over"))
+        }
+    }
+
+    @Test
     fun proxiedBodiesShareOneMemoryBudget() {
         // 32 KiB of room: a 64 KiB body can't be read while it's taken, and what was taken is reported to release.
         val budget = java.util.concurrent.Semaphore(32)

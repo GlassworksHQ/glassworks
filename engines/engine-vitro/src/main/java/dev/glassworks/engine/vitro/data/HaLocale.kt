@@ -70,14 +70,57 @@ object HaLocale {
     /** The panel's locale, as the browser HA's frontend runs in would report it. Tests replace it. */
     @Volatile var deviceLocale: () -> Locale = { Locale.getDefault() }
 
-    /** The panel's time zone (HA's `LOCAL_TIME_ZONE`). Tests replace it. */
-    @Volatile var deviceTimeZone: () -> TimeZone = { TimeZone.getDefault() }
+    /**
+     * The panel's time zone (HA's `LOCAL_TIME_ZONE`). Read once and kept: `TimeZone.getDefault()` copies the zone,
+     * its whole transition table included, on every call, and the store reads it for timestamps as states land.
+     * [deviceZoneChanged] replaces it when the device's zone changes ([watchDeviceZone]). Tests replace it.
+     */
+    @Volatile var deviceTimeZone: () -> TimeZone = {
+        // Read and stored under [zoneLock], as [deviceZoneChanged] stores: a read that found nothing kept can't write
+        // the old default back over a newer zone the broadcast stored meanwhile (Greptile on #956).
+        deviceZone ?: synchronized(zoneLock) { deviceZone ?: TimeZone.getDefault().also { deviceZone = it } }
+    }
+
+    @Volatile private var deviceZone: TimeZone? = null
+    private val zoneLock = Any()
+
+    /**
+     * The device's zone changed (`ACTION_TIMEZONE_CHANGED`, its new zone's [id] when the broadcast names it): the zone
+     * kept is that one, or the device's default read afresh at the next use.
+     */
+    fun deviceZoneChanged(id: String?) {
+        val zone = id?.takeIf { it.isNotBlank() }?.let { TimeZone.getTimeZone(it) }
+        synchronized(zoneLock) { deviceZone = zone }
+    }
+
+    /** The application the zone receiver is registered with ([watchDeviceZone]). */
+    private var zoneWatchedBy: java.lang.ref.WeakReference<android.content.Context>? = null
+
+    /**
+     * Hears the device's zone change from now on, for the process: once per application (a process has one; tests
+     * make a new one per test, and a receiver on an earlier one would hear nothing). Main thread.
+     */
+    fun watchDeviceZone(context: android.content.Context) {
+        val app = context.applicationContext ?: context
+        if (zoneWatchedBy?.get() === app) return
+        zoneWatchedBy = java.lang.ref.WeakReference(app)
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context?, intent: android.content.Intent?) {
+                deviceZoneChanged(intent?.getStringExtra(android.content.Intent.EXTRA_TIMEZONE))
+            }
+        }
+        val filter = android.content.IntentFilter(android.content.Intent.ACTION_TIMEZONE_CHANGED)
+        // A protected system broadcast: Android 14's exported flag isn't needed for a receiver that hears only those
+        // (as ScreenPolicy's screen on and off).
+        app.registerReceiver(receiver, filter)
+    }
 
     fun addListener(l: () -> Unit) { listeners += l }
     fun removeListener(l: () -> Unit) { listeners -= l }
 
     /** Back to the browser's defaults: a new connection, or tests. */
     fun reset() {
+        synchronized(zoneLock) { deviceZone = null }
         synchronized(lock) {
             write(FrontendLocale(language = deviceLanguage()))
             serverTimeZone = null
