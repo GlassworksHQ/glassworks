@@ -12,82 +12,57 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 
 **Glassworks 1.0 needs Home Assistant 2026.11 or newer for notifications and the radio controls. It's the first stable release for the Aqara S1 Plus, with everything from 0.9.0.**
 
-**Upgrading from 0.4.x.** First check the panel's *Radio helper* sensor in Home Assistant. If it says the boot image
-needs refreshing, run a full Kiln install once more: that installs 1.0.0, and the app's radio bundle can then add the
-frame loader, which lets Home Assistant update the rest of the panel ([the frame's
-notes](https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/FRAME-CHANGELOG.md) explain).
-Otherwise, on 0.4.4, Home Assistant offers 1.0.0 on the panel's update card, and
-Install takes it straight there. A panel on 0.4.1, 0.4.2 or 0.4.3 is offered 0.4.4 first: install it, and 1.0.0
-shows up next, so it's two updates and no reinstall. Panels on 0.4.0 or older can't install updates from Home
-Assistant, so update them once by hand with Kiln's [Finish setting
-up](https://kiln.glassworks.dev/aqara-s1-plus/set-up), and Home Assistant takes over from there. The panel keeps its
-Home Assistant device, entity IDs and settings. Most of what changed since 0.4.x arrived in 0.9.0, so read [its
-notes](https://github.com/GlassworksHQ/glassworks/blob/main/CHANGELOG.md#090---2026-11-24) too. Two of them ask you
-to do something. So that a room's "lights off" skips the panel's screen, reload the ESPHome integration once and turn
-off Expose for the panel's *Screen* light in *Settings → Voice assistants → Expose*. If you used the built-in night
-window, import the Panel night mode blueprint. 1.0.0 itself asks one more thing: run Home Assistant 2026.11 or newer,
-which gives the panel its encryption key. On an older Home Assistant, `notify` messages and the radio controls stop
-working, as the item on the encryption key below explains.
+**Upgrading from 0.4.x**
+
+1. Check the panel's *Radio helper* sensor in Home Assistant. If it says the boot image needs refreshing, run a full
+   Kiln install once more and skip the steps below ([the frame's
+   notes](https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/FRAME-CHANGELOG.md) explain why).
+2. Update Home Assistant to 2026.11 or newer, so it can give the panel its encryption key.
+3. Install 1.0.0 from the panel's update card. A panel on 0.4.1 to 0.4.3 gets 0.4.4 first, then 1.0.0. A panel on
+   0.4.0 or older updates once with Kiln's [Finish setting up](https://kiln.glassworks.dev/aqara-s1-plus/set-up), and
+   Home Assistant takes over from there.
+4. Do the two things [0.9.0](https://github.com/GlassworksHQ/glassworks/blob/main/CHANGELOG.md#090---2026-11-24)
+   asks for: reload the ESPHome integration and turn off Expose for the panel's *Screen* light, and import the Panel
+   night mode blueprint if you used the built-in night window.
+
+The panel keeps its Home Assistant device, entity IDs and settings.
 
 ### Added
-- **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
-  page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
-  with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel
-  down in Home Assistant quiets all of it, not only announcements. The Music page's slider is now called
-  **Music volume** and sets Music Assistant's level under it.
-- **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
-  when the panel is turned down or muted, and the volume goes back to where it was after each tone.
+- **One volume for everything the panel plays.** A new **Sound** page, in the panel's settings and on the Manage
+  page, sets the volume for voice replies, timers, notifications, Music Assistant and the dashboard, with a mute
+  switch. Home Assistant's *Speaker* volume and mute control it too, and the Music page's slider is now
+  **Music volume**.
+- **Critical alerts play at full volume**, even when the panel is turned down or muted.
 
 ### Changed
-- **Kiln is easier to move around in.** Every installer screen has a Back button in the same place when going back is
-  safe, and says why when it isn't. Done steps on the side rail are links back to them. Reopening Kiln partway through
-  an install shows where you stopped and what's already on the device, with Continue and a way out. Start over asks
-  first, in a dialog that says what starts again and what stays. On a phone, a slim step bar opens the full list of
-  steps, and the main button stays at the bottom of the screen.
+- **Some Home Assistant controls need the encryption key.** Home Assistant 2026.11 or newer sets the key when you
+  add the panel, so add it from a network you trust. Until the key is set, `notify` messages, the radio controls,
+  **Dashboard URL**, **Sign out**, **Start Wi-Fi setup (Bluetooth)** and **Open device settings** don't work from
+  Home Assistant, so nobody else on your network can use them. Everyday controls like the speaker, reload and
+  restart work as before.
+- **Only Home Assistant gets the microphone and the camera.** The panel gives them to pages on your Home Assistant
+  and the secure hosts in its settings, and refuses everything else, including sites framed in your dashboard.
+- **Kiln is easier to find your way around.** Every screen has a Back button where going back is safe, finished
+  steps are links, and reopening Kiln partway through picks up where you stopped. On a phone, a slim step bar opens
+  the full list of steps.
 
 ### Fixed
-- **Another device on your network can no longer replace the panel's Home Assistant sign-in.** Once the panel is
-  signed in, its sign-in page only lets you sign in again from a browser signed in to the panel's Manage page. To use
-  another account, sign the panel out first. The panel's web pages also answer only to the panel's own address now,
-  which blocks pages on other sites from reaching them.
-- **Changing the language from Kiln no longer leaves the old dashboard running.** When Kiln sets the panel's
-  language, or the system font size changes, the panel now closes the old dashboard page before it opens the new
-  one, so the two don't both hold memory.
-- **App updates fail fast when Android blocks unknown-source installs, and S1 Plus setup allows them for fallback updates.** On a panel without the root update service, starting an update when "Install unknown apps" is off used to open a dead-end Android dialog and wait 10 minutes to time out. Glassworks now reports the missing permission right away, and both Kiln and `install.sh` allow "Install unknown apps" on the S1 Plus so fallback updates can show Android's confirmation screen.
-- **Radio firmware sensor says `none` instead of `v1` when no root helper is installed.** Panels without a root helper previously showed `(installed: v1)` in the Radio firmware sensor alongside the Radio helper sensor saying no helper was installed.
-- **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
-  restarts the app once, and a sign-in started just then, like Kiln's, was forgotten by the time Home Assistant sent
-  you back, so the panel said "This link has expired" until you signed in again. The panel now remembers a sign-in
-  in progress across the restart.
-- **The first sign-in no longer fails with "Can't reach Home Assistant" when you enter a `.local` address.**
-  Android 11 and older can't look up names like `homeassistant.local`, so the panel reaches Home Assistant through
-  the address it finds on your network. A sign-in started before the panel had found that address kept the name and
-  failed, and it only worked when you tried again. The panel now finishes the sign-in through the address it has
-  found by then, waiting a few seconds for it if needed.
-- **The dashboard no longer keeps drawing behind another app after Android closes it.** When Android closed the
-  dashboard's page to free memory while another app was in front, the page the panel opened in its place kept
-  running as if it were on screen until you came back to the panel. It now waits in the background, as the page did
-  before Android closed it.
-- **The panel's address never comes from a hotspot.** The address the panel shows and hands to Home Assistant (setup page, sign-in code, Thread join, the radio's ZHA and Thread addresses, *IP address*) now comes only from the Wi-Fi network Android is connected to. While the setup Wi-Fi or Android's tethering was up, it could show the hotspot's own address instead.
-- **Kiln installs the newest S1 release.** A fresh install from Kiln's S1 page now downloads the app from the newest
-  release at the moment you install, so a panel no longer starts out one version behind and offers an update right
-  away.
-- **Only Home Assistant gets the microphone and the camera.** The panel used to hand the microphone, the camera and
-  every other page permission to any page it showed, without asking. Now only pages on your Home Assistant and on the
-  secure hosts in the panel's settings get them. A link that leads off your dashboard, or another site framed inside it,
-  is refused, and the panel's log says so. An `allow` attribute on the frame doesn't change that: a site framed in
-  your dashboard needs to be one of the secure hosts too. Permissions an older version saved for other sites, including
-  framed ones, are forgotten when the app starts.
-- **Some Home Assistant controls need the encryption key.** Until Home Assistant gives the panel its key, anyone on
-  your network can reach the panel's ESPHome connection. **Dashboard URL**, **Sign out**, **Start Wi-Fi setup
-  (Bluetooth)** and **Open device settings** now work only over the encrypted connection, so once Home Assistant has
-  set the key, no other device can point the panel at its own page. Home Assistant 2026.11 or newer sets the key by
-  itself when you add the panel; do that from a network you trust. On an older Home Assistant, change these on the
-  panel or on the Manage page. The speaker, reload, restart and the other everyday controls work as before.
-  Notifications sent with the `notify` action and every radio control (**Radio mode**, **Radio allowed clients**,
-  **Join** and **Leave Zigbee network**, **Thread dataset**) need the key too, so a stranger on your network can't
-  put an alert on the screen or move the panel's radio to another network. On an older Home Assistant, `notify`
-  calls fail until you update it.
+- **Another device on your network can no longer replace the panel's Home Assistant sign-in.** Once signed in,
+  signing in again requires a browser signed in to the panel's Manage page (or signing out first). The panel's web
+  pages also answer only to the panel's own address, blocking other sites from reaching them.
+- **Changing the language from Kiln no longer leaves the old dashboard running.** Changing the language or system
+  font size now closes the old dashboard page before opening the new one.
+- **The first sign-in after an install works on the first try**, including with a `.local` address. The panel used
+  to lose a sign-in in progress when the app restarted, or fail with "Can't reach Home Assistant" before it had
+  found Home Assistant on your network.
+- **The dashboard stops running behind other apps** after Android closes it to free memory.
+- **The panel's address never comes from a hotspot.** The address it shows and gives Home Assistant always comes
+  from the Wi-Fi network it's connected to.
+- **Kiln installs the newest release**, so a new panel doesn't start one version behind.
+- **App updates fail fast when Android blocks them.** On a panel without the root update service, an update with
+  "Install unknown apps" turned off now says so right away instead of timing out after 10 minutes. Kiln and
+  `install.sh` now turn that setting on for the S1 Plus.
+- **The Radio firmware sensor says `none`** when no root helper is installed, instead of `v1`.
 
 ## [0.9.0] - 2026-11-24
 
