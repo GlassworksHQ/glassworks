@@ -6,6 +6,8 @@ package dev.glassworks.auth
 
 import java.net.URI
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -148,5 +150,41 @@ class SignInReplaceTest {
         // A copy saved before the field existed: no replacing.
         saved.text = """[{"state":"old","client_id":"c","redirect_uri":"r","ha_base":"$ha","created_at":${System.currentTimeMillis()},"purpose":"signin","verifier":"v","then":"QR","slot":-1}]"""
         assertFalse(StateStore(saved = saved).consume("old")!!.replaces)
+    }
+
+    @Test fun aSignInThatFinishesAfterAnotherWasSavedDoesntReplaceIt() {
+        // First setup, two phones: both callbacks pass the check while the panel isn't signed in, and the slower one's
+        // code trade ends after the faster one was saved.
+        val slowIn = CountDownLatch(1)
+        val fastDone = CountDownLatch(1)
+        val revoked: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val api = object : HttpPoster {
+            override fun postForm(url: String, body: String): Pair<Int, String> {
+                if (url.endsWith("/auth/revoke")) { revoked += body; return 200 to "" }
+                val slow = body.contains("code=slow")
+                if (slow) { slowIn.countDown(); assertTrue(fastDone.await(5, TimeUnit.SECONDS)) }
+                val rt = if (slow) "RT-slow" else "RT-fast"
+                return 200 to """{"access_token":"AT","token_type":"Bearer","refresh_token":"$rt","expires_in":1800}"""
+            }
+            override fun get(url: String, maxBytes: Int): Pair<Int, String> = -1 to ""
+        }
+        val s = SignInServer(0, { "$ha/" }, HaTokenClient(api), { auth, _ -> stored = auth }, StateStore(), signedIn = { stored != null })
+        fun req(path: String): SignInServer.Response {
+            val u = URI(path)
+            return s.handle(SignInServer.Request("GET", u.rawPath, OAuth.parseQuery(u.rawQuery), mapOf("host" to panelHost)))
+        }
+        fun begin() = OAuth.parseQuery(URI(req(SignInServer.CONTINUE).headers["Location"]!!).rawQuery)["state"]!!
+        val slow = begin()
+        val fast = begin()
+        var slowResult: SignInServer.Response? = null
+        val t = Thread { slowResult = req("/callback?code=slow&state=${OAuth.enc(slow)}") }.apply { start() }
+        assertTrue(slowIn.await(5, TimeUnit.SECONDS))
+        assertEquals(200, req("/callback?code=fast&state=${OAuth.enc(fast)}").status)
+        fastDone.countDown()
+        t.join(5_000)
+        assertEquals(409, slowResult!!.status)
+        assertEquals("the first sign-in stays", "RT-fast", stored!!.refreshToken)
+        assertEquals("the late one's session is revoked", 1, revoked.size)
+        assertTrue(revoked.single().contains("RT-slow"))
     }
 }

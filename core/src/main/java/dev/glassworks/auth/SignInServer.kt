@@ -95,6 +95,14 @@ class SignInServer(
     @Volatile private var running = false
     private val pool = Executors.newFixedThreadPool(4) { r -> Thread(r, "signin-http").apply { isDaemon = true } }
     private val ids = AtomicInteger()
+    /**
+     * Saving a sign-in is one step with deciding it may be saved: [callback] checks before it trades the code and the
+     * trade takes a while, so two callbacks can both pass while the panel isn't signed in (first setup, two phones).
+     * [stores] counts the sign-ins saved here; a callback that sees it moved during its trade saved over nothing yet,
+     * and doesn't.
+     */
+    private val saveLock = Any()
+    private var stores = 0
 
     val localPort: Int get() = serverSocket?.localPort ?: -1
 
@@ -161,6 +169,9 @@ class SignInServer(
 
     /** Not signed in, or someone allowed to replace the panel's sign-in: a browser signed in to Manage, or the panel's screen asking. */
     private fun mayReplace(req: Request): Boolean = !signedIn() || req.manage || armed()
+
+    /** The panel isn't signed in, or this sign-in was started by someone allowed to replace it, or its screen shows the code. */
+    private fun mayStore(pending: PendingSignIn): Boolean = !signedIn() || pending.replaces || armed()
 
     private fun alreadySignedIn() = page(
         409, "Conflict", "Already signed in",
@@ -234,7 +245,8 @@ class SignInServer(
         }
         pending ?: return expired(then)
         // Signed in since this sign-in started, or started by no one allowed to replace it: the code is not used.
-        if (signedIn() && !pending.replaces && !armed()) return alreadySignedIn()
+        if (!mayStore(pending)) return alreadySignedIn()
+        val seen = synchronized(saveLock) { stores }
         // Another browser finishing the setup page's sign-in (login CSRF): refused, the code is not used. Usually an
         // in-app browser that handed HA's login to the default one: the way back starts it again there.
         if (then == Then.SETUP && !bound) return page(403, "Forbidden", "Can't sign in",
@@ -246,12 +258,26 @@ class SignInServer(
             is TokenResult.Ok -> {
                 val rt = r.refreshToken
                     ?: return page(502, "Bad Gateway", "Can't sign in", "Home Assistant didn't finish creating the sign-in session.", button = back)
-                try {
-                    onSignedIn(StoredAuth(base.url, pending.clientId, rt), r)
-                } catch (t: Throwable) {
-                    AuthLog.w("storing the token failed", t)
-                    val why = (t as? SignInNotStored)?.let { "${it.message}: its key store isn't available. Try again in a minute." }
-                    return page(500, "Internal Server Error", "Can't sign in", why ?: "The panel couldn't store the sign-in.", button = back)
+                val auth = StoredAuth(base.url, pending.clientId, rt)
+                val late = synchronized(saveLock) {
+                    // Another sign-in was saved while this one traded its code, or the panel was signed in another way
+                    // (or the code on its screen went): this one doesn't replace it.
+                    if (stores != seen || !mayStore(pending)) true else {
+                        try {
+                            onSignedIn(auth, r)
+                        } catch (t: Throwable) {
+                            AuthLog.w("storing the token failed", t)
+                            val why = (t as? SignInNotStored)?.let { "${it.message}: its key store isn't available. Try again in a minute." }
+                            return page(500, "Internal Server Error", "Can't sign in", why ?: "The panel couldn't store the sign-in.", button = back)
+                        }
+                        stores++
+                        false
+                    }
+                }
+                if (late) {
+                    AuthLog.i("A sign-in finished after another one was saved: not stored")
+                    tokens.revoke(auth) // best effort: the session it made in Home Assistant isn't used
+                    return alreadySignedIn()
                 }
                 AuthLog.i("Signed in to ${base.url} (refresh token stored)")
                 if (then == Then.SETUP) return backToSetup()
