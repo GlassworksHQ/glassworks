@@ -44,14 +44,16 @@ internal class VideoTextureView(
     scaling: VideoScaling,
     /** Where a destroyed surface is given back and released, off the main thread ([TEXTURE_RELEASER]). */
     private val releaser: Executor = TEXTURE_RELEASER,
-) : TextureView(context), TextureView.SurfaceTextureListener, VideoSink {
+) : TextureView(context), TextureView.SurfaceTextureListener, VideoOutput {
     private val renderer = EglRenderer("ha-webrtc")
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var frameWidth = 0
     @Volatile private var frameHeight = 0
 
+    override val view: android.view.View get() = this
+
     /** How the picture fills the view. Main thread. */
-    var scaling: VideoScaling = scaling
+    override var scaling: VideoScaling = scaling
         set(value) {
             field = value
             updateLayout()
@@ -63,14 +65,14 @@ internal class VideoTextureView(
     }
 
     /** Starts the render thread on [egl]'s context (the decoders' textures). Any thread. */
-    fun init(egl: EglBase.Context) {
+    override fun init(egl: EglBase.Context) {
         renderer.init(egl, EglBase.CONFIG_RGBA, GlRectDrawer())
         ready = true
         main.post { surfaceTexture?.takeIf { isAvailable }?.let { attach(it) } }
     }
 
     /** Stops the render thread. Any thread but the render thread; blocks until it has stopped. */
-    fun release() {
+    override fun release() {
         handoff.beginShutdown()
         try {
             renderer.release()
@@ -86,11 +88,11 @@ internal class VideoTextureView(
      * with the picture's size, rotation applied. A frame the renderer drops, with no surface to draw on, isn't one.
      */
     @Volatile
-    var onDrawn: ((width: Int, height: Int) -> Unit)? = null
+    override var onDrawn: ((width: Int, height: Int) -> Unit)? = null
 
     /** False: frames aren't drawn (off screen), once one has been. Any thread reads it. */
     @Volatile
-    var rendering: Boolean = true
+    override var rendering: Boolean = true
 
     /** A frame has been drawn on this surface. */
     @Volatile
@@ -128,11 +130,19 @@ internal class VideoTextureView(
         updateLayout()
     }
 
-    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) = attach(surface)
+    override val surfaceReady: Boolean get() = isAvailable
+
+    override var onSurface: ((ready: Boolean) -> Unit)? = null
+
+    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+        attach(surface)
+        onSurface?.invoke(true)
+    }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = updateLayout()
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+        onSurface?.invoke(false)
         attached = false
         // A new surface starts empty: transparent again until its first frame.
         drawnOnce = false

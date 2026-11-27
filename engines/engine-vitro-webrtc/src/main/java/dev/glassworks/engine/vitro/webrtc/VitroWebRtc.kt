@@ -16,6 +16,7 @@ import dev.glassworks.hawebrtc.HaError
 import dev.glassworks.hawebrtc.HaWebRtcPlayer
 import dev.glassworks.hawebrtc.HaWebRtcStream
 import dev.glassworks.hawebrtc.VideoScaling
+import dev.glassworks.hawebrtc.VideoViewKind
 import org.json.JSONObject
 
 /**
@@ -40,11 +41,22 @@ object VitroWebRtc {
     internal val OPTIONS = HaWebRtcPlayer.Options(
         stream = HaWebRtcStream.Options(audio = false, idleTeardownMs = 0),
         scaling = VideoScaling.STRETCH,
+        // A SurfaceView from Android 7: a video frame doesn't make the dashboard draw again (the TextureView's did, so
+        // four cameras kept the S1's render thread busy). Android 6 (the Mirror) keeps the TextureView: its surface
+        // would lag a frame behind as the view scrolls.
+        view = VideoViewKind.AUTO,
     )
+
+    /** [OPTIONS] on a TextureView: More Info's camera ([Factory.createForeground]). */
+    internal val FOREGROUND_OPTIONS = HaWebRtcPlayer.Options(stream = OPTIONS.stream, scaling = OPTIONS.scaling, view = VideoViewKind.TEXTURE_VIEW)
 
     internal class Factory(private val host: CameraStreamHost) : CameraStreamFactory {
         override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
             if (kind == CameraStreamKind.WEB_RTC) WebRtcCameraStream(HaWebRtcPlayer(host.context, HostChannel(host), entityId, OPTIONS)) else null
+
+        /** More Info's camera: its sheet slides in on a layer, which a SurfaceView's picture doesn't follow. */
+        override fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? =
+            if (kind == CameraStreamKind.WEB_RTC) WebRtcCameraStream(HaWebRtcPlayer(host.context, HostChannel(host), entityId, FOREGROUND_OPTIONS)) else null
 
         /** libwebrtc's factory and EGL get made off the main thread while the view builds. */
         override fun prewarm() = HaWebRtcPlayer.prewarm(host.context)
@@ -92,6 +104,7 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
     private var closed = false
 
     init {
+        player.onSurface = { ready -> if (!closed) { if (ready) listener?.onSurfaceReady() else listener?.onSurfaceLost() } }
         player.listener = object : HaWebRtcPlayer.Listener {
             override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) {
                 if (!closed) listener?.onFirstFrame(sinceStartMs)
@@ -116,6 +129,8 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
     override fun setRendering(rendering: Boolean) = player.setRendering(rendering)
 
     override val closeWhenHidden: Boolean get() = true
+
+    override val surfaceReady: Boolean get() = player.surfaceReady
 
     override fun close() {
         if (closed) return

@@ -7,7 +7,9 @@ package dev.glassworks.engine.vitro.camera
 import android.content.Context
 import android.os.Handler
 import android.os.SystemClock
+import android.view.SurfaceView
 import android.view.TextureView
+import android.view.View
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -20,6 +22,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
+import dev.glassworks.platform.Platform
 import org.json.JSONObject
 
 /**
@@ -35,8 +38,11 @@ import org.json.JSONObject
  *   most six HTTP/1.1 connections per host, a limit a panel's own HTTP stack doesn't have. `backBufferLength` caps
  *   what hls.js keeps behind the playhead; ExoPlayer keeps none, which is less on a panel.
  * - Muted, as HA's cards are, and with the audio track off, so no audio decoder runs.
- * - The picture draws in a [TextureView] that stays clear until the first frame, so the card's still shows while
- *   the stream connects.
+ * - The picture draws in a [SurfaceView] from Android 7 (a [TextureView] on Android 6): the system composites it
+ *   under the window, so a frame doesn't make the dashboard draw again. It stays clear (alpha 0, no hole in the
+ *   window) until the first frame, so the card's still shows while the stream connects.
+ * - Off screen ([setRendering] false), once its first frame is in, the player lets go of the view: it keeps
+ *   decoding (Media3 renders to a placeholder surface), so it's live again at once, but draws nothing.
  * - Fallen behind the live window, it goes back to the live edge, as hls.js does; any other playback error, and
  *   `camera/stream` failing, is the stream failing (HA's `hasVideo: false`).
  *
@@ -52,17 +58,28 @@ class HlsCameraStream internal constructor(
     private val callWs: (msg: JSONObject, done: (success: Boolean, result: Any?, error: JSONObject?) -> Unit) -> Unit,
     private val newPlayer: (Context) -> ExoPlayer,
     private val newSource: (url: String) -> MediaSource,
-    /** Where the player draws: the [TextureView] (tests give the player a surface of their own). */
-    private val attachOutput: (ExoPlayer, TextureView) -> Unit,
+    /** Where the player draws: the [view] (tests give the player a surface of their own). */
+    private val attachOutput: (ExoPlayer, View) -> Unit,
+    /** The player lets go of the [view] (off screen). */
+    private val detachOutput: (ExoPlayer, View) -> Unit = { p, _ -> p.clearVideoSurface() },
+    /** A [SurfaceView] (true) or a [TextureView]. */
+    surfaceView: Boolean = Platform.surfaceFollowsScroll,
 ) : CameraStream, CameraStreamVideoSize {
-    constructor(host: CameraStreamHost, entityId: String) : this(
+    constructor(host: CameraStreamHost, entityId: String, surfaceView: Boolean = Platform.surfaceFollowsScroll) : this(
         host.context, host.main, entityId, host.haBase, host.callWs, ::defaultPlayer, ::defaultSource,
-        { p, v -> p.setVideoTextureView(v) },
+        attachOutput = { p, v -> if (v is SurfaceView) p.setVideoSurfaceView(v) else p.setVideoTextureView(v as TextureView) },
+        surfaceView = surfaceView,
     )
 
     private val appContext = context
-    private val texture = TextureView(context).apply { alpha = 0f }
-    override val view: android.view.View get() = texture
+    private val output: View = (if (surfaceView) SurfaceView(context) else TextureView(context)).apply { alpha = 0f }
+    override val view: View get() = output
+
+    /** On screen ([setRendering]). */
+    private var rendering = true
+
+    /** The player draws into [output] now. */
+    private var outputAttached = false
     override var listener: CameraStream.Listener? = null
 
     override var videoWidth = 0
@@ -97,6 +114,21 @@ class HlsCameraStream internal constructor(
         if (active) connect() else disconnect()
     }
 
+    override fun setRendering(rendering: Boolean) {
+        if (closed || this.rendering == rendering) return
+        this.rendering = rendering
+        applyOutput()
+    }
+
+    /** The player draws into the view while on screen, and until its first frame in any case (it says the stream plays). */
+    private fun applyOutput() {
+        val p = player ?: return
+        val want = rendering || !firstFrameSeen
+        if (want == outputAttached) return
+        outputAttached = want
+        if (want) attachOutput(p, output) else detachOutput(p, output)
+    }
+
     override fun close() {
         if (closed) return
         closed = true
@@ -110,7 +142,7 @@ class HlsCameraStream internal constructor(
         startedAt = SystemClock.elapsedRealtime()
         firstFrameSeen = false
         // Clear again until this start's (or resume's) first frame: the last frame of before never shows as live.
-        texture.alpha = 0f
+        output.alpha = 0f
         callWs(JSONObject().put("type", "camera/stream").put("entity_id", entityId)) { ok, result, error ->
             main.post {
                 if (closed || gen != generation) return@post
@@ -133,10 +165,12 @@ class HlsCameraStream internal constructor(
         p.addListener(object : Player.Listener {
             override fun onRenderedFirstFrame() {
                 if (closed || gen != generation) return
-                texture.alpha = 1f
+                output.alpha = 1f
                 if (!firstFrameSeen) {
                     firstFrameSeen = true
                     listener?.onFirstFrame(SystemClock.elapsedRealtime() - startedAt)
+                    // Off screen since before its first frame: it lets go of the view now that it has shown one.
+                    applyOutput()
                 }
             }
 
@@ -168,10 +202,11 @@ class HlsCameraStream internal constructor(
         // Each frame the player hands the surface (on its playback thread): a rendered frame, after the first.
         p.setVideoFrameMetadataListener { _, _, _, _ ->
             main.post {
-                if (!closed && gen == generation && firstFrameSeen) listener?.onFrameRendered()
+                if (!closed && gen == generation && firstFrameSeen && outputAttached) listener?.onFrameRendered()
             }
         }
-        attachOutput(p, texture)
+        attachOutput(p, output)
+        outputAttached = true
         p.setMediaSource(newSource(playlist))
         p.playWhenReady = true
         p.prepare()
@@ -184,6 +219,7 @@ class HlsCameraStream internal constructor(
 
     private fun disconnect() {
         generation++
+        outputAttached = false
         val p = player ?: return
         player = null
         runCatching { p.release() }

@@ -25,7 +25,7 @@ internal class LibWebRtcPeer(
     factory: PeerConnectionFactory,
     config: WebRtcClientConfig,
     audio: Boolean,
-    private val view: VideoTextureView,
+    private val view: VideoOutput,
     private val events: WebRtcPeer.Events,
 ) : WebRtcPeer {
     private val closed = AtomicBoolean(false)

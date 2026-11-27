@@ -36,6 +36,48 @@ class HaWebRtcPlayerTest {
     }
 
     @Test
+    fun `a SurfaceView when asked, clear until its first frame, and AUTO picks it from API 24`() {
+        val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door", HaWebRtcPlayer.Options(view = VideoViewKind.SURFACE_VIEW))
+        val view = player.view
+        assertTrue(view is android.view.SurfaceView)
+        // Alpha 0 draws nothing, the hole in the window included: what's behind it shows until a frame is there.
+        assertEquals(0f, view.alpha)
+        player.close()
+        assertEquals(VideoViewKind.SURFACE_VIEW, VideoViewKind.AUTO.resolved(CompatApi(24)))
+        assertEquals(VideoViewKind.TEXTURE_VIEW, VideoViewKind.AUTO.resolved(CompatApi(23)))
+        assertEquals(VideoViewKind.TEXTURE_VIEW, VideoViewKind.TEXTURE_VIEW.resolved(CompatApi(34)))
+        assertEquals("the library's default stays a TextureView", VideoViewKind.TEXTURE_VIEW, HaWebRtcPlayer.Options().view)
+    }
+
+    @Test
+    fun `a SurfaceView opens its hole with its first frame, and a frame from a surface that went never opens the next`() {
+        val view = VideoSurfaceView(context, VideoScaling.STRETCH) { it.run() }
+        val surfaces = ArrayList<Boolean>()
+        view.onSurface = { surfaces += it }
+        view.surfaceCreated(view.holder)
+        assertTrue(view.surfaceReady)
+        // The renderer isn't drawing on it yet (no render thread here): a render then doesn't count.
+        view.frameRendered()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0f, view.alpha)
+        assertFalse(view.drawnOnce)
+        // Drawing: the first frame opens the hole.
+        val drawing = VideoSurfaceView::class.java.getDeclaredField("drawing").apply { isAccessible = true }
+        drawing.setBoolean(view, true)
+        view.frameRendered()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1f, view.alpha)
+        // A frame finished on the old surface, reported after it went and a new one came: the new one stays clear.
+        view.frameRendered()
+        view.surfaceDestroyed(view.holder)
+        view.surfaceCreated(view.holder)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0f, view.alpha)
+        assertFalse(view.drawnOnce)
+        assertEquals(listOf(true, false, true), surfaces)
+    }
+
+    @Test
     fun `without libwebrtc's native library the player reports start_failed on the main thread`() {
         val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
         val done = CountDownLatch(1)

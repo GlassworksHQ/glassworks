@@ -52,7 +52,8 @@ import org.json.JSONObject
  * - HLS loads beside WebRTC only after WebRTC has gone [EXTRA_DELAY_MS] without video, and stops as soon as WebRTC
  *   has video: HA runs both until both have loaded, and then shows WebRTC (muted, as here), so the second decoder and
  *   HA's HLS stream worker would only cost.
- * - WebRTC playing alone (no slot for HLS beside it) gets [ALONE_TIMEOUT_MS] to show video before HLS takes over,
+ * - WebRTC playing alone (no slot for HLS beside it) gets [ALONE_TIMEOUT_MS], from the moment its view has a
+ *   surface to draw on, to show video before HLS takes over,
  *   rather than the player's own 20 s; a camera whose WebRTC failed to connect plays HLS first for a while
  *   ([CameraKnowledge.webRtcFailedRecently]).
  * - [foreground] (More Info's) takes a slot from a card behind it when every slot is held ([CameraVideoBudget]).
@@ -190,6 +191,9 @@ internal class LiveCameraFeed(
 
     private class Slot(val stream: CameraStream, val frame: CameraFitFrame) {
         var hasFrame = false
+
+        /** When the player's view got its surface ([SystemClock.elapsedRealtime]), or -1 while it has none. */
+        var surfaceAt = -1L
     }
 
     private val slots = LinkedHashMap<CameraStreamKind, Slot>()
@@ -637,8 +641,15 @@ internal class LiveCameraFeed(
         if (!alone) {
             cancelAloneDeadline()
         } else if (!aloneDeadlinePosted) {
-            aloneDeadlinePosted = true
-            ctx.main.postDelayed(aloneDeadline, ALONE_TIMEOUT_MS - EXTRA_DELAY_MS)
+            // Counted from the player's surface, the first moment a frame could be on screen: not from its start, which
+            // [VitroView] puts inside the view's build (a heavy view's build on the S1 took seconds of it). A view not
+            // laid out yet waits for its surface ([CameraStream.Listener.onSurfaceReady] recomputes); the player's
+            // own timeout still bounds a surface that never comes.
+            val since = slots[CameraStreamKind.WEB_RTC]?.surfaceAt ?: -1L
+            if (since >= 0) {
+                aloneDeadlinePosted = true
+                ctx.main.postDelayed(aloneDeadline, (since + ALONE_TIMEOUT_MS - SystemClock.elapsedRealtime()).coerceAtLeast(0L))
+            }
         }
         // On MJPEG because the camera's video failed (not for want of a slot): video is tried again after a while.
         val videoFailed = !capped && video.isEmpty() && supported.any { it != CameraStreamKind.MJPEG }
@@ -653,7 +664,7 @@ internal class LiveCameraFeed(
     private fun open(kind: CameraStreamKind): Slot? {
         val players = ctx.cameraPlayers
         val target = host
-        val created = if (players == null || target == null) null else guard(kind) { players.create(entityId, kind) }
+        val created = if (players == null || target == null) null else guard(kind) { if (foreground) players.createForeground(entityId, kind) else players.create(entityId, kind) }
         if (created == null) {
             // No player for it here (or it threw): that kind failed, as HA's player reports `hasVideo: false`.
             failed(kind)
@@ -666,6 +677,7 @@ internal class LiveCameraFeed(
             frame.addView(created.view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             requireNotNull(target).addView(frame, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             created.listener = listenerFor(kind, slot)
+            if (created.surfaceReady) slot.surfaceAt = SystemClock.elapsedRealtime()
             created.start()
             if (!onScreen) created.setRendering(false)
         }
@@ -701,6 +713,21 @@ internal class LiveCameraFeed(
             if (!current()) return
             streamFrames++
             sizeFrom(slot)
+        }
+
+        override fun onSurfaceReady() {
+            if (!current()) return
+            // A new surface (the first, or one after the last went): WebRTC's wait for video starts over from it.
+            slot.surfaceAt = SystemClock.elapsedRealtime()
+            if (kind == CameraStreamKind.WEB_RTC) cancelAloneDeadline()
+            scheduleRecompute()
+        }
+
+        override fun onSurfaceLost() {
+            if (!current()) return
+            // No surface, no frame on screen: the wait stops until the next one ([onSurfaceReady]).
+            slot.surfaceAt = -1L
+            if (kind == CameraStreamKind.WEB_RTC) cancelAloneDeadline()
         }
 
         override fun onError(reason: String) {
@@ -872,7 +899,7 @@ internal class LiveCameraFeed(
         /** How long WebRTC plays alone before HLS loads beside it, if it has no video by then. */
         const val EXTRA_DELAY_MS = 1_500L
 
-        /** How long WebRTC playing alone has to show video, from its start, when HLS could take over. */
+        /** How long WebRTC playing alone has to show video, from its view's surface, when HLS could take over. */
         const val ALONE_TIMEOUT_MS = 8_000L
 
         /** How long a card is off screen before its slot gives way to a camera on screen. */
