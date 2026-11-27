@@ -257,10 +257,6 @@ internal class ClarityCameras(private val now: () -> Double) {
                 inner.create(entityId, kind)?.let { MeasuredCameraStream(it, entityId, kind) }
                     ?.also { ClarityCameras.current?.opened(it) }
 
-            override fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? =
-                inner.createForeground(entityId, kind)?.let { MeasuredCameraStream(it, entityId, kind) }
-                    ?.also { ClarityCameras.current?.opened(it) }
-
             override fun prewarm() = inner.prewarm()
         }
 

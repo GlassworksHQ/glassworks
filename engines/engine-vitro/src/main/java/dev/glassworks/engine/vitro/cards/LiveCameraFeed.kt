@@ -664,7 +664,7 @@ internal class LiveCameraFeed(
     private fun open(kind: CameraStreamKind): Slot? {
         val players = ctx.cameraPlayers
         val target = host
-        val created = if (players == null || target == null) null else guard(kind) { if (foreground) players.createForeground(entityId, kind) else players.create(entityId, kind) }
+        val created = if (players == null || target == null) null else guard(kind) { players.create(entityId, kind) }
         if (created == null) {
             // No player for it here (or it threw): that kind failed, as HA's player reports `hasVideo: false`.
             failed(kind)

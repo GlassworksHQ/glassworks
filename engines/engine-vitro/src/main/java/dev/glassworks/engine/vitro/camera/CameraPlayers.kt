@@ -17,9 +17,6 @@ class CameraPlayers(private val factories: Map<CameraStreamKind, CameraStreamFac
 
     override fun create(entityId: String, kind: CameraStreamKind): CameraStream? = factories[kind]?.create(entityId, kind)
 
-    override fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? =
-        factories[kind]?.createForeground(entityId, kind)
-
     /** [kind]'s player gets ready ([CameraStreamFactory.prewarm]): a camera is about to play it. */
     fun prewarm(kind: CameraStreamKind) {
         factories[kind]?.prewarm()
@@ -34,9 +31,6 @@ class CameraPlayers(private val factories: Map<CameraStreamKind, CameraStreamFac
             val builtIn = mapOf(
                 CameraStreamKind.HLS to object : CameraStreamFactory {
                     override fun create(entityId: String, kind: CameraStreamKind): CameraStream = HlsCameraStream(host, entityId)
-
-                    override fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream =
-                        HlsCameraStream(host, entityId, surfaceView = false)
                 },
                 CameraStreamKind.MJPEG to object : CameraStreamFactory {
                     override fun create(entityId: String, kind: CameraStreamKind): CameraStream? {
