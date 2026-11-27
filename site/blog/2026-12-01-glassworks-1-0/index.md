@@ -69,6 +69,8 @@ Optional panes like the Bluetooth proxy and camera stay off until you turn them 
 - **[lululemon Studio Mirror](../../../frames/lululemon-mirror/README.md)** — a 40-inch display behind a full-length mirror, installed via the community Glass Panes image or Kiln's stock-in-place patcher (with Device Owner silent updates and a true restore point back to stock). Clarity grade **E** on the web path.
 - **[Generic Android](../../../frames/generic-android/README.md)** — a no-root app for whatever Android tablet you already have, tested on the [Google Pixel Tablet](../../../frames/google-pixel-tablet/README.md) (Clarity grade **B**) and a 2016 [Samsung Galaxy Tab A 10.1](../../../frames/samsung-galaxy-tab-a-10-1-2016/README.md) running LineageOS.
 
+![The lululemon Studio Mirror, Aqara Panel Hub S1 Plus, and Google Pixel Tablet side by side running the same Home Assistant dashboard on Glassworks 1.0](./devices.webp)
+
 ## Cracking open locked hardware—with a road back to stock
 
 Glassworks isn't just an Android app. A huge part of this project is the low-level hardware research underneath it—and neither the Aqara S1 Plus nor the lululemon Studio Mirror could be modified this way before. Through our own research, both devices now have a non-destructive path and a full road back to stock.
