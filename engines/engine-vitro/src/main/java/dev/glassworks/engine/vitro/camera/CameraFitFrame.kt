@@ -26,10 +26,43 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
             if (field == value) return
             field = value
             requestLayout()
+            coverMayHaveChanged()
         }
 
     private var videoW = 0
     private var videoH = 0
+
+    /**
+     * The picture fills the whole frame, no letterbox: `cover`, `fill`, a video whose shape is the frame's (within
+     * [SNAP_PX]), or one whose size isn't known yet (it fills the frame then). False before the frame has a size.
+     * What's behind the frame (the card's still) shows only where this is false.
+     */
+    val coversFrame: Boolean
+        get() {
+            val w = width
+            val h = height
+            if (w <= 0 || h <= 0) return false
+            // `cover` makes the picture larger than the frame on one axis (the frame clips it): that fills it too.
+            val (cw, ch) = fitted(w, h)
+            return cw >= w && ch >= h
+        }
+
+    /** Called when [coversFrame] changes: a new video size, fit or frame size. Main thread. */
+    var onCoverChanged: (() -> Unit)? = null
+
+    private var coveredLast = false
+
+    private fun coverMayHaveChanged() {
+        val now = coversFrame
+        if (now == coveredLast) return
+        coveredLast = now
+        onCoverChanged?.invoke()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        coverMayHaveChanged()
+    }
 
     init {
         clipChildren = true
@@ -40,6 +73,7 @@ class CameraFitFrame(context: Context, fit: String) : ViewGroup(context) {
         videoW = width
         videoH = height
         requestLayout()
+        coverMayHaveChanged()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {

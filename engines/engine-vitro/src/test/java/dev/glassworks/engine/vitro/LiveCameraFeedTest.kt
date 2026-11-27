@@ -206,6 +206,12 @@ class LiveCameraFeedTest {
     private fun live(kind: CameraStreamKind) = made.last { it.kind == kind && !it.closed }
     private fun running() = made.filter { !it.closed }.map { it.kind }
 
+    /** Lays [host] and the players' frames in it out at [w] × [h], as the card would. */
+    private fun lay(host: FrameLayout, w: Int = 1280, h: Int = 720) {
+        host.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
+        host.layout(0, 0, w, h)
+    }
+
     @Test
     fun theStillHidesUnderAStreamsPictureAndShowsAgainWheneverNothingPlaysOverIt() {
         val host = FrameLayout(activity)
@@ -213,6 +219,7 @@ class LiveCameraFeedTest {
         val f = LiveCameraFeed(context(store()), "camera.porch", { null }, host = host, still = still) {}
         f.start()
         idle()
+        lay(host)
         assertEquals("connecting: the still shows", View.VISIBLE, still.visibility)
         val rtc = live(WEB_RTC)
         assertTrue("until the first frame each frame is wanted", rtc.listener!!.wantsFrames)
@@ -242,6 +249,7 @@ class LiveCameraFeedTest {
         live(WEB_RTC).fail()
         assertEquals(View.VISIBLE, still.visibility)
         idle()
+        lay(host)
         assertEquals(listOf(HLS), f.runningKinds)
         assertEquals(View.VISIBLE, still.visibility)
         live(HLS).frame()
@@ -258,12 +266,50 @@ class LiveCameraFeedTest {
         f.start()
         idle()
         extraDue()
+        lay(host)
         assertEquals(listOf(WEB_RTC, HLS), f.runningKinds)
         // WebRTC loads hidden (alpha 0) beside HLS: its picture covers nothing.
         live(WEB_RTC).listener!!.onFirstFrame(10)
         assertEquals(View.VISIBLE, still.visibility)
         live(HLS).frame()
         assertEquals(View.INVISIBLE, still.visibility)
+        f.stop()
+    }
+
+    @Test
+    fun aLetterboxedPictureKeepsTheStillInItsBandsAndAFullOneHidesIt() {
+        val host = FrameLayout(activity)
+        val still = View(activity)
+        val f = LiveCameraFeed(context(store()), "camera.porch", { null }, host = host, still = still) {}
+        f.start()
+        idle()
+        // A 16:9 video in a square card, `contain` (the video's default): bands above and below it.
+        lay(host, 400, 400)
+        live(WEB_RTC).frame(1280, 720)
+        lay(host, 400, 400)
+        assertEquals("letterboxed: HA's poster shows in the bands, so the still stays", View.VISIBLE, still.visibility)
+        // The card takes the video's shape (no aspect_ratio): the picture fills it, and the still goes.
+        lay(host, 400, 225)
+        assertEquals(View.INVISIBLE, still.visibility)
+        // Within the fit's snap of the video's shape (a card rounded to whole pixels) counts as filled too.
+        lay(host, 400, 226)
+        assertEquals(View.INVISIBLE, still.visibility)
+        // A new picture size that no longer fits the card's shape brings the still back at once.
+        live(WEB_RTC).resize(640, 640)
+        assertEquals(View.VISIBLE, still.visibility)
+        f.stop()
+    }
+
+    @Test
+    fun aCoverFitHidesTheStillWhateverTheShapes() {
+        val host = FrameLayout(activity)
+        val still = View(activity)
+        val f = LiveCameraFeed(context(store()), "camera.porch", { null }, host = host, fitMode = CameraFitFrame.COVER, still = still) {}
+        f.start()
+        idle()
+        lay(host, 400, 400)
+        live(WEB_RTC).frame(1280, 720)
+        assertEquals("cover crops to the frame: nothing of the still would show", View.INVISIBLE, still.visibility)
         f.stop()
     }
 

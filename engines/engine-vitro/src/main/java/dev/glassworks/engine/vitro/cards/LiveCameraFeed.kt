@@ -63,8 +63,10 @@ import org.json.JSONObject
  * - A player that keeps nothing worth keeping while paused ([CameraStream.closeWhenHidden]: WebRTC) is closed when
  *   the camera hides, and opened again when it shows.
  * - The card's [still] is hidden while a stream's picture covers it (HA's poster stays under the `<video>`): it isn't
- *   drawn under every video frame. It shows again at once whenever nothing plays over it: the stream stops, fails,
- *   falls back, pauses, or stops drawing off screen; then the next picture drawn on screen hides it again.
+ *   drawn under every video frame. Only where the picture fills its whole frame ([CameraFitFrame.coversFrame]): a
+ *   letterboxed video (`contain` in a card of another shape) keeps the still in its bands, as HA's poster shows
+ *   there. It shows again at once whenever nothing plays over it: the stream stops, fails, falls back, pauses, or
+ *   stops drawing off screen; then the next picture drawn on screen hides it again.
  */
 internal class LiveCameraFeed(
     private val ctx: VitroCardContext,
@@ -702,6 +704,8 @@ internal class LiveCameraFeed(
         }
         val frame = CameraFitFrame(requireNotNull(target).context, CameraFitFrame.fitFor(fitMode, kind))
         val slot = Slot(created, frame)
+        // A letterboxed picture leaves the still showing in its bands: it's hidden only once the picture fills the frame.
+        frame.onCoverChanged = { if (slots[kind] === slot) updateStill() }
         slots[kind] = slot
         val ok = guard(kind) {
             frame.addView(created.view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -812,7 +816,8 @@ internal class LiveCameraFeed(
      */
     private fun updateStill() {
         val view = still ?: return
-        val covered = running && active && onScreen && slots.values.any { it.drawing && it.hasFrame && it.frame.alpha > 0f }
+        val covered = running && active && onScreen &&
+            slots.values.any { it.drawing && it.hasFrame && it.frame.alpha > 0f && it.frame.coversFrame }
         if (covered == stillHidden) return
         stillHidden = covered
         view.visibility = if (covered) View.INVISIBLE else View.VISIBLE
@@ -846,6 +851,7 @@ internal class LiveCameraFeed(
     private fun closeSlot(kind: CameraStreamKind) {
         val slot = slots.remove(kind) ?: return
         slot.drawing = false
+        slot.frame.onCoverChanged = null
         // The still first, so no frame passes with neither the player's picture nor the still.
         updateStill()
         slot.stream.listener = null
