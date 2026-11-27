@@ -373,9 +373,9 @@ class VitroView(
      * view (`hui-masonry-view.ts` `_createColumns`) puts its columns up first and adds every card in 16 ms slices with
      * a frame between, which on a panel draws the first screen over many frames and stretches the whole build.
      * Vitro builds the first screen in one pass instead ([buildMasonryLayout]: the cards whose column, decided from
-     * the config, puts them within it by HA's card sizes), so the first frame shows it whole, then adds the rest in
-     * chunks of at most [REST_SLICE_BUDGET_MS] that don't wait for frames: each runs as soon as the main thread is
-     * free, frames and input in between. The finished view is the one a build in one go makes, as every card's column
+     * the config, puts them within it by HA's card sizes), so the first frame shows it whole. Once that screen has
+     * been drawn twice (it settles first: [postSlice]), it adds the rest in chunks of at most [REST_SLICE_BUDGET_MS]
+     * that don't wait for frames: each runs as soon as the main thread is free, frames and input in between. The finished view is the one a build in one go makes, as every card's column
      * is decided before any is built ([HaMasonry.place]). What waits for the whole view (the islands no card took
      * back, the readiness and metrics, the rebuild for guessed states) waits for its last chunk ([finishBuild]).
      */
