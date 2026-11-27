@@ -13,6 +13,7 @@ import android.graphics.drawable.Drawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import dev.glassworks.engine.vitro.camera.CameraFitFrame
 import dev.glassworks.engine.vitro.cards.CustomButtonCardView
 import dev.glassworks.engine.vitro.cards.SensorGraphCardView
 import dev.glassworks.engine.vitro.cards.StackInCardView
@@ -25,6 +26,7 @@ import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.ContainedCard
+import dev.glassworks.engine.vitro.ui.VideoRedraw
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONArray
@@ -338,7 +340,81 @@ class HardwareRedrawTest {
         assertEquals("the other card works", null, other.failure)
     }
 
+    /** A card surface with a camera's picture (a TextureView in its fit frame, as the players place it) and a label. */
+    private class VideoSurface(ctx: VitroCardContext) : CardSurface(ctx) {
+        val texture = android.view.TextureView(ctx.context)
+        val label = View(ctx.context)
+
+        init {
+            val fit = CameraFitFrame(ctx.context, CameraFitFrame.CONTAIN)
+            fit.addView(texture, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            val host = android.widget.FrameLayout(ctx.context)
+            host.addView(fit, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            addView(host, LayoutParams(LayoutParams.MATCH_PARENT, 90))
+            addView(label, LayoutParams(LayoutParams.MATCH_PARENT, 10))
+        }
+    }
+
+    @Test fun aVideoFrameRedrawsItsTextureViewAloneAndAnyOtherChangeStillRecordsTheCard() {
+        var card: VideoSurface? = null
+        val vv = dashboard(JSONObject().put("type", PLAIN)) { c, ctx -> if (c.type == PLAIN) VideoSurface(ctx).also { card = it } else null }
+        val c = card!!
+        hardwareFrame(vv)
+        hardwareFrame(vv)
+        assertFalse(c.isInvalidated())
+        // A new frame: the TextureView invalidates itself (15 or more times a second per camera). Its draw is the
+        // framework's own and runs no card code: the card keeps its display list.
+        c.texture.invalidate()
+        assertTrue(c.texture.isInvalidated())
+        assertFalse("a video frame doesn't record its card again", c.isInvalidated())
+        hardwareFrame(vv)
+        // Anything else inside the card still records the card, so its draw stays inside the card's catch.
+        c.label.invalidate()
+        assertTrue("another view's change records the card", c.isInvalidated())
+        hardwareFrame(vv)
+        assertEquals(emptyList<Pair<String, String?>>(), contained.toList())
+    }
+
     companion object {
         const val PLAIN = "custom:test-plain"
+    }
+}
+
+/**
+ * Android 6 and 7, where a change climbs through `invalidateChildInParent` without saying which view changed: a video's
+ * [CameraFitFrame] marks its TextureView's frame ([VideoRedraw]) for the card guards above it, for the rest of that
+ * main-thread message only.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [25], application = Application::class)
+class VideoRedrawLegacyTest {
+    private val context = org.robolectric.RuntimeEnvironment.getApplication()
+
+    @After fun reset() = VideoRedraw.resetForTest()
+
+    @Suppress("DEPRECATION")
+    @Test fun aVideoFramesChangeIsMarkedForTheCardsAboveItUntilTheMessageEnds() {
+        val card = android.widget.FrameLayout(context)
+        val other = android.widget.FrameLayout(context)
+        val fit = CameraFitFrame(context, CameraFitFrame.CONTAIN)
+        card.addView(fit)
+        fit.addView(android.view.TextureView(context))
+        fit.invalidateChildInParent(IntArray(2), android.graphics.Rect(0, 0, 10, 10))
+        assertTrue("the guard above the video hears a video frame", VideoRedraw.isVideoFrame(card))
+        assertFalse("a guard elsewhere doesn't", VideoRedraw.isVideoFrame(other))
+        // The next main-thread message: whatever changes then isn't the video's.
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertFalse(VideoRedraw.isVideoFrame(card))
+    }
+
+    @Suppress("DEPRECATION")
+    @Test fun anImagesChangeInAFitFrameIsNotAVideoFrame() {
+        // MJPEG draws into an ImageView, whose draw runs app code: its card still records itself again.
+        val card = android.widget.FrameLayout(context)
+        val fit = CameraFitFrame(context, CameraFitFrame.FILL)
+        card.addView(fit)
+        fit.addView(android.widget.ImageView(context))
+        fit.invalidateChildInParent(IntArray(2), android.graphics.Rect(0, 0, 10, 10))
+        assertFalse(VideoRedraw.isVideoFrame(card))
     }
 }

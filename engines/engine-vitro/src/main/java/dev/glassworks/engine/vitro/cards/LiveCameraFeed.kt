@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.cards
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import dev.glassworks.engine.vitro.VitroFailures
@@ -61,6 +62,11 @@ import org.json.JSONObject
  *   its slot goes to a camera on screen that waits for one.
  * - A player that keeps nothing worth keeping while paused ([CameraStream.closeWhenHidden]: WebRTC) is closed when
  *   the camera hides, and opened again when it shows.
+ * - The card's [still] is hidden while a stream's picture covers it (HA's poster stays under the `<video>`): it isn't
+ *   drawn under every video frame. Only where the picture fills its whole frame ([CameraFitFrame.coversFrame]): a
+ *   letterboxed video (`contain` in a card of another shape) keeps the still in its bands, as HA's poster shows
+ *   there. It shows again at once whenever nothing plays over it: the stream stops, fails, falls back, pauses, or
+ *   stops drawing off screen; then the next picture drawn on screen hides it again.
  */
 internal class LiveCameraFeed(
     private val ctx: VitroCardContext,
@@ -77,6 +83,8 @@ internal class LiveCameraFeed(
     private val cardType: String? = null,
     /** More Info's camera: HA's dialog plays over the dashboard, so it takes a slot from a card behind it if it must. */
     private val foreground: Boolean = false,
+    /** The card's still under [host] ([onBitmap]'s view): hidden while a stream's picture covers it. */
+    private val still: View? = null,
     private val onBitmap: (Bitmap) -> Unit,
 ) {
     private val pollMs = if (stream) POLL_MS else SNAPSHOT_MS
@@ -90,7 +98,8 @@ internal class LiveCameraFeed(
     /** [setActive]'s ask: the card shows. [active] is that and not [offScreenOut]. */
     private var shown = true
 
-    /** The card is on screen ([setOnScreen]). */
+    /** The card is on screen ([setOnScreen]). Read on the players' threads too (their listener's wantsFrames). */
+    @Volatile
     private var onScreen = true
 
     /** Off screen for [PARK_MS]: its slots give way to a camera on screen ([CameraVideoBudget.park]). */
@@ -129,6 +138,9 @@ internal class LiveCameraFeed(
     }
 
     private var running = false
+
+    /** Read on the players' threads too (their listener's wantsFrames). */
+    @Volatile
     private var active = true
     private var polling = false
     private var inFlight = false
@@ -191,6 +203,18 @@ internal class LiveCameraFeed(
 
     private class Slot(val stream: CameraStream, val frame: CameraFitFrame) {
         var hasFrame = false
+
+        /**
+         * A picture of this run is on screen now: drawn since the player started or resumed, and since the card came
+         * back on screen. Until it is, the still shows under it and the player is asked for every frame
+         * ([CameraStream.Listener.wantsFrames], read on its threads).
+         */
+        @Volatile
+        var drawing = false
+
+        /** The picture's size the card last took ([sizeFrom]), 0 × 0 before. */
+        var width = 0
+        var height = 0
 
         /** When the player's view got its surface ([SystemClock.elapsedRealtime]), or -1 while it has none. */
         var surfaceAt = -1L
@@ -289,11 +313,14 @@ internal class LiveCameraFeed(
         ctx.main.removeCallbacks(parkTask)
         for (kind in slots.keys.toList()) {
             val slot = slots[kind] ?: continue
+            // Off screen the players stop drawing: the still is back under them, and stays until one draws again.
+            if (!onScreen) slot.drawing = false
             if (guard(kind) { slot.stream.setRendering(onScreen) } == null) {
                 closeSlot(kind)
                 failed(kind)
             }
         }
+        updateStill()
         if (!running) return
         if (!onScreen) {
             schedulePark()
@@ -331,6 +358,9 @@ internal class LiveCameraFeed(
         this.active = active
         if (!active) {
             hiddenAt = SystemClock.elapsedRealtime()
+            // Paused, nothing plays over the still; a resumed player shows a first frame again before it covers it.
+            for (slot in slots.values) slot.drawing = false
+            updateStill()
             stopPolling()
             cancelVideoRetry()
             cancelTimers()
@@ -423,6 +453,7 @@ internal class LiveCameraFeed(
         for (kind in slots.keys.toList()) closeSlot(kind)
         releaseSlots()
         capped = false
+        updateStill()
     }
 
     /**
@@ -633,8 +664,9 @@ internal class LiveCameraFeed(
             if (p.kind == CameraStreamKind.MJPEG && mjpegDown) continue
             val slot = slots[p.kind] ?: open(p.kind) ?: continue
             slot.frame.alpha = if (p.visible) 1f else 0f
-            if (p.visible && slot.hasFrame) sizeFrom(slot)
+            if (p.visible && slot.hasFrame) sizeFrom(slot, force = true)
         }
+        updateStill()
         // The still polls only while nothing streams: once MJPEG (or video) draws, its frames are the picture.
         if (slots.values.any { it.hasFrame && it.frame.alpha > 0f }) stopPolling()
         // WebRTC alone (no slot for HLS, its turn not come yet, or HLS not loaded) gets a shorter wait for video when
@@ -675,6 +707,8 @@ internal class LiveCameraFeed(
         }
         val frame = CameraFitFrame(requireNotNull(target).context, CameraFitFrame.fitFor(fitMode, kind))
         val slot = Slot(created, frame)
+        // A letterboxed picture leaves the still showing in its bands: it's hidden only once the picture fills the frame.
+        frame.onCoverChanged = { if (slots[kind] === slot) updateStill() }
         slots[kind] = slot
         val ok = guard(kind) {
             frame.addView(created.view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -695,9 +729,13 @@ internal class LiveCameraFeed(
     private fun listenerFor(kind: CameraStreamKind, slot: Slot) = object : CameraStream.Listener {
         private fun current() = running && slots[kind] === slot
 
+        /** Each frame only until this run's picture is on screen: then the still is covered, and the size known. */
+        override val wantsFrames: Boolean get() = !slot.drawing && onScreen && active
+
         override fun onFirstFrame(sinceStartMs: Long) {
             if (!current()) return
             slot.hasFrame = true
+            slot.drawing = true
             streamFrames++
             when (kind) {
                 CameraStreamKind.HLS -> hlsVideo = true
@@ -707,15 +745,25 @@ internal class LiveCameraFeed(
                 }
                 CameraStreamKind.MJPEG -> Unit
             }
-            sizeFrom(slot)
+            sizeFrom(slot, force = true)
             if (slot.frame.alpha > 0f) stopPolling()
+            updateStill()
             scheduleRecompute()
         }
 
         override fun onFrameRendered() {
             if (!current()) return
             streamFrames++
+            // Its size is read when it changes, not every frame (a player that skips frames says so: onVideoSize).
             sizeFrom(slot)
+            if (!slot.drawing && onScreen) {
+                slot.drawing = true
+                updateStill()
+            }
+        }
+
+        override fun onVideoSize() {
+            if (current() && slot.hasFrame) sizeFrom(slot)
         }
 
         override fun onSurfaceReady() {
@@ -746,13 +794,36 @@ internal class LiveCameraFeed(
         override fun onEnded() = onError("ended")
     }
 
-    private fun sizeFrom(slot: Slot) {
+    /**
+     * The card takes [slot]'s picture size when it changed ([force]: and when its player is shown, or drew its first
+     * frame, as the card may have taken another player's size meanwhile).
+     */
+    private fun sizeFrom(slot: Slot, force: Boolean = false) {
         val sized = slot.stream as? CameraStreamVideoSize ?: return
         val w = sized.videoWidth
         val h = sized.videoHeight
         if (w <= 0 || h <= 0) return
+        if (!force && w == slot.width && h == slot.height) return
+        slot.width = w
+        slot.height = h
         slot.frame.setVideoSize(w, h)
         if (slot.frame.alpha > 0f) onVideoSize?.invoke(w, h)
+    }
+
+    /** Whether the still shows now ([still]): hidden while a shown player's picture of this run is on screen. */
+    private var stillHidden = false
+
+    /**
+     * Hides the still while a stream covers it, and shows it again as soon as nothing does. INVISIBLE, not GONE:
+     * the card's layout (and a card sized to the still's shape) stays as it is.
+     */
+    private fun updateStill() {
+        val view = still ?: return
+        val covered = running && active && onScreen &&
+            slots.values.any { it.drawing && it.hasFrame && it.frame.alpha > 0f && it.frame.coversFrame }
+        if (covered == stillHidden) return
+        stillHidden = covered
+        view.visibility = if (covered) View.INVISIBLE else View.VISIBLE
     }
 
     /** [kind] can't play (now): the choice moves on, and a failed MJPEG falls back to polled stills. */
@@ -782,6 +853,10 @@ internal class LiveCameraFeed(
 
     private fun closeSlot(kind: CameraStreamKind) {
         val slot = slots.remove(kind) ?: return
+        slot.drawing = false
+        slot.frame.onCoverChanged = null
+        // The still first, so no frame passes with neither the player's picture nor the still.
+        updateStill()
         slot.stream.listener = null
         guard(kind) { slot.stream.close() }
         runCatching { (slot.frame.parent as? ViewGroup)?.removeView(slot.frame) }

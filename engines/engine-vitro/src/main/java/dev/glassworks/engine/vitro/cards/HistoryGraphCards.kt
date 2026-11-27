@@ -579,7 +579,18 @@ class ChartLegendView(private val ctx: VitroCardContext) : ViewGroup(ctx.context
         addView(pill, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
+    /** The items drawn now ([setItems]). */
+    private var items: List<LegendItem> = emptyList()
+
+    /** Whether the legend draws [other] already: the same series, names, colors and values, in order. */
+    fun shows(other: List<LegendItem>): Boolean = items.size == other.size && items.indices.all { i ->
+        val a = items[i]
+        val b = other[i]
+        a.id == b.id && a.name == b.name && a.color == b.color && a.value == b.value
+    }
+
     fun setItems(items: List<LegendItem>) {
+        this.items = items
         removeAllViews()
         entries.clear()
         val multiple = items.size > 1
@@ -1190,9 +1201,32 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
 
     private var stream: HaGraph.Stream? = null
     private var unsubscribe: (() -> Unit)? = null
-    private var stateHistory: HistoryResult? = null
-    private var statsHistory: HistoryResult? = null
-    private var generation = 0
+    /** The history drawn: the stream's states merged with the statistics before them, built on [GraphWork]'s thread. */
+    private var history: HistoryResult? = null
+    /** The graph thread's own copies of the stream's history and the statistics, which each answer merges. */
+    private var workerStates: HistoryResult? = null
+    private var workerStats: HistoryResult? = null
+    @Volatile private var generation = 0
+
+    /**
+     * The first statistics are still on their way while nothing is drawn: the history's first answer waits for them
+     * (at most [STATS_WAIT_MS]), so the charts are built once with both rather than once for each.
+     */
+    private var awaitingStats = false
+    private var statsWaitPosted = false
+    private val statsWaitOver = Runnable {
+        statsWaitPosted = false
+        awaitingStats = false
+        if (history != null) render()
+    }
+
+    private fun stopStatsWait() {
+        ctx.main.removeCallbacks(statsWaitOver)
+        statsWaitPosted = false
+    }
+
+    /** The charts on screen, by kind and unit: a history with the same ones redraws them in place ([render]). */
+    private var shown: ShownCharts? = null
 
     /** The rejected stream's message: it stays on screen over any history held until a stream delivers again. */
     private var streamError: String? = null
@@ -1244,13 +1278,14 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
     private val redraw: Runnable = object : Runnable {
         override fun run() {
             if (failure != null) return
-            if (stateHistory != null) render()
+            if (history != null && !awaitingStats) render()
             ctx.main.postDelayed(this, 60_000L)
         }
     }
 
     override fun onCardFailed() {
         ctx.main.removeCallbacks(redraw)
+        stopStatsWait()
         unsubscribe?.invoke()
         unsubscribe = null
         stream = null
@@ -1266,6 +1301,8 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
 
     override fun onDetachedFromWindow() {
         ctx.main.removeCallbacks(redraw)
+        stopStatsWait()
+        awaitingStats = false
         unsubscribe?.invoke()
         unsubscribe = null
         stream = null
@@ -1285,11 +1322,27 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
         }, { ev, first ->
             ctx.main.post {
                 if (stream !== s) return@post
-                if (first) s.restart()
                 streamError = null
-                val combined = s.process(ev, ctx.now())
-                stateHistory = HaHistory.compute({ ctx.store[it] }, combined, entityIds, temperatureUnit())
-                render()
+                // The states the history is read with, taken here: the graph thread doesn't read the store.
+                val states = stateSnapshot()
+                val unit = temperatureUnit()
+                val at = ctx.now()
+                GraphWork.run(ctx.main, {
+                    if (first) s.restart()
+                    val combined = s.process(ev, at)
+                    val computed = HaHistory.compute({ states[it] }, combined, entityIds, unit)
+                    workerStates = computed
+                    HaHistory.merge(computed, workerStats)
+                }) { merged ->
+                    if (stream !== s) return@run
+                    history = merged
+                    if (!awaitingStats) {
+                        render()
+                    } else if (!statsWaitPosted) {
+                        statsWaitPosted = true
+                        ctx.main.postDelayed(statsWaitOver, STATS_WAIT_MS)
+                    }
+                }
             }
         }, { error ->
             ctx.main.post {
@@ -1313,14 +1366,43 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
                 .put("statistic_ids", JSONArray(entityIds))
                 .put("period", "hour")
                 .put("types", JSONArray(listOf("mean", "state")))
+            // Nothing drawn yet: the first history waits for these.
+            if (history == null) awaitingStats = true
             ctx.callWs(stats) { ok, result, _ ->
                 ctx.main.post {
                     if (gen != generation) return@post
-                    if (ok && result is JSONObject) statsHistory = HaHistory.statisticsToHistory({ ctx.store[it] }, result, entityIds)
-                    render()
+                    if (!ok || result !is JSONObject) {
+                        statsArrived(null)
+                        return@post
+                    }
+                    val states = stateSnapshot()
+                    GraphWork.run(ctx.main, {
+                        // A newer subscription's statistics replace these: drop them unread.
+                        if (gen != generation) return@run null
+                        val lts = HaHistory.statisticsToHistory({ states[it] }, result, entityIds)
+                        workerStats = lts
+                        workerStates?.let { HaHistory.merge(it, lts) }
+                    }) { merged -> if (gen == generation) statsArrived(merged) }
                 }
             }
         }
+    }
+
+    /** The statistics answered (or failed: [merged] null and no history yet): draw what there is, once. */
+    private fun statsArrived(merged: HistoryResult?) {
+        if (merged != null) history = merged
+        val waited = awaitingStats
+        awaitingStats = false
+        stopStatsWait()
+        // A history that waited for these draws now; one already drawn draws again with them.
+        if (history != null && (waited || merged != null)) render()
+    }
+
+    /** The card's entities as the store has them now, for the graph thread. */
+    private fun stateSnapshot(): Map<String, dev.glassworks.engine.vitro.data.EntityState?> {
+        val out = HashMap<String, dev.glassworks.engine.vitro.data.EntityState?>(entityIds.size * 2)
+        for (id in entityIds) out[id] = ctx.store[id]
+        return out
     }
 
     private fun temperatureUnit(): String? = ctx.haConfig().optJSONObject("unit_system")?.optString("temperature")?.takeIf { it.isNotEmpty() }
@@ -1335,21 +1417,22 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
             renderPending = false
             charts.removeAllViews()
             slotCharts.clear()
+            shown = null
             info.text = it
             info.visibility = VISIBLE
             return
         }
-        val h = stateHistory ?: return
+        val history = this.history ?: return
         // A hidden card (a cached view) keeps its history but builds nothing until it shows.
         if (!isShown && isAttachedToWindow) {
             renderPending = true
             return
         }
         renderPending = false
-        val history = HaHistory.merge(h, statsHistory)
-        charts.removeAllViews()
-        slotCharts.clear()
         if (history.line.isEmpty() && history.timeline.isEmpty()) {
+            charts.removeAllViews()
+            slotCharts.clear()
+            shown = null
             info.text = HaText.ui("ui.components.history_charts.no_history_found")
             info.visibility = VISIBLE
             return
@@ -1371,36 +1454,71 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
             lineSpecs.maxOfOrNull { HaLineChart.yAxis(it.first).third } ?: 0f,
             if (history.timeline.isNotEmpty()) HaTimelineChart.labelWidth(history.timeline, names, showNames) else 0f,
         )
+        val padded = lineSpecs.map { (spec, legend) ->
+            LineChartSpec(spec.lines, spec.xMin, spec.xMax, spec.unit, spec.heightCss, false, config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() }, config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() }, padding,
+                fitYData = config.raw.optBoolean("fit_y_data", false)) to legend
+        }
+        val rows = history.timeline
+        val kinds = buildList {
+            if (rows.isNotEmpty()) add("timeline")
+            padded.forEach { add("line:" + it.first.unit.orEmpty()) }
+        }
+        // The same charts as on screen (a new answer, the minute's redraw, a new width): their scenes are drawn again
+        // where they are, as the chart elements of HA's page update in place.
+        val current = shown
+        if (current != null && current.kinds == kinds) {
+            current.timeline?.let { chart ->
+                chart.heightCss = HaTimelineChart.height(rows.size)
+                chart.setScene { w -> HaTimelineChart.scene(rows, names, start, end, padding, w, ctx, showNames) }
+            }
+            slotCharts.clear()
+            current.lines.forEachIndexed { i, line ->
+                val (spec, legend) = padded[i]
+                line.host.update(spec)
+                line.legend?.let { if (!it.shows(legend)) it.setItems(legend) }
+                slotCharts += SlotChart(line.host.chart, line.legendBox, spec.heightCss)
+            }
+            return
+        }
+        charts.removeAllViews()
+        slotCharts.clear()
         var index = 0
-        if (history.timeline.isNotEmpty()) {
-            val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = HaTimelineChart.height(history.timeline.size) }
-            val rows = history.timeline
+        var timelineChart: ChartView? = null
+        if (rows.isNotEmpty()) {
+            val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = HaTimelineChart.height(rows.size) }
             chart.setScene { w -> HaTimelineChart.scene(rows, names, start, end, padding, w, ctx, showNames) }
             charts.addView(entry(chart, timeline = true, first = index++ == 0))
+            timelineChart = chart
         }
-        for ((spec, legend) in lineSpecs) {
-            val withPad = LineChartSpec(spec.lines, spec.xMin, spec.xMax, spec.unit, spec.heightCss, false, config.raw.optDouble("min_y_axis").takeIf { !it.isNaN() }, config.raw.optDouble("max_y_axis").takeIf { !it.isNaN() }, padding,
-                fitYData = config.raw.optBoolean("fit_y_data", false))
+        val lines = ArrayList<ShownLine>()
+        for ((withPad, legend) in padded) {
             val box = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
             val chart = LineChartHost(ctx, withPad)
             box.addView(chart, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             var legendView: View? = null
+            var legendChips: ChartLegendView? = null
             if (showNames) {
-                val unit = spec.unit.orEmpty()
-                legendView = ChartLegendView(ctx).apply {
+                val unit = withPad.unit.orEmpty()
+                legendChips = ChartLegendView(ctx).apply {
                     // The chip's state outlives the redraw each minute, as the frontend's chart element does.
                     expanded = legendExpanded[unit] ?: expandLegend
                     onExpandedChange = { legendExpanded[unit] = it }
                     setItems(legend)
                     onLabel = { id -> ctx.openMoreInfo(id) }
                 }
-                legendView = scrollingLegend(legendView)
+                legendView = scrollingLegend(legendChips)
                 box.addView(legendView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             }
             slotCharts += SlotChart(chart.chart, legendView, withPad.heightCss)
+            lines += ShownLine(chart, legendChips, legendView)
             charts.addView(entry(box, timeline = false, first = index++ == 0))
         }
+        shown = ShownCharts(kinds, timelineChart, lines)
     }
+
+    /** The charts [render] built, so a history with the same kinds and units redraws them where they are. */
+    private class ShownCharts(val kinds: List<String>, val timeline: ChartView?, val lines: List<ShownLine>)
+    private class ShownLine(val host: LineChartHost, val legend: ChartLegendView?, val legendBox: View?)
 
     private fun entry(child: View, timeline: Boolean, first: Boolean): View = historyEntry(ctx, child, timeline, first)
 
@@ -1414,9 +1532,12 @@ class HistoryGraphCardView(ctx: VitroCardContext, private val config: CardConfig
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        if (w != oldw && stateHistory != null) post { render() }
+        if (w != oldw && history != null && !awaitingStats) post { render() }
     }
 }
+
+/** How long a history graph's first answer waits for its statistics before it draws without them. */
+private const val STATS_WAIT_MS = 500L
 
 /** `.entry-container`: a line chart 8 px down, a first timeline 16 px down; later ones under a 2 px divider. */
 internal fun historyEntry(ctx: VitroCardContext, child: View, timeline: Boolean, first: Boolean, timelineTopMargin: Float = 16f): View {
@@ -1477,12 +1598,18 @@ internal fun stateHistoryLineSpec(
 }
 
 /** A line chart, as high as its spec unless a fixed slot sizes it. */
-internal class LineChartHost(ctx: VitroCardContext, spec: LineChartSpec) : LinearLayout(ctx.context) {
+internal class LineChartHost(private val ctx: VitroCardContext, spec: LineChartSpec) : LinearLayout(ctx.context) {
     val chart = ChartView(ctx.context, ctx.dp).apply { heightCss = spec.heightCss }
 
     init {
         chart.setSizedScene { w, h -> HaLineChart.scene(spec, w, ctx, h) }
         addView(chart, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    /** Draws [spec] in this chart instead (a new answer or width for the same unit). */
+    fun update(spec: LineChartSpec) {
+        chart.heightCss = spec.heightCss
+        chart.setSizedScene { w, h -> HaLineChart.scene(spec, w, ctx, h) }
     }
 }
 

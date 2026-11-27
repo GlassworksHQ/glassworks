@@ -64,7 +64,15 @@ internal class VideoTextureView(
         surfaceTextureListener = this
     }
 
-    /** Starts the render thread on [egl]'s context (the decoders' textures). Any thread. */
+    /**
+     * Starts the render thread on [egl]'s context (the decoders' textures). Any thread.
+     *
+     * RGBA, though the picture is opaque once drawn: [isOpaque] already tells the window so, and that is what spares
+     * the blend, so `CONFIG_PLAIN` (VideoSurfaceView's) would buy nothing here. It asks EGL for no alpha, and libwebrtc
+     * takes the first config EGL lists, which EGL's sort makes a 24-bit RGB 888 one wherever the driver has it: a
+     * buffer format the app's window would then sample as a texture on every frame, which a SurfaceView never does,
+     * and which hasn't been tried on these panels' GPUs. RGBA 8888 is what a TextureView's producers get by default.
+     */
     override fun init(egl: EglBase.Context) {
         renderer.init(egl, EglBase.CONFIG_RGBA, GlRectDrawer())
         ready = true
@@ -88,7 +96,7 @@ internal class VideoTextureView(
      * with the picture's size, rotation applied. A frame the renderer drops, with no surface to draw on, isn't one.
      */
     @Volatile
-    override var onDrawn: ((width: Int, height: Int) -> Unit)? = null
+    override var onDrawn: FrameDrawn? = null
 
     /** False: frames aren't drawn (off screen), once one has been. Any thread reads it. */
     @Volatile
@@ -159,7 +167,7 @@ internal class VideoTextureView(
         if (w > 0 && h > 0) {
             drawnOnce = true
             updateOpaque()
-            onDrawn?.invoke(w, h)
+            onDrawn?.onDrawn(w, h)
         }
     }
 

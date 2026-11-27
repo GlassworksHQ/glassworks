@@ -47,7 +47,7 @@ internal class VideoSurfaceView(
             updateLayout()
         }
 
-    @Volatile override var onDrawn: ((width: Int, height: Int) -> Unit)? = null
+    @Volatile override var onDrawn: FrameDrawn? = null
 
     @Volatile override var rendering: Boolean = true
 
@@ -86,7 +86,7 @@ internal class VideoSurfaceView(
         if (alpha != 1f) alpha = 1f
         val w = frameWidth
         val h = frameHeight
-        if (w > 0 && h > 0) onDrawn?.invoke(w, h)
+        if (w > 0 && h > 0) onDrawn?.onDrawn(w, h)
     }
 
     /** After each frame the renderer swapped onto the surface (render thread). */

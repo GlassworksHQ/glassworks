@@ -97,24 +97,60 @@ object VitroFonts {
      */
     fun typeface(context: Context, weight: Int, sizeSp: Float, italic: Boolean = false, fontFamily: String? = null): Typeface {
         val list = fontFamily?.takeIf { it.isNotBlank() } ?: familyOf(context)
-        for ((name, generic) in CssFontFaces.familyList(list)) {
-            val known = builtIn(name)
+        val families = familiesOf(list)
+        // No stylesheet declares fonts: every lookup is Absent and starts nothing, so the list alone picks the face.
+        if (!WebFonts.hasSheets) {
+            val face = faceOfList[list] ?: builtInFace(families).also { remember(faceOfList, list, it) }
+            return builtIn(context, face, weight, sizeSp, italic)
+        }
+        for (f in families) {
             // A bare generic keyword (serif) is the platform's face, never a web font of that name; a quoted one
             // ("serif") is a family like any other, and a stylesheet may declare it.
             // A browser always has a font for a generic, so the list ends there: cursive is Android's own cursive
             // family, and the generics Android has nothing for (fantasy, emoji, math, ...) its sans-serif.
-            if (generic) return builtIn(context, known ?: genericFace(name), weight, sizeSp, italic)
-            // A quoted generic name ("serif") is a family name only: Vitro's own face doesn't stand in for it.
-            val own = known?.takeUnless { isGenericName(name) }
-            when (val web = WebFonts.lookup(name, weight, italic)) {
+            if (f.generic) return builtIn(context, f.known ?: genericFace(f.name), weight, sizeSp, italic)
+            when (val web = WebFonts.lookup(f.name, weight, italic)) {
                 is WebFonts.Lookup.Ready -> return web.typeface
                 // A family Vitro has draws its own face while the sheets are read, in case one declares it too.
-                WebFonts.Lookup.Loading -> if (own != null) return builtIn(context, own, weight, sizeSp, italic)
-                WebFonts.Lookup.Absent -> if (own != null) return builtIn(context, own, weight, sizeSp, italic)
+                WebFonts.Lookup.Loading -> if (f.own != null) return builtIn(context, f.own, weight, sizeSp, italic)
+                WebFonts.Lookup.Absent -> if (f.own != null) return builtIn(context, f.own, weight, sizeSp, italic)
             }
         }
         return builtIn(context, Face.SYSTEM, weight, sizeSp, italic)
     }
+
+    /**
+     * One family of a list, read once: its name, whether it's a bare generic keyword, the face Vitro has by that name,
+     * and that face as the family's own (none for a quoted generic name, "serif", which is a family name only).
+     */
+    private class ListFamily(val name: String, val generic: Boolean, val known: Face?, val own: Face?)
+
+    /** Each `font-family` list read so far, parsed once: every text view asks for one, and the lists are few. */
+    private val parsedLists = java.util.concurrent.ConcurrentHashMap<String, List<ListFamily>>()
+
+    /** The face each list draws in while no stylesheet declares fonts ([typeface]'s loop with every lookup Absent). */
+    private val faceOfList = java.util.concurrent.ConcurrentHashMap<String, Face>()
+
+    private fun familiesOf(list: String): List<ListFamily> = parsedLists[list] ?: CssFontFaces.familyList(list).map { (name, generic) ->
+        val known = builtIn(name)
+        ListFamily(name, generic, known, known?.takeUnless { isGenericName(name) })
+    }.also { remember(parsedLists, list, it) }
+
+    private fun builtInFace(families: List<ListFamily>): Face {
+        for (f in families) {
+            if (f.generic) return f.known ?: genericFace(f.name)
+            if (f.own != null) return f.own
+        }
+        return Face.SYSTEM
+    }
+
+    /** Keeps [value] for [list], forgetting them all past a bound (card-mod templates can make lists without end). */
+    private fun <V : Any> remember(map: java.util.concurrent.ConcurrentHashMap<String, V>, list: String, value: V) {
+        if (map.size >= MAX_LISTS) map.clear()
+        map[list] = value
+    }
+
+    private const val MAX_LISTS = 256
 
     private val builtInCache = HashMap<String, Typeface>()
 

@@ -23,6 +23,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Vitro dashboards with live cameras scroll more smoothly.** With Vitro on, a live camera that's scrolled out of
   view stops drawing its video until it's back on screen, so cameras you can't see no longer slow down the rest of the
   dashboard.
+- **Live cameras on Vitro cost the panel less, and HLS cameras start sooner.** With Vitro on, each video frame
+  now redraws only the video, not the whole camera card around it, and the camera's still picture is no longer
+  drawn under the video once it plays, so a dashboard with several live cameras leaves the panel more room for
+  everything else. A camera that plays over HLS starts once it has half a second of video instead of two and a half.
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
   with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel
@@ -32,6 +36,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
 ### Changed
+- **Vitro dashboards open faster and stay smoother while values change.** With Vitro on, big dashboards build their
+  cards with less work, history graphs and sensor graphs read their history in the background, and a value that keeps
+  changing, such as a power sensor or a clock with seconds, no longer makes the whole dashboard lay itself out again.
+  Nothing looks different.
 - **Kiln is easier to move around in.** Every installer screen has a Back button in the same place when going back is
   safe, and says why when it isn't. Done steps on the side rail are links back to them. Reopening Kiln partway through
   an install shows where you stopped and what's already on the device, with Continue and a way out. Start over asks

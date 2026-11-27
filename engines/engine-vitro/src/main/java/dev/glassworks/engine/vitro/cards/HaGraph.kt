@@ -66,7 +66,7 @@ object HaGraph {
             "Infinity", "+Infinity" -> return Double.POSITIVE_INFINITY
             "-Infinity" -> return Double.NEGATIVE_INFINITY
         }
-        if (DECIMAL.matches(t)) return t.toDouble()
+        if (isDecimal(t)) return t.toDouble()
         val radix = when {
             t.startsWith("0x") || t.startsWith("0X") -> 16
             t.startsWith("0o") || t.startsWith("0O") -> 8
@@ -76,7 +76,35 @@ object HaGraph {
         return t.substring(2).toBigIntegerOrNull(radix)?.toDouble() ?: Double.NaN
     }
 
-    private val DECIMAL = Regex("^[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?$")
+    /**
+     * Whether [t] is a decimal literal, `[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?` with ASCII digits, read without a regex:
+     * the footer asks it of every point of a day's history. (Android's ICU regex takes any Unicode digit for `\d`, which
+     * [String.toDouble] then refuses.)
+     */
+    internal fun isDecimal(t: String): Boolean {
+        val n = t.length
+        var i = 0
+        if (i < n && (t[i] == '+' || t[i] == '-')) i++
+        val intStart = i
+        while (i < n && t[i] in '0'..'9') i++
+        val intDigits = i - intStart
+        var fracDigits = 0
+        if (i < n && t[i] == '.') {
+            i++
+            val fracStart = i
+            while (i < n && t[i] in '0'..'9') i++
+            fracDigits = i - fracStart
+        }
+        if (intDigits == 0 && fracDigits == 0) return false
+        if (i < n && (t[i] == 'e' || t[i] == 'E')) {
+            i++
+            if (i < n && (t[i] == '+' || t[i] == '-')) i++
+            val expStart = i
+            while (i < n && t[i] in '0'..'9') i++
+            if (i == expStart) return false
+        }
+        return i == n
+    }
 
     /** One entity's states of a stream message. */
     fun parseStates(arr: JSONArray?): MutableList<HistoryState> {

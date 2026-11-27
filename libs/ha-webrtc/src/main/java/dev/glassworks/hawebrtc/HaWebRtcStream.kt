@@ -79,6 +79,27 @@ public class HaWebRtcStream(
     /** Where the stream reports. Set it before [start]. */
     public var listener: Listener? = null
 
+    /**
+     * A frame of a run that plays on, at the size of the one before, taken on the thread that drew it (the main
+     * thread) instead of going through the stream's own: true when taken. False sends it the usual way, to
+     * [Listener.onFrame] on the scheduler's thread. Such a frame changes nothing of the stream's own (its timeout is
+     * off, its tries counted afresh): only its report hops threads and allocates, at 15 or more frames a second.
+     */
+    internal fun interface SteadyFrames {
+        fun onSteadyFrame(width: Int, height: Int): Boolean
+    }
+
+    /** [HaWebRtcPlayer]'s [SteadyFrames]; none for any other listener, which hears of every frame on the scheduler's thread. */
+    @Volatile
+    internal var steadyFrames: SteadyFrames? = null
+
+    /**
+     * The connection and run whose frames may go to [steadyFrames]: set on the scheduler's thread once a frame of that
+     * run was reported, cleared when it pauses or the connection goes. Read on the thread a frame is drawn on.
+     */
+    @Volatile private var steadyAttempt: Attempt? = null
+    @Volatile private var steadyRun = -1
+
     private inner class Attempt {
         var signaling: HaWebRtcSignaling? = null
         var peer: WebRtcPeer? = null
@@ -134,6 +155,7 @@ public class HaWebRtcStream(
         this.active = active
         if (!started || closed || failed) return
         if (!active) {
+            steadyAttempt = null
             reconnect?.cancel()
             reconnect = null
             attempt?.let { a ->
@@ -255,6 +277,12 @@ public class HaWebRtcStream(
         } else {
             listener?.onFrame(width, height)
         }
+        // The run plays on: its next frames may skip this thread ([steadyFrames]). The run first, so a frame that
+        // reads the attempt already sees this run.
+        if (steadyFrames != null && (steadyAttempt !== a || steadyRun != frameRun)) {
+            steadyRun = frameRun
+            steadyAttempt = a
+        }
     }
 
     private fun onState(a: Attempt, state: PeerState) {
@@ -298,6 +326,7 @@ public class HaWebRtcStream(
     }
 
     private fun teardown(a: Attempt) {
+        if (steadyAttempt === a) steadyAttempt = null
         a.timeout?.cancel()
         a.disconnected?.cancel()
         a.timeout = null
@@ -353,6 +382,8 @@ public class HaWebRtcStream(
 
         override fun onFrame(width: Int, height: Int) {
             val frameRun = run
+            val steady = steadyFrames
+            if (steady != null && steadyAttempt === a && steadyRun == frameRun && steady.onSteadyFrame(width, height)) return
             scheduler.post { onFrame(a, frameRun, width, height) }
         }
     }

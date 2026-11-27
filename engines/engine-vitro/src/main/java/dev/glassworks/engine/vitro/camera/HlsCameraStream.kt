@@ -18,10 +18,12 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * HA's HLS stream (the `stream` integration) as a [CameraStream], the way `ha-hls-player` plays it, on Media3's
@@ -35,6 +37,10 @@ import org.json.JSONObject
  *   is played whenever HA offers it: hls.js turns `lowLatencyMode` off past two streams because a browser keeps at
  *   most six HTTP/1.1 connections per host, a limit a panel's own HTTP stack doesn't have. `backBufferLength` caps
  *   what hls.js keeps behind the playhead; ExoPlayer keeps none, which is less on a panel.
+ * - It starts playing once [BUFFER_FOR_PLAYBACK_MS] of media is in, as hls.js lets the `<video>` play with its first
+ *   fragment, not after ExoPlayer's default 2.5 s ([loadControl]). Where it starts is the live edge less the
+ *   playlist's hold-back (LL-HLS's `PART-HOLD-BACK`, else three target durations), as hls.js's `liveSyncDurationCount`
+ *   and its low-latency mode put it.
  * - Muted, as HA's cards are, and with the audio track off, so no audio decoder runs.
  * - The picture draws in a [TextureView] on every Android version, not a SurfaceView: a panel whose screen is rotated
  *   (the S1's) has a composer that overlays only one video, so a surface per camera pushed the whole window onto the
@@ -71,11 +77,31 @@ class HlsCameraStream internal constructor(
     private val output = TextureView(context).apply { alpha = 0f }
     override val view: View get() = output
 
+    /** The frames the player handed the surface since [frameReport] last ran (its playback thread counts them). */
+    private val framesPending = AtomicInteger(0)
+
+    /** The [generation] those frames came in (the playback thread's last write). */
+    @Volatile
+    private var framesGen = -1
+
+    /**
+     * Each frame's report, on the main thread: one Runnable for the stream's life, posted once for however many frames
+     * came meanwhile, so a frame allocates nothing and the main thread hears of each one.
+     */
+    private val frameReport = Runnable {
+        val n = framesPending.getAndSet(0)
+        if (closed || framesGen != generation || !firstFrameSeen || !outputAttached) return@Runnable
+        repeat(n) { listener?.onFrameRendered() }
+    }
+
     /** On screen ([setRendering]). */
     private var rendering = true
 
     /** The player draws into [output] now. */
     private var outputAttached = false
+
+    /** Read on the player's playback thread too: whether it wants each frame ([CameraStream.Listener.wantsFrames]). */
+    @Volatile
     override var listener: CameraStream.Listener? = null
 
     override var videoWidth = 0
@@ -172,8 +198,13 @@ class HlsCameraStream internal constructor(
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 if (videoSize.width <= 0 || videoSize.height <= 0) return
-                videoWidth = (videoSize.width * videoSize.pixelWidthHeightRatio).toInt().coerceAtLeast(1)
-                videoHeight = videoSize.height
+                val w = (videoSize.width * videoSize.pixelWidthHeightRatio).toInt().coerceAtLeast(1)
+                val h = videoSize.height
+                if (w == videoWidth && h == videoHeight) return
+                videoWidth = w
+                videoHeight = h
+                // After the first frame (which reads the size itself) the card may not hear of every frame: told here.
+                if (!closed && gen == generation && firstFrameSeen) listener?.onVideoSize()
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -195,10 +226,13 @@ class HlsCameraStream internal constructor(
                 fail("hls: ${error.errorCodeName}")
             }
         })
-        // Each frame the player hands the surface (on its playback thread): a rendered frame, after the first.
+        // Each frame the player hands the surface (on its playback thread): a rendered frame, after the first. Only
+        // while someone wants to hear of each one (Clarity measuring, a card whose still isn't covered yet); then
+        // counted, and one report posted for the frames since the last ran.
         p.setVideoFrameMetadataListener { _, _, _, _ ->
-            main.post {
-                if (!closed && gen == generation && firstFrameSeen && outputAttached) listener?.onFrameRendered()
+            if (listener?.wantsFrames == true) {
+                framesGen = gen
+                if (framesPending.getAndIncrement() == 0) main.post(frameReport)
             }
         }
         attachOutput(p, output)
@@ -228,7 +262,23 @@ class HlsCameraStream internal constructor(
         /** hls.js's `maxLiveSyncPlaybackRate` in HA's player. */
         const val MAX_LIVE_SYNC_SPEED = 2f
 
-        fun defaultPlayer(context: Context): ExoPlayer = ExoPlayer.Builder(context).build()
+        /** Media buffered before playback starts: ExoPlayer's default is 2.5 s, which a live camera waits through. */
+        const val BUFFER_FOR_PLAYBACK_MS = 500
+
+        /** Before playback starts again after the buffer ran dry (ExoPlayer's default 5 s). */
+        const val BUFFER_AFTER_REBUFFER_MS = 1_000
+
+        /** The least and most media it keeps ahead (ExoPlayer's defaults 50 s each): a live camera has only seconds. */
+        const val MIN_BUFFER_MS = 1_500
+        const val MAX_BUFFER_MS = 4_000
+
+        /** Short buffers for a live camera ([BUFFER_FOR_PLAYBACK_MS]), by time rather than by bytes. */
+        fun loadControl(): DefaultLoadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(MIN_BUFFER_MS, MAX_BUFFER_MS, BUFFER_FOR_PLAYBACK_MS, BUFFER_AFTER_REBUFFER_MS)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
+        fun defaultPlayer(context: Context): ExoPlayer = ExoPlayer.Builder(context).setLoadControl(loadControl()).build()
 
         fun defaultSource(url: String): MediaSource {
             val http = DefaultHttpDataSource.Factory()

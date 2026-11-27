@@ -497,6 +497,48 @@ class HaWebRtcStreamTest {
     }
 
     @Test
+    fun `a playing run's later frames go to the player's steady path, never past a pause, a resume or a new connection`() {
+        val s = stream(HaWebRtcStream.Options(idleTeardownMs = 60_000, connectTimeoutMs = 10_000))
+        val steady = ArrayList<String>()
+        var take = true
+        s.steadyFrames = HaWebRtcStream.SteadyFrames { w, h -> steady += "${w}x$h"; take }
+        val (peer, _) = connect(s)
+        // The run's first frame goes through the stream's thread, as before; it isn't steady yet.
+        peer.events.onFrame(640, 480)
+        assertEquals(emptyList<String>(), steady)
+        clock.runAll()
+        // Now the run plays on: its frames skip the stream's thread (nothing queued) when the player takes them.
+        peer.events.onFrame(640, 480)
+        peer.events.onFrame(640, 480)
+        assertEquals(listOf("640x480", "640x480"), steady)
+        clock.runAll()
+        assertEquals("steady frames don't reach the stream's own listener", listOf("first", "session"), log.map { it.substringBefore(' ') }.sorted())
+        // The player can't take one (a new size): it goes the usual way.
+        take = false
+        peer.events.onFrame(1280, 720)
+        clock.runAll()
+        assertEquals("frame", log.last())
+        take = true
+        // Paused and resumed: the resumed run's frames go the usual way until its first frame was reported.
+        s.setActive(false)
+        steady.clear()
+        peer.events.onFrame(640, 480)
+        s.setActive(true)
+        peer.events.onFrame(640, 480)
+        assertEquals(emptyList<String>(), steady)
+        clock.runAll()
+        assertEquals(2, log.count { it.startsWith("first") })
+        peer.events.onFrame(640, 480)
+        assertEquals(listOf("640x480"), steady)
+        // A new connection after a failure starts over too.
+        peer.events.onConnectionState(PeerState.FAILED)
+        clock.runAll()
+        steady.clear()
+        peer.events.onFrame(640, 480)
+        assertEquals("a torn-down connection's frame is never steady", emptyList<String>(), steady)
+    }
+
+    @Test
     fun `a listener that closes the stream from onReconnecting leaves no timer behind`() {
         val s = stream()
         s.listener = object : HaWebRtcStream.Listener {
