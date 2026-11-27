@@ -23,6 +23,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Vitro dashboards with live cameras scroll more smoothly.** With Vitro on, a live camera that's scrolled out of
   view stops drawing its video until it's back on screen, so cameras you can't see no longer slow down the rest of the
   dashboard.
+- **Live cameras on Vitro cost the panel less, and HLS cameras start sooner.** With Vitro on, each video frame
+  now redraws only the video, not the whole camera card around it, and the camera's still picture is no longer
+  drawn under the video once it plays, so a dashboard with several live cameras leaves the panel more room for
+  everything else. A camera that plays over HLS starts once it has half a second of video instead of two and a half.
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
   with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel

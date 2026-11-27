@@ -303,10 +303,20 @@ internal class MeasuredCameraStream(
 
     override val videoHeight: Int get() = (inner as? CameraStreamVideoSize)?.videoHeight ?: 0
 
+    /** Read on the stream's own threads too ([CameraStream.Listener.wantsFrames]). */
+    @Volatile
     override var listener: CameraStream.Listener? = null
 
     init {
         inner.listener = object : CameraStream.Listener {
+            /** Every picture while Clarity measures; otherwise what the card wants. */
+            override val wantsFrames: Boolean
+                get() = ClarityCameras.current != null || listener?.wantsFrames == true
+
+            override fun onVideoSize() {
+                listener?.onVideoSize()
+            }
+
             override fun onFirstFrame(sinceStartMs: Long) {
                 ClarityCameras.current?.firstFrame(this@MeasuredCameraStream, sinceStartMs)
                 listener?.onFirstFrame(sinceStartMs)

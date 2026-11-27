@@ -154,6 +154,7 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
                 LibWebRtcPeer(rt.factory, config, audio, video, events)
             }, HandlerScheduler(w), options.stream)
             s.listener = Events()
+            s.steadyFrames = steady
             stream = s
             s.setActive(startActive)
             s.start()
@@ -247,7 +248,39 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
             if (closed || run != viewRun) return@post
             videoWidth = width
             videoHeight = height
+            deliveredRun = run
             listener?.let(call)
+        }
+    }
+
+    /** The [viewRun] of the last frame report delivered, the size it set ([videoWidth]) included. Main thread. */
+    private var deliveredRun = -1
+
+    /** Frames [steady] took since [steadyReport] last ran. Main thread. */
+    private var steadyPending = 0
+
+    /**
+     * Each steady frame's [Listener.onFrameRendered]: one Runnable for the player's life, posted once for the frames
+     * that came before it ran. Posted, not called, as a TextureView reports its frame from inside its own draw.
+     */
+    private val steadyReport = Runnable {
+        val n = steadyPending
+        steadyPending = 0
+        if (closed || deliveredRun != viewRun) return@Runnable
+        repeat(n) { listener?.onFrameRendered() }
+    }
+
+    /**
+     * A frame of a run that plays on (the stream says so), drawn on the main thread: when the main thread already had
+     * this run's report at this size, it's reported from here, with nothing allocated and no hop to the player's
+     * thread and back. Anything else (a new size, a pause or resume since) goes the usual way, through [frame].
+     */
+    internal val steady = HaWebRtcStream.SteadyFrames { width, height ->
+        if (closed || Looper.myLooper() !== main.looper || deliveredRun != viewRun || width != videoWidth || height != videoHeight) {
+            false
+        } else {
+            if (steadyPending++ == 0) main.post(steadyReport)
+            true
         }
     }
 

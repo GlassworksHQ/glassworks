@@ -106,7 +106,7 @@ class HaWebRtcPlayerTest {
     fun `a frame counts when the view shows it, not when it is decoded`() {
         val view = VideoTextureView(context, VideoScaling.FIT)
         val drawn = ArrayList<Pair<Int, Int>>()
-        view.onDrawn = { w, h -> drawn += w to h }
+        view.onDrawn = FrameDrawn { w, h -> drawn += w to h }
         val texture = android.graphics.SurfaceTexture(0)
         // An update with no frame received yet (nothing of the camera's on it) isn't a frame.
         view.onSurfaceTextureUpdated(texture)
@@ -148,6 +148,37 @@ class HaWebRtcPlayerTest {
         assertEquals(listOf("first 120 1280x720", "frame"), got)
         assertEquals(1280 to 720, player.videoWidth to player.videoHeight)
         player.close()
+    }
+
+    @Test
+    fun `a steady frame is reported from the main thread at the size it had, once the run's first frame was delivered`() {
+        val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
+        val got = ArrayList<String>()
+        player.listener = object : HaWebRtcPlayer.Listener {
+            override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) { got += "first" }
+            override fun onFrameRendered() { got += "frame" }
+            override fun onError(error: HaError) {}
+        }
+        val events = player.Events()
+        assertFalse("nothing delivered yet: the usual way", player.steady.onSteadyFrame(1280, 720))
+        events.onFirstFrame(120, 1280, 720)
+        assertFalse("the first frame's report hasn't run yet", player.steady.onSteadyFrame(1280, 720))
+        shadowOf(Looper.getMainLooper()).idle()
+        // Delivered: frames at that size are taken, and reported once each, in one post.
+        assertTrue(player.steady.onSteadyFrame(1280, 720))
+        assertTrue(player.steady.onSteadyFrame(1280, 720))
+        assertFalse("a new size goes the usual way, which updates videoWidth", player.steady.onSteadyFrame(640, 480))
+        assertEquals(listOf("first"), got)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("first", "frame", "frame"), got)
+        // Taken just before a pause: dropped with it, as the usual way drops a stale report.
+        assertTrue(player.steady.onSteadyFrame(1280, 720))
+        player.setActive(false)
+        assertFalse(player.steady.onSteadyFrame(1280, 720))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("first", "frame", "frame"), got)
+        player.close()
+        assertFalse(player.steady.onSteadyFrame(1280, 720))
     }
 
     @Test

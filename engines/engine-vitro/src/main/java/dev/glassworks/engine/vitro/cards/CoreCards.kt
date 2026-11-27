@@ -3466,6 +3466,7 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
             fitMode = config.raw.optString("fit_mode").ifEmpty { null },
             onVideoSize = { w, h -> takeAspect(w, h) },
             cardType = config.type,
+            still = img,
         ) { bmp -> showBitmap(bmp) }
     }
 

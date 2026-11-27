@@ -33,9 +33,9 @@ import org.json.JSONObject
  *   when it shows again.
  * - A stream reports through [listener]: [Listener.onFirstFrame] once per [start] or resume, when the first picture
  *   is on screen (HA's `streams` event with `hasVideo: true`); [Listener.onFrameRendered] for each later picture drawn
- *   (Clarity counts them); [Listener.onError] when it can't play or stops playing (HA's `hasVideo: false`: the choice
- *   falls back to the next kind and closes this one); [Listener.onEnded] when the server ends a live stream, which the
- *   choice treats like an error.
+ *   (Clarity counts them; a stream may call it only while [Listener.wantsFrames]); [Listener.onError] when it can't
+ *   play or stops playing (HA's `hasVideo: false`: the choice falls back to the next kind and closes this one);
+ *   [Listener.onEnded] when the server ends a live stream, which the choice treats like an error.
  */
 interface CameraStream {
     val view: android.view.View
@@ -65,6 +65,19 @@ interface CameraStream {
         fun onFirstFrame(sinceStartMs: Long)
 
         fun onFrameRendered()
+
+        /**
+         * Whether [onFrameRendered] is wanted now. A stream may skip the call (and the thread hop that brings it)
+         * while this is false: the card wants it only until its still is covered, and Clarity while it measures.
+         * Read on any thread, the stream's decoder's included, so it reads fields that are safe to read there.
+         */
+        val wantsFrames: Boolean get() = true
+
+        /**
+         * The picture's size changed ([CameraStreamVideoSize]) after the first frame. A stream calls it when it may
+         * skip [onFrameRendered] ([wantsFrames]), so the card still follows a new size.
+         */
+        fun onVideoSize() {}
 
         /** The view got its surface ([surfaceReady] is true now). */
         fun onSurfaceReady() {}

@@ -110,6 +110,10 @@ internal object CameraProbe {
                 choice?.onFrameRendered()
             }
 
+            override fun onVideoSize() {
+                choice?.onVideoSize()
+            }
+
             override fun onSurfaceReady() {
                 choice?.onSurfaceReady()
             }

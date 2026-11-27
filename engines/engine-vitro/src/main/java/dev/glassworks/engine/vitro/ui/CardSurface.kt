@@ -970,21 +970,23 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
      * Without it Android rebuilds only that view's display list, straight from the card's, and a throw there would
      * reach the app. The card's other views keep their lists: it costs the card's own small list. A failed card
      * records itself again too, whether or not its error card is in yet: its [draw] then runs no view of the card's
-     * own, so nothing of it is drawn outside a catch, and the guards above can keep leaving it to this one.
+     * own, so nothing of it is drawn outside a catch, and the guards above can keep leaving it to this one. A camera's
+     * video frame is left alone ([redrawsWithoutCardCode]): it redraws only its TextureView, which runs no card code.
      */
     @TargetApi(Build.VERSION_CODES.O)
     override fun onDescendantInvalidated(child: View, target: View) {
         super.onDescendantInvalidated(child, target)
-        if (isNearestGuard(this, target)) invalidate()
+        if (!redrawsWithoutCardCode(target) && isNearestGuard(this, target)) invalidate()
     }
 
     /**
      * As [onDescendantInvalidated], on Android 6 and 7, where hardware drawing finds the changed view this way. It
-     * doesn't say which view changed, so every card guard above it records itself again.
+     * doesn't say which view changed, so every card guard above it records itself again, but for a camera's video
+     * frame, which its [dev.glassworks.engine.vitro.camera.CameraFitFrame] marks ([VideoRedraw]).
      */
     @Deprecated("ViewGroup's, deprecated in API 26, where onDescendantInvalidated takes over")
     override fun invalidateChildInParent(location: IntArray, dirty: Rect): ViewParent? {
-        if (!Platform.hasDescendantInvalidated && isHardwareAccelerated) invalidate()
+        if (!Platform.hasDescendantInvalidated && isHardwareAccelerated && !VideoRedraw.isVideoFrame(this)) invalidate()
         @Suppress("DEPRECATION")
         return super.invalidateChildInParent(location, dirty)
     }

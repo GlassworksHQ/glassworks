@@ -138,21 +138,22 @@ class ContainedCard(
      * Recording the guard again draws the card through [drawChild]; the card's views that didn't change keep their
      * display lists, so it costs one small list. A guard waiting for its error card records itself again too: its
      * [drawChild] then skips the card, so nothing of the failed card is drawn outside a catch, and the guards above
-     * can keep leaving it to this one.
+     * can keep leaving it to this one. A camera's video frame is left alone ([redrawsWithoutCardCode]).
      */
     @TargetApi(Build.VERSION_CODES.O)
     override fun onDescendantInvalidated(child: View, target: View) {
         super.onDescendantInvalidated(child, target)
-        if (isNearestGuard(this, target)) redrawThroughGuard()
+        if (!redrawsWithoutCardCode(target) && isNearestGuard(this, target)) redrawThroughGuard()
     }
 
     /**
      * As [onDescendantInvalidated], on Android 6 and 7, where hardware drawing finds the changed view this way. It
-     * doesn't say which view changed, so every guard above it records itself again.
+     * doesn't say which view changed, so every guard above it records itself again, but for a camera's video frame
+     * ([VideoRedraw]).
      */
     @Deprecated("ViewGroup's, deprecated in API 26, where onDescendantInvalidated takes over")
     override fun invalidateChildInParent(location: IntArray, dirty: Rect): ViewParent? {
-        if (!Platform.hasDescendantInvalidated && isHardwareAccelerated) redrawThroughGuard()
+        if (!Platform.hasDescendantInvalidated && isHardwareAccelerated && !VideoRedraw.isVideoFrame(this)) redrawThroughGuard()
         @Suppress("DEPRECATION")
         return super.invalidateChildInParent(location, dirty)
     }
