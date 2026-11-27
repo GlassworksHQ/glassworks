@@ -67,7 +67,7 @@ object BubbleModules {
      * (Bubble would apply none), which errs toward the island.
      */
     fun isMapping(line: String): Boolean {
-        val l = line.trim()
+        val l = withoutProperties(line)
         if (l.isEmpty()) return false
         if (l.startsWith("{")) return !FLOW_EMPTY.matches(l)
         return BLOCK_KEY.containsMatchIn(l)
@@ -76,6 +76,20 @@ object BubbleModules {
     /** A block mapping's first key: a quoted or plain key, then `:` and a space or the line's end; or `? `. */
     private val BLOCK_KEY = Regex("""^(?:\?\s|(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s#\-?:,\[\]{}&*!|>'"%@`][^#]*?|-[^\s#][^#]*?)\s*:(?:\s|$))""")
     private val FLOW_EMPTY = Regex("""^\{\s*}\s*(?:#.*)?$""")
+
+    /**
+     * YAML node properties in front of a node: an anchor (`&modules`) or a tag (`!!map`, `!local`, `!<uri>`), each followed
+     * by a space or the line's end. A mapping may carry them (`&modules` on its own line, then `default:`), and YAML reads
+     * the mapping all the same (Greptile on #952).
+     */
+    private val NODE_PROPERTIES = Regex("""^(?:(?:&[^\s\[\]{},]+|!(?:<[^>]*>|[^\s\[\]{},]*))(?:\s+|$))+""")
+
+    /** [line] trimmed, its leading node properties ([NODE_PROPERTIES]) dropped. */
+    internal fun withoutProperties(line: String): String {
+        val t = line.trim()
+        val m = NODE_PROPERTIES.find(t) ?: return t
+        return t.substring(m.range.last + 1).trim()
+    }
 
     /** The most of a body [probe] reads: blank lines and comments before its content count toward it. */
     internal const val MAX_BODY_CHARS = 1 shl 20
@@ -135,7 +149,8 @@ object BubbleModules {
                     t == "---" || t.startsWith("--- ") -> t.removePrefix("---").trim().takeIf { it.isNotEmpty() && !it.startsWith("#") }
                     else -> l
                 }
-                if (content != null) return content
+                // A line of node properties alone (`&modules`, `--- !!map`) belongs to the node on the next line.
+                if (content != null && withoutProperties(content).let { it.isNotEmpty() && !it.startsWith("#") }) return content
                 if (c < 0) return ""
                 line.setLength(0)
             } else {

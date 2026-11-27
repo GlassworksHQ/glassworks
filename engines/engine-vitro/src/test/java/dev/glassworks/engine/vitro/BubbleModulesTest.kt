@@ -202,11 +202,13 @@ class BubbleModulesTest {
         // Bubble parses the body as YAML and takes modules from a mapping alone (Sourcery on #952: the content type and
         // a 4 KiB window decided it before).
         for (yes in listOf("default:", "my_module:", "default: {name: x}", "\"my module\": 1", "'a''s': 1", "? complex", "{a: 1}",
-            "{ default: { name: x } }", "-dash-key: 1", "key:   # a comment after")) {
+            "{ default: { name: x } }", "-dash-key: 1", "key:   # a comment after",
+            // Node properties in front of the mapping or its first key (Greptile on #952).
+            "&modules default:", "!!map default:", "&m !!map {a: 1}", "!<tag:yaml.org,2002:map> default:")) {
             assertTrue(yes, BubbleModules.isMapping(yes))
         }
         for (no in listOf("", "{}", "{ }  # empty", "- default", "[default]", "just text", "<!DOCTYPE html>", "<html><head>",
-            "404 Not Found", "\"quoted scalar\"", "http://x", "a:b", "|", "& anchor")) {
+            "404 Not Found", "\"quoted scalar\"", "http://x", "a:b", "|", "& anchor", "&modules", "!!map", "&m - default")) {
             assertFalse(no, BubbleModules.isMapping(no))
         }
     }
@@ -220,6 +222,10 @@ class BubbleModulesTest {
         assertEquals("{a: 1}", first("--- {a: 1}\n"))
         assertEquals("  default:", first("\uFEFF\r\n  default:\r\n"))
         assertEquals("", first("\n\n# only comments\n"))
+        // An anchor or tag on its own line belongs to the mapping below it.
+        assertEquals("default:", first("&modules\ndefault:\n  name: x\n"))
+        assertEquals("default:", first("--- !!map\ndefault:\n"))
+        assertEquals("", first("&modules\n"))
         // Past the cap with nothing read: none (YAML would read nothing there either).
         assertEquals("", first(" ".repeat(BubbleModules.MAX_BODY_CHARS + 10) + "\ndefault:"))
     }
