@@ -20,9 +20,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   over WebRTC (through go2rtc, Nest and other integrations) plays that way, with low delay and hardware decoding.
   Cameras without WebRTC, or where it doesn't connect, play HLS or MJPEG as before, and a camera goes back to WebRTC
   once Home Assistant is back after a restart. Nothing changes in Home Assistant.
-- **Vitro dashboards with live cameras scroll more smoothly.** With Vitro on, live camera video is drawn by Android
-  itself, so a playing camera no longer makes the whole dashboard redraw with every video frame. While a camera card
-  fades in or out, it shows its still picture, and a card's `state_filter` tints that still but not the live video.
+- **Vitro dashboards with live cameras scroll more smoothly.** With Vitro on, a live camera that's scrolled out of
+  view stops drawing its video until it's back on screen, so cameras you can't see no longer slow down the rest of the
+  dashboard.
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
   with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel

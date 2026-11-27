@@ -7,7 +7,6 @@ package dev.glassworks.engine.vitro.camera
 import android.content.Context
 import android.os.Handler
 import android.os.SystemClock
-import android.view.SurfaceView
 import android.view.TextureView
 import android.view.View
 import androidx.annotation.OptIn
@@ -22,7 +21,6 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
-import dev.glassworks.platform.Platform
 import org.json.JSONObject
 
 /**
@@ -38,9 +36,10 @@ import org.json.JSONObject
  *   most six HTTP/1.1 connections per host, a limit a panel's own HTTP stack doesn't have. `backBufferLength` caps
  *   what hls.js keeps behind the playhead; ExoPlayer keeps none, which is less on a panel.
  * - Muted, as HA's cards are, and with the audio track off, so no audio decoder runs.
- * - The picture draws in a [SurfaceView] from Android 7 (a [TextureView] on Android 6): the system composites it
- *   under the window, so a frame doesn't make the dashboard draw again. It stays clear (alpha 0, no hole in the
- *   window) until the first frame, so the card's still shows while the stream connects.
+ * - The picture draws in a [TextureView] on every Android version, not a SurfaceView: a panel whose screen is rotated
+ *   (the S1's) has a composer that overlays only one video, so a surface per camera pushed the whole window onto the
+ *   GPU at video rate and scrolling slowed down. It stays clear (alpha 0) until the first frame, so the card's still
+ *   shows while the stream connects.
  * - Off screen ([setRendering] false), once its first frame is in, the player lets go of the view: it keeps
  *   decoding (Media3 renders to a placeholder surface), so it's live again at once, but draws nothing.
  * - Fallen behind the live window, it goes back to the live edge, as hls.js does; any other playback error, and
@@ -59,20 +58,17 @@ class HlsCameraStream internal constructor(
     private val newPlayer: (Context) -> ExoPlayer,
     private val newSource: (url: String) -> MediaSource,
     /** Where the player draws: the [view] (tests give the player a surface of their own). */
-    private val attachOutput: (ExoPlayer, View) -> Unit,
+    private val attachOutput: (ExoPlayer, TextureView) -> Unit,
     /** The player lets go of the [view] (off screen). */
-    private val detachOutput: (ExoPlayer, View) -> Unit = { p, _ -> p.clearVideoSurface() },
-    /** A [SurfaceView] (true) or a [TextureView]. */
-    surfaceView: Boolean = Platform.surfaceFollowsScroll,
+    private val detachOutput: (ExoPlayer, TextureView) -> Unit = { p, _ -> p.clearVideoSurface() },
 ) : CameraStream, CameraStreamVideoSize {
-    constructor(host: CameraStreamHost, entityId: String, surfaceView: Boolean = Platform.surfaceFollowsScroll) : this(
+    constructor(host: CameraStreamHost, entityId: String) : this(
         host.context, host.main, entityId, host.haBase, host.callWs, ::defaultPlayer, ::defaultSource,
-        attachOutput = { p, v -> if (v is SurfaceView) p.setVideoSurfaceView(v) else p.setVideoTextureView(v as TextureView) },
-        surfaceView = surfaceView,
+        attachOutput = { p, v -> p.setVideoTextureView(v) },
     )
 
     private val appContext = context
-    private val output: View = (if (surfaceView) SurfaceView(context) else TextureView(context)).apply { alpha = 0f }
+    private val output = TextureView(context).apply { alpha = 0f }
     override val view: View get() = output
 
     /** On screen ([setRendering]). */

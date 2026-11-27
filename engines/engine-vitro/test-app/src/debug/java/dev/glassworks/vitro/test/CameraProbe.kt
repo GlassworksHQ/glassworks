@@ -53,9 +53,6 @@ internal object CameraProbe {
                     override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
                         inner.create(entityId, kind)?.let { Probed(it, entityId, kind).proxy }
 
-                    override fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? =
-                        inner.createForeground(entityId, kind)?.let { Probed(it, entityId, kind).proxy }
-
                     override fun prewarm() = inner.prewarm()
                 }
             }

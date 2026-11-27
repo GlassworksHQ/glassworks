@@ -41,22 +41,15 @@ object VitroWebRtc {
     internal val OPTIONS = HaWebRtcPlayer.Options(
         stream = HaWebRtcStream.Options(audio = false, idleTeardownMs = 0),
         scaling = VideoScaling.STRETCH,
-        // A SurfaceView from Android 7: a video frame doesn't make the dashboard draw again (the TextureView's did, so
-        // four cameras kept the S1's render thread busy). Android 6 (the Mirror) keeps the TextureView: its surface
-        // would lag a frame behind as the view scrolls.
-        view = VideoViewKind.AUTO,
+        // A TextureView on every Android version, never a SurfaceView: a panel whose screen is rotated (the S1's) has a
+        // composer that overlays only one video, so a surface per camera pushed the whole window onto the GPU at video
+        // rate and scrolling slowed down. In the window, the video also fades, clips and filters with its card.
+        view = VideoViewKind.TEXTURE_VIEW,
     )
-
-    /** [OPTIONS] on a TextureView: More Info's camera ([Factory.createForeground]). */
-    internal val FOREGROUND_OPTIONS = HaWebRtcPlayer.Options(stream = OPTIONS.stream, scaling = OPTIONS.scaling, view = VideoViewKind.TEXTURE_VIEW)
 
     internal class Factory(private val host: CameraStreamHost) : CameraStreamFactory {
         override fun create(entityId: String, kind: CameraStreamKind): CameraStream? =
             if (kind == CameraStreamKind.WEB_RTC) WebRtcCameraStream(HaWebRtcPlayer(host.context, HostChannel(host), entityId, OPTIONS)) else null
-
-        /** More Info's camera: its sheet slides in on a layer, which a SurfaceView's picture doesn't follow. */
-        override fun createForeground(entityId: String, kind: CameraStreamKind): CameraStream? =
-            if (kind == CameraStreamKind.WEB_RTC) WebRtcCameraStream(HaWebRtcPlayer(host.context, HostChannel(host), entityId, FOREGROUND_OPTIONS)) else null
 
         /** libwebrtc's factory and EGL get made off the main thread while the view builds. */
         override fun prewarm() = HaWebRtcPlayer.prewarm(host.context)

@@ -60,12 +60,6 @@ open class PlatformApi(
     val hasProcessStartTime: Boolean get() = apiLevel >= 24
 
     /**
-     * A `SurfaceView`'s surface moves in step with its view as it scrolls (Android 7: the render thread positions it).
-     * Before, it lags a frame behind, so video draws into a `TextureView` there.
-     */
-    val surfaceFollowsScroll: Boolean get() = apiLevel >= 24
-
-    /**
      * The system CA store has ISRG Root X1, Let's Encrypt's root (Android 7.1). Below it, HTTPS to a host on it
      * (raw.githubusercontent.com, GitHub's release assets) fails unless the app adds the root ([HttpsTrust]).
      * Android 7.0's Network Security Config could add it too, but only from XML for the whole app.
