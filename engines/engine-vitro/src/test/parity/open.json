@@ -96,17 +96,9 @@
   "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
- "s1/m-mushroom-cover-cover-open-no-position": {
-  "owner": "#799",
-  "reason": "Mushroom cover with show_buttons_control on a cover without stop or position (supported_features 3): Mushroom shows open and close only; Vitro shows all four buttons"
- },
  "s1/m-mushroom-cover-cover-unavailable": {
   "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
- },
- "s1/m-mushroom-cover-cover-unknown": {
-  "owner": "#799",
-  "reason": "Mushroom cover with show_buttons_control on a cover without stop or position (supported_features 3): Mushroom shows open and close only; Vitro shows all four buttons"
  },
  "s1/m-mushroom-entity-sensor-temperature": {
   "owner": "#799",

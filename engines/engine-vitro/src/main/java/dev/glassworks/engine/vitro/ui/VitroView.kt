@@ -104,6 +104,7 @@ import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatChecker
 import dev.glassworks.engine.vitro.compat.BubbleFallback
 import dev.glassworks.engine.vitro.compat.IslandBudget
+import dev.glassworks.engine.vitro.compat.IslandCardSizes
 import dev.glassworks.engine.vitro.compat.IslandFrontend
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.WebFallback
@@ -256,14 +257,76 @@ class VitroView(
      */
     @Volatile var resourcesList: List<LovelaceResource> = emptyList()
         set(v) {
+            val firstAnswer = !resourcesKnown
+            resourcesKnown = true
+            val held = resourceHold
+            resourceHold = null
+            if (held != null) mainHandler.removeCallbacks(held.timeout)
             // A list equals another with the same resources; whether Bubble's modules apply changes the routes too.
-            if (field == v && (field as? LovelaceResourceList)?.bubbleModules == (v as? LovelaceResourceList)?.bubbleModules) return
+            if (field == v && (field as? LovelaceResourceList)?.bubbleModules == (v as? LovelaceResourceList)?.bubbleModules) {
+                // The first answer is what a held first build waited for, even when it's the empty list it assumed.
+                if (firstAnswer && held != null && dashboard === held.config) renderView(held.index, forceRebuild = false, pushHistory = false)
+                return
+            }
             field = v
             // The islands load the resources into their page: new resources need new pages, pooled ones too.
             dropBuiltViews(keepIslands = false)
             closePooledIslands()
-            dashboard?.let { renderView(currentViewIndex, forceRebuild = true) }
+            // The view the page is on: the one a first build held for this answer, or the one that went to HA's
+            // frontend (never the index before it, which the page never showed: tablet Vitro run 3 built it behind HA).
+            val index = held?.takeIf { dashboard === it.config }?.index ?: webViewIndex ?: currentViewIndex
+            dashboard?.let { renderView(index, forceRebuild = true, pushHistory = held == null) }
         }
+
+    /**
+     * Whether Home Assistant has answered for this server's Lovelace resources ([resourcesList] set since
+     * [resetForServer]). Until then nothing that routes on them is decided: which cards go to an island, and whether a
+     * view goes to HA's frontend ([holdFirstBuildForResourcesMs]).
+     */
+    @Volatile var resourcesKnown: Boolean = false
+        private set
+
+    /**
+     * How long a first build waits for the resources' answer ([resourcesKnown]; 0: it doesn't). The engine sets it.
+     * They're asked before the dashboard's config, but a dashboard that loads Bubble Card hears them only after the
+     * modules check ([dev.glassworks.engine.vitro.data.BubbleModules]: a command, a subscription and a file), and the
+     * config lands first. Without the wait, a view of Bubble cards that only an island draws went to HA's frontend
+     * ("no Lovelace resource loads Bubble Card's script") and came back once they landed (tablet Vitro run 3). Past
+     * the wait it builds with what it has, and the answer rebuilds it.
+     */
+    var holdFirstBuildForResourcesMs: Long = 0
+
+    /** A first build waiting for the resources ([holdFirstBuildForResourcesMs]): its view, its config, its timer. */
+    private class ResourceHold(val index: Int, val config: DashboardConfig, val timeout: Runnable)
+
+    private var resourceHold: ResourceHold? = null
+
+    /** The view the page last handed to HA's frontend ([onWebView]), until a view is built again. */
+    private var webViewIndex: Int? = null
+
+    /**
+     * True when view [index]'s first build waits for the resources' answer: none yet for this server, and the view
+     * isn't built. Past [holdFirstBuildForResourcesMs] it builds without them.
+     */
+    private fun holdForResources(index: Int, cfg: DashboardConfig): Boolean {
+        if (resourcesKnown || holdFirstBuildForResourcesMs <= 0 || viewCache[index] != null) return false
+        resourceHold?.let { h ->
+            if (h.index == index && h.config === cfg) return true
+            mainHandler.removeCallbacks(h.timeout)
+        }
+        lateinit var hold: ResourceHold
+        hold = ResourceHold(index, cfg, Runnable {
+            if (resourceHold !== hold) return@Runnable
+            resourceHold = null
+            // No answer in time (a Home Assistant that never sends one): built as if it had none, from now on.
+            resourcesKnown = true
+            Log.w(TAG, "No Lovelace resources after $holdFirstBuildForResourcesMs ms: building without them")
+            if (dashboard === cfg) renderView(index, forceRebuild = false, pushHistory = false)
+        })
+        resourceHold = hold
+        mainHandler.postDelayed(hold.timeout, holdFirstBuildForResourcesMs)
+        return true
+    }
     var lastMetrics: VitroMetrics = VitroMetrics()
         private set
 
@@ -400,6 +463,45 @@ class VitroView(
         Log.i(TAG, "${card.type}: $reason")
         mainHandler.post { leaveForFrontend() }
     }
+
+    /**
+     * An island's [card] answered `getCardSize()` with [size] ([IslandCardSizes]). A masonry view places its cards by
+     * those sizes, as HA's does: the view on screen is laid out again (its islands kept) when the answer moves a card
+     * to another column or changes how many columns stay, and other built masonry views with the card are when next
+     * shown. A view that places its cards the same stays as it is.
+     */
+    fun islandCardSize(card: CardConfig, size: Double, generation: Int = serverGeneration) {
+        // A size an island of another Home Assistant reported, queued before [resetForServer]: not this one's card.
+        if (generation != serverGeneration) return
+        val cfg = dashboard
+        val width = (resources.displayMetrics.widthPixels / dp).toInt()
+        fun holds(v: ViewConfig) = v.cards.any { root -> holdsCard(root, card.raw.toString()) }
+        val masonry = cfg?.views?.withIndex()?.filter { (i, v) -> viewCache[i] != null && isMasonry(v) && holds(v) }.orEmpty()
+        val before = masonry.associate { (i, v) -> i to HaMasonry.place(v.cards, width, ::stateForBuild).let { (p, n) -> p.toList() to n } }
+        if (!IslandCardSizes.record(card.raw, size)) return
+        for ((i, v) in masonry) {
+            val after = HaMasonry.place(v.cards, width, ::stateForBuild).let { (p, n) -> p.toList() to n }
+            if (after == before[i]) continue
+            Log.i(TAG, "View '${v.path ?: i}': ${card.type} weighs $size (its getCardSize): its masonry columns are placed again")
+            if (i == currentViewIndex && webViewIndex == null) renderView(i, forceRebuild = true, pushHistory = false) else staleViews += i
+        }
+    }
+
+    /**
+     * Which Home Assistant the islands' reports are about: [resetForServer] moves it on, and a report made under an
+     * older one ([islandCardSize]) is dropped (Sourcery on #952). The engine reads it as it builds each card's context.
+     */
+    @Volatile var serverGeneration: Int = 0
+        private set
+
+    /** A view [buildViewTree] lays out as masonry (its last case): not a panel, sections, sidebar or layout-card view. */
+    private fun isMasonry(v: ViewConfig): Boolean =
+        !(v.type == "panel" && v.cards.isNotEmpty()) && !(v.type == "sections" && v.sections.isNotEmpty()) &&
+            v.type != "sidebar" && v.layoutCardType == null
+
+    /** True when [card], or a card inside it, has the config [raw]. */
+    private fun holdsCard(card: CardConfig, raw: String): Boolean =
+        card.raw.toString() == raw || CardRouter.producedCards(card, perEntity = false).any { holdsCard(it.value, raw) }
 
     /**
      * The views that go to HA's frontend now ([fallbackReason]) leave: built ones go, islands and all (they never show
@@ -565,7 +667,14 @@ class VitroView(
         islandLosses.clear()
         gaveUpIslands.clear()
         gaveUpViews.clear()
+        serverGeneration++
+        IslandCardSizes.clear()
+        resourceHold?.let { mainHandler.removeCallbacks(it.timeout) }
+        resourceHold = null
+        webViewIndex = null
         resourcesList = emptyList()
+        // Another server's resources are its own answer's: none is known until it comes.
+        resourcesKnown = false
         // Nothing of the old server stays on screen while the new one connects: not its tabs, not its backdrop, and
         // a backdrop image still loading from it doesn't land afterwards.
         tabBar.removeAllViews()
@@ -894,11 +1003,22 @@ class VitroView(
         }
     }
 
+    /**
+     * HA's toolbar behind the view tabs (`hui-root`'s `.header`, frontend 20261028.5): `--app-header-background-color`,
+     * with no fallback of its own. HA's theme sets it to `--sidebar-background-color`, which it sets to
+     * `--card-background-color`: the theme variable, never the card-only `--ha-card-background` or a card-mod style, so
+     * a theme with transparent cards keeps its toolbar (Greptile on #952). Past those, HA's own card background.
+     */
+    internal fun headerBackground(theme: dev.glassworks.engine.vitro.theme.ResolvedTheme): Int =
+        listOf("app-header-background-color", "sidebar-background-color", "card-background-color")
+            .firstNotNullOfOrNull { ThemeResolver.parseColor(theme.vars[it]) }
+            ?: if (theme.dark) 0xFF1C1C1C.toInt() else 0xFFFFFFFF.toInt()
+
     private fun rebuildTabs(config: DashboardConfig) {
         tabBar.removeAllViews()
         tabs.clear()
         val theme = ThemeResolver.resolve(themeCatalog, darkMode)
-        tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
+        tabScroll.setBackgroundColor(headerBackground(theme))
         // Like HA, subviews have no tab: they are reached by navigation and come back with their back arrow. A view
         // hidden from this user gets one, shown only while it's on screen ([applyTabVisibility]).
         config.views.forEachIndexed { idx, v ->
@@ -952,7 +1072,7 @@ class VitroView(
 
     private fun highlightTab(selected: Int, theme: ResolvedTheme) {
         // The strip itself follows the theme too (a light/dark switch, a cached view's own theme).
-        tabScroll.setBackgroundColor(theme.secondaryBackgroundColor)
+        tabScroll.setBackgroundColor(headerBackground(theme))
         applyTabVisibility(selected)
         for (t in tabs) {
             val active = t.viewIndex == selected
@@ -995,7 +1115,7 @@ class VitroView(
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     /** True when the view on screen has been built (not waiting for its first states). */
-    val currentViewBuilt: Boolean get() = viewCache[currentViewIndex] != null
+    val currentViewBuilt: Boolean get() = resourceHold == null && viewCache[currentViewIndex] != null
 
     /**
      * The page is gone: a view waiting for its first states isn't built later (a late build would make cards, and
@@ -1004,6 +1124,8 @@ class VitroView(
     fun cancelPendingBuilds() {
         holding?.cancel?.invoke()
         holding = null
+        resourceHold?.let { mainHandler.removeCallbacks(it.timeout) }
+        resourceHold = null
         stateRebuilds.values.forEach { it() }
         stateRebuilds.clear()
     }
@@ -1105,15 +1227,30 @@ class VitroView(
         // Nothing to build: no island a rebuild gave up waits for it.
         val cfg = dashboard ?: return closePooledIslands()
         val viewCfg = cfg.views.getOrNull(index) ?: return closePooledIslands()
+        // Whether the view goes to HA's frontend, and which of its cards go to islands, is decided once the resources
+        // are known: the decision made then is the one that stands. The connecting screen stays meanwhile.
+        if (holdForResources(index, cfg)) {
+            // The view the page waits on is the current one: a rebuild meanwhile (the user's light or dark choice, a
+            // theme, the header) renders it, not the index before, which would take the wait over (Greptile on #952).
+            // Whether it goes to HA's frontend is still decided once the resources are known.
+            currentViewIndex = index
+            for (i in 0 until contentHost.childCount) contentHost.getChildAt(i).visibility = GONE
+            for (i in 0 until overlayLayer.childCount) overlayLayer.getChildAt(i).visibility = GONE
+            updateIslandsShown()
+            updateCardsHidden()
+            return
+        }
         // Before anything is selected or built: the page leaves for HA's frontend, and this view stays as it was. No
         // build follows, so no island a rebuild gave up waits for one.
         onWebView?.let { show ->
             fallbackReason(viewCfg)?.let { reason ->
                 closePooledIslands()
+                webViewIndex = index
                 show(viewCfg, reason)
                 return
             }
         }
+        webViewIndex = null
         val t0 = SystemClock.elapsedRealtime()
         val prev = currentViewIndex
         if (pushHistory && !forceRebuild && prev != index && cfg.views.getOrNull(prev) != null) {

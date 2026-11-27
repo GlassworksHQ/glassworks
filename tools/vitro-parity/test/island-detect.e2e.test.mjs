@@ -53,3 +53,30 @@ test('the made-up cases hand off exactly when they draw an HA element the island
     await browser.close();
   }
 });
+
+// HA's own elements as the island defines them, checked on the plain made-up card (tablet Vitro run 3):
+// - ha-card has HA's look in its own shadow root, so it holds inside the card's shadow root too (no rule of the page
+//   reaches there): the card's background, 12 px corners, a 1 px border in --ha-card-border-color, and no header;
+// - ha-state-icon with neither an icon nor a state object draws nothing, as HA's (a house before);
+// - the island reports the card's getCardSize (2), which HA's masonry view places it by.
+test('the island draws ha-card and ha-state-icon as HA does, and reports the card size', { skip: !lib && !required ? why : false }, async () => {
+  assert.ok(lib, why);
+  const plain = join(CASES, 'test-plain.json');
+  const r = await lib.probeIsland(ROOT, plain, {
+    evaluate: `c => {
+      const card = c.shadowRoot.querySelector('ha-card');
+      const cs = getComputedStyle(card);
+      return {
+        background: cs.backgroundColor, radius: cs.borderTopLeftRadius,
+        border: [cs.borderTopWidth, cs.borderTopStyle, cs.borderTopColor, cs.borderLeftWidth, cs.borderBottomWidth].join(' '),
+        header: card.shadowRoot.querySelectorAll('h1').length,
+        stateIcon: c.shadowRoot.querySelector('ha-state-icon').childElementCount,
+      };
+    }`,
+  });
+  assert.deepEqual(r.evaluated, {
+    background: 'rgb(28, 28, 28)', radius: '12px', border: '1px solid rgb(44, 44, 44) 1px 1px', header: 0, stateIcon: 0,
+  });
+  const sizes = r.bridge.filter((m) => m.type === 'cardSize');
+  assert.deepEqual(sizes, [{ type: 'cardSize', size: 2 }], JSON.stringify(r.bridge));
+});

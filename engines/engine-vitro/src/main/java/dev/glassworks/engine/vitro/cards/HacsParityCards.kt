@@ -334,7 +334,8 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
             }
             addView(MdiIconView(ctx.context).apply { setIcon(icon, ctx.theme.primaryTextColor) },
                 FrameLayout.LayoutParams(controlIconPx, controlIconPx, Gravity.CENTER))
-            setOnClickListener { onClick() }
+            // A disabled `<button>` sends no click ([setMushroomButtonEnabled]).
+            setOnClickListener { if (isEnabled) onClick() }
             applyHaRipple(this, ctx.px(12f).toFloat(), ctx.theme.dark)
         }
 
@@ -1027,15 +1028,22 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
     private var activeControl = coverControls.firstOrNull()
     private val slider = if ("position_control" in coverControls)
         mushroomSlider(BLUE) { frac -> call("cover", "set_cover_position") { it.put("position", (frac * 100f).roundToInt()) } } else null
-    private val buttons = if ("buttons_control" in coverControls) listOf(
-        mushroomButton("mdi:arrow-up", "Open") { call("cover", "open_cover") },
-        mushroomButton("mdi:stop", "Stop") { call("cover", "stop_cover") },
-        mushroomButton("mdi:arrow-down", "Close") { call("cover", "close_cover") },
+    /**
+     * `mushroom-cover-buttons-control` (Mushroom 5.3.0): open, stop and close, each only when the cover supports it
+     * (`supported_features` OPEN 1, STOP 8, CLOSE 2) and each disabled while it can't act. Open and close: an
+     * unavailable cover, or one fully open (`current_position` 100, else `open`) or opening (closed or closing), unless
+     * its state is assumed ([CoverState]); stop: an unavailable cover only. Open and close take the device class's
+     * icons (sideways for an awning, curtain, door or gate).
+     */
+    private val buttons: List<Pair<Int, FrameLayout>> = if ("buttons_control" in coverControls) listOf(
+        COVER_OPEN to mushroomButton("mdi:arrow-up", "Open") { call("cover", "open_cover") },
+        COVER_STOP to mushroomButton("mdi:stop", "Stop") { call("cover", "stop_cover") },
+        COVER_CLOSE to mushroomButton("mdi:arrow-down", "Close") { call("cover", "close_cover") },
     ) else emptyList()
     private val switchButtons = LinkedHashMap<String, View>()
 
     init {
-        buttons.forEach { addCell(row, it) }
+        buttons.forEach { (_, b) -> addCell(row, b) }
         slider?.let { addCell(row, it, fill = true) }
         // The other control as a button beside the active one (Mushroom's _renderOtherControls).
         if (coverControls.size > 1) coverControls.forEach { c ->
@@ -1047,10 +1055,28 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
         start()
     }
 
+    private var lastState: EntityState? = null
+
+    /**
+     * Mushroom's `_controls` for [s]: the configured controls the cover supports (buttons with OPEN, CLOSE or STOP;
+     * the position slider with SET_POSITION 4), none without a state.
+     */
+    private fun available(s: EntityState?): List<String> = if (s == null) emptyList() else coverControls.filter { c ->
+        when (c) {
+            "buttons_control" -> s.supports(COVER_OPEN or COVER_CLOSE or COVER_STOP)
+            "position_control" -> s.supports(COVER_SET_POSITION)
+            else -> false
+        }
+    }
+
     private fun showActive() {
-        buttons.forEach { it.visibility = if (activeControl == "buttons_control") VISIBLE else GONE }
+        val available = available(lastState)
+        // Mushroom's updateActiveControl: the active control stays while the cover has it, else the first it has.
+        if (activeControl !in available) activeControl = available.firstOrNull()
+        bindButtons(lastState)
         slider?.visibility = if (activeControl == "position_control") VISIBLE else GONE
-        switchButtons.forEach { (c, b) -> b.visibility = if (c == activeControl) GONE else VISIBLE }
+        // Mushroom's next-control button: only while the cover has more than one control.
+        switchButtons.forEach { (c, b) -> b.visibility = if (c == activeControl || c !in available || available.size < 2) GONE else VISIBLE }
     }
 
     override fun render(s: EntityState?) {
@@ -1062,10 +1088,43 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
         // Mushroom: HA's state label, then a position that isn't 0 ("Open ⸱ 100%").
         setSecondary(s?.let { mushroomStateLine(config.type, it) } ?: "…")
         slider?.setValue((pos ?: 0) / 100f, active = open)
+        lastState = s
+        showActive()
         collapseWhen(!open)
     }
 
+    /** The buttons [s] supports, shown while they are the active control, each enabled while it can act. */
+    private fun bindButtons(s: EntityState?) {
+        var first = true
+        for ((bit, b) in buttons) {
+            val shown = activeControl == "buttons_control" && s != null && s.supports(bit)
+            b.visibility = if (shown) VISIBLE else GONE
+            if (!shown || s == null) continue
+            // mushroom-button-group: no gap where a button isn't drawn.
+            (b.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+                val start = if (first) 0 else ctx.px(10f)
+                if (lp.marginStart != start) { lp.marginStart = start; b.layoutParams = lp }
+            }
+            first = false
+            when (bit) {
+                COVER_OPEN -> (b.getChildAt(0) as? MdiIconView)?.let { it.setIcon(CoverState.openIcon(s), it.tintColor) }
+                COVER_CLOSE -> (b.getChildAt(0) as? MdiIconView)?.let { it.setIcon(CoverState.closeIcon(s), it.tintColor) }
+            }
+            setMushroomButtonEnabled(b, when (bit) {
+                COVER_OPEN -> CoverState.canOpen(s)
+                COVER_CLOSE -> CoverState.canClose(s)
+                else -> s.state != "unavailable"
+            })
+        }
+    }
+
     private companion object {
+        /** `CoverEntityFeature`: OPEN, CLOSE and STOP. */
+        const val COVER_OPEN = 1
+        const val COVER_CLOSE = 2
+        const val COVER_STOP = 8
+        const val COVER_SET_POSITION = 4
+
         /** `--rgb-state-cover`: Mushroom's blue. */
         val BLUE = 0xFF2196F3.toInt()
 
