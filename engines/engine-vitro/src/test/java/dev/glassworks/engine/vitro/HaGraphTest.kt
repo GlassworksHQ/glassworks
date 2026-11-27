@@ -72,6 +72,30 @@ class HaGraphTest {
     }
 
     @Test
+    fun decimalScanTakesTheStringsTheRegexDid() {
+        // The pattern jsNumber matched before it scanned by hand (java.util.regex: \d is ASCII only).
+        val regex = Regex("^[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?$")
+        // Every string of up to 6 of these: two digits stand for all ten, plus the signs, point, exponents, a letter,
+        // a space and a non-ASCII digit (Arabic-Indic three).
+        val alphabet = "05+-.eEx \u0663"
+        var checked = 0
+        fun walk(prefix: String) {
+            assertEquals("\"$prefix\"", regex.matches(prefix), HaGraph.isDecimal(prefix))
+            checked++
+            if (prefix.length < 6) for (c in alphabet) walk(prefix + c)
+        }
+        walk("")
+        assertTrue(checked > 1_000_000)
+        for (t in listOf("1017.0", "-.5", "+5.", "1e5", "1E-5", "3.25e+10", "007", ".", "e5", "1e", "1e+", "--1", "1.2.3", "Infinity", "0x10", "\u0661\u0662")) {
+            assertEquals(t, regex.matches(t), HaGraph.isDecimal(t))
+        }
+        // And jsNumber reads them the same as before: the literal's value, NaN for the rest.
+        assertEquals(-0.5, HaGraph.jsNumber("-.5"), 0.0)
+        assertEquals(5.0, HaGraph.jsNumber(" +5. "), 0.0)
+        assertTrue(HaGraph.jsNumber("\u0661\u0662").isNaN())
+    }
+
+    @Test
     fun streamMergesLaterMessagesAndKeepsTheStartState() {
         val s = HaGraph.Stream(1.0)
         val first = JSONObject().put("states", JSONObject().put("sensor.a", JSONArray()
@@ -321,6 +345,8 @@ class HaGraphTest {
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         footer.measure(android.view.View.MeasureSpec.makeMeasureSpec(500, android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.makeMeasureSpec(100, android.view.View.MeasureSpec.EXACTLY))
         footer.layout(0, 0, 500, 100)
+        // The stream is merged and the path built on the graph thread.
+        drainGraphWork()
         footer.draw(android.graphics.Canvas(android.graphics.Bitmap.createBitmap(500, 100, android.graphics.Bitmap.Config.ARGB_8888)))
         assertEquals(GraphFooterView.NO_HISTORY, footer.contentDescription)
     }
@@ -358,5 +384,17 @@ class HaGraphTest {
         val exact = ECharts.valueScale(0.0, 0.3, 0.0, 0.3, 0.0, splitNumber = 3)
         assertEquals(0.3, exact.ticks.last(), 1e-12)
         assertEquals(1, exact.ticks.count { kotlin.math.abs(it - 0.3) < 1e-12 })
+    }
+
+    /** Runs the main looper until every graph job has handed its result back. */
+    private fun drainGraphWork() {
+        val deadline = System.nanoTime() + 10_000_000_000L
+        do {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            if (dev.glassworks.engine.vitro.cards.GraphWork.pending.get() == 0) break
+            Thread.sleep(5)
+        } while (System.nanoTime() < deadline)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        assertEquals(0, dev.glassworks.engine.vitro.cards.GraphWork.pending.get())
     }
 }

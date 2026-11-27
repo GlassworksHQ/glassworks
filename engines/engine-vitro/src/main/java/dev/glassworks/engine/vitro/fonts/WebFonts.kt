@@ -117,6 +117,12 @@ object WebFonts {
     private var notifyQueued = false
 
     /** Called (main thread) after a font arrives or the stylesheets change what a drawn family resolves to. */
+    /**
+     * Whether any stylesheet is configured: without one, [lookup] is Absent for every family and starts nothing, so
+     * a font list's face doesn't depend on the loader ([VitroFonts.typeface] keeps it per list).
+     */
+    val hasSheets: Boolean get() = cssUrls.isNotEmpty()
+
     fun addListener(l: () -> Unit) {
         listeners += l
     }

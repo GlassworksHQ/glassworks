@@ -19,7 +19,8 @@ import org.json.JSONObject
  * point per hour (`detail: 1`; `detail: 2` keeps min and max per 5 px), a smooth line in `--accent-color` at 80 %
  * opacity, 2 px wide, over a 10 % fill down to the bottom. As wide as the card, a fifth of that high.
  *
- * The path is built when the history or the width changes, never while drawing.
+ * The stream's messages are merged and the path built on [GraphWork]'s thread, when the history or the width changes
+ * (and each minute, as the window moves), never while drawing: the view draws the last path built for its width.
  */
 class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : View(ctx.context) {
     private val entityId: String? = config.optString("entity").takeIf { it.isNotBlank() }
@@ -65,12 +66,17 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
     /** HA's footer error (`ui.components.history_charts.error`) while the stream is rejected; null otherwise. */
     private var error: String? = null
 
+    /** The stream; read and merged on [GraphWork]'s thread only, in the order its messages came. */
     private var stream: HaGraph.Stream? = null
+    /** The states drawn. Read on the graph thread only (merging the stream changes them there). */
     private var history: List<HistoryState>? = null
     private var unsubscribe: (() -> Unit)? = null
     private var line: Path? = null
-    private val fill = Path()
+    private var fill: Path? = null
+    /** The width [line] was built for (-1: none yet). */
     private var builtFor = -1
+    /** The newest path asked of the graph thread: an older answer is dropped. */
+    private var buildToken = 0
 
     init {
         color = ctx.theme.accentColor
@@ -116,10 +122,7 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
      */
     private val redraw: Runnable = object : Runnable {
         override fun run() {
-            val states = history
-            if (states != null && states.isNotEmpty()) history = purge(states, (ctx.now() - hoursToShow * HaGraph.HOUR_MS) / 1000.0)
-            builtFor = -1
-            invalidate()
+            requestBuild(purgeFirst = true)
             ctx.main.postDelayed(this, if (hoursToShow > 24) HaGraph.HOUR_MS.toLong() else 60_000L)
         }
     }
@@ -143,13 +146,18 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
                     error = null
                     contentDescription = null
                 }
-                val combined = s.process(ev, ctx.now())
-                var states: List<HistoryState> = combined[id].orEmpty()
+                val now = ctx.now()
                 // No history: the current state alone (limitedHistoryFromStateObj).
-                if (states.isEmpty()) ctx.store[id]?.let { st -> states = listOf(HistoryState(st.state, st.lastUpdated)) }
-                history = states
-                builtFor = -1
-                invalidate()
+                val current = ctx.store[id]?.let { st -> HistoryState(st.state, st.lastUpdated) }
+                GraphWork.run(ctx.main, {
+                    if (first) s.restart()
+                    val states: List<HistoryState> = s.process(ev, now)[id].orEmpty()
+                    if (states.isEmpty() && current != null) listOf(current) else states
+                }) { states ->
+                    if (stream !== s) return@run
+                    history = states
+                    requestBuild()
+                }
             }
         }, { err ->
             // A rejected stream: HA's footer shows the error instead of a line.
@@ -158,7 +166,10 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
                 stream = null
                 unsubscribe = null
                 history = null
+                buildToken++
                 builtFor = -1
+                line = null
+                fill = null
                 val why = err?.optString("message")?.takeIf { it.isNotEmpty() } ?: err?.optString("code").orEmpty()
                 error = HaText.ui("ui.components.history_charts.error").let { if (why.isEmpty()) it else "$it: $why" }
                 contentDescription = error
@@ -167,33 +178,58 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
         })
     }
 
-    private fun rebuild() {
-        builtFor = width
-        line = null
-        noHistory = false
+    /** A path built for one width: the line and its fill, or [noHistory] when there was nothing to plot. */
+    private class Built(val width: Int, val line: Path?, val fill: Path?, val noHistory: Boolean, val states: List<HistoryState>)
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w != oldw) requestBuild()
+    }
+
+    /**
+     * Builds the path for the history and width now on the graph thread ([purgeFirst]: after dropping the states the
+     * window has moved past), and shows it when it's still the newest asked for.
+     */
+    private fun requestBuild(purgeFirst: Boolean = false) {
         val states = history ?: return
+        val w = width
+        if (w <= 0) return
+        val token = ++buildToken
+        val now = ctx.now()
+        GraphWork.run(ctx.main, {
+            val kept = if (purgeFirst && states.isNotEmpty()) purge(states, (now - hoursToShow * HaGraph.HOUR_MS) / 1000.0) else states
+            build(kept, w, now)
+        }) { built ->
+            if (token != buildToken) return@run
+            history = built.states
+            builtFor = built.width
+            line = built.line
+            fill = built.fill
+            noHistory = built.noHistory
+            if (noHistory) contentDescription = NO_HISTORY else if (contentDescription == NO_HISTORY) contentDescription = null
+            invalidate()
+        }
+    }
+
+    /** The footer's path for [states] at [width] px and [nowMs], as HA's `hui-graph-base` draws it. Any thread. */
+    private fun build(states: List<HistoryState>, width: Int, nowMs: Long): Built {
         val wCss = width / dp.toDouble()
         val hCss = wCss / 5.0
         // sample to 1 point per hour or 1 point per 5 pixels
         val maxDetails = maxOf(10.0, if (detail > 1) maxOf(wCss / 5, hoursToShow) else hoursToShow)
-        val now = ctx.now().toDouble()
+        val now = nowMs.toDouble()
         val coords = HaGraph.footerCoordinates(states, wCss, hCss, maxDetails, now - hoursToShow * HaGraph.HOUR_MS, now, minY, maxY, detail != 2)
-        if (coords.isEmpty()) {
-            // A completed answer with no numbers in it: HA's "No state history found." (not loading, not an error).
-            noHistory = true
-            contentDescription = NO_HISTORY
-            return
-        }
-        if (contentDescription == NO_HISTORY) contentDescription = null
-        val p = HaGraph.smoothPath(coords, dp) ?: return
-        line = p
-        fill.reset()
+        // A completed answer with no numbers in it: HA's "No state history found." (not loading, not an error).
+        if (coords.isEmpty()) return Built(width, null, null, noHistory = true, states)
+        val p = HaGraph.smoothPath(coords, dp) ?: return Built(width, null, null, noHistory = false, states)
+        val fill = Path()
         fill.addPath(p)
         val lastX = (coords.last()[0] * dp).toFloat()
         val bottom = (hCss * dp).toFloat()
         fill.lineTo(lastX, bottom)
         fill.lineTo(0f, bottom)
         fill.close()
+        return Built(width, p, fill, noHistory = false, states)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -203,14 +239,15 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
             canvas.drawText(fit, 0, fit.length, width / 2f, height / 2f - (errorPaint.ascent() + errorPaint.descent()) / 2f, errorPaint)
             return
         }
-        if (builtFor != width) rebuild()
+        // The path for another width is being built: nothing until it's there (a footer's width rarely changes).
+        if (builtFor != width) return
         if (noHistory) {
             // `.info { position: absolute; top: calc(50% - 16px) }`, centered.
             canvas.drawText(NO_HISTORY, width / 2f, height / 2f - 16f * dp - infoPaint.ascent(), infoPaint)
             return
         }
         val p = line ?: return
-        canvas.drawPath(fill, fillPaint)
+        fill?.let { canvas.drawPath(it, fillPaint) }
         canvas.drawPath(p, linePaint)
     }
 

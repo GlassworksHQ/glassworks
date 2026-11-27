@@ -19,6 +19,7 @@ import android.widget.TextView
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.LocalRelayout
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -76,11 +77,28 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     internal var digitsWeight: Int = 0
         private set
 
+    /**
+     * The tick's new digits lay out this card again, not the dashboard: the card keeps its size as the time changes
+     * ([LocalRelayout]). Null while CardSurface's constructor runs.
+     */
+    private var local: LocalRelayout? = LocalRelayout(this)
+
+    override fun requestLayout() {
+        if (local?.take() != true) super.requestLayout()
+    }
+
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        local?.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
+    }
+
     private val tick = object : Runnable {
         override fun run() {
             // Attached but hidden (a cached tab behind another): no ticking; showing it again resumes.
             if (!running || !isShown) return
-            render(Date())
+            // Only the digits and the date change here.
+            val l = local
+            if (l != null) l.run { render(Date()) } else render(Date())
             ctx.main.postDelayed(this, if (showSeconds) 1_000L else 5_000L)
         }
     }

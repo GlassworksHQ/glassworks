@@ -367,6 +367,41 @@ object MdiIcons {
         return cache.putIfAbsent(key, path) ?: path
     }
 
+    /**
+     * [glyph] scaled by [scale] and moved by [dx], [dy], as an icon box draws it: one shared, never-changed path per
+     * glyph, size and offset, so identical icons hand the renderer the same path (Skia caches a path's mask by its
+     * generation ID, which a path rebuilt for every draw never repeats). Built with the same scale-then-translate
+     * matrix each view used to apply to its own copy, so the points, and the pixels, are the same.
+     */
+    fun placed(glyph: Path, scale: Float, dx: Float, dy: Float): Path {
+        val key = PlacedKey(glyph, scale, dx, dy)
+        synchronized(placedCache) { placedCache[key]?.let { return it } }
+        val m = Matrix().apply {
+            setScale(scale, scale)
+            postTranslate(dx, dy)
+        }
+        val out = Path().apply {
+            set(glyph)
+            transform(m)
+        }
+        synchronized(placedCache) { return placedCache.getOrPut(key) { out } }
+    }
+
+    /** A glyph (by identity: a reloaded catalog's glyph is a new path) at one size and offset. */
+    private class PlacedKey(val glyph: Path, val scale: Float, val dx: Float, val dy: Float) {
+        override fun equals(other: Any?): Boolean = other is PlacedKey && other.glyph === glyph &&
+            other.scale.toRawBits() == scale.toRawBits() && other.dx.toRawBits() == dx.toRawBits() && other.dy.toRawBits() == dy.toRawBits()
+
+        override fun hashCode(): Int =
+            ((System.identityHashCode(glyph) * 31 + scale.toRawBits()) * 31 + dx.toRawBits()) * 31 + dy.toRawBits()
+    }
+
+    /** The placed glyphs, least recently drawn first; a dashboard draws far fewer distinct ones than this holds. */
+    private val placedCache = object : LinkedHashMap<PlacedKey, Path>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<PlacedKey, Path>): Boolean = size > PLACED_MAX
+    }
+    private const val PLACED_MAX = 512
+
     private fun keyOf(name: String): String = name.trim().lowercase().removePrefix("mdi:").removePrefix("hass:")
 
     /** Receives the drawing commands [parseSvgPathInto] emits. Pure, so path data can be checked off-device. */
@@ -853,9 +888,8 @@ object MdiIcons {
 /** Lightweight Android View drawing one crisp 24x24 MDI icon path in [tintColor]. */
 class MdiIconView(context: Context) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val drawPath = Path()
-    private val matrix = Matrix()
-    private var iconPath: Path = MdiIcons.pathFor("home")
+    /** The glyph, looked up when first set or drawn (a view always given an icon never parses `home`). */
+    private var iconPath: Path? = null
     private var iconName = "home"
     /** The icon's name as given to [setIcon] (`mdi:` prefix and all). */
     val icon: String get() = iconName
@@ -868,13 +902,16 @@ class MdiIconView(context: Context) : View(context) {
         set(v) { if (field !== v) { field = v; invalidate() } }
 
     fun setIcon(name: String, color: Int = tintColor) {
-        picture = null
-        iconName = name
         // Read before the lookup: a catalog that finishes during it still redraws this view (redrawWhenReady
         // re-checks), and one already loaded costs no registration.
         val mayBeStandIn = MdiIcons.isLoading
-        iconPath = MdiIcons.pathFor(name)
+        val path = MdiIcons.pathFor(name)
         if (mayBeStandIn) MdiIcons.redrawWhenReady(this)
+        // The same glyph in the same color: nothing to draw again (a state update that keeps the icon).
+        if (picture == null && path === iconPath && name == iconName && color == tintColor) return
+        picture = null
+        iconName = name
+        iconPath = path
         tintColor = color
         paint.color = color
         invalidate()
@@ -900,12 +937,8 @@ class MdiIconView(context: Context) : View(context) {
             canvas.restore()
             return
         }
-        matrix.reset()
-        matrix.setScale(scale, scale)
-        matrix.postTranslate(dx, dy)
-        drawPath.set(iconPath)
-        drawPath.transform(matrix)
+        val src = iconPath ?: MdiIcons.pathFor(iconName).also { iconPath = it }
         paint.color = tintColor
-        canvas.drawPath(drawPath, paint)
+        canvas.drawPath(MdiIcons.placed(src, scale, dx, dy), paint)
     }
 }
