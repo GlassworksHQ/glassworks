@@ -2,7 +2,7 @@
 // A device frame's addresses (#621): its install's steps from its installer.json, and the standard flow's after them.
 // A load at a set-up step (a reload, a link) opens the standard flow there, connecting over adb; a load at an app flow's
 // step opens the app alone; the install's tab mark brings a flashed Mirror straight to its first start.
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -56,6 +56,11 @@ describe('a device frame\'s addresses', () => {
     sessionStorage.setItem(`kiln:device:${MIRROR_BASE}:image`, JSON.stringify({ at: 'flashed', image: mirrorFrame.imageFlow.recipes[0]!.id }));
     at(`${MIRROR_BASE}/first-start`);
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
+    // the resume screen first: where it stopped, and Continue to the step the mark resumes on
+    expect(await screen.findByRole('heading', { name: 'Pick up where you left off' })).toBeTruthy();
+    expect(screen.getByText('Only its first start is left.')).toBeTruthy();
+    expect(location.pathname).toBe(`${MIRROR_BASE}/first-start`);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByRole('button', { name: 'Connect' })).toBeTruthy();
     expect(screen.queryByText(/Download the system image/)).toBeNull();
     expect(location.pathname).toBe(`${MIRROR_BASE}/first-start`);
@@ -96,6 +101,37 @@ describe('sessions kept from an earlier visit', () => {
     await e.session.undo();
     expect(e.session.isClosed).toBe(true); // let go before the app's Connect opens it again
     await vi.waitFor(() => expect(location.pathname).toBe(`${MIRROR_BASE}/app`)); // back on the app's first screen
+  });
+});
+
+describe('the credits on set-up\'s Done', () => {
+  it('are the ones the install stood on: none after an in-place install, the frame\'s otherwise, and a reload keeps them', async () => {
+    const credits = () => (registry.get()!.session as unknown as { standard: { credits: unknown } }).standard.credits;
+    at(MIRROR_BASE);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
+    const m = new FakeMirror({ kiosk: 'app' });
+    await act(async () => { pageHandOver(MIRROR_BASE)(m, { credits: {} }); });
+    expect(credits()).toEqual({}); // Glass Panes wasn't written
+    expect(sessionStorage.getItem(`kiln:standard:${MIRROR_BASE}:credits`)).toBe('{}');
+    await act(async () => { pageHandOver(MIRROR_BASE)(m); });
+    expect(credits()).toEqual(mirrorFrame.credits);
+    expect(sessionStorage.getItem(`kiln:standard:${MIRROR_BASE}:credits`)).toBeNull();
+  });
+
+  it('are right with the tab\'s storage off: the hand-over carries them, not storage', async () => {
+    const credits = () => (registry.get()!.session as unknown as { standard: { credits: unknown } }).standard.credits;
+    const off = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
+    const offGet = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('blocked', 'SecurityError'); });
+    try {
+      at(MIRROR_BASE);
+      render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
+      const m = new FakeMirror({ kiosk: 'app' });
+      await act(async () => { pageHandOver(MIRROR_BASE)(m, { credits: {} }); });
+      expect(credits()).toEqual({});
+    } finally {
+      off.mockRestore();
+      offGet.mockRestore();
+    }
   });
 });
 

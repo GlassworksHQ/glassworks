@@ -77,7 +77,7 @@ public final class ProbeServerService extends Service {
     private volatile ServerSocket server;
     private volatile ExecutorService requestPool;
     private volatile ScheduledExecutorService deadlineTimer;
-    private BleProbeServer ble;
+    private volatile BleProbeServer ble;
     private final Set<Socket> activeSockets = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private final class RequestTask implements Runnable {
@@ -128,7 +128,7 @@ public final class ProbeServerService extends Service {
             t.setDaemon(true);
             t.start();
             Thread warm = new Thread(() -> {
-                try { StockBundle.current(); } catch (Throwable e) { Log.w(TAG, "stock bundle unavailable", e); }
+                try { StockBundle.current(); } catch (Throwable e) { ProbeLog.w(TAG, "stock bundle unavailable", e); }
             }, "stock-probe-bundle");
             warm.setDaemon(true);
             warm.start();
@@ -136,7 +136,7 @@ public final class ProbeServerService extends Service {
                 ble = new BleProbeServer(this);
                 ble.start();
             } catch (Throwable e) {
-                Log.w(TAG, "BLE probe unavailable", e);
+                ProbeLog.w(TAG, "BLE probe unavailable", e);
                 ble = null;
             }
         }
@@ -153,7 +153,7 @@ public final class ProbeServerService extends Service {
         try {
             File apkDir = new File(getApplicationInfo().sourceDir).getParentFile();
             if (apkDir == null || !new File(apkDir, "enable_wifi").exists()) {
-                Log.i(TAG, "no enable_wifi marker; leaving Wi-Fi/SoftAP untouched");
+                ProbeLog.i(TAG, "no enable_wifi marker; leaving Wi-Fi/SoftAP untouched");
                 return;
             }
             WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
@@ -162,14 +162,14 @@ public final class ProbeServerService extends Service {
                 Method isAp = wm.getClass().getMethod("isWifiApEnabled");
                 Object apOn = isAp.invoke(wm);
                 if (Boolean.TRUE.equals(apOn)) {
-                    Log.i(TAG, "SoftAP is active; leaving Wi-Fi mode untouched");
+                    ProbeLog.i(TAG, "SoftAP is active; leaving Wi-Fi mode untouched");
                     return;
                 }
             } catch (Throwable ignored) {}
             boolean ok = wm.setWifiEnabled(true);
-            Log.i(TAG, "requested Wi-Fi client enable: " + ok);
+            ProbeLog.i(TAG, "requested Wi-Fi client enable: " + ok);
         } catch (Throwable t) {
-            Log.w(TAG, "maybeEnableWifiClient failed", t);
+            ProbeLog.w(TAG, "maybeEnableWifiClient failed", t);
         }
     }
 
@@ -213,7 +213,7 @@ public final class ProbeServerService extends Service {
             listener = new ServerSocket(PORT);
             server = listener;
             if (!running) return;
-            Log.i(TAG, "HTTP probe listening on port " + PORT + " uid=" + Process.myUid() + " fiemap=" + Fiemap.isAvailable());
+            ProbeLog.i(TAG, "HTTP probe listening on port " + PORT + " uid=" + Process.myUid() + " fiemap=" + Fiemap.isAvailable());
             while (running) {
                 Socket sock = listener.accept();
                 RequestTask task = new RequestTask(sock);
@@ -224,7 +224,7 @@ public final class ProbeServerService extends Service {
                 }
             }
         } catch (IOException e) {
-            if (running) Log.e(TAG, "server loop failed", e);
+            if (running) ProbeLog.e(TAG, "server loop failed", e);
         } finally {
             server = null;
             requestPool = null;
@@ -431,13 +431,28 @@ public final class ProbeServerService extends Service {
                 out.flush();
             } else if ("/".equals(route) || "/bundle".equals(route)) {
                 sendText(out, 200, "text/html", bundlePage());
+            } else if ("/log".equals(route)) {
+                // the probe's own log and its Bluetooth state, for a stock Mirror that lets no adb in yet
+                BleProbeServer b = ble;
+                String text = "uptimeMs=" + android.os.SystemClock.elapsedRealtime() + "\n"
+                        + (b != null ? b.describe() : "ble: not started") + "\n\n" + ProbeLog.dump();
+                sendText(out, 200, "text/plain", text);
             } else if ("/status".equals(route)) {
                 String json = "{\"ok\":true,\"uid\":" + Process.myUid()
                         + ",\"pid\":" + Process.myPid()
                         + ",\"sdk\":" + Build.VERSION.SDK_INT
                         + ",\"fiemap\":" + Fiemap.isAvailable()
                         + ",\"bootCompleted\":\"" + escapeJson(getSysProp("sys.boot_completed")) + "\"}\n";
-                sendText(out, 200, "application/json", json);
+                byte[] body = json.getBytes(StandardCharsets.UTF_8);
+                String hdr = "HTTP/1.1 200 OK\r\n"
+                        + "Content-Type: application/json; charset=utf-8\r\n"
+                        + "Content-Length: " + body.length + "\r\n"
+                        + CORS_HEADERS
+                        + "Cache-Control: no-store\r\n"
+                        + "Connection: close\r\n\r\n";
+                out.write(hdr.getBytes(StandardCharsets.US_ASCII));
+                out.write(body);
+                out.flush();
             } else if ("/props".equals(route)) {
                 sendText(out, 200, "text/plain", readAllProps());
             } else if ("/dt-panel".equals(route)) {
@@ -508,7 +523,7 @@ public final class ProbeServerService extends Service {
             }
             try { s.shutdownOutput(); } catch (IOException ignored) {}
         } catch (Throwable t) {
-            Log.w(TAG, "request failed", t);
+            ProbeLog.w(TAG, "request failed", t);
         } finally {
             activeSockets.remove(sock);
             if (killer != null) killer.cancel(false);
@@ -520,7 +535,8 @@ public final class ProbeServerService extends Service {
             + "Access-Control-Expose-Headers: Content-Length, Content-Disposition\r\n";
 
     private static boolean isCorsRoute(String route) {
-        return "/stock-bundle.bin".equals(route);
+        // /status too: Kiln checks it, across origins, to see that the computer reached the Mirror's own Wi-Fi
+        return "/stock-bundle.bin".equals(route) || "/status".equals(route);
     }
 
     private static void sendPreflight(OutputStream out) throws IOException {

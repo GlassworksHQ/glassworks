@@ -95,8 +95,8 @@ describe('the screens', () => {
 
   it('4: the install line, 5 of 6 at the home screen, and each grant read back', async () => {
     await show('installing', /5 of 6/);
-    expect(heading()).toBe('Keep it plugged in');
-    expect(document.querySelector('.plain')?.textContent).toContain('Pixel Tablet, Android 14, 64-bit');
+    expect(heading()).toBe('Installing Glassworks');
+    expect(document.querySelector('.plist')?.textContent).toContain('Pixel Tablet, Android 14, 64-bit');
     const grants = [...document.querySelectorAll('.grants > div')].map((g) => g.textContent);
     expect(grants).toEqual(['MicrophoneOn', 'CameraNot requested', 'Automatic locationOn', 'Show over other appsOn', 'Turn the screen offOn', 'Updates without a tapOn']);
     expect(document.querySelector('.warnbox')).toBeNull();
@@ -168,7 +168,7 @@ describe('the screens', () => {
 
   it('a refused install: nothing changed, said so, with Try again', async () => {
     await show('error', 'Kiln can\'t install on this tablet');
-    expect(document.querySelector('.raw')?.textContent).toMatch(/Install via USB/);
+    expect(document.querySelector('.lede')?.textContent).toMatch(/Install via USB/); // the refusal says why itself, in the lede
     expect(rail()).toContain('Install:bad');
     expect(embers()).toEqual(['Try again']);
   });
@@ -273,6 +273,39 @@ describe('the session', () => {
     await closed.connect();
     expect(reopen).toHaveBeenCalledTimes(2);
     expect(closed.state.connectError).toBe('Nothing was picked. Pick the tablet in the browser\'s list, then tap Allow on it.');
+  });
+
+  it('every screen before the install has a way back: named to Find, the steps to where they came from, Allow to the steps once the ask stopped', async () => {
+    const s = new AndroidSession({ ...deps(), connect: vi.fn(() => Promise.reject(new DOMException('No device selected.', 'NotFoundError'))), picked: () => false }, true);
+    await s.pickApk('a.apk', fakeGenericApk());
+    await s.find();
+    expect(s.state.screen).toBe('named');
+    s.toSteps();
+    expect(s.state.screen).toBe('debug');
+    s.backFromSteps();
+    expect(s.state.screen).toBe('named');
+    // a brand corrected from the named screen: Back from its steps is the brand list, and the list's Back is named again
+    s.brands();
+    s.pickBrand('other');
+    s.chooseBrand();
+    expect(s.state.screen).toBe('debug');
+    s.backFromSteps();
+    expect(s.state.screen).toBe('brand');
+    s.back();
+    expect(s.state.screen).toBe('named');
+    s.toSteps();
+    s.backFromSteps();
+    expect(s.state.screen).toBe('named');
+    s.restart();
+    expect(s.state).toMatchObject({ screen: 'find' });
+    expect(s.state.identified).toBeUndefined();
+    await s.find();
+    s.toSteps();
+    await s.connect(); // nothing picked: the ask has stopped
+    expect(s.state).toMatchObject({ screen: 'allow', connecting: false });
+    s.backToSteps();
+    expect(s.state).toMatchObject({ screen: 'debug' });
+    expect(s.state.connectError).toBeUndefined();
   });
 
   it('a closed list is said plainly, and changes nothing', async () => {

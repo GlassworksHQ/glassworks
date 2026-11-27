@@ -11,7 +11,7 @@ import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from '@glasswor
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { axmlAttribute, zipEntry } from '@glassworks/app-adb';
-import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, IMAGE_KIOSK, IMAGE_OWNER_FINGERPRINT, GLASSWORKS, KEPT_APPS, UNUSED_APPS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, adbFingerprint, adbKeyLines, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
+import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, IMAGE_KIOSK, IMAGE_OWNER_FINGERPRINT, GLASSWORKS, KEPT_APPS, UNUSED_APPS, MIRROR_PROBE, PRIVILEGED, FRAMEWORK_OVERLAY, SETTINGS_OVERLAY, adbFingerprint, adbKeyLines, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
 import { API_KEY_HANDOVER_PROP, DEVICE_MAC_PROP, MIRROR_FRAME } from '../src/image';
 import { fakeAdbKey, fakeServicesJar } from './fakes';
 import { DEXDUMP, disassemble } from './dexdump';
@@ -33,6 +33,8 @@ const APK = mirrorApk({ libs });
 const ANIM = new Uint8Array(randomBytes(50_000));
 /** frames/lululemon-mirror/overlay/GlassworksSettings.apk, as build.sh writes it */
 const OVERLAY = new Uint8Array(readFileSync(join(__dirname, '../../overlay/GlassworksSettings.apk')));
+/** frames/lululemon-mirror/overlay/GlassworksFramework.apk, as build.sh writes it */
+const FRAMEWORK = new Uint8Array(readFileSync(join(__dirname, '../../overlay/GlassworksFramework.apk')));
 /** the installer's key: the one the patched services.jar lets in */
 const KEY = fakeAdbKey(11);
 const TEMPLATE = 'update_config=1\neapol_version=1\nap_scan=1\nfast_reauth=1\npmf=1\np2p_no_group_iface=1\n';
@@ -124,6 +126,24 @@ describe('a first boot with nothing to tap: the settings overlay and the saved W
     expect(await zipEntry(OVERLAY, 'META-INF/TESTKEY.RSA')).toBeDefined(); // v1-signed with AOSP's public test key (Android 6 reads no v2)
   });
 
+  it('the committed framework overlay is the pinned build, for "android", with config_screenBrightnessSettingMinimum 0', async () => {
+    const sha = hex(new Sha256().update(FRAMEWORK).digest());
+    expect(sha, 'rebuild with frames/lululemon-mirror/overlay/build.sh and update FRAMEWORK_OVERLAY.sha256').toBe(FRAMEWORK_OVERLAY.sha256);
+    const manifest = (await zipEntry(FRAMEWORK, 'AndroidManifest.xml'))!;
+    expect(axmlAttribute(manifest, 'manifest', 'package')).toBe('dev.glassworks.mirror.framework');
+    expect(axmlAttribute(manifest, 'overlay', 'targetPackage')).toBe('android');
+    expect(await zipEntry(FRAMEWORK, 'classes.dex')).toBeUndefined(); // resources only
+    expect(await zipEntry(FRAMEWORK, 'META-INF/TESTKEY.RSA')).toBeDefined();
+    // one resource: the name idmap matches against framework-res, and its value as a Res_value
+    // (size 8, res0 0, TYPE_INT_DEC 0x10, data 0), as `aapt2 dump resources` shows it
+    const arsc = Buffer.from((await zipEntry(FRAMEWORK, 'resources.arsc'))!);
+    expect(arsc.includes('config_screenBrightnessSettingMinimum')).toBe(true);
+    expect(arsc.includes(Buffer.from('integer', 'utf16le'))).toBe(true); // the type pool is UTF-16
+    const value = Buffer.from([8, 0, 0, 0x10, 0, 0, 0, 0]);
+    expect(arsc.indexOf(value)).toBeGreaterThan(0);
+    expect(arsc.indexOf(value, arsc.indexOf(value) + 1)).toBe(-1);
+  });
+
   it('stores the WPA passphrase as its PSK (IEEE 802.11i test vectors), never the password itself', async () => {
     const enc = (s: string) => new TextEncoder().encode(s);
     expect(await wpaPsk('password', enc('IEEE'))).toBe('f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e');
@@ -170,9 +190,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     const fs = await Ext4.open(disk);
     await fs.setLabel('/framework/services.jar', 'u:object_r:system_file:s0');
     const log: string[] = [];
-    await patchSystem(fs, { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY, deviceMac: MAC, time: T }, (l) => log.push(l));
+    await patchSystem(fs, { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY, frameworkOverlay: FRAMEWORK, deviceMac: MAC, time: T }, (l) => log.push(l));
     const after = { free: fs.freeBlocks, inodes: fs.freeInodes };
-    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY, deviceMac: MAC, time: T }); // again: the same result
+    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY, frameworkOverlay: FRAMEWORK, deviceMac: MAC, time: T }); // again: the same result
     const again = await Ext4.open(disk);
     expect({ free: again.freeBlocks, inodes: again.freeInodes }).toEqual(after);
     await dump(disk, img);
@@ -194,11 +214,13 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(prop.match(/^ro\.glassworks\.device\.[a-z]+=.*$/gm)).toEqual([`${DEVICE_MAC_PROP}=${MAC}`]);
     expect(log.join('\n')).not.toContain(MAC);
     expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
+    expect(Buffer.from(debugfsCat(img, FRAMEWORK_OVERLAY.path))).toEqual(Buffer.from(FRAMEWORK));
+    expect(log).toContain(FRAMEWORK_OVERLAY.path);
     for (const p of [DIR, `${DIR}/lib/arm64`, '/vendor/overlay']) {
       expect(debugfs(img, `stat ${p}`)).toMatch(/Mode:\s+0755[\s\S]*User:\s+0\s+Group:\s+0/);
       expect(debugfs(img, `ea_get ${p} security.selinux`)).toContain('u:object_r:system_file:s0');
     }
-    for (const p of [`${DIR}/Glassworks.apk`, `${DIR}/lib/arm64/libmozglue.so`, '/media/bootanimation.zip', SETTINGS_OVERLAY.path]) {
+    for (const p of [`${DIR}/Glassworks.apk`, `${DIR}/lib/arm64/libmozglue.so`, '/media/bootanimation.zip', SETTINGS_OVERLAY.path, FRAMEWORK_OVERLAY.path]) {
       expect(debugfs(img, `stat ${p}`)).toMatch(/Mode:\s+0644[\s\S]*User:\s+0\s+Group:\s+0/);
       expect(debugfs(img, `ea_get ${p} security.selinux`)).toContain('u:object_r:system_file:s0');
     }
@@ -275,6 +297,8 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     await expect(patchSystem(await Ext4.open(disk2), { adbKey: KEY, apk: mirrorApk({ minSdk: 23, home: 'none' }) })).rejects.toThrow(/it has no home screen \(no activity with MAIN, HOME and DEFAULT in one intent filter\)/);
     const tampered = OVERLAY.slice(); tampered[100]! ^= 1;
     await expect(patchSystem(await Ext4.open(disk2), { adbKey: KEY, apk: APK, settingsOverlay: tampered })).rejects.toThrow(/settings overlay isn't the one Kiln builds.*Nothing was changed/);
+    const tamperedFramework = FRAMEWORK.slice(); tamperedFramework[100]! ^= 1;
+    await expect(patchSystem(await Ext4.open(disk2), { adbKey: KEY, apk: APK, frameworkOverlay: tamperedFramework })).rejects.toThrow(/framework overlay isn't the one Kiln builds.*Nothing was changed/);
     await expect(patchSystem(await Ext4.open(disk2), { adbKey: KEY, apk: APK, deviceMac: 'e6:79:e6:e0:96:a3' })).rejects.toThrow(/device id isn't a MAC.*Nothing was changed/);
     expect(hex(new Sha256().update(await disk.read(0, disk.blocks)).digest())).toBe(before);
     expect(hex(new Sha256().update(await disk2.read(0, disk2.blocks)).digest())).toBe(before2);
@@ -464,7 +488,7 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       expect(await packageIn(IMAGE_KIOSK.dir)).toBe(IMAGE_KIOSK.package);
       const apk = REAL_APK ? new Uint8Array(readFileSync(REAL_APK)) : APK;
       const log: string[] = [];
-      await patchSystem(real, { adbKey: KEY, apk, bootAnimation: ANIM, settingsOverlay: OVERLAY }, (l) => log.push(l));
+      await patchSystem(real, { adbKey: KEY, apk, bootAnimation: ANIM, settingsOverlay: OVERLAY, frameworkOverlay: FRAMEWORK }, (l) => log.push(l));
       console.info(`free after the patch: ${real.freeBlocks} blocks of 4 KiB; ${log.find((l) => l.includes('native librar')) ?? 'no native libraries'}`);
       for (const u of UNUSED_APPS) expect(await real.exists(u.dir), u.dir).toBe(false);
       expect(await real.exists(IMAGE_KIOSK.dir)).toBe(false);
@@ -493,6 +517,7 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       expect(debugfs(img, `ls ${DIR}/lib/arm64`)).toContain('libxul.so');
       expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toMatch(/\nro\.lockscreen\.disable\.default=true\n$/);
       expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
+      expect(Buffer.from(debugfsCat(img, FRAMEWORK_OVERLAY.path))).toEqual(Buffer.from(FRAMEWORK));
       expect(debugfs(img, 'ls /app')).toContain('Provision');
       // services.jar: the installer's key in place of the project key, and (with the SDK's dexdump)
       // the same code, locals and annotations as the original, verified as ART does

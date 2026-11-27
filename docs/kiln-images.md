@@ -38,7 +38,7 @@ export const GLASS_PANES_IMAGE: ImageRecipe = {
   by: { name: 'git-nimrod', href: 'https://github.com/git-nimrod' },
   project: { name: 'git-nimrod/glass-panes', href: 'https://github.com/git-nimrod/glass-panes' },
   licence: 'MIT; the image’s parts keep their own',
-  summary: 'Android 6.0.1 for the Mirror as its release has it, with its own Mirror Kiosk app.',
+  summary: 'Replaces everything on the Mirror with Android 6.0.1 as its release has it, with its own Mirror Kiosk app.',
   support: { name: 'Glass Panes on GitHub', href: 'https://github.com/git-nimrod/glass-panes/issues' },
   release: { name: 'mirror-android-3', href: 'https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-3' },
   next: { name: 'its README', href: 'https://github.com/git-nimrod/glass-panes#readme' },
@@ -67,7 +67,7 @@ export const GLASS_PANES_IMAGE: ImageRecipe = {
 |---|---|
 | `id` | The image's id in Kiln's link. `glassworks` is taken |
 | `name`, `by`, `project` | Shown on the card, and on every screen of the install: "Glass Panes is made by git-nimrod. Questions about it go to its project." They must match the frame's `credits` entry for the image (`frames/<id>/design/frame.json`) |
-| `licence`, `summary` | The card's licence row and its one line |
+| `licence`, `summary` | The card's licence row and its one line, which opens with what happens to the device (replaced, or kept with a way back) |
 | `support` | Where questions go. The card says "Its project, on GitHub" |
 | `release` | The release the files come from, named on the download screen |
 | `next` | Where the person carries on after Done, e.g. your install guide |
@@ -164,6 +164,12 @@ Kiln puts its own steps around every recipe. A recipe can't list, skip or move t
 6. **The way back**, on Done: how to put the other image back, or for an in-place recipe, the restore
    point written over the blocks it changed (from this browser, or from the downloaded zip), on the
    device it was made on only. After a write in the install fails, the error screen offers it too.
+   Nothing can read the restore back once it's written (the bootloader can't read a partition, and the
+   fresh app data drops this browser's adb key), so Kiln checks it before the first write instead:
+   each file against the size and SHA-256 recorded when it was made, the device it was made on, the
+   restore image's shape, and that it puts back exactly the original files the frame names, byte for
+   byte. While adb still lets Kiln in, it also checks that those files on the device are what the
+   install wrote or still the originals. Any failed check writes nothing.
 
 Every file is downloaded and checked before Kiln connects to the device, so a failed download never
 leaves a half-written device.

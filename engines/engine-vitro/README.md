@@ -141,7 +141,7 @@ Some dashboards and views go to that fallback too, so the panel shows them as Ho
 
 The other views of the dashboard stay native. A view never goes back and forth: once it opens in Home Assistant's frontend for a card like that, Vitro doesn't take it back to draw the card again. The way back from one of these pages works as from any other Home Assistant page: Back, Reload dashboard and a tap on a dashboard return to the native view.
 
-The island server only serves islands. Its proxy forwards what a card loads (`/api/`, `/local/`, `/hacsfiles/`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), and only to a page that holds the cookie its island page sets, so other apps on the device can't use it. On the legacy engine, which loads only the dashboard's origin, the island server's loopback address is the one other origin it allows, and each page stays on its own origin: Home Assistant's pages never reach the island server, and islands never reach Home Assistant except through it.
+The island server only serves islands. Its proxy forwards what a card loads (`/api/`, `/local/`, `/hacsfiles/`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), and only to an island page, whose address holds a random key, so other apps on the device can't use it. On the legacy engine, which loads only the dashboard's origin, the island server's loopback address is the one other origin it allows, and each page stays on its own origin: Home Assistant's pages never reach the island server, and islands never reach Home Assistant except through it.
 
 ## What works
 
@@ -364,11 +364,11 @@ With Vitro on, that GeckoView allows exactly two origins: your Home Assistant, a
 Islands load from a small web server inside the app, `VitroIslandServer`. It is built so that nothing outside the island can use it:
 
 - **It never listens on the network.** The server is bound to `127.0.0.1`, so only apps on the panel itself can reach it, never another device on your network.
-- **Other apps on the panel can't use it.** Every app on a device can reach `127.0.0.1`, so the server answers only a page that holds a random key, which the island page sets for itself as a cookie. Each island's address is random as well. A request also has to name the server itself as its host, which stops a web page from reaching it through a look-alike address (DNS rebinding).
+- **Other apps on the panel can't use it.** Every app on a device can reach `127.0.0.1`, so the server answers only requests that come from an island page. Each island page lives under a random key in its address, new every time the app starts, and so does everything the page loads from the server. When a card asks for one of Home Assistant's addresses directly, such as an entity picture, the browser names the island page as the request's referrer, which carries the key, and the server moves that request under the key. The browser never names an island page to another site or another app's port, so the key stays between the islands and the server. The key isn't a cookie, because the browser sends a cookie set on `127.0.0.1` to every app listening there, whatever its port. Each island's address is random as well. A request also has to name the server itself as its host, which stops a web page from reaching it through a look-alike address (DNS rebinding).
 - **It only serves islands.** Home Assistant's own pages, such as sign-in and settings, load from Home Assistant itself, so their WebSocket and sign-in never pass through it.
 - **Your token goes only to your Home Assistant.** The server forwards an island's requests to the one Home Assistant the panel is signed in to and adds the panel's token there. It forwards only the paths cards load (the API, `/local`, `/hacsfiles`, Home Assistant's static files and media, and the folders of the dashboard's own Lovelace resources), refuses paths that try to climb out of those folders, and follows redirects only within Home Assistant.
 - **Answers made with the token aren't cached,** so they can't be served again after a sign-in change, and the memory proxied answers can use is capped.
-- **Its logs leave out tokens and queries,** and the compatibility checker's reasons leave out addresses.
+- **Its logs leave out tokens, queries and the key,** and the compatibility checker's reasons leave out addresses.
 
 ## Known limits
 

@@ -28,7 +28,7 @@ export function cases(d: Driver): Case[] {
     ...(download ? [{ id: 'stalled-download', kind: 'stalled-download' as const, knobs: { stall: true }, step: download.id,
       what: `the first download (in ${download.id}) stops sending: a watchdog ends it, and it resumes by itself or ends with an error whose Try again is on that step's screen (or the one before), then Done` }] : []),
     ...(agent ? [{ id: 'channel-drop', kind: 'channel-drop' as const, knobs: { channelDrop: true }, step: agent.id,
-      what: `the local network drops halfway through ${agent.id}'s transfer: Kiln carries on over Bluetooth by itself and reaches Done, with no error screen` }] : []),
+      what: `the local network drops halfway through ${agent.id}'s transfer: Kiln reaches Done over Bluetooth with no error screen, by itself or (on a device with its own Wi-Fi) from the screen that offers it` }] : []),
     { id: 'no-touch', kind: 'no-touch', knobs: { noTouch: true },
       what: `nobody touches the device beyond the taps the flow declares (${f.steps.flatMap((s) => s.taps ?? []).join(', ') || 'none'}): it reaches Done` },
   ];

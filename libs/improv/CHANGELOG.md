@@ -5,6 +5,17 @@ What changed in each release of `dev.glassworks:improv` on Maven Central. Versio
 cut from `libs/improv/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
+## [Unreleased]
+
+### Fixed
+- **`ImprovBleServer` keeps advertising after a failed refresh on Android 6 and 7.** Below Android 8, a refresh of
+  the advertisement that failed left nothing advertised, and no later state change tried again, so a phone could no
+  longer find the device. It now tries again up to three times, a second or more apart, and then reports the failure
+  through `onAdvertising(false, …)` instead of staying quiet.
+- **`WifiProvisioner` keeps a joined network on Android 6 and 7.** There a network `addNetwork` adds is forgotten at
+  the next restart until the app calls `saveConfiguration`, so it now does, once the join succeeds. Android 8 and
+  newer save it themselves, so nothing changes there.
+
 ## [0.2.1] - 2026-11-25
 
 ### Fixed

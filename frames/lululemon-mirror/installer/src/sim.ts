@@ -10,7 +10,7 @@ import {
 } from '../test/fakes';
 import design from '../../design/installer.json';
 import { SYSTEM_BYTES, USERDATA_BYTES } from './flash';
-import { bundleExtents, mirrorInPlace } from './inplace';
+import { ORIGINAL_JAR, bundleExtents, mirrorInPlace } from './inplace';
 import { HIDDEN_HOMES, PREVIOUS_HOME } from './recipe';
 import { STOCK_SERVICES_JAR_PATH, buildSurgicalSparseImage } from './stock';
 
@@ -86,7 +86,10 @@ export const simInPlaceCode: InPlaceCode = {
     return {
       writes: { 'system-in-place': sparse(patched), userdata: new Blob([new Uint8Array(4096)]) },
       restore: sparse(jar),
-      manifest: { version: 1, systemBytes, servicesJar: { size: jar.length, patchedSha256, restoreSparse: 'restore-services.sparse' } },
+      // the real build's manifest shape (servicesJar, its original kept as a file): the way back checks the restore against it
+      manifest: { version: 1, systemBytes, servicesJar: { path: STOCK_SERVICES_JAR_PATH, size: jar.length, originalSha256: await sha256Hex(jar), patchedSha256, extents,
+        origFile: ORIGINAL_JAR, restoreSparse: 'restore-services.sparse' } },
+      files: { [ORIGINAL_JAR]: jar },
       readBack: [{ path: STOCK_SERVICES_JAR_PATH, sha256: patchedSha256, size: patched.length }],
     };
   },
@@ -120,6 +123,13 @@ export const simInPlace: InPlaceSim = {
     // no app, no Device Owner, nothing hidden, as after a factory reset
     const fresh = () => Object.assign(new FakeMirror({ kiosk: 'none', serialno: FAKE_SERIAL }), {
       rebootToBootloader: async () => { installed = false; },
+      // `ls '<path>'`, as toybox answers it: the way back asks when a file won't read, to tell a file that's gone
+      async run(this: FakeMirror, cmd: string) {
+        // Kiln quotes the path (one shell argument): `ls '<path>'`
+        const ls = /^ls '([^']*)'$/.exec(cmd);
+        if (ls) return ls[1] === STOCK_SERVICES_JAR_PATH && jar ? { out: `${ls[1]}\n`, code: 0 } : { out: `ls: ${ls[1]}: No such file or directory\n`, code: 1 };
+        return FakeMirror.prototype.run.call(this, cmd);
+      },
       // adb's sync: the system's files as the last write left them
       async pull(path: string) {
         if (o.unreadable) throw new Error(`${path}: Permission denied`);

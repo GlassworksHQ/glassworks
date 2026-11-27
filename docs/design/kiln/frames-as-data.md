@@ -53,7 +53,7 @@ All of it at the frame level, in `frames/<id>/`. A new frame needs no change und
 | Whether it writes, and whether the device restarts after | step `writes`, `reboots` | S1 install: both |
 | Taps on the device's own screen | step `taps`; none on a frame without touch | Android: `allow-usb-debugging` |
 | Its way back | `installer.json` `wayBack`, or a flow's own `wayBack` | S1: restore the backup; Mirror: flash the Glass Panes images, and for its `stock` flow, `restore-blocks` |
-| Words that name its hardware | `installer.json` `words`: the USB names at each "your turn", help links, the way back's words, the Silent updates words by state | "USB Device (1f3a:efe8)" |
+| Words that name its hardware | `installer.json` `words`: the USB names at each "your turn", help links, the way back's words, the Silent updates words by state, and, optionally, how long the install and its steps usually take (`time`) and the numbered steps into recovery mode (`recoverySteps`) | "USB Device (1f3a:efe8)", "about 10 minutes" |
 | Recovery drawing | `design/recovery.json` | (unchanged) |
 
 A frame that doesn't say a flow's `engine` gets `image` for a flow with a `fastboot` step and `app`

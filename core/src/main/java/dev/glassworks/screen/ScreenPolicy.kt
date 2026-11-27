@@ -95,6 +95,28 @@ class ScreenPolicy(
 
         /** The most automatic brightness may reach: [max], or full while something [held] the screen. */
         fun brightnessCap(held: Boolean, max: Float): Float = if (held) 1f else max
+
+        /**
+         * The lowest window brightness while awake on a frame whose lowest brightness is off ([SleepMode.BACKLIGHT_OFF]):
+         * the default lowest automatic brightness, so a dark room looks the same as before.
+         */
+        const val VISIBLE_FLOOR = 0.1f
+
+        /**
+         * What the window gets while awake: the policy's [brightness] (0..1, or below 0 for the system value), lifted to
+         * [floor] when there is one. The system value ([system], 0..1, null if unreadable) stays the system's own,
+         * with no window override, unless it is below the floor. Without a floor, [brightness] as it is.
+         *
+         * Why: on the lululemon Mirror 0 is the backlight off, and the system value can be 0 (a slider moved all the
+         * way down, or left there by something else). Followed as it was, the panel came up awake and dark, and a
+         * wake from Home Assistant didn't light it.
+         */
+        fun awakeBrightness(brightness: Float, system: Float?, floor: Float?): Float = when {
+            floor == null -> brightness
+            brightness >= 0f -> maxOf(brightness, floor)
+            system != null && system < floor -> floor
+            else -> brightness
+        }
     }
 
     private lateinit var ctx: Context
@@ -154,14 +176,38 @@ class ScreenPolicy(
     var onKeepScreenOn: ((Boolean) -> Unit)? = null
         set(v) { field = v; v?.invoke(keepOn) }
     var onBrightness: ((Float) -> Unit)? = null
-        set(v) { field = v; v?.invoke(windowBrightness) }
+        set(v) { field = v; if (v != null) sendBrightness() }
 
     /** Activity hook: draw black over everything, and wake on a tap, while true ([blackout]). */
     var onBlackout: ((Boolean) -> Unit)? = null
         set(v) { field = v; v?.invoke(blackout) }
 
-    /** What the window gets: [brightness], or [BLACKOUT_BRIGHTNESS] in a [blackout]. */
-    private val windowBrightness: Float get() = if (blackout) BLACKOUT_BRIGHTNESS else brightness
+    /**
+     * What the window gets: [brightness], kept visible on a frame whose lowest brightness is off ([awakeBrightness]),
+     * or [BLACKOUT_BRIGHTNESS] in a [blackout].
+     */
+    private val windowBrightness: Float get() =
+        if (blackout) BLACKOUT_BRIGHTNESS else awakeBrightness(brightness, if (visibleFloor != null) systemBrightness() else null, visibleFloor)
+
+    /** [VISIBLE_FLOOR] on a [SleepMode.BACKLIGHT_OFF] frame, where 0 is the backlight off; none elsewhere. */
+    private val visibleFloor: Float? = if (sleepMode == SleepMode.BACKLIGHT_OFF) VISIBLE_FLOOR else null
+
+    /** `Settings.System.SCREEN_BRIGHTNESS` as 0..1, or null before [start] or when it can't be read. */
+    private fun systemBrightness(): Float? {
+        if (!::ctx.isInitialized) return null
+        return runCatching {
+            android.provider.Settings.System.getInt(ctx.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS) / 255f
+        }.getOrNull()
+    }
+
+    /** The last value [onBrightness] got. */
+    private var sentBrightness = Float.NaN
+
+    private fun sendBrightness() {
+        val w = windowBrightness
+        sentBrightness = w
+        onBrightness?.invoke(w)
+    }
     /** Fired on any state change (presence/lux/screen); used to push updates to the page. */
     var onStateChanged: (() -> Unit)? = null
 
@@ -196,6 +242,9 @@ class ScreenPolicy(
         watchSystemBrightness()
         // The light sensor reports only on change, so auto brightness off can't wait for a reading.
         updateBrightness()
+        // A hook attached before start got the window brightness without the system value (no context yet): on a
+        // backlight-off frame following a system value of 0 that was the system's own, i.e. dark. Send it again now.
+        if (windowBrightness != sentBrightness) sendBrightness()
         presence?.start(ctx, ::onPresence)
         light?.start(ctx, ::onLux)
         ctx.registerReceiver(screenReceiver, IntentFilter().apply {
@@ -260,7 +309,7 @@ class ScreenPolicy(
         onBlackout?.invoke(false)
         // The light may have changed while it was dark: go straight to the new target.
         if (prefs.autoBrightness && !lux.isNaN()) updateBrightness(immediate = true)
-        onBrightness?.invoke(windowBrightness)
+        sendBrightness()
         notifyChanged()
     }
 
@@ -273,7 +322,7 @@ class ScreenPolicy(
         blackout = true
         screenOn = false
         setKeepOn(true)
-        onBrightness?.invoke(windowBrightness)
+        sendBrightness()
         onBlackout?.invoke(true)
         notifyChanged()
     }
@@ -589,6 +638,8 @@ class ScreenPolicy(
         val uri = android.provider.Settings.System.getUriFor(android.provider.Settings.System.SCREEN_BRIGHTNESS)
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {
+                // Followed or not, a system value below the visible floor changes what the window gets.
+                if (visibleFloor != null && windowBrightness != sentBrightness) sendBrightness()
                 if (SystemClock.elapsedRealtime() - startedAt < 30_000) return // boot-time writes by the firmware
                 if (!prefs.autoBrightness && prefs.manualBrightness <= 0f) return // already following the system
                 Log.i(logTag, "system brightness slider moved: following it (auto brightness off)")
@@ -614,7 +665,7 @@ class ScreenPolicy(
             val manual = if (prefs.autoBrightness) -1f else prefs.manualBrightness.let { if (it > 0f) it else -1f }
             if (brightness != manual) {
                 brightness = manual
-                onBrightness?.invoke(windowBrightness)
+                sendBrightness()
                 notifyChanged()
             }
             return
@@ -628,7 +679,7 @@ class ScreenPolicy(
         val next = if (brightness < 0f || immediate) target else brightness + (target - brightness) * 0.3f
         if (brightness < 0f || kotlin.math.abs(next - brightness) > 0.01f) {
             brightness = next
-            onBrightness?.invoke(windowBrightness)
+            sendBrightness()
         }
     }
 

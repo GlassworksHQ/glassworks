@@ -46,8 +46,20 @@ describe('ReceiveScreen', () => {
     expect(screen.getByText('Keep the back cover off.')).toBeTruthy();
     fireEvent.click(button('Connect over Bluetooth'));
     expect(p.onConnectBluetooth).toHaveBeenCalledOnce();
-    fireEvent.click(button('Cancel'));
+    fireEvent.click(button('Stop')); // it stops what's running, never the install
     expect(p.onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('the hotspot join screen without Bluetooth: Continue stays the main action, and the helper\'s page is one click away', () => {
+    const onByHand = vi.fn();
+    receive({ stage: 'ready', network: 'Example-Setup', bluetoothAvailable: false, onByHand });
+    expect(screen.queryByRole('button', { name: 'Use Bluetooth instead' })).toBeNull();
+    fireEvent.click(button('Download it by hand instead'));
+    expect(onByHand).toHaveBeenCalledOnce();
+    expect(button('Continue')).toBeTruthy();
+    cleanup();
+    receive({ stage: 'ready', network: 'Example-Setup', bluetoothAvailable: true, onByHand });
+    expect(screen.queryByRole('button', { name: 'Download it by hand instead' })).toBeNull(); // Bluetooth is the other way there
   });
 
   it('a frame\'s title and boot hint replace the defaults', () => {
@@ -73,6 +85,19 @@ describe('ReceiveScreen', () => {
     pick(p);
   });
 
+  it('without Bluetooth or an address: no link, and the router is where the address is (#944)', () => {
+    receive({ stage: 'ready', bluetoothAvailable: false, agentPageUrl: null, agentPort: 18765 });
+    expect(screen.queryByRole('link', { name: /download page/ })).toBeNull();
+    expect(screen.getByText(/router’s list of devices, then go to http:\/\/<address>:18765/)).toBeTruthy();
+    expect(screen.queryByText(/shown on/)).toBeNull(); // the setup helper has no screen
+  });
+
+  it('a guessed address links, and says it may have changed', () => {
+    receive({ stage: 'ready', bluetoothAvailable: false, agentPageGuessed: true });
+    expect((screen.getByRole('link', { name: /download page/ }) as HTMLAnchorElement).href).toBe(URL_);
+    expect(screen.getByText(/If nothing opens once .* has restarted, its address may have changed/)).toBeTruthy();
+  });
+
   it('connecting: says so and offers no second connect', () => {
     receive({ stage: 'connecting' });
     expect(screen.getByRole('status').textContent).toMatch(/Connecting/);
@@ -84,12 +109,21 @@ describe('ReceiveScreen', () => {
     expect(screen.getByRole('status').textContent).toMatch(/Matched a saved copy on this computer/);
   });
 
-  it('transferring: channel, percent, sizes, speed and time left', () => {
+  it('transferring: the percent and the time left first, then the channel, sizes and speed', () => {
     receive({ stage: 'transferring', channel: 'ble', progress: { receivedBytes: 25 * 1024 * 1024, totalBytes: 100 * 1024 * 1024, bytesPerSecond: 20 * 1024, etaSeconds: 240 } });
     expect(screen.getByText('Bluetooth')).toBeTruthy();
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('25');
-    expect(screen.getByText('25% · 25 MB / 100 MB · 20 KB/s · ~4 min left')).toBeTruthy();
+    expect(screen.getByText('25%')).toBeTruthy();
+    expect(screen.getByText('About 4 minutes left')).toBeTruthy();
+    expect(screen.getByText('25 MB of 100 MB · 20 KB/s')).toBeTruthy();
     expect(screen.queryByText(/missing pieces/)).toBeNull();
+    // Bluetooth is slow: said up front, as normal, with what to keep doing
+    expect(screen.getByText(/Bluetooth is slow, and that’s normal/)).toBeTruthy();
+  });
+
+  it('transferring with no time yet: the channel\'s usual time stands in', () => {
+    receive({ stage: 'transferring', channel: 'ble', progress: { receivedBytes: 1, totalBytes: 100, bytesPerSecond: 0, etaSeconds: null } });
+    expect(screen.getByText('Usually about 5 minutes')).toBeTruthy();
   });
 
   it('transferring: a resend pass and a calm fallback note', () => {
@@ -128,7 +162,7 @@ describe('ReceiveScreen', () => {
 
   it('file-fallback: open the page, then select the file', () => {
     const p = receive({ stage: 'file-fallback' });
-    expect(screen.getByText('Select the downloaded bundle file')).toBeTruthy();
+    expect(screen.getByText('Select the downloaded file')).toBeTruthy();
     const page = screen.getByRole('link', { name: /download page/ }) as HTMLAnchorElement;
     expect(page.href).toBe(URL_);
     expect(page.rel).toBe('noopener noreferrer');
@@ -137,13 +171,16 @@ describe('ReceiveScreen', () => {
 
   it('verifying: a check is running', () => {
     receive({ stage: 'verifying' });
-    expect(screen.getByRole('heading').textContent).toBe('Checking the bundle');
+    expect(screen.getByRole('heading').textContent).toBe('Checking what arrived');
     expect(screen.getByRole('status')).toBeTruthy();
   });
 
-  it('error: the message, Try again and the file as a way around', () => {
+  it('error: the device is safe, Try again, the file as a way around, and the message on request', () => {
     const p = receive({ stage: 'error', errorMessage: 'The connection dropped.' });
     expect(document.querySelector('.card.err')).not.toBeNull();
+    expect(screen.getByText('The panel’s system hasn’t changed.')).toBeTruthy();
+    expect(screen.queryByText('The connection dropped.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
     expect(screen.getByText('The connection dropped.')).toBeTruthy();
     fireEvent.click(button('Try again'));
     expect(p.onRetry).toHaveBeenCalledOnce();
@@ -172,30 +209,53 @@ describe('RestorePointScreen', () => {
     expect(screen.queryByRole('button', { name: /Download/ })).toBeNull();
   });
 
-  it('ready: saved, checked, downloadable, and Continue goes on', () => {
+  it('ready: saved, checked, and Continue waits for a copy on this computer, saying so beside it', () => {
     const p = restore();
-    expect(screen.getByText('✓ Saved in this browser')).toBeTruthy();
+    expect(screen.getByText('Saved in this browser')).toBeTruthy();
     const code = screen.getByText('aaaaaaaaaaaa');
     expect(code.getAttribute('title')).toBe(p.verifiedDigest);
+    expect(screen.queryByText(/SHA-256/)).toBeNull();
+    // until the copy is downloaded, downloading it is the one ember action, and Continue waits
+    expect(button('Download a copy').className).toContain('ember');
+    const c = button('Continue');
+    expect(c.className).not.toContain('ember');
+    expect(c.disabled).toBe(true);
+    fireEvent.click(c);
+    expect(p.onContinue).not.toHaveBeenCalled();
+    const why = document.getElementById(c.getAttribute('aria-describedby')!)!;
+    expect(why.textContent).toBe('Continue opens once a copy is on this computer.');
+    expect(why.closest('.foot')).toBe(c.closest('.foot'));
     fireEvent.click(button('Download a copy'));
     expect(p.onDownload).toHaveBeenCalledOnce();
-    const c = button('Continue');
-    expect(c.disabled).toBe(false);
-    fireEvent.click(c);
-    expect(p.onContinue).toHaveBeenCalledOnce();
     expect(screen.getByText(/go back to it at any time/)).toBeTruthy();
-    expect(screen.getByText('Keep the back cover off.')).toBeTruthy();
+    // after the last VOL−: the cover note would ask for it once more
+    expect(screen.queryByText('Keep the back cover off.')).toBeNull();
   });
 
-  it('ready and downloaded: says so', () => {
-    restore({ downloaded: true });
-    expect(button('Downloaded ✓')).toBeTruthy();
+  it('ready and downloaded: says so, and Continue goes on', () => {
+    const p = restore({ downloaded: true });
+    expect(button('Downloaded ✓').className).not.toContain('ember');
+    const c = button('Continue');
+    expect(c.className).toContain('ember');
+    expect(c.disabled).toBe(false);
+    expect(c.hasAttribute('aria-describedby')).toBe(false);
+    expect(screen.queryByText(/Continue opens once/)).toBeNull();
+    expect(screen.getByText('A copy is on this computer')).toBeTruthy();
+    fireEvent.click(c);
+    expect(p.onContinue).toHaveBeenCalledOnce();
+  });
+
+  it('a download that failed says why, and Continue still waits', () => {
+    restore({ downloadError: 'QuotaExceededError' });
+    expect(screen.getByRole('alert').textContent).toContain('QuotaExceededError');
+    expect(button('Continue').disabled).toBe(true);
   });
 
   it('error: nothing changed yet, Try again, no Continue', () => {
     const p = restore({ status: 'error', errorMessage: 'QuotaExceededError' });
     expect(document.querySelector('.card.err')).not.toBeNull();
-    expect(screen.getByText(/nothing on the device has changed yet/)).toBeTruthy();
+    expect(screen.getByText(/the device’s system hasn’t changed/)).toBeTruthy();
+    fireEvent.click(button('Details'));
     expect(screen.getByText('QuotaExceededError')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
     fireEvent.click(button('Try again'));
@@ -204,10 +264,13 @@ describe('RestorePointScreen', () => {
 });
 
 describe('InPlaceNotice', () => {
-  it('says what changes, with the frame\'s note', () => {
-    render(<InPlaceNotice words={{ coverNote: 'Keep the back cover off.' }} />);
+  it('says what changes, with the frame\'s cover note only between the two fastboot sessions', () => {
+    const { unmount } = render(<InPlaceNotice words={{ coverNote: 'Keep the back cover off.' }} cover />);
     expect(screen.getByText(/app data starts fresh/)).toBeTruthy();
     expect(screen.getByText('Keep the back cover off.')).toBeTruthy();
+    unmount();
+    render(<InPlaceNotice words={{ coverNote: 'Keep the back cover off.' }} />);
+    expect(screen.queryByText('Keep the back cover off.')).toBeNull();
   });
 });
 

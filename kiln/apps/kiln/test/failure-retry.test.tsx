@@ -31,11 +31,13 @@ describe('Try again after a failed write', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText(/An earlier attempt already changed the panel\./)).toBeTruthy(); // not "Nothing is written yet."
     expect(screen.queryByText(/Nothing is written yet/)).toBeNull();
+    // the way back is right there too, not only after another failed Connect
+    expect(screen.getByRole('button', { name: 'Undo with your backup' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 
     expect(await screen.findByRole('heading', { name: 'No panel in recovery mode' })).toBeTruthy();
     // what happened, then how to fix it in its own callout (#672)
-    expect(document.querySelector('.lede')?.textContent).toBe('This attempt wrote nothing; an earlier try did.');
+    expect(document.querySelector('main .note')?.textContent).toBe('This attempt wrote nothing; an earlier try did.');
     expect(screen.getByRole('group', { name: 'How to fix it' }).textContent)
       .toBe('How to fix itUnplug it, hold the recovery button on the board first, then plug it in and keep holding for 10 seconds. Then use Undo with your backup.');
     expect(screen.getAllByRole('button', { name: 'Undo with your backup' })[0]!.className).toMatch(/ember/);

@@ -35,11 +35,14 @@ object WifiRadio {
      * device owner). Then a setup hotspot could start but never finish: the panel couldn't join the network a phone
      * sends.
      */
-    fun lockedOff(context: Context, platform: PlatformApi = Platform): Boolean {
-        if (!switchedOff(context) || platform.appCanEnableWifi) return false
+    fun lockedOff(context: Context, platform: PlatformApi = Platform): Boolean =
+        switchedOff(context) && !mayEnable(context, platform)
+
+    /** This app may switch Wi-Fi on: [PlatformApi.appCanEnableWifi] (Android 9 and older), or it is the device owner. */
+    fun mayEnable(context: Context, platform: PlatformApi = Platform): Boolean {
+        if (platform.appCanEnableWifi) return true
         val ctx = context.applicationContext
-        val owner = runCatching { ctx.getSystemService(DevicePolicyManager::class.java)?.isDeviceOwnerApp(ctx.packageName) }.getOrNull() == true
-        return !owner
+        return runCatching { ctx.getSystemService(DevicePolicyManager::class.java)?.isDeviceOwnerApp(ctx.packageName) }.getOrNull() == true
     }
 
     /**

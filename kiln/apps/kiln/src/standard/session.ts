@@ -276,7 +276,8 @@ export class StandardSession implements SetupSteps, WifiSteps {
     // each command on a lid (the stall watchdog): a device that stops answering ends in an error with Try again
     const p = this.panel!;
     const bounded: PanelShell = { ...p, run: (cmd, signal) => p.run(cmd, signal ?? this.lid(SETTINGS_MS)) };
-    await applySettings(new Steps(bounded, (step, detail) => this.ui.note(step || `  ${detail}`)), opts, this.standard.appId);
+    // with this computer's time: a device that never reached a time server gets its clock from here (applySettings)
+    await applySettings(new Steps(bounded, (step, detail) => this.ui.note(step || `  ${detail}`)), { ...opts, now: Date.now() }, this.standard.appId);
     at({ step: 'start' });
     return {};
   }
@@ -322,6 +323,8 @@ export class StandardSession implements SetupSteps, WifiSteps {
   protected get steps() { return this.setUp.steps; }
   /** The device has a touchscreen: the steps offer "do it on the panel" only then. */
   get touch(): boolean { return this.standard.touch; }
+  /** The device as the steps name it (its frame's `the`). */
+  get the(): string { return this.standard.the; }
   /** The Wi-Fi step. A device already on Wi-Fi says so first, with changing it as the other way. */
   async wifi(): Promise<void> {
     // Try again after the app couldn't be reached: a device that went off USB is connected again first, so a frame with

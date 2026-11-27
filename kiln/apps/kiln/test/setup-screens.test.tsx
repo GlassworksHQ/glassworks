@@ -29,7 +29,7 @@ describe('the set-up forms', () => {
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     act(() => s.store.dispatch({ type: 'setup', setup: { phase: 'settings', update: false, installing: [{ step: 'apk', apk: 'a-new-apk', stage: 'install' }] } }));
     expect(screen.getByRole('heading', { name: /Installing/ })).toBeTruthy();
-    expect(document.querySelectorAll('ol.join li.cur, ol.join li.done')).toHaveLength(0);
+    expect(document.querySelectorAll('.plist .prow.now, .plist .prow.done')).toHaveLength(0);
     s.close();
   });
 
@@ -158,16 +158,17 @@ describe('the set-up forms', () => {
     const s = demoSession(s1Demo, 'app');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('resume')); // the demo panel has no Glassworks: a first install
-    const rows = () => [...document.querySelectorAll('.join li')].map((li) => `${li.className || '-'} ${li.firstChild?.textContent}`);
+    const mark = (li: Element) => (li.classList.contains('now') ? 'cur' : li.classList.contains('done') ? 'done' : '-');
+    const rows = () => [...document.querySelectorAll('.plist .prow')].map((li) => `${mark(li)} ${li.querySelector('.plabel')?.textContent}`);
     const going = s.installApp({ clock24: true, keyboard: true });
     await act(() => new Promise((r) => setTimeout(r, 1200))); // Glassworks' pm install (the demo holds it 2.5 s)
     expect(screen.getByRole('heading').textContent).toBe('Installing Glassworks');
     expect(rows()).toEqual(['cur Install Glassworks', '- Set it as the home screen', '- Install the on-screen keyboard', '- Apply your language, time zone, and clock', '- Start Glassworks']);
-    expect(document.querySelector('.join li.cur .sub-step')?.textContent).toBe('Android is installing and optimizing it for this panel');
+    expect(document.querySelector('.prow.now .pnote')?.textContent).toBe('Android is installing and optimizing it for this panel');
     expect(screen.getByRole('status').textContent).toBe('Install Glassworks. Android is installing and optimizing it for this panel'); // what a screen reader hears
     expect(document.body.textContent).not.toMatch(/restart/); // no app runs yet, so nothing restarts
     await act(async () => { // the keyboard's turn
-      for (let i = 0; i < 300 && !document.querySelector('.join li.cur')?.textContent?.startsWith('Install the on-screen keyboard'); i++) await new Promise((r) => setTimeout(r, 10));
+      for (let i = 0; i < 300 && !document.querySelector('.prow.now .plabel')?.textContent?.startsWith('Install the on-screen keyboard'); i++) await new Promise((r) => setTimeout(r, 10));
     });
     expect(rows()).toEqual(['done Install Glassworks', 'done Set it as the home screen', 'cur Install the on-screen keyboard', '- Apply your language, time zone, and clock', '- Start Glassworks']);
     expect(screen.getByRole('status').textContent).toMatch(/^Install the on-screen keyboard\. (Copying the app to the panel|Android is installing it)$/); // each step is announced
@@ -187,7 +188,7 @@ describe('the set-up forms', () => {
     await act(() => new Promise((r) => setTimeout(r, 1200))); // Glassworks' pm install
     expect(screen.getByRole('heading').textContent).toBe('Updating Glassworks');
     expect(screen.getByRole('status').textContent).toBe('Install Glassworks. Android is installing and optimizing it for this panel. The app restarts briefly while it updates — that\'s normal.');
-    expect([...document.querySelectorAll('.join li')].map((li) => li.firstChild?.textContent)).not.toContain('Install the on-screen keyboard'); // not asked for
+    expect([...document.querySelectorAll('.plist .plabel')].map((li) => li.textContent)).not.toContain('Install the on-screen keyboard'); // not asked for
     await act(() => going);
     s.close();
   }, 20_000);

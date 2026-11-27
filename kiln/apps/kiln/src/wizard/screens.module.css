@@ -1,4 +1,4 @@
-.fix { display: grid; gap: 4px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--edge); background: color-mix(in srgb, var(--fg) 3%, transparent); max-width: 64ch; }
+.fix { display: grid; gap: 4px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--edge); background: var(--well); }
 .fix b { font-weight: 500; }
 .step { display: grid; gap: 10px; }
 .step h3 { font-size: 15px; font-weight: 500; }

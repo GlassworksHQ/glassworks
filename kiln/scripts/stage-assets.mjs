@@ -51,7 +51,10 @@ const assets = [
   { name: 'bootanimation', file: repo('branding/glass-tile/bootanimation.zip'), license: 'MIT', source: `${SRC}/tree/main/branding/glass-tile` },
   { name: 'bootlogo', file: repo('branding/glass-tile/bootlogo.bmp'), license: 'MIT', source: `${SRC}/tree/main/branding/glass-tile` },
   { name: 'mirror-bootanimation', file: repo('branding/lululemon-mirror/bootanimation.zip'), license: 'MIT', source: `${SRC}/tree/main/branding/lululemon-mirror` },
+  // the Mirror's in-place install: the animation's last frame, which it wraps in a one-frame animation the stock one's size
+  { name: 'mirror-bootanimation-compact', file: repo('branding/lululemon-mirror/bootanimation-compact.zip'), license: 'MIT', source: `${SRC}/tree/main/branding/lululemon-mirror` },
   { name: 'mirror-settings-overlay', file: repo('frames/lululemon-mirror/overlay/GlassworksSettings.apk'), license: 'MIT', source: `${SRC}/tree/main/frames/lululemon-mirror/overlay` },
+  { name: 'mirror-framework-overlay', file: repo('frames/lululemon-mirror/overlay/GlassworksFramework.apk'), license: 'MIT', source: `${SRC}/tree/main/frames/lululemon-mirror/overlay/framework` },
   // the Mirror's in-place install: the MIT stock probe app its stage plants as the setup agent (tools/mirror/stock-probe-app)
   { name: 'mirror-stock-probe-apk', file: repo('tools/mirror/stock-probe-app/prebuilt/stock-probe.apk'), license: 'MIT', source: `${SRC}/tree/main/tools/mirror/stock-probe-app` },
   { name: 'mirror-stock-probe-fiemap', file: repo('tools/mirror/stock-probe-app/prebuilt/libfiemap.so'), license: 'MIT', source: `${SRC}/tree/main/tools/mirror/stock-probe-app` },

@@ -7,7 +7,7 @@
 //   8..12   uint32 payloadLen
 //   12..    metaLen bytes of UTF-8 JSON (an object), then payloadLen bytes of payload, and nothing after.
 // The agent signs it with the stage's secret: `hmacSha256`, the last field of the JSON, is HMAC-SHA256 over the JSON
-// as it would be without that field, followed by the payload.
+// up to that field (without the field's comma and without the closing brace), followed by the payload.
 
 const MAGIC = [0x47, 0x57, 0x53, 0x42]; // "GWSB"
 const HEADER = 12;
@@ -74,6 +74,12 @@ export async function hmacSha256Hex(secret: Uint8Array, ...parts: Uint8Array[]):
   return hex(await crypto.subtle.sign('HMAC', key, all));
 }
 
+/**
+ * A bundle whose `hmacSha256` doesn't match the stage's secret: everything else may hold, but Kiln can't tell that its
+ * own agent sent it (another browser's or an earlier run's stage, or this browser's storage cleared since).
+ */
+export class BundleSignatureError extends Error {}
+
 const SIGNED_TAIL = /,"hmacSha256":"([0-9a-f]{64})"\}$/;
 
 /**
@@ -110,11 +116,9 @@ export async function verifyGwsbBundle(bytes: Uint8Array, opts: VerifyGwsbOption
     const text = new TextDecoder().decode(rawMetaBytes);
     const tail = SIGNED_TAIL.exec(text);
     if (!tail || tail[1] !== mac) throw new Error('bundle: hmacSha256 must be the meta\'s last field, 64 lower-case hex digits');
-    const cut = tail[0].length - 1; // keep the closing brace
-    const base = new Uint8Array(rawMetaBytes.byteLength - cut);
-    base.set(rawMetaBytes.subarray(0, rawMetaBytes.byteLength - tail[0].length), 0);
-    base[base.byteLength - 1] = 0x7d; // }
-    if (!sameInConstantTime(await hmacSha256Hex(opts.secret, base, payload), mac)) throw new Error('bundle: its signature doesn\'t match (hmacSha256)');
+    // the agent signs the JSON up to that field, without it and without the closing brace (StockBundle.buildMetaBase)
+    const base = rawMetaBytes.subarray(0, rawMetaBytes.byteLength - tail[0].length);
+    if (!sameInConstantTime(await hmacSha256Hex(opts.secret, base, payload), mac)) throw new BundleSignatureError('bundle: its signature doesn\'t match (hmacSha256)');
   } else if (opts.requireHmac) {
     throw new Error('bundle: there is no secret to check its signature with');
   }

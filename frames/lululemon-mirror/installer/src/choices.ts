@@ -26,7 +26,8 @@ export const GLASSWORKS_IMAGE: ImageRecipe = {
   by: { name: 'GlassworksHQ', href: 'https://github.com/GlassworksHQ' },
   project: { name: 'glassworks.dev', href: 'https://www.glassworks.dev' },
   licence: 'MPL-2.0 and MIT',
-  summary: 'Your Home Assistant dashboard on the glass, built on the Glass Panes image.',
+  summary: 'Replaces lululemon’s system with the Glass Panes image, then puts your Home Assistant dashboard on the glass.',
+  advice: { tag: 'alternative', trade: 'Faster, but there’s no way back to lululemon’s software afterward.' },
   support: { name: 'Glassworks on GitHub', href: 'https://github.com/GlassworksHQ/glassworks/issues' },
   files: [SYSTEM],
   steps: [
@@ -55,7 +56,8 @@ export const GLASSWORKS_IN_PLACE: ImageRecipe = {
   by: { name: 'GlassworksHQ', href: 'https://github.com/GlassworksHQ' },
   project: { name: 'glassworks.dev', href: 'https://www.glassworks.dev' },
   licence: 'MPL-2.0 and MIT',
-  summary: 'Your Home Assistant dashboard on the glass, with lululemon’s own system kept in place and a restore point to go back.',
+  summary: 'Keeps lululemon’s system, with a restore point to go back to, and puts your Home Assistant dashboard on the glass.',
+  advice: { tag: 'recommended', trade: 'Slower, but it keeps lululemon’s software, so you can always go back.' },
   support: { name: 'Glassworks on GitHub', href: 'https://github.com/GlassworksHQ/glassworks/issues' },
   files: [],
   steps: [
@@ -84,7 +86,7 @@ export const GLASS_PANES_IMAGE: ImageRecipe = {
   by: { name: panes.developer, href: panes.developerHref },
   project: { name: 'git-nimrod/glass-panes', href: panes.href },
   licence: 'MIT; the image’s parts keep their own',
-  summary: 'Android 6.0.1 for the Mirror as its release has it, with its own Mirror Kiosk app.',
+  summary: 'Replaces everything on the Mirror with Android 6.0.1 as its release has it, with its own Mirror Kiosk app.',
   support: { name: 'Glass Panes on GitHub', href: `${panes.href}/issues` },
   vendor: 'Its vendor files belong to Qualcomm and Quectel.',
   release: { name: 'mirror-android-3', href: GLASS_PANES.release },

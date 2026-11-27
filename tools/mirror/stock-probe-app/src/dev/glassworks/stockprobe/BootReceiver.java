@@ -11,7 +11,7 @@ public final class BootReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        Log.i(TAG, "received " + (intent != null ? intent.getAction() : "null") + "; starting ProbeServerService");
+        ProbeLog.i(TAG, "received " + (intent != null ? intent.getAction() : "null") + "; starting ProbeServerService");
         context.startService(new Intent(context, ProbeServerService.class));
     }
 }

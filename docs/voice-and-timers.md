@@ -4,7 +4,7 @@ Glassworks turns your panel into a native Home Assistant Assist satellite, using
 
 ## How Assist works on the panel
 
-When Voice is enabled, the panel continuously runs an on-device **microWakeWord** model on TensorFlow Lite. Nothing is sent over the network until the wake word is heard.
+When Voice is enabled, the panel continuously runs an on-device **microWakeWord** model on LiteRT (TensorFlow Lite). Nothing is sent over the network until the wake word is heard.
 
 When you say the wake word:
 
@@ -78,7 +78,7 @@ If the panel is not responding to your wake word, check the **Voice status** sen
 | `Model check failed` | The downloaded file did not match the expected SHA-256 checksum (for example, a captive portal or intercepting proxy returned a web page instead of the model). Fix the network path and tap **Try again**. |
 | `Model not saved` | App storage is full or not writable. Free up storage space on the device. |
 | `Model missing` | A custom legacy openWakeWord model is selected that cannot be downloaded automatically. Pick one of the four official microWakeWord options. |
-| `Engine failed` | TensorFlow Lite failed to start on the device. Open the [Manage page](manage.md) log (filter by *Voice*) and report the issue. |
+| `Engine failed` | LiteRT, the wake word engine, failed to start on the device. Open the [Manage page](manage.md) log (filter by *Voice*) and report the issue. |
 | `Microphone not allowed` | Android's Microphone permission is denied. Grant **Microphone** permission to Glassworks in Android's app settings. |
 | `Microphone unavailable` | The device has no microphone, another app is holding it, or audio capture failed. Close any app using the microphone; Glassworks retries automatically every 5 seconds. |
 

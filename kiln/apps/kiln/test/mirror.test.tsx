@@ -50,11 +50,13 @@ describe('the switch', () => {
     expect(screen.queryByText('Test only')).toBeNull();
   });
 
-  it('with it, Kiln installs Glassworks over fastboot by default: first and picked on the choice (#579)', async () => {
+  it('with it, the choice starts on the recommended way (on the stock software), and the full image over fastboot is one click away', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('Choose what to install on the Mirror');
     expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
+    expect(embers()).toEqual(['Continue with Glassworks on the stock software']);
+    fireEvent.click(screen.getByRole('radio', { name: 'Glassworks' }));
     expect(embers()).toEqual(['Continue with Glassworks']);
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
     await screen.findByText('Install Glassworks on the Mirror');
@@ -129,7 +131,7 @@ describe('the test install', () => {
     const s = await appDemo(mirrorEntry, 'undo-pending', true);
     expect(s.state).toMatchObject({ screen: 'checks', report: { pendingHome: MIRROR_KIOSK } });
     render(<AppFlow session={s} />);
-    expect(screen.getByText('Undo: give the home screen back')).toBeTruthy();
+    expect(screen.getByText('Give the home screen back')).toBeTruthy();
   });
 
   it('Connect asks for the device inside the click, before anything is awaited', () => {

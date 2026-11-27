@@ -17,6 +17,7 @@ import {
   unhideStockBloat, type FiemapExtent,
 } from '../src';
 import { GLASS_PANES_KEY_FINGERPRINT, adbFingerprint } from '../src/services';
+import { patchedKeyFingerprint } from '../src/stock';
 import { fakeAdbKey } from './fakes';
 
 import { DEXDUMP, HAS_D8, START_CONFIRMATION_LOG_STRING, buildSyntheticStockServicesJar } from './synthetic-services';
@@ -40,6 +41,7 @@ function methodBlock(block: string, name: string): string {
 
 const DPMS_DESC = 'Lcom/android/server/devicepolicy/DevicePolicyManagerService;';
 const MIRROR_AP_DESC = 'Lcom/android/server/MirrorApService;';
+const USB_SERVICE_DESC = 'Lcom/android/server/usb/UsbService;';
 
 // ---------------------------------------------------------------------------
 // buildSurgicalSparseImage
@@ -258,6 +260,169 @@ describe('patchStockServicesJar', () => {
     // Same class and method, another body: not what was read from stock, so it isn't emptied on a guess.
     const jar = buildSyntheticStockServicesJar({ mirrorAp: 'unexpected' });
     await expect(patchStockServicesJar(jar, fakeAdbKey(0x55))).rejects.toThrow(/does not load "com\.mirror\.framework\.ACTION_START_HOST_APD"/);
+  }, 60_000);
+
+  /** dexdump -d of `jar`'s UsbService, written to a scratch file and removed. */
+  function usbService(jar: Uint8Array): string {
+    const dir = mkdtempSync(join(tmpdir(), 'gw-stock-usb-'));
+    try {
+      const p = join(dir, 'patched.jar');
+      writeFileSync(p, jar);
+      expect(execFileSync(DEXDUMP!, ['-c', p], { encoding: 'utf8' })).toContain('Checksum verified');
+      return classBlock(execFileSync(DEXDUMP!, ['-d', p], { encoding: 'utf8', maxBuffer: 1 << 30 }), USB_SERVICE_DESC);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it.skipIf(!HAS_D8)('lets an app holding WRITE_SECURE_SETTINGS answer "Allow USB debugging?", and changes nothing else in UsbService', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const res = await patchStockServicesJar(jar, fakeAdbKey(0x56));
+    expect(res.patched.length).toBe(jar.length);
+    expect(res.usbAllow).toBeDefined();
+    if (DEXDUMP) {
+      const usb = usbService(res.patched);
+      const allow = methodBlock(usb, 'allowUsbDebugging');
+      expect(allow).toContain('"android.permission.WRITE_SECURE_SETTINGS"');
+      expect(allow).not.toContain('MANAGE_USB');
+      expect(allow).toContain('UsbDebuggingManager;.allowUsbDebugging'); // still hands the key on
+      // deny keeps MANAGE_USB: only the app's Allow is opened
+      expect(methodBlock(usb, 'denyUsbDebugging')).toContain('"android.permission.MANAGE_USB"');
+      // the same bytes but that operand: one const-string, nothing moved
+      const before = methodBlock(usbService(jar), 'allowUsbDebugging');
+      expect(allow.split('\n').length).toBe(before.split('\n').length);
+    }
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('with appApprovesUsbDebugging:false leaves UsbService as it was', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const res = await patchStockServicesJar(jar, fakeAdbKey(0x57), { appApprovesUsbDebugging: false });
+    expect(res.usbAllow).toBeUndefined();
+    if (DEXDUMP) expect(methodBlock(usbService(res.patched), 'allowUsbDebugging')).toContain('"android.permission.MANAGE_USB"');
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('refuses a UsbService it did not read: none at all, or an allowUsbDebugging checking two permissions', async () => {
+    const key = fakeAdbKey(0x58);
+    await expect(patchStockServicesJar(buildSyntheticStockServicesJar({ usbService: 'none' }), key))
+      .rejects.toThrow(/USB debugging patch: services\.jar has no Lcom\/android\/server\/usb\/UsbService;\.allowUsbDebugging/);
+    await expect(patchStockServicesJar(buildSyntheticStockServicesJar({ usbService: 'unexpected' }), key))
+      .rejects.toThrow(/USB debugging patch: UsbService\.allowUsbDebugging loads 2 permission strings/);
+    // off: the rest goes ahead
+    const res = await patchStockServicesJar(buildSyntheticStockServicesJar({ usbService: 'none' }), key, { appApprovesUsbDebugging: false });
+    expect(res.usbAllow).toBeUndefined();
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('reinstalling over an earlier install trusts the new key, adds the USB-debugging change if missing, and matches a fresh patch byte for byte', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const a = fakeAdbKey(0x59);
+    const b = fakeAdbKey(0x5a);
+    const fresh = await patchStockServicesJar(jar, b);
+    // an install from before the USB-debugging change, by another computer
+    const old = await patchStockServicesJar(jar, a, { appApprovesUsbDebugging: false });
+    const re = await patchStockServicesJar(old.patched, b);
+    expect(re.repatched).toEqual({ from: old.fingerprint });
+    expect(re.fingerprint).toBe(fresh.fingerprint);
+    expect(re.usbAllow).toBeDefined();
+    expect(Buffer.from(re.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    // the same computer again, on a jar that has everything: nothing to write
+    const again = await patchStockServicesJar(fresh.patched, b);
+    expect(again.repatched).toEqual({ from: fresh.fingerprint });
+    expect(Buffer.from(again.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    expect(patchedKeyFingerprint((await zipEntry(re.patched, "classes.dex"))!)).toBe(fresh.fingerprint);
+  }, 60_000);
+
+  /** dexdump -d of `jar`'s AlarmManagerService binder, written to a scratch file and removed. */
+  function alarmStub(jar: Uint8Array): string {
+    const dir = mkdtempSync(join(tmpdir(), 'gw-stock-alarm-'));
+    try {
+      const p = join(dir, 'patched.jar');
+      writeFileSync(p, jar);
+      return classBlock(execFileSync(DEXDUMP!, ['-d', p], { encoding: 'utf8', maxBuffer: 1 << 30 }), 'Lcom/android/server/AlarmManagerService$2;');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it.skipIf(!HAS_D8)('lets adb and the app set the time zone and the clock: both check WRITE_SECURE_SETTINGS, one operand each', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const res = await patchStockServicesJar(jar, fakeAdbKey(0x61));
+    expect(res.patched.length).toBe(jar.length);
+    expect(res.timeZone).toBeDefined();
+    if (DEXDUMP) {
+      const tz = methodBlock(alarmStub(res.patched), 'setTimeZone');
+      expect(tz).toContain('"android.permission.WRITE_SECURE_SETTINGS"');
+      expect(tz).not.toContain('SET_TIME_ZONE');
+      expect(tz).toContain('setTimeZoneImpl'); // still sets it
+      expect(tz.split('\n').length).toBe(methodBlock(alarmStub(jar), 'setTimeZone').split('\n').length);
+      const clock = methodBlock(alarmStub(res.patched), 'setTime');
+      expect(clock).toContain('"android.permission.WRITE_SECURE_SETTINGS"');
+      expect(clock).not.toContain('"android.permission.SET_TIME"');
+    }
+    expect(res.time).toBeDefined();
+    const off = await patchStockServicesJar(jar, fakeAdbKey(0x62), { adbSetsClock: false });
+    expect(off.timeZone).toBeUndefined();
+    expect(off.time).toBeUndefined();
+    if (DEXDUMP) {
+      expect(methodBlock(alarmStub(off.patched), 'setTimeZone')).toContain('"android.permission.SET_TIME_ZONE"');
+      expect(methodBlock(alarmStub(off.patched), 'setTime')).toContain('"android.permission.SET_TIME"');
+    }
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('reinstalling over an install from before the clock change adds it, byte for byte as a fresh patch', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const b = fakeAdbKey(0x63);
+    const fresh = await patchStockServicesJar(jar, b);
+    for (const key of [fakeAdbKey(0x64), b]) { // another computer's install, then this computer's own
+      const old = await patchStockServicesJar(jar, key, { adbSetsClock: false });
+      const re = await patchStockServicesJar(old.patched, b);
+      expect(re.timeZone).toBeDefined();
+      expect(re.time).toBeDefined();
+      expect(Buffer.from(re.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    }
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('reinstalling over an install that left stock\'s hotspot on turns it off, byte for byte as a fresh patch', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const b = fakeAdbKey(0x5b);
+    const fresh = await patchStockServicesJar(jar, b);
+    for (const key of [fakeAdbKey(0x5c), b]) { // another computer's install, then this computer's own
+      const apOn = await patchStockServicesJar(jar, key, { disableStockAp: false });
+      expect(apOn.stockAp).toBeUndefined();
+      const re = await patchStockServicesJar(apOn.patched, b);
+      expect(re.repatched).toEqual({ from: apOn.fingerprint });
+      expect(re.stockAp).toBeDefined();
+      expect(Buffer.from(re.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    }
+    // asked to leave it on, a reinstall leaves it as it is
+    const apOn = await patchStockServicesJar(jar, b, { disableStockAp: false });
+    const kept = await patchStockServicesJar(apOn.patched, b, { disableStockAp: false });
+    expect(kept.stockAp).toBeUndefined();
+    expect(Buffer.from(kept.patched).equals(Buffer.from(apOn.patched))).toBe(true);
+  }, 60_000);
+
+  it.skipIf(!HAS_D8)('reinstalling over a jar patched without Device Owner (the surgical adb tool\'s) adds both fixes, byte for byte as a fresh patch', async () => {
+    const jar = buildSyntheticStockServicesJar();
+    const b = fakeAdbKey(0x5d);
+    const fresh = await patchStockServicesJar(jar, b);
+    expect(fresh.deviceOwner).toBeDefined();
+    const none = { enableDeviceOwner: false, disableStockAp: false, appApprovesUsbDebugging: false, adbSetsClock: false };
+    for (const key of [fakeAdbKey(0x5e), b]) { // another computer's install, then this computer's own
+      const surgical = await patchStockServicesJar(jar, key, none);
+      expect(surgical.deviceOwner).toBeUndefined();
+      const re = await patchStockServicesJar(surgical.patched, b);
+      expect(re.repatched).toEqual({ from: surgical.fingerprint });
+      expect(re.deviceOwner).toEqual(fresh.deviceOwner);
+      expect(Buffer.from(re.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    }
+    // a jar that has them keeps them, with nothing to write
+    const again = await patchStockServicesJar(fresh.patched, b);
+    expect(again.deviceOwner).toEqual(fresh.deviceOwner);
+    expect(Buffer.from(again.patched).equals(Buffer.from(fresh.patched))).toBe(true);
+    // asked to leave Device Owner off, a reinstall doesn't add it
+    const surgical = await patchStockServicesJar(jar, b, none);
+    const kept = await patchStockServicesJar(surgical.patched, b, none);
+    expect(kept.deviceOwner).toBeUndefined();
+    expect(Buffer.from(kept.patched).equals(Buffer.from(surgical.patched))).toBe(true);
   }, 60_000);
 });
 

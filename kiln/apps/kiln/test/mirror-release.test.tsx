@@ -232,6 +232,7 @@ describe('the page', () => {
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('Choose what to install on the Mirror');
     expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
+    fireEvent.click(screen.getByRole('radio', { name: 'Glassworks' })); // the full image, not the recommended in-place way
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
     await screen.findByText('Install Glassworks on the Mirror');
   };
@@ -302,7 +303,10 @@ describe('the page', () => {
       history.replaceState(null, '', `/lululemon-mirror?apk=${q}`);
       render(<StrictMode><DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} /></StrictMode>);
       await until(() => !!screen.queryByText('Choose what to install on the Mirror') || !!screen.queryByText('Install Glassworks on the Mirror'));
-      if (!screen.queryByText('Install Glassworks on the Mirror')) fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
+      if (!screen.queryByText('Install Glassworks on the Mirror')) {
+        fireEvent.click(screen.getByRole('radio', { name: 'Glassworks' })); // the full image, not the recommended in-place way
+        fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
+      }
       await screen.findByText('Install Glassworks on the Mirror');
     };
     await page('release');

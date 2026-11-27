@@ -9,6 +9,9 @@ import { cap, fmtSize } from '@glassworks/kiln-core';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import type { FileCheck, ImageSession, ImageState } from '../imageSession';
 import { TestOnly } from '../ReleaseApk';
+import { Foot } from '../../components/Nav';
+import { Usually } from '../../components/Kit';
+import { totalTime } from '../words';
 import c from './choice.module.css';
 
 type P = { f: ImageSession; s: ImageState };
@@ -31,22 +34,34 @@ export function Whose({ r }: { r: ImageRecipe }) {
   );
 }
 
-function Card({ r }: { r: ImageRecipe }) {
+/**
+ * One image. The radio is the card's whole face (stretched over it), and the project's link sits above it, beside the
+ * radio rather than inside it: a link inside a button is neither a valid control nor one a screen reader can reach.
+ */
+function Card({ r, picked, time }: { r: ImageRecipe; picked: boolean; time?: string }) {
+  const id = `image-${r.id}`;
   return (
-    <RadioGroup.Item value={r.id} className={c.card} aria-label={r.name}>
+    <div className={c.card} data-state={picked ? 'checked' : 'unchecked'}>
+      <RadioGroup.Item value={r.id} className={c.pick} aria-labelledby={`${id}-name`} aria-describedby={[`${id}-sum`, r.advice && `${id}-trade`, time && `${id}-time`].filter(Boolean).join(' ')} />
       <span className={c.head}>
         <span className="rd" aria-hidden="true" />
-        <b className={c.name}>{r.name}</b>
+        <b className={c.name} id={`${id}-name`}>{r.name}</b>
         {r.community && <span className="pill soon">Community image</span>}
+        {/* the frame's advice (recipe `advice`): which way it recommends, and the other one */}
+        {!r.community && r.advice && <span className={`pill ${r.advice.tag === 'recommended' ? c.rec : 'soon'}`}>{r.advice.tag === 'recommended' ? 'Recommended' : 'Alternative'}</span>}
       </span>
-      <span className={c.summary}>{r.summary}</span>
-      <dl className={c.facts}>
-        <dt>By</dt><dd>{r.by.name}</dd>
-        <dt>License</dt><dd>{r.licence}</dd>
-        <dt>Support</dt><dd>{r.community ? 'Its project, on GitHub' : r.support.name}</dd>
-        <dt>Project</dt><dd><a className="link" href={r.project.href} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>{r.project.name}</a></dd>
-      </dl>
-    </RadioGroup.Item>
+      <span className={c.summary} id={`${id}-sum`}>{r.summary}</span>
+      {r.advice && <span className={c.trade} id={`${id}-trade`}>{r.advice.trade}</span>}
+      {/* how long it usually takes, from the frame's words (time.total.<recipe id>): only where the frame gives one */}
+      <Usually time={time} id={`${id}-time`} />
+      {/* who makes it, its licence, where questions go, its project: one quiet line (community-images.md keeps all four) */}
+      <p className={c.facts}>
+        <span>{`By ${r.by.name}`}</span>
+        <span>{r.licence}</span>
+        <span>{`Support: ${r.community ? 'Its project, on GitHub' : r.support.name}`}</span>
+        <span><a className={`link ${c.above}`} href={r.project.href} target="_blank" rel="noopener">{r.project.name}</a></span>
+      </p>
+    </div>
   );
 }
 
@@ -54,7 +69,9 @@ function Card({ r }: { r: ImageRecipe }) {
 export function Choose({ f, s }: P) {
   const r = f.recipe;
   const from = s.from ? f.recipeOf(s.from) : undefined;
-  const shown = f.recipes.filter((x) => s.open || !x.community);
+  // the recommended way first, then the alternative, then the rest in the frame's order
+  const rank = (x: ImageRecipe) => (x.advice?.tag === 'recommended' ? 0 : x.advice?.tag === 'alternative' ? 1 : 2);
+  const shown = f.recipes.filter((x) => s.open || !x.community).map((x, i) => ({ x, i })).sort((a, b) => rank(a.x) - rank(b.x) || a.i - b.i).map(({ x }) => x);
   const others = f.recipes.filter((x) => x.community).length;
   return (
     <section className="card" aria-labelledby="h">
@@ -67,7 +84,7 @@ export function Choose({ f, s }: P) {
         </p>
       )}
       <RadioGroup.Root id="images" className={`${c.cards}${s.open ? '' : ` ${c.one}`}`} value={r.id} onValueChange={(v) => f.pick(v)} aria-labelledby="h">
-        {shown.map((x) => <Card key={x.id} r={x} />)}
+        {shown.map((x) => <Card key={x.id} r={x} picked={x.id === r.id} time={totalTime(f.frame, x.id)} />)}
       </RadioGroup.Root>
       {others > 0 && (
         <p className={`small ${c.more}`}>
@@ -75,10 +92,9 @@ export function Choose({ f, s }: P) {
           {!s.open && <span>Maintained by other community projects.</span>}
         </p>
       )}
-      <div className="foot">
-        <span />
+      <Foot>
         <button type="button" className="btn ember" onClick={() => f.choose()}>Continue with {r.name}</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -141,13 +157,10 @@ export function Download({ f, s }: P) {
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       {r.steps.some((x) => x.do === 'wifi') && <WifiFields f={f} s={s} r={r} />}
       {(r.release || r.vendor) && <p className="small">{r.release && <>Release <code>{r.release.name}</code>.</>}{r.release && r.vendor && ' '}{r.vendor}</p>}
-      <div className="foot">
-        <span className="links">
-          {!s.link && <><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button><span aria-hidden="true">·</span></>}
-          <button type="button" className="link" onClick={() => f.toGlassworks()}>Install Glassworks instead</button>
-        </span>
+      <Foot>
+        <button type="button" className="btn ghost" onClick={() => f.toGlassworks()}>Install Glassworks instead</button>
         <DownloadButton f={f} s={s} label={`Download ${r.name}`} />
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -190,13 +203,10 @@ export function ConfirmCommunity({ f, s, reversible }: P & { reversible?: string
       </p>
       {reversible && <p className="small">{reversible}.</p>}
       <label className="check"><input type="checkbox" checked={s.understood} onChange={(e) => f.understand(e.target.checked)} />{` I understand everything on ${f.frame.the} is replaced.`}</label>
-      <div className="foot">
-        <span className="links">
-          <button type="button" className="link" onClick={() => f.retry()}>Back</button><span aria-hidden="true">·</span>
-          <button type="button" className="link" onClick={() => f.toGlassworks()}>Install Glassworks instead</button>
-        </span>
+      <Foot>
+        <button type="button" className="btn ghost" onClick={() => f.toGlassworks()}>Install Glassworks instead</button>
         <button type="button" className="btn ember" disabled={!s.understood} onClick={() => void f.flash()}>Install {r.name}</button>
-      </div>
+      </Foot>
     </section>
   );
 }
@@ -235,7 +245,7 @@ export function DoneCommunity({ f, log }: { f: ImageSession; log: React.ReactNod
         </div>
       </div>
       <WayBack f={f} other={f.recipes[0]!} />
-      <div className="foot">{log}</div>
+      {log}
     </section>
   );
 }
