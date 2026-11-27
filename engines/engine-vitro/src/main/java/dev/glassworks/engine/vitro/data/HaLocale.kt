@@ -75,16 +75,22 @@ object HaLocale {
      * its whole transition table included, on every call, and the store reads it for timestamps as states land.
      * [deviceZoneChanged] replaces it when the device's zone changes ([watchDeviceZone]). Tests replace it.
      */
-    @Volatile var deviceTimeZone: () -> TimeZone = { deviceZone ?: TimeZone.getDefault().also { deviceZone = it } }
+    @Volatile var deviceTimeZone: () -> TimeZone = {
+        // Read and stored under [zoneLock], as [deviceZoneChanged] stores: a read that found nothing kept can't write
+        // the old default back over a newer zone the broadcast stored meanwhile (Greptile on #956).
+        deviceZone ?: synchronized(zoneLock) { deviceZone ?: TimeZone.getDefault().also { deviceZone = it } }
+    }
 
     @Volatile private var deviceZone: TimeZone? = null
+    private val zoneLock = Any()
 
     /**
      * The device's zone changed (`ACTION_TIMEZONE_CHANGED`, its new zone's [id] when the broadcast names it): the zone
      * kept is that one, or the device's default read afresh at the next use.
      */
     fun deviceZoneChanged(id: String?) {
-        deviceZone = id?.takeIf { it.isNotBlank() }?.let { TimeZone.getTimeZone(it) }
+        val zone = id?.takeIf { it.isNotBlank() }?.let { TimeZone.getTimeZone(it) }
+        synchronized(zoneLock) { deviceZone = zone }
     }
 
     /** The application the zone receiver is registered with ([watchDeviceZone]). */
@@ -114,7 +120,7 @@ object HaLocale {
 
     /** Back to the browser's defaults: a new connection, or tests. */
     fun reset() {
-        deviceZone = null
+        synchronized(zoneLock) { deviceZone = null }
         synchronized(lock) {
             write(FrontendLocale(language = deviceLanguage()))
             serverTimeZone = null
