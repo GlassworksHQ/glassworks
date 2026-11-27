@@ -108,7 +108,7 @@ export default async function Home() {
             </h2>
             <p className={s.sectionLede}>
               Plug in over USB and open Kiln in Chrome or Edge—no terminal commands and no vendor cloud (just a quick{" "}
-              <Link href="/docs/frames/aqara-s1-plus/install#one-time-setup-for-your-computer">one-time USB driver</Link> for the S1 on Windows). Supported wall switches back up their stock software first so you can return anytime, while the Studio Mirror can always go back to plain Glass Panes, or to lululemon's system if you installed on the stock software.
+              <Link href="/docs/frames/aqara-s1-plus/install#one-time-setup-for-your-computer">one-time USB driver</Link> for the S1 on Windows). Supported wall switches back up their stock software first so you can return anytime, while the Studio Mirror can always go back to plain Glass Panes, or to lululemon&rsquo;s system if you installed on the stock software.
             </p>
             <div className={s.actions}>
               <a href={KILN} className={s.kilnBtn}>
