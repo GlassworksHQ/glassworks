@@ -14,7 +14,7 @@ import {
 } from '../src';
 import { ADB_KEYS, AID, LABELS, WIFI_CONF, macFromSerial, wpaSupplicantConf } from '../src/image';
 import { DEFAULT_WIFI_TEMPLATE } from '../src/stage';
-import { INSTALLER_MAC_SETTING, USB_ALLOW_PERMISSION_SETTING, factoryUserdata, glassworksInPlace, keepWifiOn, keptBundleFits } from '../src/inplace';
+import { INSTALLER_MAC_SETTING, USB_ALLOW_PERMISSION_SETTING, factoryUserdata, glassworksInPlace, keepWifiOn, keptBundleFits, wifiAddress } from '../src/inplace';
 import { USB_ALLOW_PERMISSION } from '../src/stock';
 import type { PanelShell } from '@glassworks/adb';
 import { GLASSWORKS } from '../src/app';
@@ -371,6 +371,19 @@ describe('a reinstall, and stock\'s hotspot', () => {
     // `pm list packages` matches by substring: a package whose name only starts with ours isn't ours
     expect(await glassworksInPlace(shell({ out: `package:${GLASSWORKS.package}.other\n`, code: 0 }))).toBe(false);
     expect(await glassworksInPlace(shell({ out: `package:${GLASSWORKS.package}\n`, code: 0 }))).toBe(true);
+  });
+
+  it('reads the Mirror\'s Wi-Fi address for the reinstall\'s download by hand, and nothing that isn\'t one', async () => {
+    const shell = (answers: Record<string, { out: string; code: number } | Error>) => ({
+      run: async (c: string) => { const r = answers[c] ?? { out: '', code: 1 }; if (r instanceof Error) throw r; return r; },
+    }) as unknown as PanelShell;
+    expect(mirrorInPlace(design.device.words).lanAddress).toBeTypeOf('function');
+    expect(await wifiAddress(shell({ 'getprop dhcp.wlan0.ipaddress': { out: '192.0.2.44\n', code: 0 } }))).toBe('192.0.2.44');
+    expect(await wifiAddress(shell({ 'getprop dhcp.wlan0.ipaddress': { out: '\n', code: 0 },
+      'ip -4 -o addr show wlan0': { out: '4: wlan0    inet 192.0.2.45/24 brd 192.0.2.255 scope global wlan0\n', code: 0 } }))).toBe('192.0.2.45');
+    expect(await wifiAddress(shell({ 'getprop dhcp.wlan0.ipaddress': { out: '999.1.1.1', code: 0 } }))).toBeUndefined();
+    expect(await wifiAddress(shell({ 'getprop dhcp.wlan0.ipaddress': new Error('closed'), 'ip -4 -o addr show wlan0': new Error('closed') }))).toBeUndefined();
+    expect(await wifiAddress(shell({}))).toBeUndefined(); // on Ethernet only: no Wi-Fi address
   });
 });
 

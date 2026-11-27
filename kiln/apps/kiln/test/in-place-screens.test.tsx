@@ -85,6 +85,19 @@ describe('ReceiveScreen', () => {
     pick(p);
   });
 
+  it('without Bluetooth or an address: no link, and the router is where the address is (#944)', () => {
+    receive({ stage: 'ready', bluetoothAvailable: false, agentPageUrl: null, agentPort: 18765 });
+    expect(screen.queryByRole('link', { name: /download page/ })).toBeNull();
+    expect(screen.getByText(/router’s list of devices, then go to http:\/\/<address>:18765/)).toBeTruthy();
+    expect(screen.queryByText(/shown on/)).toBeNull(); // the setup helper has no screen
+  });
+
+  it('a guessed address links, and says it may have changed', () => {
+    receive({ stage: 'ready', bluetoothAvailable: false, agentPageGuessed: true });
+    expect((screen.getByRole('link', { name: /download page/ }) as HTMLAnchorElement).href).toBe(URL_);
+    expect(screen.getByText(/If nothing opens once .* has restarted, its address may have changed/)).toBeTruthy();
+  });
+
   it('connecting: says so and offers no second connect', () => {
     receive({ stage: 'connecting' });
     expect(screen.getByRole('status').textContent).toMatch(/Connecting/);

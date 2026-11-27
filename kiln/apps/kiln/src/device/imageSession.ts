@@ -15,7 +15,7 @@ import {
   type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type InPlaceCode, type NamedPart, type ReadBackFile,
   type PlannedStep, type PrepareStep, type RestoredFile,
 } from '@glassworks/kiln-core';
-import type { BluetoothLike } from './channels';
+import { buildAgentPageUrl, type BluetoothLike } from './channels';
 import { InPlaceReceiver, UnverifiedBundle, fallbackWords, fromHexString, hotspotUrls, memoryInPlaceStore, newSecret, restorePointZip, toHexString, type InPlaceStore, type Received } from './inPlace';
 import type { ReceiveChannel, ReceiveProgress, ReceiveStage } from './InPlaceScreens';
 
@@ -135,7 +135,9 @@ export interface ImageDeps {
 export type ProgressMark = { at: 'written' | 'flashed' | 'staged' | 'received' | 'undo'; image?: string; secret?: string; serial?: string; digest?: string; bundle?: string;
   wrote?: string[]; began?: string[]; restore?: { serial: string; digest: string }; readBack?: ReadBackFile[];
   /** `staged`: the device's own Wi-Fi was gone (the frame's `ownWifiGone`), so its agent got the person's network. */
-  noOwnWifi?: boolean };
+  noOwnWifi?: boolean;
+  /** `staged`, with `noOwnWifi`: the device's address on that network before the restart (the frame's `lanAddress`). */
+  lanHost?: string };
 const MARKS: readonly ProgressMark['at'][] = ['written', 'flashed', 'staged', 'received', 'undo'];
 export interface DeviceProgress { get(): ProgressMark | undefined; set(m: ProgressMark | undefined): void }
 
@@ -166,6 +168,8 @@ export interface ReceiveView {
   progress: ReceiveProgress | null;
   /** The agent's own page, where the bundle can be downloaded by hand. */
   pageUrl: string | null;
+  /** `pageUrl` is the device's address from before the restart (the frame's `lanAddress`), not one the agent gave. */
+  pageGuessed?: boolean;
   /** Why Kiln moved to another channel, said calmly. */
   fallback: string | null;
   error: string | null;
@@ -431,6 +435,8 @@ export class ImageSession {
       this.secret = secret;
       this.serial = mark.serial;
       this.noOwnWifi = !!mark.noOwnWifi;
+      // only an address (IPv4 or IPv6), so a changed mark can't turn the download link into another page
+      this.lanHost = mark.noOwnWifi && typeof mark.lanHost === 'string' && /^[0-9a-fA-F.:]+$/.test(mark.lanHost) ? mark.lanHost : undefined;
       this.state = { ...this.state, screen: 'receive', picked: wrote.id, files: waiting(wrote), changed: true, round: 1, receive: this.receiveView('ready'), resumed: 'staged' };
       this.cursor = this.indexOf(wrote, 'receive');
       setTimeout(() => this.watchHotspot(), 0);
@@ -787,10 +793,10 @@ export class ImageSession {
       if (!mine()) { void p.close?.().catch(() => {}); if (latest()) this.set({ connecting: false }); return; }
       await checkBoard(p, this.d.frame);
       if (!mine()) { void p.close?.().catch(() => {}); if (latest()) this.set({ connecting: false }); return; }
-      const gone = await this.ownWifiGone(p);
+      const { gone, host } = await this.ownWifiGone(p);
       if (!mine()) { void p.close?.().catch(() => {}); if (latest()) this.set({ connecting: false }); return; }
       await this.restart(p);
-      if (mine()) this.noOwnWifi = gone;
+      if (mine()) { this.noOwnWifi = gone; this.lanHost = host; }
       if (latest()) this.set({ connecting: false, restarted: mine() });
     } catch (e) {
       void p?.close?.().catch(() => {}); // a refusal (not the device) or a failed restart: let go of the connection
@@ -803,17 +809,18 @@ export class ImageSession {
    * For an in-place recipe whose device opens its own Wi-Fi: whether an earlier install turned that off (the frame's
    * `ownWifiGone`, over adb). A reinstall then gives the agent the person's network instead.
    */
-  private async ownWifiGone(p: PanelShell): Promise<boolean> {
+  private async ownWifiGone(p: PanelShell): Promise<{ gone: boolean; host?: string }> {
     const c = this.inPlace ? this.d.frame.imageFlow.inPlace : undefined;
-    if (!c?.channels.lan?.hotspot || !c.ownWifiGone) return false;
+    if (!c?.channels.lan?.hotspot || !c.ownWifiGone) return { gone: false };
     // bounded like every read before the restart: a device that stops answering ends the check (as no: the hotspot
     // path, as before this check), and the restart goes on
     const gone = await c.ownWifiGone(bounded(p, this.d.frame)).catch(() => false);
-    if (gone) {
-      this.log(`${cap(this.d.frame.the)}'s own Wi-Fi network is off since its earlier install`);
-      this.log('', 'the setup helper joins your Wi-Fi network instead, and Kiln reaches it there or over Bluetooth');
-    }
-    return gone;
+    if (!gone) return { gone };
+    this.log(`${cap(this.d.frame.the)}'s own Wi-Fi network is off since its earlier install`);
+    this.log('', 'the setup helper joins your Wi-Fi network instead, and Kiln reaches it there or over Bluetooth');
+    // where the helper is likely found on that network: the download by hand's address when Bluetooth can't say
+    const host = await c.lanAddress?.(bounded(p, this.d.frame)).catch(() => undefined);
+    return host ? { gone, host } : { gone };
   }
 
   /**
@@ -842,6 +849,10 @@ export class ImageSession {
    * fastboot): its agent gets the person's network, and is reached over it or Bluetooth.
    */
   private noOwnWifi = false;
+  /** With [noOwnWifi]: the device's address on the person's network before the restart (the frame's `lanAddress`). */
+  private lanHost?: string;
+  /** This run's agent described itself over Bluetooth: its own page (or none) stands, never [lanHost]'s guess. */
+  private agentSaid = false;
 
   private store(): InPlaceStore { return this.d.inPlaceStore ?? (this.storeMemo ??= memoryInPlaceStore()); }
 
@@ -858,10 +869,18 @@ export class ImageSession {
 
   private receiveView(stage: ReceiveStage, patch: Partial<ReceiveView> = {}): ReceiveView {
     const h = this.hotspot();
+    const kept = this.state?.receive;
+    const guess = !kept?.pageUrl && !h && !this.agentSaid ? this.guessedPage() : null;
     return {
-      stage, channel: null, progress: null, pageUrl: this.state?.receive?.pageUrl ?? h?.page ?? null, fallback: null, error: null,
+      stage, channel: null, progress: null, pageUrl: kept?.pageUrl ?? h?.page ?? guess, ...(guess || (kept?.pageUrl && kept.pageGuessed) ? { pageGuessed: true } : {}), fallback: null, error: null,
       bluetooth: this.state?.receive?.bluetooth ?? true, network: h?.ssid ?? null, joined: this.state?.receive?.joined ?? false, ...patch,
     };
+  }
+
+  /** The agent's page at the device's address from before the restart ([lanHost]), when there's no better one. */
+  private guessedPage(): string | null {
+    const lan = this.d.frame.imageFlow.inPlace?.channels.lan;
+    return this.inPlace && this.noOwnWifi && this.lanHost && lan ? buildAgentPageUrl(this.lanHost, lan.port, lan.pagePath) : null;
   }
 
   /** The device's own Wi-Fi and the agent's addresses on it, when the frame declares one and the serial is known. */
@@ -939,6 +958,7 @@ export class ImageSession {
             this.receiving?.abort();
             this.receiving = undefined;
             this.receiver = undefined;
+            this.agentSaid = false;
             this.restore = undefined;
             if (this.state.leftHotspot) this.set({ leftHotspot: undefined });
             this.wrote = new Set();
@@ -979,7 +999,7 @@ export class ImageSession {
             // the stage's write is done: a reload from here on resumes on receive (its agent starts with any restart,
             // the stage being on userdata), never staging again
             else if (this.state.round === 1 && this.secret && this.serial && steps[i + 1]?.do === 'restart' && steps[i + 2]?.do === 'receive') {
-              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial, ...(this.noOwnWifi ? { noOwnWifi: true } : {}) });
+              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial, ...(this.noOwnWifi ? { noOwnWifi: true, ...(this.lanHost ? { lanHost: this.lanHost } : {}) } : {}) });
             }
             break;
           }
@@ -993,7 +1013,7 @@ export class ImageSession {
             this.made = Object.create(null);
             const next = steps[i + 1]?.do;
             if (next === 'receive' && this.secret && this.serial) {
-              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial, ...(this.noOwnWifi ? { noOwnWifi: true } : {}) });
+              this.d.progress?.set({ at: 'staged', image: r.id, secret: toHexString(this.secret), serial: this.serial, ...(this.noOwnWifi ? { noOwnWifi: true, ...(this.lanHost ? { lanHost: this.lanHost } : {}) } : {}) });
             } else if (next === 'app-install') {
               this.restore = undefined;
               this.wrote = new Set();
@@ -1141,7 +1161,7 @@ export class ImageSession {
     try {
       const got = await rec.receive({
         secret, serial, signal,
-        onMeta: (_m, pageUrl) => { if (live()) this.set({ receive: { ...this.state.receive!, pageUrl } }); },
+        onMeta: (_m, pageUrl) => { if (live()) { this.agentSaid = true; this.set({ receive: { ...this.state.receive!, pageUrl, pageGuessed: undefined } }); } },
         onChannel: (c) => { if (live()) this.set({ receive: { ...this.state.receive!, stage: c === 'cache' ? 'cache-hit' : 'transferring', channel: c, fallback: fellBack } }); },
         onProgress: (p) => { if (live()) this.set({ receive: { ...this.state.receive!, progress: this.progressOf(p) } }); },
         onFallback: (e) => { if (!live()) return; lanDenied = e.reason === 'lna-denied'; fellBack = fallbackWords(e); this.log('', fellBack); this.set({ receive: { ...this.state.receive!, fallback: fellBack } }); },
@@ -2167,6 +2187,7 @@ export class ImageSession {
     this.watching = undefined;
     void this.receiver?.cancel().catch(() => {});
     this.receiver = undefined;
+    this.agentSaid = false;
     this.secret = undefined;
     this.serial = undefined;
     this.bundle = undefined;

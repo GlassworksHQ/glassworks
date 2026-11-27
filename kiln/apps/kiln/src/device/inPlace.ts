@@ -88,8 +88,7 @@ export function idbInPlaceStore(db: string): InPlaceStore {
     async latestRestore() {
       for (const m of (await store.list()).reverse()) {
         if (!m.files.some((f) => f.part.startsWith('restore/'))) continue;
-        const digest = m.id.slice(m.id.lastIndexOf('-') + 1);
-        const serial = m.serial ?? m.id.slice(0, m.id.lastIndexOf('-'));
+        const { serial, digest } = inPlaceKey(m);
         const files = (await store.files(m)).filter((f) => f.part.startsWith('restore/')).map((f) => ({ filename: f.part.slice('restore/'.length), data: f.data }));
         return { serial, digest, files };
       }
@@ -102,6 +101,16 @@ export function idbInPlaceStore(db: string): InPlaceStore {
     },
     async persist() { try { return (await navigator.storage?.persist?.()) ?? false; } catch { return false; } },
   };
+}
+
+/**
+ * The key an idbInPlaceStore record's id stands for (`<serial>-<digest>`): the digest is all that follows the serial, so
+ * a restore point the person imported (`restore-<sha>`, imageSession's way back) keeps its prefix and is found again.
+ */
+export function inPlaceKey(m: { id: string; serial?: string }): { serial: string; digest: string } {
+  if (m.serial && m.id.startsWith(`${m.serial}-`)) return { serial: m.serial, digest: m.id.slice(m.serial.length + 1) };
+  const at = /^(.*?)-((?:restore-)?[^-]*)$/.exec(m.id);
+  return at ? { serial: at[1]!, digest: at[2]! } : { serial: m.serial ?? '', digest: m.id };
 }
 
 /** A new secret for the stage: 32 random bytes. */
