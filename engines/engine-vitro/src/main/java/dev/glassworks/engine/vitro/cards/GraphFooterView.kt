@@ -140,7 +140,6 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
         }, { ev, first ->
             ctx.main.post {
                 if (stream !== s) return@post
-                if (first) s.restart()
                 if (error != null) {
                     // Recovered: the error and its description go with it.
                     error = null
@@ -150,6 +149,7 @@ class GraphFooterView(private val ctx: VitroCardContext, config: JSONObject) : V
                 // No history: the current state alone (limitedHistoryFromStateObj).
                 val current = ctx.store[id]?.let { st -> HistoryState(st.state, st.lastUpdated) }
                 GraphWork.run(ctx.main, {
+                    // The stream is only ever touched here, on the graph thread, in its messages' order.
                     if (first) s.restart()
                     val states: List<HistoryState> = s.process(ev, now)[id].orEmpty()
                     if (states.isEmpty() && current != null) listOf(current) else states
