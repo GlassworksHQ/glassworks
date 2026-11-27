@@ -72,8 +72,8 @@ Glassworks is built around three core concepts, guided by our [Principles](docs/
 | Frame | Status | Overview |
 |---|---|---|
 | [Aqara S1 Plus](frames/aqara-s1-plus/README.md) | Stable | Rooted Allwinner A133 wall panel and Glassworks' reference device. Runs every pane, including Zigbee/Thread radio and wall base relays. |
-| [Generic Android](frames/generic-android/README.md) | Beta | Standard Android app for Android 8+ tablets and phones (plus a legacy build for Android 6–7), with no root required. Includes tested devices like the [Google Pixel Tablet](frames/google-pixel-tablet/README.md) and the [Samsung Galaxy Tab A 10.1 (2016)](frames/samsung-galaxy-tab-a-10-1-2016/README.md). |
-| [lululemon Studio Mirror](frames/lululemon-mirror/README.md) | Beta | 40-inch smart mirror running Android behind the glass. |
+| [Generic Android](frames/generic-android/README.md) | Stable | Standard Android app for Android 8+ tablets and phones (plus a legacy build for Android 6–7), with no root required. Includes tested devices like the [Google Pixel Tablet](frames/google-pixel-tablet/README.md) and the [Samsung Galaxy Tab A 10.1 (2016)](frames/samsung-galaxy-tab-a-10-1-2016/README.md). |
+| [lululemon Studio Mirror](frames/lululemon-mirror/README.md) | Stable | 40-inch smart mirror running Android behind the glass. |
 
 Each device definition lives in `frames/<id>/design/frame.json` (see [the frame format](frames/README.md)) and is showcased with interactive 3D models at [glassworks.dev/frames](https://www.glassworks.dev/frames).
 

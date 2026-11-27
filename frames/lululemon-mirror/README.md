@@ -29,8 +29,8 @@
     </picture>
   </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-beta-on-dark.svg">
-    <img alt="Status: beta" src="https://www.glassworks.dev/brand/badge-status-beta-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-stable-on-dark.svg">
+    <img alt="Status: stable" src="https://www.glassworks.dev/brand/badge-status-stable-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -62,7 +62,7 @@ These same credits are stored in [`design/frame.json`](design/frame.json) and di
 
 ## Status
 
-**Status: beta.** Glassworks for the Mirror is out as the legacy build of Glassworks for Generic Android, and Kiln installs its latest release on a supported Mirror straight from Chrome or Edge at [kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lululemon-mirror). After that, new releases show up in Home Assistant under **Settings → Updates**, as on any Glassworks panel ([Updates](../../docs/updates.md)).
+**Status: stable.** Glassworks for the Mirror is out as the legacy build of Glassworks for Generic Android, and Kiln installs its latest release on a supported Mirror straight from Chrome or Edge at [kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lululemon-mirror). After that, new releases show up in Home Assistant under **Settings → Updates**, as on any Glassworks panel ([Updates](../../docs/updates.md)).
 
 - **Supported hardware:** Original Qualcomm (MSM8916) Mirror units running stock software 1.x. Later revisions switched to an NXP i.MX8 board where only JTAG hardware access has been reported; those revisions are not supported. Note that screen size alone does not identify which board is inside ([see board revisions](research/revisions.md)).
 - **Android 6 legacy build:** Because the original Mirror runs Android 6.0.1, Kiln installs the dedicated legacy build of [Glassworks for Generic Android](../generic-android/README.md#the-legacy-build-android-6-and-7). It runs a frozen browser engine locked strictly to your Home Assistant address, starts upright in portrait mode, and guides you through Wi-Fi and Home Assistant sign-in from your phone or computer since the Mirror has no touchscreen.
@@ -118,7 +118,7 @@ Choose **Glassworks on the stock software** on Kiln's first screen to keep lulul
 | App data | Starts fresh | Starts fresh |
 | Way back | Install the plain Glass Panes image | The restore point puts lululemon's system back as it was |
 | Updates | Install by themselves | Install by themselves (Glassworks is the Device Owner) |
-| Status | Beta | Experimental |
+| Status | Stable | Experimental |
 
 1. **Prepare:** Pick the Glassworks APK and, if you like, your Wi-Fi network. Glassworks joins it on its first start, so the Mirror comes up online and ready for Home Assistant. You can also add it on the Mirror later.
 2. **First trip into fastboot:** Follow the same hardware guide as the image install. Kiln writes a small setup agent to the Mirror's app storage only, then restarts it. lululemon's system isn't touched.
@@ -147,13 +147,13 @@ If your Mirror already runs the Glass Panes image and you only want to install t
 
 | Pane | Support | Notes |
 |---|---|---|
-| **Assist** | Alpha | Uses the built-in microphone for local wake word detection. |
-| **Timers** | Alpha | On-screen voice timers paired with Assist. |
-| **Sendspin** | Alpha | Synced Music Assistant playback over the Mirror's stereo speakers. |
-| **Notifications** | Alpha | Because the Mirror has no touchscreen, high/critical alerts without a tag or timeout dismiss automatically after 2 minutes. |
-| **Camera** | Alpha | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. The live video stream costs memory and can make the dashboard reload ([Known issues](#known-issues)). |
-| **Bluetooth proxy** | Alpha | Uses the built-in Bluetooth LE radio once location permission is granted. |
-| **Diagnostics** | Alpha | Reports uptime and memory (no CPU temperature sensor on this board). |
+| **Assist** | Stable | Uses the built-in microphone for local wake word detection. |
+| **Timers** | Stable | On-screen voice timers paired with Assist. |
+| **Sendspin** | Stable | Synced Music Assistant playback over the Mirror's stereo speakers. |
+| **Notifications** | Stable | Because the Mirror has no touchscreen, high/critical alerts without a tag or timeout dismiss automatically after 2 minutes. |
+| **Camera** | Stable | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. The live video stream costs memory and can make the dashboard reload ([Known issues](#known-issues)). |
+| **Bluetooth proxy** | Stable | Uses the built-in Bluetooth LE radio once location permission is granted. |
+| **Diagnostics** | Stable | Reports uptime and memory (no CPU temperature sensor on this board). |
 | **Zigbee / Thread radio** | Not supported | No 802.15.4 radio hardware. |
 | **Time zone** | Not supported | Aqara S1 Plus only. |
 | **Wall base** | Not supported | Aqara S1 Plus only. |

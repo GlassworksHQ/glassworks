@@ -5,6 +5,6 @@
   "requires": [
     "silabs-radio"
   ],
-  "status": "beta",
+  "status": "stable",
   "docs": "frames/aqara-s1-plus/docs/radio.md"
 }

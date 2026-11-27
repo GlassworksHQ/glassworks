@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// /android (#403): open to everyone (beta; the release, test/android-release.test.tsx; ?apk=local, a file), and every demo screen on the real generic recipe behind a
+// /android (#403): open to everyone (stable; the release, test/android-release.test.tsx; ?apk=local, a file), and every demo screen on the real generic recipe behind a
 // simulated device, as the approved mockup draws them.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { fakeApk } from '@glassworks/app-adb/fakes';
@@ -38,7 +38,7 @@ async function show(name: AndroidDemo, ready: string | RegExp) {
 }
 
 describe('the switch', () => {
-  it('is on for everyone, the release by default (beta), and demos only where demos run', () => {
+  it('is on for everyone, the release by default (stable), and demos only where demos run', () => {
     expect(androidMode('', true, ANDROID_DEMOS)).toEqual({ on: true, apk: 'release' });
     expect(androidMode('?apk=local', false, ANDROID_DEMOS)).toEqual({ on: true, apk: 'local' });
     expect(androidMode('?demo=done', true, ANDROID_DEMOS)).toEqual({ on: true, demo: 'done' });

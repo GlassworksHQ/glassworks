@@ -4,7 +4,7 @@
   "name": "lululemon Studio Mirror",
   "brand": "lululemon",
   "aka": "Originally sold as Mirror, by Mirror.co",
-  "status": "beta",
+  "status": "stable",
   "summary": "A full-length mirror with a 40-inch portrait screen behind it. The original version takes a new Android image over fastboot.",
   "tagline": "A 40-inch mirror with Android behind it.",
   "notice": "Installing will erase lululemon's software, with no backup. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target.",
@@ -282,32 +282,32 @@
   "camera": { "maxPixels": 921600, "sensorDegrees": 180 },
   "panes": {
     "assist": {
-      "support": "alpha",
+      "support": "stable",
       "note": "It has a microphone. In the legacy build."
     },
     "timers": {
-      "support": "alpha",
+      "support": "stable",
       "note": "Needs Assist."
     },
     "sendspin": {
-      "support": "alpha",
+      "support": "stable",
       "note": "It has stereo speakers. In the legacy build."
     },
     "notifications": {
-      "support": "alpha",
-      "note": "In the legacy build. No touch, so an urgent one with no tag or timeout closes after 2 minutes. Not yet run on a Mirror."
+      "support": "stable",
+      "note": "In the legacy build. No touch, so an urgent one with no tag or timeout closes after 2 minutes."
     },
     "bluetooth-proxy": {
-      "support": "alpha",
-      "note": "It has Bluetooth LE (its WCN3660B, read from a teardown). In the legacy build. It scans only once the location permission is granted, which Kiln doesn't do yet. Not yet run on a Mirror."
+      "support": "stable",
+      "note": "It has Bluetooth LE (its WCN3660B, read from a teardown). In the legacy build. It scans only once the location permission is granted, which Kiln doesn't do yet."
     },
     "camera": {
-      "support": "alpha",
+      "support": "stable",
       "note": "It has a camera (5 MP, front). In the legacy build: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on; Kiln grants the camera. The live stream costs memory the dashboard needs, so with it on the dashboard reloads more often."
     },
     "diagnostics": {
-      "support": "alpha",
-      "note": "In the legacy build, with no CPU temperature. Not yet run on a Mirror."
+      "support": "stable",
+      "note": "In the legacy build, with no CPU temperature."
     },
     "radio": {
       "support": "no",

@@ -94,13 +94,13 @@ describe('frame designs', () => {
     expect(RENDERS[id], 'Kiln imports it').toMatch(/render/);
   });
 
-  it('the S1 is stable, the Mirror, generic Android and the Pixel Tablet beta, all installable from Kiln', () => {
+  it('the S1, the Mirror, generic Android and the Pixel Tablet are stable, all installable from Kiln', () => {
     expect(read('aqara-s1-plus')).toMatchObject({ status: 'stable', kiln: '/aqara-s1-plus', recovery: 'recovery.json' });
     expect(read('aqara-s1-plus').abis, 'the S1 runs a 32-bit userspace').toEqual(['armeabi-v7a']);
-    expect(read('lululemon-mirror')).toMatchObject({ status: 'beta', kiln: '/lululemon-mirror' });
-    expect(read('generic-android')).toMatchObject({ status: 'beta', kiln: '/android' });
-    // a tested device: beta, with no route of its own; it installs as its base, generic Android (kilnRoute)
-    expect(read('google-pixel-tablet')).toMatchObject({ status: 'beta', base: 'generic-android' });
+    expect(read('lululemon-mirror')).toMatchObject({ status: 'stable', kiln: '/lululemon-mirror' });
+    expect(read('generic-android')).toMatchObject({ status: 'stable', kiln: '/android' });
+    // a tested device: stable, with no route of its own; it installs as its base, generic Android (kilnRoute)
+    expect(read('google-pixel-tablet')).toMatchObject({ status: 'stable', base: 'generic-android' });
     expect(read('google-pixel-tablet').kiln).toBeUndefined();
   });
 
