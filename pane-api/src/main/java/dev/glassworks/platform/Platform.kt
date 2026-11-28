@@ -60,6 +60,12 @@ open class PlatformApi(
     val hasProcessStartTime: Boolean get() = apiLevel >= 24
 
     /**
+     * `logcat -v epoch` exists (Android 7). Below it, `logcat` rejects `-v epoch` and exits, so callers must fall
+     * back to `-v threadtime`.
+     */
+    val hasLogcatEpoch: Boolean get() = apiLevel >= 24
+
+    /**
      * The system CA store has ISRG Root X1, Let's Encrypt's root (Android 7.1). Below it, HTTPS to a host on it
      * (raw.githubusercontent.com, GitHub's release assets) fails unless the app adds the root ([HttpsTrust]).
      * Android 7.0's Network Security Config could add it too, but only from XML for the whole app.

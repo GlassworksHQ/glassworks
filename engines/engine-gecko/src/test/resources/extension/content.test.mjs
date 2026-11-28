@@ -206,6 +206,41 @@ test("a page without a launch screen drops the style at once", () => {
   assert.equal(style.removed, true);
 });
 
+test("getExternalAuth failure drops the launch style so HA's error is visible", async () => {
+  const p = page();
+  const style = p.appended.find((el) => el.id === "glassworks-launch");
+  const callbacks = [];
+  p.window.wrappedJSObject.externalAuthSetToken = (...args) => callbacks.push(args);
+  p.domContentLoaded();
+  assert.equal(style.removed, false);
+
+  // A successful reply leaves the launch style in place until the frontend removes #ha-launch-screen.
+  p.window.externalApp.getExternalAuth(JSON.stringify({ callback: "externalAuthSetToken", force: false }));
+  const okReq = p.posted.find((m) => m.type === "getExternalAuth");
+  p.send({ type: "reply", id: okReq.id, success: true, access_token: "tok", expires_in: 1800 });
+  await Promise.resolve();
+  assert.equal(style.removed, false);
+  assert.equal(callbacks.length, 1);
+  assert.equal(callbacks[0][0], true);
+
+  // A failed reply drops the launch style immediately so the launch screen isn't left solid dark.
+  p.window.externalApp.getExternalAuth(JSON.stringify({ callback: "externalAuthSetToken", force: true }));
+  const failReq = p.posted.filter((m) => m.type === "getExternalAuth").at(-1);
+  p.send({ type: "reply", id: failReq.id, success: false });
+  await Promise.resolve();
+  assert.equal(style.removed, true);
+  assert.deepEqual(callbacks[1], [false]);
+});
+
+test("revealLaunch from the app drops the launch style on fallback", () => {
+  const p = page();
+  const style = p.appended.find((el) => el.id === "glassworks-launch");
+  p.domContentLoaded();
+  assert.equal(style.removed, false);
+  p.send({ type: "revealLaunch" });
+  assert.equal(style.removed, true);
+});
+
 test("only one ready, however many signals come", () => {
   const p = page();
   p.domContentLoaded();

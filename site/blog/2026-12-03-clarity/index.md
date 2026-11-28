@@ -3,6 +3,7 @@ title: "Introducing Clarity: an open performance grade for Home Assistant wall p
 date: 2026-12-03
 author: "Eduardo"
 summary: "Spec sheets can't tell you whether a wall panel will feel snappy on your actual dashboard. Clarity runs the real Home Assistant frontend on fixed reference dashboards and gives every device an honest A+ to E grade."
+cover_alt: "We gave our own flagship panel a D, above an A+ to E grade scale: B for the Pixel Tablet (heavy dashboards block 0.9 s), D for the Aqara S1 Plus (typical dashboards block 2.7 s) and E for the lululemon Mirror (taps take 480 ms)."
 draft: true
 ---
 
@@ -61,11 +62,19 @@ A benchmark only matters if people trust it, so we set a few strict ground rules
 
 ## Grading our own panel first
 
-To keep ourselves honest, we started with our own reference device. The Aqara Panel Hub S1 Plus grades **[grade at release]**—[one line from its Clarity card]. It's an older 32-bit chip doing real work on Home Assistant's modern JavaScript frontend. We spent a lot of time trying to squeeze more speed out of it and documented [everything that worked and everything that didn't](../../../frames/aqara-s1-plus/research/view-open.md).
+To keep ourselves honest, we started with our own reference device. The Aqara Panel Hub S1 Plus grades **D**—best kept to light dashboards, held back by typical dashboards where the browser's main thread blocks for 2.7 seconds after the view is drawn. It's an older 32-bit chip doing real work on Home Assistant's modern JavaScript frontend. We spent a lot of time trying to squeeze more speed out of it and documented [everything that worked and everything that didn't](../../../frames/aqara-s1-plus/research/view-open.md).
 
 I'd much rather publish an honest D than massage the test into a B. If you know we won't fudge the grade on our own flagship device, you can actually trust the A's when you see them.
 
-Every Glassworks frame gets a Clarity run, and its grade appears right on [glassworks.dev/frames](https://www.glassworks.dev/frames) and inside Kiln. [Other frames' grades at release.]
+That honest D also forced a better question: if we won't bend the test to make a slow browser look fast, why is a wall panel running a browser engine at all? It's why we're building **[Vitro](https://github.com/GlassworksHQ/glassworks/issues/790)** for **Glassworks 1.1** (*Settings → Labs*)—a native Android renderer for the Home Assistant dashboard you already have—and grading it against the web engine under these exact same rules.
+
+![Bar charts of four Clarity measurements for the Pixel Tablet (B), Aqara S1 Plus (D) and lululemon Mirror (E): restart 2.9, 14.0 and 23.5 s; light-dashboard taps 32, 72 and 480 ms; typical dashboards blocked 0 ms, 2.7 s and 4.5 s; heavy dashboards blocked 0.9 s and 31.5 s, and out of memory on the Mirror](./grades-comparison.webp)
+
+Every Glassworks frame gets a Clarity run, and its grade appears right on [glassworks.dev/frames](https://www.glassworks.dev/frames) and inside Kiln:
+
+- **Google Pixel Tablet: B** — good for typical dashboards with a live camera; heavy dashboards block for 0.9 s.
+- **Aqara Panel Hub S1 Plus: D** — best kept to light dashboards; typical dashboards block for 2.7 s.
+- **lululemon Studio Mirror: E** — 930 MB RAM and Android 6 make taps take 480 ms on light dashboards, and heavy dashboards run out of memory.
 
 ## Beyond the letter grade
 

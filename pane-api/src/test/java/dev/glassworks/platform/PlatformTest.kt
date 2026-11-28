@@ -30,6 +30,7 @@ class PlatformTest {
         Triple("hasLocaleList", 24) { it.hasLocaleList },
         Triple("hasSetProgressAction", 24) { it.hasSetProgressAction },
         Triple("hasProcessStartTime", 24) { it.hasProcessStartTime },
+        Triple("hasLogcatEpoch", 24) { it.hasLogcatEpoch },
         Triple("hasIsrgRootX1", 25) { it.hasIsrgRootX1 },
         Triple("hasActivityManagerGetService", 26) { it.hasActivityManagerGetService },
         Triple("hasNotificationChannels", 26) { it.hasNotificationChannels },

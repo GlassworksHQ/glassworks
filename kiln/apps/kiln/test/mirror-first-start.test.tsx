@@ -149,6 +149,42 @@ describe('connecting while the Mirror is still starting', () => {
     expect(handed).toEqual([]);
   });
 
+  it('waits for the dropped USB handle to close before reopening, and retries a transient AdbBusy', async () => {
+    const LOST = "Failed to execute 'transferOut' on 'USBDevice': A transfer error has occurred.";
+    const order: string[] = [];
+    const first: PanelShell = {
+      run: async () => { throw new Error(LOST); },
+      push: async () => {},
+      close: async () => { await new Promise((r) => setTimeout(r, 15)); order.push('closed'); },
+    };
+    const again = new FirstBootMirror();
+    let busy = 2;
+    const reopen = vi.fn(async (): Promise<PanelShell> => {
+      order.push('reopen');
+      if (busy-- > 0) throw new AdbBusy();
+      return again;
+    });
+    const { f, mirror } = setup({ request: async () => first, reopen });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(order[0]).toBe('closed');
+    expect(reopen).toHaveBeenCalledTimes(3);
+    expect(f.state).toMatchObject({ screen: 'choose', firstBoot: expect.anything() });
+    expect(handed).toEqual([again]);
+  });
+
+  it('stops reconnecting after 3 consecutive AdbBusy errors instead of spinning for 6 minutes', async () => {
+    const LOST = "Failed to execute 'transferOut' on 'USBDevice': A transfer error has occurred.";
+    const first: PanelShell = { run: async () => { throw new Error(LOST); }, push: async () => {} };
+    const reopen = vi.fn(async (): Promise<PanelShell> => { throw new AdbBusy(); });
+    const { f, mirror } = setup({ request: async () => first, reopen, tries: 20 });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(reopen).toHaveBeenCalledTimes(3);
+    expect(f.state.screen).toBe('error');
+    expect(handed).toEqual([]);
+  });
+
   it('a Mirror that never lets in ends with a clear message, and Connect works again', async () => {
     const reopen = vi.fn(async (): Promise<PanelShell> => { throw new Error(REFUSED); });
     const { f, mirror } = setup({ request: async () => { throw new Error(REFUSED); }, reopen, tries: 3 });

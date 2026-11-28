@@ -20,7 +20,7 @@ import { lines, rich } from './rich';
 import { totalTime, word } from './words';
 import { InPlaceNotice, ReceiveScreen, RestorePointScreen, type InPlaceWords } from './InPlaceScreens';
 import { Foot, StartOverDialog } from '../components/Nav';
-import { BrowserAsk, ClockGlyph, Details, Hands, Instructions, Note, Problem, Progress, Wait, rowsAt, useForward, type ProgressRow } from '../components/Kit';
+import { BrowserAsk, ClockGlyph, Details, DriverNote, Hands, Instructions, Note, Problem, Progress, Wait, rowsAt, useForward, type ProgressRow } from '../components/Kit';
 import type { FlowActionSpec } from '../components/Shell';
 import { ManagePageRow } from '../wizard/screens';
 import { hostOs } from '../wizard/explain';
@@ -89,7 +89,12 @@ function ImageCredit({ f }: { f: DeviceFrame }) {
 
 /** The technical log, closed until asked for. */
 function Log({ s }: { s: ImageState }) {
-  return <Details label="Technical log"><pre className="rawlog">{[...s.log].reverse().join('\n') || 'Nothing yet.'}</pre></Details>;
+  return (
+    <Details label="Technical log">
+      {s.log.length > 0 && <span className="small">Newest lines first.</span>}
+      <pre className="rawlog">{[...s.log].reverse().join('\n') || 'Nothing yet.'}</pre>
+    </Details>
+  );
 }
 
 
@@ -260,6 +265,7 @@ export function ImageImage({ f, s, m, ms }: P) {
 
 /** Fastboot by hand: the drawing, the numbered steps to tick off, what to watch for, then the browser's list. */
 function ByHandFastboot({ d, cover }: { d: DeviceFrame; cover?: string }) {
+  const note = word(d, 'fastboot.byHandNote');
   return (
     <>
       {/* the drawing beside the steps on a computer, so the steps stay in the first screen; above them on a phone */}
@@ -267,7 +273,7 @@ function ByHandFastboot({ d, cover }: { d: DeviceFrame; cover?: string }) {
         <div className="howto-art"><Recovery data={d.recovery} /></div>
         <Instructions steps={lines(d.words['fastboot.byHandSteps']).map((x) => rich(x))} label="Fastboot mode, by hand" />
       </div>
-      <Note tone="info">{d.words['fastboot.byHandNote']}</Note>
+      {note && <Note tone="info">{note}</Note>}
       {cover && <Note tone="turn" title="Keep the back cover off">{cover}</Note>}
     </>
   );
@@ -286,9 +292,14 @@ export function ImageFastboot({ f, s }: P) {
       {again ? <>
         {s.leftHotspot && <Note tone="ok" title={`Kiln has what it needs from ${d.the}`}>You can switch this computer back to your usual Wi-Fi now.</Note>}
         <p className="lede">{`The same button as before, one more time. Then Kiln saves a restore point before it changes anything.`}</p>
+        <UsbSetup d={d} />
         <Instructions steps={lines(d.imageFlow.inPlace?.words['inPlace.fastboot.again'] ?? '').map((x) => rich(x))} label="Fastboot mode, once more" />
-      </> : s.restarted ? <p className="lede">{rich(d.words['fastboot.restarted'])}</p> : <>
+      </> : s.restarted ? <>
+        <p className="lede">{rich(d.words['fastboot.restarted'])}</p>
+        <UsbSetup d={d} />
+      </> : <>
         {intro && <p className="lede">{intro}</p>}
+        <UsbSetup d={d} />
         <ByHandFastboot d={d} cover={f.inPlace ? d.imageFlow.inPlace?.words['inPlace.coverNote'] : undefined} />
       </>}
       {r && !r.ok && (
@@ -297,7 +308,6 @@ export function ImageFastboot({ f, s }: P) {
         </Note>
       )}
       {!s.connecting && <BrowserAsk listed={d.listed} short={d.short} the={d.the} />}
-      <UsbSetup d={d} />
       {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <Note tone="bad">{s.connectError}</Note>}
       <Foot busy={s.connecting}>
@@ -311,13 +321,12 @@ export function ImageFastboot({ f, s }: P) {
 }
 
 /**
- * The frame's one-time USB setup for this computer's system, under a fastboot screen's browser ask (installer.json
+ * The frame's one-time USB setup for this computer's system, near the top of a fastboot screen (installer.json
  * `device.drivers`, as the wizard's Connect shows a wizard frame's `drivers`): nothing on macOS, or for a frame that gives none.
  */
 function UsbSetup({ d }: { d: DeviceFrame }) {
-  const line = useMemo(() => { const o = hostOs(); return o === 'other' ? undefined : d.drivers?.[o]; }, [d]);
-  if (!line) return null;
-  return <p className="small">{line}{d.drivers?.guide && <>{' '}<a className="link" href={d.drivers.guide} target="_blank" rel="noopener">Setup guide</a></>}</p>;
+  const os = useMemo(() => hostOs(), []);
+  return <DriverNote os={os} line={os === 'other' ? undefined : d.drivers?.[os]} guide={d.drivers?.guide} />;
 }
 
 /** What Kiln's checks read in fastboot, all passed: one calm line, the details beside it. */
@@ -682,10 +691,15 @@ export function InPlaceUndo({ f, s }: P) {
     return (
       <section className="card" aria-labelledby="h">
         <h2 id="h">{`Put ${d.the} in fastboot mode`}</h2>
-        {u.restarted ? <p className="lede">{rich(d.words['fastboot.restarted'])}</p> : <ByHandFastboot d={d} />}
+        {u.restarted ? <>
+          <p className="lede">{rich(d.words['fastboot.restarted'])}</p>
+          <UsbSetup d={d} />
+        </> : <>
+          <UsbSetup d={d} />
+          <ByHandFastboot d={d} />
+        </>}
         {u.error && <Note tone="bad">{u.error}</Note>}
         {!s.connecting && <BrowserAsk listed={d.listed} short={d.short} the={d.the} />}
-        <UsbSetup d={d} />
         {s.connectError && <Note tone="bad">{s.connectError}</Note>}
         <Foot busy={s.connecting}>
           <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.undoFlash()}>Connect and restore</button>
