@@ -162,6 +162,28 @@ class GeckoBehaviourPinTest {
         assertEquals(emptyList<String>(), h.eventsDuring { h.newIntent(Intent().putExtra("open", "  ")) })
     }
 
+    /**
+     * A path opens on Home Assistant's origin, its query and fragment kept: the engine never gets the bare path, which
+     * GeckoView can't load and the legacy engine's lockdown refuses for its missing origin (the Mirror, Vitro's fallback).
+     */
+    @Test
+    fun `open with a path loads it on the dashboard's origin`() = harness().use { h ->
+        assertEquals(listOf("s1.load $base/history"), h.eventsDuring { h.newIntent(Intent().putExtra("open", "/history")) })
+        assertEquals(
+            listOf("s1.load $base/logbook?entity_id=light.kitchen#top"),
+            h.eventsDuring { h.newIntent(Intent().putExtra("open", "/logbook?entity_id=light.kitchen#top")) },
+        )
+        assertEquals(listOf("s1.load $base/config/dashboard"), h.eventsDuring { h.newIntent(Intent().putExtra("open", "config/dashboard")) })
+        assertEquals("a scheme-relative URL names a host", emptyList<String>(), h.eventsDuring { h.newIntent(Intent().putExtra("open", "//192.0.2.30/history")) })
+        assertEquals(dash, KioskPrefs(h.app).urlSetting)
+    }
+
+    @Test
+    fun `open with a path drops the default port as the panel writes Home Assistant's address`() =
+        harness(prefs = { it.urlSetting = "http://192.0.2.10:80/lovelace/0" }).use { h ->
+            assertEquals(listOf("s1.load http://192.0.2.10/history"), h.eventsDuring { h.newIntent(Intent().putExtra("open", "/history")) })
+        }
+
     @Test
     fun `reload reloads, and comes before a one-off open in the same intent`() = harness().use { h ->
         assertEquals(listOf("s1.reload"), h.eventsDuring { h.newIntent(Intent().putExtra("reload", true)) })

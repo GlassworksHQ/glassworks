@@ -46,6 +46,7 @@ import dev.glassworks.dashboard.Dashboards
 import dev.glassworks.dashboard.StableChange
 import dev.glassworks.setup.SetupSignals
 import dev.glassworks.update.UpdateManager
+import dev.glassworks.assist.Chimes
 import dev.glassworks.assist.ExoAudioPlayer
 import dev.glassworks.assist.TtsPlayer
 
@@ -236,6 +237,7 @@ class PanelDevice(
 
     fun start() {
         exec.execute { startInternal() }
+        Chimes.prepare()
     }
 
     fun stop() {

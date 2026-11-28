@@ -19,6 +19,7 @@ import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
 import dev.glassworks.GlassworksApp
+import dev.glassworks.auth.FrontendUrls
 import dev.glassworks.auth.HaSocket
 import dev.glassworks.auth.OAuth
 import dev.glassworks.auth.WsHaSocket
@@ -938,6 +939,19 @@ class VitroEngine(
         override fun load(url: String) {
             // A navigation queued before the activity went away: a new client here would outlive the page.
             if (disposed) return
+            // A path (`/history`) is one on Home Assistant: no engine loads a bare path, and the legacy one's lockdown
+            // refuses it for its missing origin. The core sends URLs; a path that reaches here goes on HA's origin too.
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                val resolved = FrontendUrls.resolve(url, currentOrigin ?: configuredOrigin())
+                if (resolved == null) {
+                    Log.w(logTag, "Not a URL, nor a path on a known Home Assistant: nothing loads")
+                    return
+                }
+                if (resolved != url) {
+                    load(resolved)
+                    return
+                }
+            }
             val redirected = host.redirect(url)
             if (redirected != null) {
                 if (redirected == "about:blank") return
@@ -1188,11 +1202,12 @@ class VitroEngine(
          * true})` (`navigation_replace`), so the page it leaves is no step in the history and back skips it.
          */
         private fun navigateInPlace(path: String, replace: Boolean = false) {
+            // Anything else is a path on Home Assistant, its query and fragment kept. One with another scheme stays a
+            // path there (`/javascript:…`), as before: it never runs in the page.
             val url = if (path.startsWith("http://") || path.startsWith("https://")) {
                 path
             } else {
-                val origin = currentOrigin ?: return
-                origin + if (path.startsWith("/")) path else "/$path"
+                FrontendUrls.pathOn(currentOrigin, path) ?: return
             }
             if (replace) currentUrl = null // the page left isn't a step to come back to
             load(url)
