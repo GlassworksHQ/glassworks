@@ -185,4 +185,35 @@ class AuthAndLoadingFixesTest {
         h.idle()
         assertEquals(0, (0 until geckoView.childCount).map { geckoView.getChildAt(it) }.filterIsInstance<android.widget.TextView>().size)
     }
+
+    @Test
+    fun `default port 80 or 443 in signedInBase allows getExternalAuth from normalized browser sender url`() {
+        harness(prefs = { it.urlSetting = "http://192.0.2.10:80" }).use { h ->
+            h.signIn("http://192.0.2.10:80")
+            val port = h.connect("http://192.0.2.10/?external_auth=1")
+            val reply = h.send(port, JSONObject().put("type", "getExternalAuth").put("id", 9)).single()
+            assertTrue("port-80 signedInBase matches browser's stripped sender.url", reply.getBoolean("success"))
+            assertEquals("test-access-token", reply.getString("access_token"))
+        }
+        harness(prefs = { it.urlSetting = "https://ha.example.com:443" }).use { h ->
+            h.signIn("https://ha.example.com:443")
+            val port = h.connect("https://ha.example.com/?external_auth=1")
+            val reply = h.send(port, JSONObject().put("type", "getExternalAuth").put("id", 10)).single()
+            assertTrue("port-443 signedInBase matches browser's stripped sender.url", reply.getBoolean("success"))
+            assertEquals("test-access-token", reply.getString("access_token"))
+        }
+    }
+
+    @Test
+    fun `loading fallback posts revealLaunch so a hidden HA launch screen becomes visible`() = harness().use { h ->
+        h.progress.onPageStart(h.session, dash)
+        val port = h.connect(dash)
+        h.send(port, JSONObject("""{"type":"launch"}"""), replies = 0)
+        h.progress.onPageStop(h.session, true)
+        assertTrue(h.loading.isShowing)
+
+        h.advance(MainActivity.LAUNCH_FALLBACK_MS)
+        assertFalse("loading overlay hidden on fallback", h.loading.isShowing)
+        assertTrue("revealLaunch posted to page on fallback", port.posted.any { it.optString("type") == "revealLaunch" })
+    }
 }

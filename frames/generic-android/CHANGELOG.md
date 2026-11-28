@@ -12,14 +12,21 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Fixed
+- **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
+  saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing
+  the panel to refuse dashboard authentication tokens, dashboard lists, theme updates, and permissions. Default ports
+  are now stripped from origins and omitted for port 80 discovery.
 - **Home Assistant addresses entered without `http://` or a port now work.** Typing a bare address such as
   `192.0.2.10` or `homeassistant.local` in Settings or manual setup now fills in `http://` and port `8123`
   automatically, while explicit `http://` and `https://` addresses keep their scheme and port. Invalid addresses
   are rejected with an inline error instead of being saved.
-- **Sign-in errors no longer trap the panel on the connecting screen or loop forever.** If Home Assistant rejects
-  authentication without revoking the panel's token (for example during a temporary error or IP ban), the panel now
-  stops bouncing between the dashboard and the login page and hides the connecting screen right away so the error
-  or sign-in screen is visible.
+- **Sign-in errors and loading timeouts no longer trap the panel on the connecting screen or leave a blank dark screen.**
+  If Home Assistant rejects authentication without revoking the panel's token (for example during a temporary error or
+  IP ban), the panel now stops bouncing between the dashboard and the login page, hides the connecting screen right
+  away, and reveals Home Assistant's launch screen on auth failure or fallback timeout so any error is visible.
+- **Changing Screen settings to stay on wakes a sleeping panel right away.** Setting *Turn off when idle* to *Never*
+  or turning *Wake when someone's near* off from Manage or Settings now wakes a sleeping or blacked-out display
+  immediately instead of leaving it dark until restart.
 - **Lockdown messages are no longer hidden behind the connecting screen.** When the legacy browser engine blocks a
   page or waits on its lockdown, the connecting screen now steps aside so you can read the message. In the legacy
   build.

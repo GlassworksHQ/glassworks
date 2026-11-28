@@ -52,6 +52,8 @@ class CoreSettings(
         val presenceRange: () -> String? = { null },
         /** Brightness follows the light sensor, or stops. */
         val brightness: () -> Unit = {},
+        /** Wakes a sleeping screen when a setting asks for it to stay on ("always" / Never). */
+        val screenAwake: () -> Unit = {},
         /** Ends the paired browsers of setup over the network and the setup hotspot (dev.glassworks.setup.LanSetup.close). */
         val closeSetup: () -> Unit = {},
         /** The overlays' theme changed ([KioskPrefs.overlayTheme]): they draw with it from now on. */
@@ -149,7 +151,7 @@ class CoreSettings(
     // ScreenPolicy wakes on (#601), on the panel and on the Manage page.
     private fun wake(detail: String) = switch(WAKE_TITLE, detail, { prefs.approachWakes }) {
         prefs.screenMode = if (it) "presence" else "always"
-        if (it) prefs.wakeOnApproach = true
+        if (it) prefs.wakeOnApproach = true else live.screenAwake()
     }
 
     private fun rangeSlider() = SettingsItem.Slider(
@@ -187,7 +189,7 @@ class CoreSettings(
     ) { v, done ->
         prefs.idleOffSec = v
         // Never leaves the mode as it is, so an "always" screen stays on.
-        if (v > 0) prefs.screenMode = "presence"
+        if (v > 0) prefs.screenMode = "presence" else live.screenAwake()
         done(null)
     }
 

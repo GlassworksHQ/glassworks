@@ -681,7 +681,10 @@ open class MainActivity : Activity() {
         override fun run() {
             val waited = SystemClock.uptimeMillis() - pageStoppedAt
             if (frontendLoading && waited < LAUNCH_FALLBACK_MS) handler.postDelayed(this, LAUNCH_FALLBACK_MS - waited)
-            else hideConnecting(if (frontendLoading) "fallback 45 s, the frontend still loading" else "fallback 15 s, no word from the page")
+            else {
+                page?.post(JSONObject().put("type", "revealLaunch"))
+                hideConnecting(if (frontendLoading) "fallback 45 s, the frontend still loading" else "fallback 15 s, no word from the page")
+            }
         }
     }
 

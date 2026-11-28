@@ -36,9 +36,12 @@ class HaUrlsTest {
     @Test
     fun addresses() {
         assertEquals("http://192.168.1.100:8123", HaUrls.fromAddress(ip))
+        assertEquals("http://192.168.1.100", HaUrls.fromAddress(ip, 80))
+        assertEquals("http://192.168.1.100", HaUrls.fromTxt(txt("internal_url" to ""), ip, 80))
         assertNull(HaUrls.fromAddress(InetAddress.getByName("127.0.0.1")))
         assertNull(HaUrls.fromAddress(InetAddress.getByName("169.254.1.2")))
         assertEquals("http://[fd00:0:0:0:0:0:0:5]:8123", HaUrls.fromAddress(InetAddress.getByName("fd00::5")))
+        assertEquals("http://[fd00:0:0:0:0:0:0:5]", HaUrls.fromAddress(InetAddress.getByName("fd00::5"), 80))
     }
 
     @Test
@@ -47,7 +50,8 @@ class HaUrlsTest {
         assertEquals("http://192.0.2.10:8123", HaUrls.normalize("192.0.2.10"))
         assertEquals("http://homeassistant.local:8123", HaUrls.normalize("homeassistant.local"))
         assertEquals("http://[fd00::5]:8123", HaUrls.normalize("[fd00::5]"))
-        assertEquals("http://192.0.2.10:80", HaUrls.normalize("192.0.2.10:80"))
+        assertEquals("http://192.0.2.10", HaUrls.normalize("192.0.2.10:80"))
+        assertEquals("https://ha.example.com", HaUrls.normalize("https://ha.example.com:443/lovelace"))
         assertEquals("https://ha.example.com", HaUrls.normalize("https://ha.example.com"))
         assertEquals("http://ha.example.com", HaUrls.normalize("http://ha.example.com"))
         assertEquals("http://homeassistant.local:8123", HaUrls.normalize("http://homeassistant.local:8123/lovelace/0"))

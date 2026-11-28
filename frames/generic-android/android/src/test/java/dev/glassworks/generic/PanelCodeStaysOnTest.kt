@@ -9,6 +9,9 @@ import dev.glassworks.KioskPrefs
 import dev.glassworks.KioskService
 import dev.glassworks.glassworksRuntime
 import dev.glassworks.manage.PanelCode
+import dev.glassworks.pane.SettingsItem
+import dev.glassworks.settings.CoreSettings
+import dev.glassworks.settings.S1Settings
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -112,5 +115,31 @@ class PanelCodeStaysOnTest {
         advance(25_000)
         assertFalse("sleeps after KioskService.onDestroy releases stayOn", screen.screenOn)
         assertTrue(screen.blackout)
+    }
+
+    @Test fun settingIdleTimeoutToNeverWakesABlackedOutMirror() {
+        service = Robolectric.buildService(KioskService::class.java).create()
+        val runtime = app.glassworksRuntime
+        val screen = runtime.screen
+
+        // Let the Mirror enter blackout sleep after the 20 s idle timeout.
+        advance(25_000)
+        assertTrue("Mirror entered blackout sleep", screen.blackout)
+        assertFalse("screen is off before changing settings", screen.screenOn)
+
+        // Setting "Turn off when idle" to Never (0) via S1Settings wakes the Mirror immediately.
+        val model = S1Settings.model(runtime, KioskPrefs(app), runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
+        val idle = model.sections.first { it.id == CoreSettings.SCREEN }.items
+            .filterIsInstance<SettingsItem.Duration>()
+            .single { it.title == "Turn off when idle" }
+        idle.save(0) {}
+        advance(100)
+        assertTrue("screen wakes when idle timeout is set to Never", screen.screenOn)
+        assertFalse("blackout lifted when idle timeout is set to Never", screen.blackout)
+
+        // And it stays awake past the old 20 s timeout.
+        advance(60_000)
+        assertTrue("screen stays awake with Never", screen.screenOn)
+        assertFalse("no blackout with Never", screen.blackout)
     }
 }

@@ -39,11 +39,11 @@ object HaUrls {
         return out
     }
 
-    /** `http://<ip>:<port>`; IPv6 is bracketed. Link-local / loopback addresses are not useful. */
+    /** `http://<ip>[:<port>]` (omits `:80`); IPv6 is bracketed. Link-local / loopback addresses are not useful. */
     fun fromAddress(addr: InetAddress, port: Int = DEFAULT_PORT): String? {
         if (addr.isLoopbackAddress || addr.isAnyLocalAddress || addr.isLinkLocalAddress || addr.isMulticastAddress) return null
         val h = if (addr is Inet6Address) "[" + addr.hostAddress.substringBefore('%') + "]" else addr.hostAddress
-        return "http://$h:$port"
+        return if (port == 80) "http://$h" else "http://$h:$port"
     }
 
     private val IDNA_DEVIATION = Regex("[\\u00df\\u03c2\\u200c\\u200d]")
