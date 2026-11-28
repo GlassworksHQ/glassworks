@@ -836,9 +836,10 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     private var outlineClip: Boolean = false
         set(v) {
             field = v
-            // On, the record decides (turning it on here would only be undone there, and each change costs the window
-            // a frame); off, no clip. Only a real change is passed on: setClipToOutline damages the parent every time.
-            val clip = if (ScrollPath.contentClip) v && clipToOutline else v
+            // Decided now ([OutlineClip.needsClip]: a surface painted past its rounded fill, a card_mod gradient's, always
+            // clips) and again as the card records, when its content is laid out. Only a real change is passed on:
+            // setClipToOutline damages the parent every time.
+            val clip = v && (!ScrollPath.contentClip || OutlineClip.needsClip(this) != null)
             if (clipToOutline != clip) clipToOutline = clip
         }
 

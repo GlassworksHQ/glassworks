@@ -95,6 +95,12 @@ class ScrollPathTest {
         // Content along the edges: the clip stays.
         Triple("sensor with graph", """{"type": "sensor", "entity": "sensor.temp", "graph": "line"}""", true),
         Triple("picture", """{"type": "picture", "image": "/local/room.png"}""", true),
+        // A card_mod gradient is a rectangle the clip rounds: kept, whatever the content.
+        Triple(
+            "tile with a card_mod gradient",
+            """{"type": "tile", "entity": "light.kitchen", "card_mod": {"style": "ha-card { background: linear-gradient(90deg, #102030, #405060); border: 3px solid #ff0000; border-radius: 40px }"}}""",
+            true,
+        ),
         Triple(
             "entities with card_mod padding 0",
             """{"type": "entities", "entities": ["switch.fan"], "card_mod": {"style": "ha-card { padding: 0px; background: #223344; }"}}""",

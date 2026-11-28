@@ -506,7 +506,8 @@ class MasonrySlicesTest {
 
     // A card a chunk made is shown as below the fold of a view built in one go, and what it decides from being shown
     // holds (Greptile on #950: a GONE stage the cards once waited in told a clock it was hidden, and their move, which
-    // dispatches no visibility change, left it stopped).
+    // dispatches no visibility change, left it stopped). Below the band culling draws, its timer waits, and it catches
+    // up as it comes back: never left stopped.
     @Test
     fun aDeferredClockKeepsTickingOnceItsInItsColumn() {
         val heavy = cards("heavy", 60).put(JSONObject().put("type", "clock").put("clock_size", "small"))
@@ -518,9 +519,23 @@ class MasonrySlicesTest {
         assertFalse(vv.buildInProgress)
         val clock = all(vv).filterIsInstance<dev.glassworks.engine.vitro.cards.ClockCardView>().single()
         assertTrue("in its column, shown", clock.isShown && clock.parent?.parent is MasonryColumnsLayout)
-        // A time it would never show now, then its next tick (5 s apart without seconds).
+        layOut(vv)
+        val scroll = vv.currentScroll()!!
+        val cull = requireNotNull(vv.currentCull())
+        cull.update()
+        // Far below the first screen, the column doesn't draw it (ViewportCull): its timer waits meanwhile.
+        assertTrue("left out below the band", clock.culled)
+        // A time it would never show now: scrolled to, it shows the current time at once, then ticks on.
         clock.renderAt(java.util.Date(978_356_220_000L))
         val stale = clock.renderedTime
+        val r = android.graphics.Rect(0, 0, clock.width, clock.height)
+        scroll.offsetDescendantRectToMyCoords(clock, r)
+        scroll.scrollTo(0, r.top)
+        cull.update()
+        assertFalse("drawn again", clock.culled)
+        assertTrue("caught up at once: still $stale", clock.renderedTime != stale)
+        // Its next tick (5 s apart without seconds).
+        clock.renderAt(java.util.Date(978_356_220_000L))
         ShadowLooper.idleMainLooper(6, java.util.concurrent.TimeUnit.SECONDS)
         assertTrue("it ticked: still $stale", clock.renderedTime != stale)
     }
