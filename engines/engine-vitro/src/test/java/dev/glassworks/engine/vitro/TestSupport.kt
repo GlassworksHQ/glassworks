@@ -74,14 +74,26 @@ fun View.isInvalidated(): Boolean = privateFlags.getInt(this) and pflagInvalidat
  * Every message the client sends lands in [received] in order, so tests assert on the wire. [connect] has the
  * `(String) -> HaSocket` shape both [HaDashboardClient] and `VitroEngine` take. Addresses are RFC 5737.
  */
-class FakeHaServer {
-    init {
-        // HA's frontend files (HaFrontend) are fetched over HTTP, not through the fake's socket: a test that doesn't
-        // serve them gets none, and no client of any test reaches the network for them (192.0.2.10 only times out,
-        // and HaFrontend reads on one thread, so a read stuck there held up a later test's: IslandSessionsTest).
+/**
+ * Serves no HA frontend files (HaFrontend) for each test, and puts back the fetch that was there after it. HA's
+ * frontend files are fetched over HTTP, not through [FakeHaServer]'s socket: without this a test's clients would go to
+ * the network for them (192.0.2.10 only times out, on the one thread every frontend read shares). A test that serves
+ * them sets [dev.glassworks.engine.vitro.data.HaFrontend.fetch] itself, after this has run.
+ */
+class NoHaFrontendFetch : org.junit.rules.ExternalResource() {
+    private var saved: ((String) -> ByteArray?)? = null
+
+    override fun before() {
+        saved = dev.glassworks.engine.vitro.data.HaFrontend.fetch
         dev.glassworks.engine.vitro.data.HaFrontend.fetch = { null }
     }
 
+    override fun after() {
+        saved?.let { dev.glassworks.engine.vitro.data.HaFrontend.fetch = it }
+    }
+}
+
+class FakeHaServer {
     companion object {
         const val TOKEN = "test-token"
         const val BASE = "http://192.0.2.10:8123"

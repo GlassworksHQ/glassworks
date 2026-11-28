@@ -59,6 +59,9 @@ import org.robolectric.shadows.ShadowLooper
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class CardContainmentTest {
+    /** Its clients never go to the network for HA's frontend files ([NoHaFrontendFetch]). */
+    @get:org.junit.Rule val noFrontendFetch = NoHaFrontendFetch()
+
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
     private val store = EntityStore()
     private val contained = java.util.concurrent.CopyOnWriteArrayList<Triple<String, String?, Throwable>>()

@@ -41,6 +41,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class VitroFallbackReturnTest {
+    /** Its clients never go to the network for HA's frontend files ([NoHaFrontendFetch]). */
+    @get:org.junit.Rule val noFrontendFetch = NoHaFrontendFetch()
+
     private val base = FakeHaServer.BASE
     private val living = "$base/wall-test/living"
     private val wall = "$base/wall-test/wall"

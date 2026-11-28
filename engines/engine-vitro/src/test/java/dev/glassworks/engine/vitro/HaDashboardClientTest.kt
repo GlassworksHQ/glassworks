@@ -39,6 +39,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * generic commands, history and templates. The client runs its real reader thread; tests wait on the wire.
  */
 class HaDashboardClientTest {
+    /** Its clients never go to the network for HA's frontend files ([NoHaFrontendFetch]). */
+    @get:org.junit.Rule val noFrontendFetch = NoHaFrontendFetch()
+
 
     private class RecordingListener : HaDashboardClient.Listener {
         val connected = CopyOnWriteArrayList<String>()
