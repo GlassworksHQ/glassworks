@@ -43,7 +43,11 @@ public class HaWebRtcStream(
     public class Options(
         /** Receive the camera's audio too (a recvonly audio transceiver). Off: cameras on a dashboard are muted. */
         public val audio: Boolean = false,
-        /** No frame this long after a connection starts fails it ([TIMEOUT]). */
+        /**
+         * No frame this long after a connection starts fails it ([TIMEOUT]). It counts from the connection's first
+         * request to HA: [HaWebRtcPlayer]'s first connection makes libwebrtc's shared parts and its renderer while that
+         * request is out, so they count too (only the renderer when [HaWebRtcPlayer.prewarm] made the parts already).
+         */
         public val connectTimeoutMs: Long = 20_000,
         /** How long a paused stream keeps its connection before it closes it. 0 closes it at once. */
         public val idleTeardownMs: Long = 60_000,

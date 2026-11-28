@@ -23,3 +23,10 @@ publish the matching section below as the release notes.
 - **No per-frame reports nobody listens to.** A listener that also implements `HaWebRtcPlayer.FrameDemand` can say
   it doesn't want each frame now (`wantsFrames`): the player then posts no main-thread task for each steady frame. A
   new size, the first frame and errors are still reported, and a listener without it hears of every frame.
+
+### Changed
+- **Video drawn without garbage.** Frames from the hardware decoder are drawn with nothing allocated per frame.
+  libwebrtc's own drawer makes a `Matrix` (with a native peer) and two arrays for every frame it draws, which with a
+  few cameras playing adds up to dozens of short-lived objects a second.
+- **The first frame a little sooner.** A player asks Home Assistant for its WebRTC configuration while libwebrtc and
+  its renderer start, rather than after both are ready.

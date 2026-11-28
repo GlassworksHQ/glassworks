@@ -194,6 +194,13 @@ With Vitro on, the S1 app and Glassworks for generic Android play Home Assistant
   `src/styles.ts`, `src/common/state_color.ts`) to Kotlin in
   `engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/cards/ButtonCardModel.kt`, `ButtonCardView.kt`
   and `ButtonCardGrid.kt`, and to TypeScript in `site/src/lib/vitroButtonCard.ts`. Those files stay under MIT.
+- **libwebrtc's frame drawer** (`VideoFrameDrawer`'s `drawFrame`, `calculateTransformedRenderSize` and
+  `drawTexture`, and `RendererCommon.convertMatrixFromAndroidGraphicsMatrix`, for drawing camera frames with nothing
+  allocated per frame). BSD-3-Clause, Copyright (c) 2011, The WebRTC project authors, with WebRTC's additional IP
+  rights grant (`LICENSES/LicenseRef-libwebrtc-notices.txt`). Reproduced from libwebrtc M150
+  (https://webrtc.googlesource.com/src, branch-heads/7871, `sdk/android/api/org/webrtc`) in Kotlin in
+  `libs/ha-webrtc/src/main/java/dev/glassworks/hawebrtc/TextureFrameDrawer.kt`, which keeps those steps under
+  BSD-3-Clause and says what changed (`libs/ha-webrtc/NOTICE`).
 - **weather-card** (its layout, units and icon names, for Vitro's native `custom:weather-card`). MIT, Copyright (c)
   2019 Bram Kragten. Ported from https://github.com/bramkragten/weather-card at tag `v1.5.0` in
   `engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/cards/HacsFastPathCards.kt`. The card's icons are
