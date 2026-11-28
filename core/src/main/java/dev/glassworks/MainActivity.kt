@@ -547,6 +547,7 @@ open class MainActivity : Activity() {
         if (d.show || d.step == SetupFlow.DONE) setupHidForLogin = false
         if (d.show) {
             VitroSentinel.setupShown() // no dashboard on this start: its end isn't a Vitro failure
+            glassworks.afterFirstFrame.reached("setup screen")
             setupOverlay.render(setupModel(d, d.step, d.done, preview = false))
         } else if (setupOverlay.isShowing && setupOverlay.model?.step != SetupFlow.DONE) {
             Log.i(TAG, "Setup complete; loading the dashboard")
@@ -697,8 +698,12 @@ open class MainActivity : Activity() {
     /** When the current page started loading, for the log. */
     private var pageStartedAt = 0L
 
+    /** A page from a server has started loading (not only a new session's `about:blank`). */
+    private var webPageStarted = false
+
     /** Hides the connecting screen, and says why in the log (one line per reason, for panel runs). */
     private fun hideConnecting(reason: String) {
+        glassworks.afterFirstFrame.reached("connecting screen hidden: $reason")
         if (!loadingOverlay.isShowing) return
         val since = if (pageStartedAt > 0) " (${SystemClock.uptimeMillis() - pageStartedAt} ms after the page started)" else ""
         Log.i(TAG, "Connecting screen hidden: $reason$since")
@@ -1273,6 +1278,7 @@ open class MainActivity : Activity() {
         // Not the end of the connecting screen: Home Assistant's first paint is its own white launch
         // screen. The page says when it's drawn ("ready", content.js); this only arms the fallback.
         override fun onFirstPaint() {
+            if (webPageStarted) glassworks.afterFirstFrame.reached("first paint")
             handler.post {
                 handler.removeCallbacks(hideLoading)
                 pageStoppedAt = SystemClock.uptimeMillis()
@@ -1339,12 +1345,15 @@ open class MainActivity : Activity() {
             frontendLoading = false
             pageStartedAt = SystemClock.uptimeMillis()
             offlineShown = false
+            // Not a new session's empty first page: its paint and stop aren't the dashboard's (afterFirstFrame).
+            if (url.startsWith("http")) webPageStarted = true
             if (url.startsWith("http") && !(authRedirectGuard.loopBroken && FrontendUrls.isAuthorizePage(url, prefs.haBase))) {
                 loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, prefs.shownHost(url)))
             }
         }
 
         override fun onPageStop(success: Boolean) {
+            if (webPageStarted) glassworks.afterFirstFrame.reached(if (success) "page loaded" else "page failed")
             if (success) {
                 // In case the page never says it's ready (no web extension, a frontend that fails).
                 handler.removeCallbacks(hideLoading)

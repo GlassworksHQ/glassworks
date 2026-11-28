@@ -772,6 +772,14 @@ class VitroEngine(
                     if (nativeActive && !disposed) signalReady(why)
                 }
             }
+            // A long view's first screen is drawn well before its last cards are added: that's the page's first paint,
+            // which the app's start-up work waits for (AfterFirstFrame). Only for the build the page's readiness waits on.
+            vitroView.onFirstScreenDrawn = { index ->
+                if (readyOnBuild != null && nativeActive && !disposed && !firstPaintReported && index == vitroView.currentViewIndex) {
+                    firstPaintReported = true
+                    host.onFirstPaint()
+                }
+            }
             // A view's first build waits (up to a second) for its states, as HA's frontend does: no wrong layout first,
             // and no second build once they land.
             vitroView.holdFirstBuildForStatesMs = FIRST_STATES_WAIT_MS
@@ -1011,6 +1019,7 @@ class VitroEngine(
             val generation = retireClient()
             // Said once per client: the client asks for its token again every 30 s.
             val withheldLogged = java.util.concurrent.atomic.AtomicBoolean(false)
+            val listener = WsListener(generation)
             val wsClient = HaDashboardClient(
                 haBase = origin,
                 tokenProvider = { force, done ->
@@ -1048,10 +1057,11 @@ class VitroEngine(
                 },
                 store = store,
                 connect = socketFactory,
-                listener = WsListener(generation),
+                listener = listener,
                 keepAliveMs = keepAliveMs,
                 configRetryMs = configRetryMs,
             )
+            listener.ownClient = wsClient
             client = wsClient
             // Islands holding the registries keep them, now from this Home Assistant.
             if (registryWatchers.isNotEmpty()) attachRegistries()
@@ -1320,6 +1330,36 @@ class VitroEngine(
 
         /** The listener of the client of [generation]; once that client is replaced or closed, its calls do nothing. */
         private inner class WsListener(private val generation: Int) : HaDashboardClient.Listener {
+            /**
+             * The client this listens to, set once it's made (its calls on the socket's thread use it). Not named
+             * `client`: that's the page's own, which the callbacks below close and clear.
+             */
+            @Volatile var ownClient: HaDashboardClient? = null
+
+            /**
+             * Socket thread. Follows what the page will follow for [config]'s first view ([subscribeSelectedView] from
+             * onViewSelected), if this client follows nothing yet ([HaDashboardClient.followEntitiesIfUnscoped]): on
+             * the S1 the main thread got to the config 600-900 ms after it landed (2026-11-28), and only then asked for
+             * the states its first build waits for. A dashboard HA's frontend draws follows nothing.
+             */
+            private fun followFirstView(c: HaDashboardClient, urlPath: String?, config: DashboardConfig) {
+                // Read off the main thread, as the warm-up above reads the view: the main thread's own call puts right
+                // whatever a change meanwhile made stale.
+                if (disposed || urlPath != currentDashboardPath || WebFallback.dashboardReason(config) != null) return
+                val path = pendingViewPath
+                val view = config.views.getOrNull(config.viewIndex(path, c.currentUser.optString("id", "").ifEmpty { null })) ?: return
+                val (follow, first) = when {
+                    CardRouter.followsAllEntities(view) -> emptySet<String>() to emptySet()
+                    else -> {
+                        val refs = CardRouter.referencedEntities(view)
+                        dashboardEntitiesOf(config)?.let { it to refs } ?: (refs to emptySet())
+                    }
+                }
+                if (c.followEntitiesIfUnscoped(follow, first)) {
+                    Log.i(logTag, "Config in: following ${if (follow.isEmpty()) "every entity" else "${follow.size} entities, the view's ${first.size} first"}")
+                }
+            }
+
             /** Runs [block] on the main thread if this listener's client is still the page's. */
             private fun post(block: () -> Unit) {
                 main.post { if (generation == clientGeneration) block() }
@@ -1402,6 +1442,8 @@ class VitroEngine(
             override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) {
                 // Route the cards off the UI thread while the config waits for it to build the view.
                 CompatWarmup.start(config, pendingViewPath)
+                // A cold start: the view about to be built asks for its states now, not once the main thread gets to it.
+                if (generation == clientGeneration) ownClient?.let { followFirstView(it, urlPath, config) }
                 post {
                     // An older request's answer for a dashboard the page has left must not replace the current one.
                     if (urlPath != currentDashboardPath) return@post

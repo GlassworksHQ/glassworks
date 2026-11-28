@@ -182,10 +182,14 @@ class Backdrop : Drawable() {
             waiting.toList().also { waiting.clear() }.forEach { it.invalidateSelf() }
         }
 
-        /** Bands of rows on up to 4 threads, each with its own dither sequence. */
+        /**
+         * Bands of rows on up to 3 threads, each with its own dither sequence. One core fewer than the device has: it
+         * bakes during the activity's start, and on the S1's 4 cores a band on every one of them took the main thread's
+         * core from its first frame and the dashboard's first build (2026-11-28).
+         */
         private fun bake(w: Int, h: Int): Bitmap {
             val px = IntArray(w * h)
-            val bands = BackdropMath.bands(h, Runtime.getRuntime().availableProcessors().coerceIn(1, 4))
+            val bands = BackdropMath.bands(h, (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, 3))
             val workers = bands.mapIndexed { i, rows ->
                 Thread({
                     val row = IntArray(w)

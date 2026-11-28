@@ -201,6 +201,27 @@ class MasonrySlicesTest {
     }
 
     @Test
+    fun theFirstScreenIsReportedOnceItHasBeenDrawnLongBeforeTheBuildEnds() {
+        val metrics = ArrayList<VitroMetrics>()
+        val drawn = ArrayList<Int>()
+        val vv = vitroView(dashboard("heavy" to 80), sliced = true, metrics = metrics, beforeLoad = { it.onFirstScreenDrawn = { i -> drawn += i } })
+        assertTrue(vv.buildInProgress)
+        assertEquals("not before its frames have been drawn", emptyList<Int>(), drawn)
+        // The first chunk runs once the first screen has been drawn twice ([VitroView.postSlice]).
+        chunk()
+        assertEquals(listOf(0), drawn)
+        assertTrue("the build goes on", vv.buildInProgress)
+        assertTrue("and has reported nothing yet", metrics.isEmpty())
+        drain(vv)
+        assertEquals("once per build", listOf(0), drawn)
+        assertEquals(1, metrics.size)
+        // A view built in one pass (a short one) is ready at once: its metrics say so, nothing else.
+        drawn.clear()
+        vitroView(dashboard("light" to 2), sliced = true, beforeLoad = { it.onFirstScreenDrawn = { i -> drawn += i } })
+        assertEquals(emptyList<Int>(), drawn)
+    }
+
+    @Test
     fun theFinishedViewIsTheOneABuildInOneGoMakes() {
         val config = dashboard("heavy" to 80)
         val once = vitroView(config, sliced = false)

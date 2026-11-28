@@ -779,6 +779,19 @@ class VitroEngineTest {
     }
 
     @Test
+    fun theLoadAfterSignInConnectsANewClientNotTheOneAuthClosed() {
+        // The page drops the client whose token was refused: the dashboard loaded after sign-in, on the same Home
+        // Assistant, connects again instead of asking the closed one (whose reader has stopped) and never answering.
+        server.acceptedTokens = emptySet()
+        val page = openPage(vitro())
+        page.load("$base/wall-test/living")
+        awaitMain("sign-in handoff") { host.locations.contains("$base/auth/authorize") }
+        server.acceptedTokens = setOf(FakeHaServer.TOKEN)
+        page.load("$base/wall-test/living")
+        awaitMain("ready after sign-in") { host.messages("ready").isNotEmpty() }
+    }
+
+    @Test
     fun anUnreachableServerStopsThePageAsFailed() {
         server.refuseConnections = true
         val page = openPage(vitro())

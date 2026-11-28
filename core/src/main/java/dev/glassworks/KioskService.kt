@@ -60,6 +60,8 @@ open class KioskService : Service() {
     private val runtime get() = glassworksRuntime
     private var device: PanelDevice? = null
     private var discovery: HaDiscovery? = null
+    /** Cancels the start-up work still waiting for the first dashboard frame ([AfterFirstFrame]). */
+    private val deferred = ArrayList<() -> Unit>()
     /** The ESPHome API key's hand-over over adb, for a reflash (#574). */
     private var secretHandover: AdbSocketServer? = null
     private var frameWork: ServiceWork? = null
@@ -115,10 +117,14 @@ open class KioskService : Service() {
         }
         discovery = d
         glassworks.discovery = d
-        d.start()
-        device = PanelDevice(this, runtime, runtime::devicePanes, d::onApiHello).also {
-            it.start()
-            runtime.device = it
+        // The mDNS browse, and the ESPHome device with its panes (the wake word and microphone, Sendspin, the wall
+        // base's probes, the API server and its mDNS), start after the first dashboard frame: on the S1 they took the
+        // CPU and the main thread from its first build. A sign-in, a manual URL or the ESPHome hello still reach
+        // discovery meanwhile, and Home Assistant only retries until the API server listens.
+        deferred += glassworks.afterFirstFrame.run("Home Assistant discovery") { d.start() }
+        device = PanelDevice(this, runtime, runtime::devicePanes, d::onApiHello).also { dev ->
+            runtime.device = dev
+            deferred += glassworks.afterFirstFrame.run("ESPHome device and panes") { dev.start() }
         }
         ImprovController.init(this) // Improv Wi-Fi via BLE (provisioning mode; see improv/)
         // The web installer, over adb (docs/onboarding.md): Wi-Fi via Improv Serial, then HA + radio.
@@ -208,6 +214,8 @@ open class KioskService : Service() {
     }
 
     override fun onDestroy() {
+        deferred.forEach { it() } // what hasn't started yet doesn't start after the service
+        deferred.clear()
         wifiStates?.let { runCatching { unregisterReceiver(it) } }
         wifiStates = null
         wifiRecovery?.close()

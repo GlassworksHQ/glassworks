@@ -805,6 +805,29 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun aColdStartFollowsTheFirstViewAsTheConfigLandsAndThePagesOwnCallSendsNothingMore() {
+        val c = newClient()
+        c.start(null)
+        awaitCondition("connected") { server.commands("lovelace/config").isNotEmpty() }
+        val all = setOf("light.lounge_lamp", "sensor.kitchen_temp", "binary_sensor.front_door")
+        // The socket thread, as the config lands: nothing picked yet, so it follows the view's first.
+        assertTrue(c.followEntitiesIfUnscoped(all, first = setOf("sensor.kitchen_temp")))
+        awaitCondition("both parts") { server.commands("subscribe_entities").size == 2 }
+        assertEquals(setOf("sensor.kitchen_temp"), ids(server.commands("subscribe_entities")[0]))
+        awaitCondition("the view's states") { store["sensor.kitchen_temp"] != null }
+        // The main thread's onViewSelected, later, for the same view: already followed.
+        c.followEntities(all, first = setOf("sensor.kitchen_temp"), additive = true)
+        readerBarrier(c)
+        assertEquals(2, server.commands("subscribe_entities").size)
+        // Once the page has picked, an early follow changes nothing (a view that follows every entity keeps that).
+        c.followEntities(emptySet())
+        awaitCondition("every entity") { server.commands("subscribe_entities").size == 3 }
+        assertFalse(c.followEntitiesIfUnscoped(all, first = emptySet()))
+        readerBarrier(c)
+        assertEquals(3, server.commands("subscribe_entities").size)
+    }
+
+    @Test
     fun aReconnectSubscribesTheWholeSetOnce() {
         val c = newClient()
         c.followEntities(setOf("light.lounge_lamp", "sensor.kitchen_temp"), first = setOf("light.lounge_lamp"), additive = true)

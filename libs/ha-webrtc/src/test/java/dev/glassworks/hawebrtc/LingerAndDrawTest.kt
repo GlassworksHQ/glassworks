@@ -69,6 +69,24 @@ class LingeringTest {
         fail = false
         assertEquals("ok", p.acquire())
     }
+
+    @Test
+    fun `alive doesn't wait for a make in progress on another thread`() {
+        val making = java.util.concurrent.CountDownLatch(1)
+        val finish = java.util.concurrent.CountDownLatch(1)
+        val p = Lingering(1, { making.countDown(); finish.await(); "parts" }, {}, { _, _ -> })
+        val warm = Thread { p.acquire() }.apply { isDaemon = true; start() }
+        try {
+            assertTrue(making.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            // The main thread's check (a second camera's prewarm) while the first one's make holds the lock.
+            val asked = java.util.concurrent.CompletableFuture.supplyAsync { p.alive }
+            assertFalse(asked.get(2, java.util.concurrent.TimeUnit.SECONDS))
+        } finally {
+            finish.countDown()
+        }
+        warm.join(5_000)
+        assertTrue(p.alive)
+    }
 }
 
 /** The picture's view: opaque once a frame covers it, and not drawing off screen once it has drawn. */

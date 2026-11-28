@@ -443,6 +443,19 @@ class HaDashboardClient(
     }
 
     /**
+     * Follows [entityIds] as [followEntities] does (additive, [first] first), only while nothing has picked what this
+     * client follows yet: the first dashboard config of a cold start, on the socket's thread, as soon as it lands. The
+     * view's states then arrive while the main thread is still busy with the start, and its first build doesn't wait
+     * for them (VitroView.holdFirstBuildForStatesMs); the page's own call for that view, later, finds them followed and
+     * sends nothing. Returns whether it followed them.
+     */
+    fun followEntitiesIfUnscoped(entityIds: Set<String>, first: Set<String>): Boolean = synchronized(entitySubLock) {
+        if (scopeSelected) return false
+        followEntities(entityIds, first, additive = true)
+        true
+    }
+
+    /**
      * False while the page shows a fallback (non-dashboard) page: no dashboard is fetched on a reconnect or a
      * `lovelace_updated`, and an answer still on its way is dropped.
      */

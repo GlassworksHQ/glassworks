@@ -114,6 +114,12 @@ interface Glassworks {
     var discovery: HaDiscovery?
 
     /**
+     * The start-up work that waits for the first dashboard frame ([AfterFirstFrame]): the ESPHome device and its panes
+     * (voice, Sendspin, the wall base), and Home Assistant's discovery. The activity says when the frame is there.
+     */
+    val afterFirstFrame: AfterFirstFrame
+
+    /**
      * The setup hotspot (#197), set while KioskService runs (it needs the service's foreground). The setup screen
      * draws it and asks for it; Wi-Fi details, setup's end and the setup page's Done stop it. Set and used on the main
      * thread; other threads (the setup page's pairing gate) read only its `isOn`.
