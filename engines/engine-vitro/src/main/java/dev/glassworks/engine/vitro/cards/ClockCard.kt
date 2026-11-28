@@ -4,7 +4,6 @@
 
 package dev.glassworks.engine.vitro.cards
 
-import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.data.FrontendLocale
 import dev.glassworks.engine.vitro.data.HaIntl
 import dev.glassworks.engine.vitro.data.HaLocale
@@ -263,8 +262,8 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     }
 
     private fun TextView.setLine(t: String) {
-        // ScrollTuning.Knob.CLOCK_SPAN: most ticks change only the seconds; the other lines keep their text and spans.
-        if (ScrollTuning.clockSpan && TextUtils.equals(text, t)) return
+        // Most ticks change only the seconds: the other lines keep their text and spans, with nothing allocated.
+        if (TextUtils.equals(text, t)) return
         val old = text as? Spanned
         val span = old?.getSpans(0, old.length, CssLineBoxSpan::class.java)?.firstOrNull()
         val sb = SpannableStringBuilder(t)
@@ -343,7 +342,7 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         if (isShown) tick.run()
     }
 
-    /** Not drawn (scrolled far away, ScrollTuning.Knob.CULL): the timer stops; drawn again, it catches up at once. */
+    /** Not drawn (scrolled far away, [dev.glassworks.engine.vitro.ui.ViewportCull]): the timer stops; drawn again, it catches up at once. */
     override fun onCulledChanged(culled: Boolean) {
         if (!running) return
         ctx.main.removeCallbacks(tick)

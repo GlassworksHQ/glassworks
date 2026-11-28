@@ -66,13 +66,17 @@ internal class LocalRelayout(private val host: View) {
         if (host.parent?.isLayoutRequested != false) return
         val w = host.width
         val h = host.height
-        dev.glassworks.engine.ScrollTuning.mark("Vitro local relayout")
-        host.measure(widthSpec, heightSpec)
-        if (host.measuredWidth == w && host.measuredHeight == h) {
-            host.layout(host.left, host.top, host.right, host.bottom)
-        } else {
-            // Outside run: the request goes up to the window.
-            host.requestLayout()
+        android.os.Trace.beginSection("Vitro local relayout")
+        try {
+            host.measure(widthSpec, heightSpec)
+            if (host.measuredWidth == w && host.measuredHeight == h) {
+                host.layout(host.left, host.top, host.right, host.bottom)
+            } else {
+                // Outside run: the request goes up to the window.
+                host.requestLayout()
+            }
+        } finally {
+            android.os.Trace.endSection()
         }
     }
 }

@@ -11,12 +11,12 @@ import android.graphics.Canvas
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
-import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.cards.ClockCardView
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.ui.CardColumn
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.ScrollPath
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONObject
@@ -34,7 +34,7 @@ import java.io.File
 import java.time.Duration
 
 /**
- * Clarity's heavy view at the S1's size: how many views it is, per card type, and what [ScrollTuning.Knob.CULL]
+ * Clarity's heavy view at the S1's size: how many views it is, per card type, and what [ScrollPath.cull]
  * leaves drawn at a few scroll positions, with the screen's pixels the same with the knob on and off. A measure, run
  * only when asked (writes `heavy-measure.txt` into the directory it is given, which holds Clarity's dashboard):
  *
@@ -52,12 +52,15 @@ class HeavyViewMeasure {
     private val dir = System.getProperty("vitro.heavyMeasure")?.takeIf { it.isNotBlank() }?.let(::File)
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
 
-    @After fun reset() = ScrollTuning.resetForTest()
+    @After fun reset() {
+        ScrollPath.cull = true
+        ScrollPath.contentClip = true
+    }
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(200))
 
     private fun heavy(cull: Boolean): VitroView {
-        ScrollTuning.setForTest(ScrollTuning.Knob.CULL, cull)
+        ScrollPath.cull = cull
         val store = EntityStore()
         store.applyCompressedEvent(JSONObject().put("a", JSONObject(File(dir, "clarity-states.json").readText())), snapshotScope = emptySet())
         val vv = VitroView(activity, store, 0xFF111111.toInt())
@@ -132,7 +135,7 @@ class HeavyViewMeasure {
             idle()
             cull.update()
             val (drawn, left) = cull.counts()
-            out.append("cull on, margin ${ScrollTuning.cullMarginPercent}%, scrollY $y: views in drawn cards $drawn, left out $left (${"%.0f".format(100.0 * left / (drawn + left))}%)\n")
+            out.append("cull on, scrollY $y: views in drawn cards $drawn, left out $left (${"%.0f".format(100.0 * left / (drawn + left))}%)\n")
             val px = screen(on)
             val n = px.indices.count { px[it] != offScreens[i][it] }
             if (n > 0) differ += "scrollY $y: $n pixels"

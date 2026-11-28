@@ -24,7 +24,7 @@ import kotlin.math.sin
 
 /**
  * Whether a card's content can draw into its rounded corners ([contentReachesCorners]), so the card needs
- * `clipToOutline` to keep it inside them ([dev.glassworks.engine.ScrollTuning.Knob.CLIP]).
+ * `clipToOutline` to keep it inside them ([ScrollPath.contentClip]).
  *
  * Without hardware layers (most of a long view's cards, once the layer budget is spent), a card that clips to its
  * outline has every draw inside it clipped to an anti-aliased rounded rect on each frame. Most cards keep their content
@@ -46,38 +46,8 @@ internal object OutlineClip {
 
     private val drawsOwnCache = HashMap<Class<*>, Boolean>()
 
-    // ---- the log: how many cards clip, and why, a few seconds after the decisions last changed. Main thread.
-
-    private val decisions = java.util.WeakHashMap<CardSurface, String>()
-    private val main by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
-    private var logPosted = false
-    private const val NO_CLIP = "-"
-    private val logTask = Runnable {
-        logPosted = false
-        val all = decisions.entries.map { it.key.cardType to it.value }
-        val clipped = all.filter { it.second != NO_CLIP }
-        val reasons = clipped.groupingBy { (type, why) -> "$type: $why" }.eachCount().entries
-            .sortedByDescending { it.value }.joinToString("; ") { "${it.key} x${it.value}" }
-        android.util.Log.i(
-            dev.glassworks.engine.ScrollTuning.TAG,
-            "outline clip: ${clipped.size} of ${all.size} rounded cards clip" + if (reasons.isEmpty()) "" else " ($reasons)",
-        )
-    }
-
-    /** Notes [card]'s decision ([reason], null: no clip) for the log, which follows once they settle. */
-    fun record(card: CardSurface, reason: String?) {
-        val value = reason ?: NO_CLIP
-        if (decisions.put(card, value) == value) return
-        dev.glassworks.engine.ScrollTuning.mark("Vitro outline clip " + card.cardType + " " + value)
-        if (logPosted) main.removeCallbacks(logTask)
-        logPosted = true
-        main.postDelayed(logTask, LOG_AFTER_MS)
-    }
-
-    private const val LOG_AFTER_MS = 3_000L
-
     /**
-     * Why [card] needs its outline clip (for the log), or null when nothing it draws reaches beyond its rounded corners.
+     * Why [card] needs its outline clip (for tests and traces), or null when nothing it draws reaches beyond its rounded corners.
      * Its outline must be its background's, a GradientDrawable whose outline is a rounded rect (its radius readable,
      * Android 7 and later); anything else keeps the clip.
      */

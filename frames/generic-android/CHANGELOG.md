@@ -27,6 +27,9 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **Vitro dashboards with live cameras scroll more smoothly.** With Vitro on, a live camera that's scrolled out of
   view stops drawing its video until it's back on screen, so cameras you can't see no longer slow down the rest of the
   dashboard.
+- **Vitro scrolls long dashboards more smoothly.** With Vitro on, a dashboard with many cards now draws only the
+  cards on screen and near it as you scroll, and a card's value that updates often (a power or temperature sensor)
+  no longer makes the whole dashboard lay out again. Cards look the same as before.
 - **Live cameras on Vitro cost the device less, and HLS cameras start sooner.** With Vitro on, each video frame
   now redraws only the video, not the whole camera card around it, and the camera's still picture is no longer
   drawn under the video once it plays, so a dashboard with several live cameras leaves the device more room for

@@ -32,8 +32,6 @@ import android.widget.Space
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
-import dev.glassworks.engine.ScrollTuning
-import dev.glassworks.engine.vitro.ui.ScrollActivity
 import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDisplay
@@ -74,9 +72,6 @@ private const val INTER_SEMIBOLD = 600
  * entering and the accelerate ease for things leaving.
  */
 internal object HaMotion {
-    /** [run]'s on-screen test. Main thread. */
-    private val snapRect = android.graphics.Rect()
-
     fun standard() = PathInterpolator(0.4f, 0f, 0.2f, 1f)
     fun decelerate() = PathInterpolator(0f, 0f, 0.2f, 1f)
     fun accelerate() = PathInterpolator(0.4f, 0f, 1f, 1f)
@@ -101,13 +96,6 @@ internal object HaMotion {
      */
     fun run(view: View, durationMs: Long, onFrame: (Float) -> Unit): ValueAnimator? {
         if (!view.isAttachedToWindow) {
-            onFrame(1f)
-            return null
-        }
-        // ScrollTuning.Knob.ANIM_SNAP: a change while the view scrolls, or off screen, lands at once. Its ~11 frames
-        // would each record the card again (and redraw its layer, if it has one) in the middle of the scroll.
-        if (ScrollTuning.animSnap && (ScrollActivity.scrolling() || !view.getGlobalVisibleRect(snapRect))) {
-            ScrollTuning.mark("Vitro anim snap")
             onFrame(1f)
             return null
         }
@@ -3084,7 +3072,7 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                     icon.setIcon(MdiIcons.resolveIconName(e.icon, s), stateColorBrightness(s, HaStateColor.icon(ctx, s, hvacOverRgb = true)))
                     val label = e.nameFor(s) ?: s?.displayName ?: e.entity
                     // A fixed-height line: new text never lays the card out, but setting the same one builds its layout again.
-                    if (ScrollTuning.relayout) name.setTextIfChanged(label) else name.text = label
+                    name.setTextIfChanged(label)
                     // hui-glance-card: a timestamp state through hui-timestamp-display ("In 3 hours").
                     ctx.showTimestampOr(state, s, s?.plainState() ?: "…")
                 }

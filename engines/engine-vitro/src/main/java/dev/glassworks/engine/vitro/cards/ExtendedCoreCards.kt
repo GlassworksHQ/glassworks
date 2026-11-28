@@ -38,7 +38,6 @@ import dev.glassworks.engine.vitro.data.HaLocale
 import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
-import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.data.LightColor
 import dev.glassworks.engine.vitro.model.ActionConfig
@@ -120,10 +119,11 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     private val fixedFooter = footer != null && ctx.cardLayout == "grid"
 
     /**
-     * [ScrollTuning.Knob.RELAYOUT]: a new value or unit (text sized to itself) lays out this card again, not the
-     * dashboard, as long as the card keeps its size ([LocalRelayout]). Null while CardSurface's constructor runs.
+     * A new value or unit (text sized to itself) lays out this card again, not the dashboard, as long as the card keeps
+     * its size ([LocalRelayout]): the 5 Hz sensor of a long view no longer measures the whole view. Null while
+     * CardSurface's constructor runs.
      */
-    private var local: LocalRelayout? = if (ScrollTuning.relayout) LocalRelayout(this) else null
+    private var local: LocalRelayout? = LocalRelayout(this)
 
     override fun requestLayout() {
         if (local?.take() != true) super.requestLayout()
@@ -175,10 +175,10 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         if (eid != null) observe(eid, ::update) else render(null)
     }
 
-    /** A state change: only what's inside the card changes ([render]), so with [local] it lays out only the card. */
+    /** A state change: only what's inside the card changes ([render]), so [local] lays out only the card. */
     private fun update(s: EntityState?) {
         val l = local
-        if (l == null) render(s) else ScrollTuning.section({ "Vitro entity update" }) { l.run { render(s) } }
+        if (l == null) render(s) else l.run { render(s) }
     }
 
     /** A line box of `--ha-line-height-condensed` (1.2) around [tv]'s [sizeCss] px text, as `.info` sets it. */
@@ -218,22 +218,16 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     }
 
     private fun render(s: EntityState?) {
-        val same = ScrollTuning.relayout
-        val name = config.name(s) ?: s?.displayName ?: config.entity.orEmpty()
-        if (same) nameView.setTextIfChanged(name) else nameView.text = name
+        // The same text isn't set again: setText lays the text out again, and asks for a layout, even then.
+        nameView.setTextIfChanged(config.name(s) ?: s?.displayName ?: config.entity.orEmpty())
         val color = if (colored(s)) stateColor(s) else null
         // HA's `filter: stateColorBrightness`: a colored light's icon dims with its brightness.
         iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color?.let { stateColorBrightness(s, it) } ?: ctx.theme.stateIconColor)
         val (value, unit) = valueAndUnit(config.raw, s)
-        if (same) {
-            valueView.setTextIfChanged(value)
-            unitView.setTextIfChanged(unit)
-        } else {
-            valueView.text = value
-            unitView.text = unit
-        }
+        valueView.setTextIfChanged(value)
+        unitView.setTextIfChanged(unit)
         val unitVisibility = if (unit.isEmpty()) GONE else VISIBLE
-        if (!same || unitView.visibility != unitVisibility) unitView.visibility = unitVisibility
+        if (unitView.visibility != unitVisibility) unitView.visibility = unitVisibility
         // The footer takes the card's color only when the card sets `color` and has one (HA's `--accent-color`
         // override); otherwise, on every render, the theme's accent.
         footer?.color = color?.takeIf { config.raw.optString("color").isNotEmpty() } ?: ctx.theme.accentColor

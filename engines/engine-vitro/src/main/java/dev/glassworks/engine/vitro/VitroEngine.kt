@@ -27,7 +27,6 @@ import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
-import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.clarity.ClarityHttp
 import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatWarmup
@@ -685,20 +684,6 @@ class VitroEngine(
             client?.close()
             client = null
             if (activePage === this) activePage = null
-            // The window's fill and format go back for whatever page comes next.
-            disposedUnderlays()
-        }
-
-        private fun disposedUnderlays() {
-            if (windowBackgroundTaken) {
-                windowBackgroundTaken = false
-                activity.window.setBackgroundDrawable(windowBackground ?: android.graphics.drawable.ColorDrawable(backgroundColor))
-                windowBackground = null
-            }
-            if (opaqueWindow) {
-                opaqueWindow = false
-                activity.window.setFormat(android.graphics.PixelFormat.RGBA_8888)
-            }
         }
         private var pendingViewPath: String? = null
         @Volatile var cachedToken: String? = null
@@ -773,68 +758,11 @@ class VitroEngine(
 
         override val view: View get() = container
 
-        /** Island pages opened on this page: their GeckoViews are SurfaceViews, which an opaque window would cover. */
-        private var islandPagesOpened = 0
-
-        /** The window's background, kept while [updateUnderlays] has taken it off. */
-        private var windowBackground: android.graphics.drawable.Drawable? = null
-        private var windowBackgroundTaken = false
-        private var opaqueWindow = false
-
-        /**
-         * True while the native view covers the whole page with an opaque color: what's under it (the container's fill,
-         * the window's) never shows.
-         */
-        private fun nativeCovers(): Boolean =
-            !disposed && vitroView.visibility == View.VISIBLE && !fallbackInFront() && vitroView.opaqueBackground
-
-        /**
-         * [ScrollTuning.Knob.OVERDRAW]: no container or window fill under an opaque native view, both back as soon as
-         * it isn't (the fallback in front, a picture backdrop, the page gone). [ScrollTuning.Knob.RGBX]: an opaque
-         * window surface while the native view shows and no SurfaceView (an island's GeckoView) was ever attached.
-         */
-        private fun updateUnderlays() {
-            if (ScrollTuning.overdraw) {
-                val covered = nativeCovers()
-                if (covered) {
-                    if (container.background != null) container.background = null
-                } else if (container.background == null) {
-                    container.setBackgroundColor(backgroundColor)
-                }
-                val window = activity.window
-                if (covered && !windowBackgroundTaken) {
-                    windowBackground = window.decorView.background
-                    windowBackgroundTaken = true
-                    window.setBackgroundDrawable(null)
-                    ScrollTuning.mark("Vitro window background off")
-                } else if (!covered && windowBackgroundTaken) {
-                    windowBackgroundTaken = false
-                    window.setBackgroundDrawable(windowBackground ?: android.graphics.drawable.ColorDrawable(backgroundColor))
-                    windowBackground = null
-                    ScrollTuning.mark("Vitro window background on")
-                }
-            }
-            if (ScrollTuning.rgbx) {
-                val opaque = !disposed && vitroView.visibility == View.VISIBLE && !fallbackInFront() && islandPagesOpened == 0
-                if (opaque != opaqueWindow) {
-                    opaqueWindow = opaque
-                    activity.window.setFormat(if (opaque) android.graphics.PixelFormat.RGBX_8888 else android.graphics.PixelFormat.RGBA_8888)
-                    Log.i(ScrollTuning.TAG, "window format " + if (opaque) "RGBX_8888 (opaque)" else "RGBA_8888")
-                }
-            }
-        }
-
         init {
             activity.application.registerActivityLifecycleCallbacks(lifecycle)
             // The device's zone is read once and kept (HaLocale.deviceTimeZone): this hears it change.
             HaLocale.watchDeviceZone(activity)
             container.addView(vitroView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-            if (ScrollTuning.overdraw || ScrollTuning.rgbx) {
-                vitroView.onOpaqueChanged = { if (!disposed) updateUnderlays() }
-                // After the activity's own first-draw change to the window's background (posted before this page was
-                // made): the decor view's queue runs before the container's.
-                container.post { updateUnderlays() }
-            }
             vitroView.onMetrics = { m ->
                 lastMetrics = m
                 // The view waited for its states: it's on screen now. Only while the native dashboard still owns the
@@ -981,7 +909,6 @@ class VitroEngine(
                         val islandHost = IslandHost()
                         runCatching { fallback.open(activity, islandHost, android.graphics.Color.TRANSPARENT) }.getOrNull()
                             ?.also { islandHost.page = it }
-                            ?.also { islandPagesOpened++; updateUnderlays() }
                             // A view rebuilt behind the fallback (a theme change): its islands stay hidden until it shows.
                             ?.also { if (fallbackInFront()) hideIslandSurfaces(it.view) }
                     },
@@ -1305,7 +1232,6 @@ class VitroEngine(
                     fallbackFresh = true
                 }
             }
-            updateUnderlays()
         }
 
         /** The islands' surfaces [hideIslandSurfaces] hid, to show again with the dashboard. */
@@ -1351,7 +1277,6 @@ class VitroEngine(
             vitroView.dashboardShown = false
             hideIslandSurfaces()
             fp.view.visibility = View.VISIBLE
-            updateUnderlays()
             // Each page Vitro sends the fallback starts with no history: Back goes through this page's own, then Vitro's.
             if (!fallbackFresh) fp.restart()
             fallbackFresh = false

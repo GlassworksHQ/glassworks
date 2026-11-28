@@ -13,7 +13,6 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.cards.ClockCardView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
 import dev.glassworks.engine.vitro.cards.EntityCardView
@@ -28,6 +27,7 @@ import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.OutlineClip
+import dev.glassworks.engine.vitro.ui.ScrollPath
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
 import org.junit.After
@@ -46,19 +46,20 @@ import org.robolectric.annotation.GraphicsMode
 import java.time.Duration
 
 /**
- * The scroll knobs ([ScrollTuning]): with each on, a card draws what it drew with it off, and the outline clip
- * ([ScrollTuning.Knob.CLIP]) stays on exactly the cards whose content reaches their rounded corners.
+ * The scroll path ([ScrollPath]): a card draws what it drew before, the outline clip stays on exactly the cards whose
+ * content reaches their rounded corners, and a culled masonry view draws the same screen as one that draws every card.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], application = Application::class, qualifiers = "w960dp-h480dp-land-hdpi")
-class ScrollKnobsTest {
+class ScrollPathTest {
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
     private val store = EntityStore()
 
     @After fun forget() {
         HaDisplay.reset()
-        ScrollTuning.resetForTest()
+        ScrollPath.cull = true
+        ScrollPath.contentClip = true
     }
 
     private fun ctx() = VitroCardContext(
@@ -137,7 +138,7 @@ class ScrollKnobsTest {
     @Test
     fun theClipStaysOnlyWhereContentReachesTheCorners() {
         seed()
-        ScrollTuning.setForTest(ScrollTuning.Knob.CLIP, true)
+        ScrollPath.contentClip = true
         val wrong = ArrayList<String>()
         for ((name, json, clips) in cards) {
             val card = show(build(json))
@@ -150,7 +151,7 @@ class ScrollKnobsTest {
     @Test
     fun offEveryRoundedCardClipsAsBefore() {
         seed()
-        ScrollTuning.setForTest(ScrollTuning.Knob.CLIP, false)
+        ScrollPath.contentClip = false
         for ((name, json, _) in cards) {
             val card = show(build(json))
             assertTrue(name, card.clipToOutline)
@@ -158,15 +159,14 @@ class ScrollKnobsTest {
     }
 
     @Test
-    fun eachCardDrawsTheSamePixelsWithTheKnobsOnAndOff() {
+    fun eachCardDrawsTheSamePixelsWithTheContentClipAsWithout() {
         seed()
-        val knobs = listOf(ScrollTuning.Knob.CLIP, ScrollTuning.Knob.RELAYOUT, ScrollTuning.Knob.ANIM_SNAP, ScrollTuning.Knob.CLOCK_SPAN)
         val differ = ArrayList<String>()
         for ((name, json, _) in cards + Triple("clock", """{"type": "clock", "clock_size": "large", "show_seconds": true}""", false)) {
-            knobs.forEach { ScrollTuning.setForTest(it, false) }
+            ScrollPath.contentClip = false
             val off = show(build(json))
             val offPixels = pixels(off)
-            knobs.forEach { ScrollTuning.setForTest(it, true) }
+            ScrollPath.contentClip = true
             val on = show(build(json))
             assertEquals(name, off.width to off.height, on.width to on.height)
             if (!pixels(on).contentEquals(offPixels)) differ += name
@@ -177,7 +177,6 @@ class ScrollKnobsTest {
     @Test
     fun aSensorCardsLiveValueLaysOutOnlyItsCard() {
         seed()
-        ScrollTuning.setForTest(ScrollTuning.Knob.RELAYOUT, true)
         val root = Root(activity)
         activity.setContentView(root)
         val card = build("""{"type": "entity", "entity": "sensor.power"}""")
@@ -197,23 +196,8 @@ class ScrollKnobsTest {
     }
 
     @Test
-    fun offASensorCardsLiveValueAsksTheWindow() {
-        seed()
-        ScrollTuning.setForTest(ScrollTuning.Knob.RELAYOUT, false)
-        val root = Root(activity)
-        activity.setContentView(root)
-        val card = build("""{"type": "entity", "entity": "sensor.power"}""")
-        root.addView(card, FrameLayout.LayoutParams(COLUMN, ViewGroup.LayoutParams.WRAP_CONTENT))
-        idle()
-        root.requests = 0
-        store.putLocal(state("sensor.power", "1234.5", mapOf("unit_of_measurement" to "W", "device_class" to "power")))
-        idle()
-        assertTrue(root.requests > 0)
-    }
-
-    @Test
     fun aRectAtTheCornerNeedsTheClipAndOneInsideThePaddingDoesNot() {
-        ScrollTuning.setForTest(ScrollTuning.Knob.CLIP, true)
+        ScrollPath.contentClip = true
         val ctx = ctx()
         val inside = object : CardSurface(ctx) {}
         inside.addView(View(activity).apply { setBackgroundColor(0xFF00FF00.toInt()) },
@@ -231,7 +215,7 @@ class ScrollKnobsTest {
 
     /**
      * The clip's effect as the GPU path draws it (Robolectric's HWUI renderer, which honors clipToOutline; a software
-     * canvas ignores it): each card with the knob on against the knob off, the differing pixels counted. Without the
+     * canvas ignores it): each card with the content clip against every rounded card clipping, the differing pixels counted. Without the
      * clip, a card's anti-aliased corner is the fill's own edge; with it, the edge is anti-aliased twice (the fill's
      * and the clip's coverage multiplied), a shade thinner: measured 2026-11-27, 105 corner pixels per card differ, by up
      * to 41 of 255, and elsewhere a few edge pixels by 1 (Skia's CPU rasterizer rounding through the clip's mask).
@@ -244,9 +228,9 @@ class ScrollKnobsTest {
             val report = ArrayList<String>()
             val outside = ArrayList<String>()
             for ((name, json, _) in cards) {
-                ScrollTuning.setForTest(ScrollTuning.Knob.CLIP, false)
+                ScrollPath.contentClip = false
                 val off = gpuPixels(build(json))
-                ScrollTuning.setForTest(ScrollTuning.Knob.CLIP, true)
+                ScrollPath.contentClip = true
                 val card = build(json)
                 val on = gpuPixels(card)
                 assertEquals(name, off.size, on.size)
@@ -306,8 +290,8 @@ class ScrollKnobsTest {
     }
 
     /** A masonry view of [n] entity cards (one sensor each) at the S1's size, with culling [cull]. */
-    private fun masonry(n: Int, cull: Boolean): dev.glassworks.engine.vitro.ui.VitroView {
-        ScrollTuning.setForTest(ScrollTuning.Knob.CULL, cull)
+    private fun masonry(n: Int, cull: Boolean, host: ViewGroup? = null): dev.glassworks.engine.vitro.ui.VitroView {
+        ScrollPath.cull = cull
         val cards = org.json.JSONArray()
         for (i in 0 until n) {
             store.putLocal(state("sensor.s$i", "${10 + i}", mapOf("unit_of_measurement" to "W")))
@@ -323,7 +307,12 @@ class ScrollKnobsTest {
                 fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} }, now = { NOW },
             )
         }
-        activity.setContentView(vv)
+        if (host != null) {
+            host.addView(vv, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            activity.setContentView(host)
+        } else {
+            activity.setContentView(vv)
+        }
         vv.setDashboard(LovelaceParser.parseDashboard(JSONObject(dash.toString())), "v")
         repeat(10) { idle() }
         screenOf(vv)
@@ -379,6 +368,45 @@ class ScrollKnobsTest {
         cull.update()
         assertFalse(card.culled)
         assertTrue("caught up as it came back", "777" in texts(card))
+    }
+
+    /** Above the Vitro view: counts the redraws asked of the window (each one a frame on a device). */
+    private class Redraws(context: Context) : FrameLayout(context) {
+        var asked = 0
+        override fun onDescendantInvalidated(child: View, target: View) {
+            asked++
+            super.onDescendantInvalidated(child, target)
+        }
+    }
+
+    /**
+     * A culled view at rest asks for no more redraws than one that draws every card: the cull pass changes nothing (and
+     * invalidates nothing) while no card crosses the band, and a culled card's live changes wait until it's back.
+     */
+    @Test
+    fun aCulledViewAtRestAsksForNoMoreRedrawsThanOneThatDrawsEveryCard() {
+        seed()
+        fun redrawsAtRest(cull: Boolean): Int {
+            val host = Redraws(activity)
+            val vv = masonry(90, cull, host)
+            vv.currentScroll()!!.scrollTo(0, 0)
+            repeat(5) { idle() }
+            vv.currentCull()?.update()
+            repeat(5) { idle() }
+            host.asked = 0
+            // Ten seconds at rest: a live change on screen (the first cards) and one far below, each second.
+            for (i in 0 until 10) {
+                store.putLocal(state("sensor.s${i % 3}", "${100 + i}", mapOf("unit_of_measurement" to "W")))
+                store.putLocal(state("sensor.s89", "${200 + i}", mapOf("unit_of_measurement" to "W")))
+                shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+            }
+            return host.asked
+        }
+        val off = redrawsAtRest(cull = false)
+        val on = redrawsAtRest(cull = true)
+        println("redraws asked at rest over 10 s: culled $on, every card drawn $off")
+        assertTrue("the live changes drew", off > 0)
+        assertTrue("culled $on redraws, not culled $off", on <= off)
     }
 
     /** The window's root: counts the layout requests that reach it. */

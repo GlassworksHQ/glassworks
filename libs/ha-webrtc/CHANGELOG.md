@@ -20,3 +20,6 @@ publish the matching section below as the release notes.
   player, and `setRendering(false)` keeps a player connected while its view is off screen without drawing.
 - **The signaling on its own.** `HaWebRtcSignaling` and `HaWebRtcStream` are plain Kotlin behind
   `HaCommandChannel`, so any HA WebSocket client and any WebRTC stack can use them.
+- **No per-frame reports nobody listens to.** `HaWebRtcPlayer.Listener.wantsFrames` (true by default): while a
+  listener says false, the player doesn't post a main-thread task for each steady frame to report it. A new size, the
+  first frame and errors are still reported.

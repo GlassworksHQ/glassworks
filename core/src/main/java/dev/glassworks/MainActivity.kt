@@ -220,8 +220,6 @@ open class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // The scroll path's knobs (debug.glassworks.scroll.*): read once, now, and logged.
-        dev.glassworks.engine.ScrollTuning.init()
         prefs = KioskPrefs(this)
         val restarted = prefs.takeSetupUpAtRestart()
         if (restarted) Log.i(TAG, "Setup screen: up again after the app's restart")

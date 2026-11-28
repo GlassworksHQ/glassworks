@@ -9,7 +9,6 @@ import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
-import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.cards.IframeCardView
 import dev.glassworks.engine.vitro.cards.PictureCardView
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
@@ -17,13 +16,13 @@ import java.util.Collections
 import java.util.WeakHashMap
 
 /**
- * [ScrollTuning.Knob.CULL]: a masonry view's columns draw only the cards in a band around the viewport.
+ * A masonry view's columns draw only the cards in a band around the viewport ([ScrollPath.cull]).
  *
  * On the S1 the render thread's `prepareTree` walks every render node the window's display lists reach, each frame:
- * on Clarity's heavy view, about 4,900 views, most of them far off screen, cost 6 to 7 ms of a scroll frame. A card the
- * column doesn't draw ([CardColumn.drawChild]) isn't in the column's display list, so the render thread never walks
- * it (and frees what it held for it: the card records itself again as it comes back, on the main thread, which has
- * time to spare).
+ * on Clarity's heavy view (about 2,000 views, most of them far off screen) that was 6.6 ms of a scroll frame, and
+ * 1.4 ms with culling (an S1 trace, 2026-11-28). A card the column doesn't draw ([CardColumn.drawChild]) isn't in the
+ * column's display list, so the render thread never walks it, and frees what it held for it: the card records itself
+ * again as it comes back, on the main thread (0.5 to 0.8 ms a card on the S1), which has time to spare.
  *
  * Nothing else changes. The card stays VISIBLE, attached and laid out: the column's height, every position, the
  * accessibility tree, `isShown` (which cards read to pause and refetch), Clarity's probes and the cameras' on-screen
@@ -31,8 +30,9 @@ import java.util.WeakHashMap
  * it's drawn again. A card with a camera, an island or a frame of its own (a SurfaceView or a TextureView, whose
  * picture follows its view's drawing) is always drawn.
  *
- * The band is the viewport and [ScrollTuning.cullMarginPercent] of its height above and below. It's checked as the
- * view scrolls and after each layout; a column records itself again only when a card crosses the band's edge.
+ * The band is the viewport and [MARGIN_PERCENT] of its height above and below. It's checked as the view scrolls and
+ * after each layout; a column records itself again only when a card crosses the band's edge, so a view at rest costs
+ * nothing.
  */
 internal class ViewportCull(private val scroll: ScrollView) {
     /** The cards (a column's children) left out now, by identity. */
@@ -65,10 +65,11 @@ internal class ViewportCull(private val scroll: ScrollView) {
         val content = scroll.getChildAt(0) ?: return
         val h = scroll.height
         if (h <= 0 || !scroll.isAttachedToWindow) return
-        val margin = h * ScrollTuning.cullMarginPercent / 100
+        val margin = h * MARGIN_PERCENT / 100
         val top = scroll.scrollY - margin
         val bottom = scroll.scrollY + h + margin
-        ScrollTuning.section({ "Vitro cull" }) {
+        android.os.Trace.beginSection("Vitro cull")
+        try {
             for (col in columns(content)) {
                 val y = offsetIn(col, content) ?: continue
                 var changed = false
@@ -88,10 +89,13 @@ internal class ViewportCull(private val scroll: ScrollView) {
                     }
                 }
                 if (changed) {
-                    ScrollTuning.mark("Vitro cull column")
+                    android.os.Trace.beginSection("Vitro cull column")
                     col.invalidate()
+                    android.os.Trace.endSection()
                 }
             }
+        } finally {
+            android.os.Trace.endSection()
         }
     }
 
@@ -163,5 +167,11 @@ internal class ViewportCull(private val scroll: ScrollView) {
     private companion object {
         /** How deep under the scroller columns are looked for (a masonry view's are 2 or 3 down). */
         const val MAX_DEPTH = 6
+
+        /**
+         * The band above and below the viewport, percent of its height: cards come back early enough to have caught
+         * up and recorded before they show, on the S1's fastest flings.
+         */
+        const val MARGIN_PERCENT = 50
     }
 }

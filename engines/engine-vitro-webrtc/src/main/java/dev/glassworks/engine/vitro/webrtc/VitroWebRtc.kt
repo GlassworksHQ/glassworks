@@ -5,7 +5,6 @@
 package dev.glassworks.engine.vitro.webrtc
 
 import android.view.View
-import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.camera.CameraStream
 import dev.glassworks.engine.vitro.camera.CameraStreamFactories
 import dev.glassworks.engine.vitro.camera.CameraStreamFactory
@@ -108,10 +107,10 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
                 if (!closed) listener?.onFrameRendered()
             }
 
-            // ScrollTuning.Knob.CAM_REPORT: a steady frame posts its report only while the card or Clarity wants it,
-            // as HLS does ([CameraStream.Listener.wantsFrames]).
+            // A steady frame posts its report only while the card or Clarity wants it, as HLS does
+            // ([CameraStream.Listener.wantsFrames]): not 15 main-thread tasks a second per camera for nobody.
             override val wantsFrames: Boolean
-                get() = !ScrollTuning.camReport || (!closed && listener?.wantsFrames == true)
+                get() = !closed && listener?.wantsFrames == true
 
             override fun onError(error: HaError) {
                 if (!closed) listener?.onError(listOf(error.code, error.message).filter { it.isNotEmpty() }.joinToString(": "))

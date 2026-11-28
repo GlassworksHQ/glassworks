@@ -13,7 +13,6 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
 import dev.glassworks.engine.vitro.cards.TileCardView
 import dev.glassworks.engine.vitro.data.EntityState
@@ -22,6 +21,7 @@ import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.ScrollPath
 import dev.glassworks.engine.vitro.ui.OutlineClip
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import org.json.JSONObject
@@ -41,7 +41,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.time.Duration
 
 /**
- * [ScrollTuning.Knob.CLIP] on the Android versions the panels run (the S1's Android 10, Android 8), not only the
+ * [ScrollPath.contentClip] on the Android versions the panels run (the S1's Android 10, Android 8), not only the
  * newest: up to Android 10 `GradientDrawable.getCornerRadii()` clones its array without a null check, so it throws
  * for a drawable rounded with `setCornerRadius()`, which is every card's (an S1 run, 2026-11-28: every card showed
  * its error card). The outline clip reads no radius back from that getter.
@@ -53,7 +53,10 @@ class OutlineClipSdkTest {
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
     private val store = EntityStore()
 
-    @After fun reset() = ScrollTuning.resetForTest()
+    @After fun reset() {
+        ScrollPath.cull = true
+        ScrollPath.contentClip = true
+    }
 
     private fun ctx() = VitroCardContext(
         context = activity, haBase = FakeHaServer.BASE, store = store,
@@ -78,7 +81,7 @@ class OutlineClipSdkTest {
 
     @Test
     fun aCardRoundedWithSetCornerRadiusDrawsAndDecidesItsClip() {
-        ScrollTuning.setForTest(ScrollTuning.Knob.CLIP, true)
+        ScrollPath.contentClip = true
         // The theme's card: a GradientDrawable rounded with setCornerRadius (CardSurface.applyTheme).
         val inside = object : CardSurface(ctx()) {}
         assertTrue((inside.background as GradientDrawable).let { it.cornerRadius > 0f })
@@ -99,7 +102,7 @@ class OutlineClipSdkTest {
 
     @Test
     fun heavysCardsDrawWithTheKnobOn() {
-        ScrollTuning.setForTest(ScrollTuning.Knob.CLIP, true)
+        ScrollPath.contentClip = true
         store.putLocal(EntityState("light.kitchen", "on", mapOf("friendly_name" to "Kitchen", "brightness" to 180), 0.0, 0.0))
         store.putLocal(EntityState("switch.fan", "off", mapOf("friendly_name" to "Fan"), 0.0, 0.0))
         val tile = show(TileCardView(ctx(), LovelaceParser.parseCard(JSONObject("""{"type": "tile", "entity": "light.kitchen"}"""))))
@@ -112,7 +115,7 @@ class OutlineClipSdkTest {
 
     @Test
     fun aRippleRoundedLikeTheCardKeepsNoClipAndAGradientWithFourRadiiKeepsIt() {
-        ScrollTuning.setForTest(ScrollTuning.Knob.CLIP, true)
+        ScrollPath.contentClip = true
         val card = object : CardSurface(ctx()) {}
         // A child filling the card, its background rounded per corner (setCornerRadii): unknown radius, clip kept.
         card.addView(View(activity).apply {

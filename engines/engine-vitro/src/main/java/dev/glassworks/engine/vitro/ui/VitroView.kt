@@ -22,7 +22,6 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.cards.LiveCameraFeed
 import dev.glassworks.engine.vitro.cards.AlarmPanelCardView
@@ -168,49 +167,7 @@ class VitroView(
      * hardware layer, so the GPU rasterizes it once per size or theme and every later frame (a live value changing)
      * only composites it. Drawn on the root, it was shaded again on every frame. A solid color stays the root's.
      */
-    private val backdrop = object : View(context) {
-        override fun draw(canvas: android.graphics.Canvas) {
-            ScrollTuning.section({ "Vitro backdrop draw" }) { super.draw(canvas) }
-        }
-    }.apply {
-        if (ScrollTuning.backdrop) {
-            // Shown, on its layer, only with a picture ([setBackdrop]): with none it draws nothing, so it's no view.
-            visibility = GONE
-        } else {
-            setLayerType(LAYER_TYPE_HARDWARE, null)
-        }
-    }
-
-    /**
-     * Puts [d] on the backdrop (null: none). With [ScrollTuning.backdrop] the backdrop is a view, on a hardware layer,
-     * only while it shows a picture.
-     */
-    private fun setBackdrop(d: android.graphics.drawable.Drawable?) {
-        backdrop.background = d
-        if (ScrollTuning.backdrop) {
-            val shown = d != null
-            backdrop.visibility = if (shown) VISIBLE else GONE
-            val layer = if (shown) LAYER_TYPE_HARDWARE else LAYER_TYPE_NONE
-            if (backdrop.layerType != layer) backdrop.setLayerType(layer, null)
-        }
-        opaqueChanged()
-    }
-
-    /** True while the view paints an opaque color under everything (a solid theme): nothing under it shows. */
-    val opaqueBackground: Boolean
-        get() = (background as? android.graphics.drawable.ColorDrawable)?.let { Color.alpha(it.color) == 0xFF && it.alpha == 0xFF } == true
-
-    /** Told when [opaqueBackground] may have changed. */
-    var onOpaqueChanged: (() -> Unit)? = null
-
-    private fun opaqueChanged() {
-        onOpaqueChanged?.invoke()
-    }
-
-    override fun setBackgroundColor(color: Int) {
-        super.setBackgroundColor(color)
-        opaqueChanged()
-    }
+    private val backdrop = View(context).apply { setLayerType(LAYER_TYPE_HARDWARE, null) }
     private val tabScroll = HorizontalScrollView(context).apply {
         isHorizontalScrollBarEnabled = false
         visibility = GONE
@@ -924,7 +881,7 @@ class VitroView(
         tabs.clear()
         tabScroll.visibility = GONE
         backdropGeneration++
-        setBackdrop(null)
+        backdrop.background = null
         setBackgroundColor(neutralBackground)
     }
 
@@ -1090,10 +1047,10 @@ class VitroView(
     /** The view on screen's scrolling container, if it scrolls (a panel view doesn't). */
     internal fun currentScroll(): ScrollView? = viewCache[currentViewIndex] as? ScrollView
 
-    /** Each masonry scroller's culling ([ScrollTuning.Knob.CULL]). */
+    /** Each masonry scroller's culling ([ViewportCull]). */
     private val culls = java.util.WeakHashMap<ScrollView, ViewportCull>()
 
-    /** The view on screen's culling, when the knob is on (tests, Clarity's counts). */
+    /** The view on screen's culling (tests and measures); null with [ScrollPath.cull] off. */
     internal fun currentCull(): ViewportCull? = currentScroll()?.let { culls[it] }
 
     /** Opens the view at [path] as its tab does (the page's history and location follow). False with no dashboard. */
@@ -2000,10 +1957,10 @@ class VitroView(
         // A picture replaces the root's color, as it did when it was the root's own background.
         fun picture(d: android.graphics.drawable.Drawable) {
             background = null
-            setBackdrop(d)
+            backdrop.background = d
         }
         fun color(c: Int) {
-            setBackdrop(null)
+            backdrop.background = null
             setBackgroundColor(c)
         }
         when (val bg = theme.background) {
@@ -2073,16 +2030,10 @@ class VitroView(
             isFillViewport = true
             isVerticalScrollBarEnabled = false
         }
-        // Masonry columns draw only the cards near the viewport (ScrollTuning.Knob.CULL).
-        val cull = if (ScrollTuning.cull) ViewportCull(scroll) else null
-        if (ScrollTuning.animSnap || cull != null) {
-            scroll.setOnScrollChangeListener { _, _, _, _, _ ->
-                // State animations land at once while the view scrolls (ScrollTuning.Knob.ANIM_SNAP).
-                if (ScrollTuning.animSnap) ScrollActivity.moved()
-                cull?.onScrolled()
-            }
-        }
-        if (cull != null) {
+        // Masonry columns draw only the cards near the viewport: the render thread walks only those ([ViewportCull]).
+        if (ScrollPath.cull) {
+            val cull = ViewportCull(scroll)
+            scroll.setOnScrollChangeListener { _, _, _, _, _ -> cull.onScrolled() }
             // The scroller's size; the columns tell their own layouts ([ViewportCull.columns]).
             scroll.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> cull.onLayout() }
             culls[scroll] = cull

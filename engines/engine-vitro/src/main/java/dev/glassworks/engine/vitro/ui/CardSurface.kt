@@ -26,7 +26,6 @@ import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import dev.glassworks.auth.OAuth
 import dev.glassworks.engine.Page
-import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.GuardedHandler
 import dev.glassworks.engine.vitro.VitroFailures
 import dev.glassworks.engine.vitro.camera.CameraPlayers
@@ -829,14 +828,18 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     private var baseBorderWidthF = 0f
 
     /**
-     * Whether the card's surface asks to clip its content to its rounded outline (a fill or a border). With
-     * [ScrollTuning.Knob.CLIP] the view clips only while some of its content reaches the corners ([updateOutlineClip]).
+     * Whether the card's surface asks to clip its content to its rounded outline (a fill or a border). The view clips
+     * only while some of its content reaches the corners: [updateOutlineClip] decides as the card records
+     * ([ScrollPath.contentClip]).
      */
     // Declared before init, which sets it (applyTheme): an initializer after it would reset the field.
     private var outlineClip: Boolean = false
         set(v) {
             field = v
-            clipToOutline = v
+            // On, the record decides (turning it on here would only be undone there, and each change costs the window
+            // a frame); off, no clip. Only a real change is passed on: setClipToOutline damages the parent every time.
+            val clip = if (ScrollPath.contentClip) v && clipToOutline else v
+            if (clipToOutline != clip) clipToOutline = clip
         }
 
     init {
@@ -968,20 +971,14 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     }
 
     /**
-     * [ScrollTuning.Knob.CLIP]: keeps clipToOutline only while the content reaches the rounded corners. Run as the card
-     * records, which every change inside it (a state, a layout, a background) leads to, so the test sees what draws.
+     * Keeps clipToOutline only while the content reaches the rounded corners ([OutlineClip]): most cards keep theirs
+     * inside the padding, and a card that clips has every draw inside it clipped to an anti-aliased rounded rect, on
+     * every frame it's drawn without a layer. Run as the card records, which every change inside it (a state, a layout,
+     * a background) leads to, so the test sees what draws.
      */
     private fun updateOutlineClip() {
-        val reason = OutlineClip.needsClip(this)
-        val clip = reason != null
+        val clip = OutlineClip.needsClip(this) != null
         if (clipToOutline != clip) clipToOutline = clip
-        OutlineClip.record(this, reason)
-    }
-
-    override fun requestLayout() {
-        // A layout asked up to the window from a card on screen (a live update's text, unless the card keeps it local).
-        if (ScrollTuning.trace && isLaidOut && !isLayoutRequested) ScrollTuning.mark("Vitro requestLayout " + cardType)
-        super.requestLayout()
     }
 
     /** The card's whole draw, its children's included ([setWillNotDraw] false sends every draw here). */
@@ -994,10 +991,8 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         }
         val saved = canvas.saveCount
         try {
-            if (outlineClip && ScrollTuning.clip) updateOutlineClip()
-            ScrollTuning.section({ "Vitro card record " + cardType + if (clipToOutline) " clip" else " noclip" }) {
-                super.draw(canvas)
-            }
+            if (outlineClip && ScrollPath.contentClip) updateOutlineClip()
+            super.draw(canvas)
         } catch (e: Exception) {
             canvas.restoreToCount(saved)
             fail("draw", e)
@@ -1409,7 +1404,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     private var hiddenByView = false
 
     /**
-     * True while the card is outside the band of the view its column draws ([ViewportCull], ScrollTuning.Knob.CULL):
+     * True while the card is outside the band of the view its column draws ([ViewportCull]):
      * attached and shown as far as Android knows, but not drawn. Its live changes wait, as a hidden view's do, and
      * catch up before it's drawn again. Main thread.
      */
