@@ -13,8 +13,8 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   key. From the panel's next restart after this update, only allowed computers get in. Kiln, or the computer that
   installed Glassworks, stays allowed. Any other computer can be let in on the panel's screen or from the Manage page.
 - **Allow a new computer over USB from the Manage page.** When a computer you haven't used before asks for USB
-  debugging, the **Security** page shows its fingerprint with **Allow this computer**, and lists the computers
-  already allowed with **Remove**. You need to be signed in with a Home Assistant administrator account. Allowed
+  debugging, the **Security** page shows its fingerprint with **Allow this computer**, for this connection or each
+  time it connects, and lists the computers already allowed with **Remove**. You need to be signed in with a Home Assistant administrator account. Allowed
   computers now stay allowed until you remove them, instead of Android forgetting them after a week without a
   connection. Kiln is on the list too, and comes back if Android had already forgotten it, unless you remove it.
   Needs the next S1 frame update.

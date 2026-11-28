@@ -83,6 +83,10 @@ if [ "$1 $2 $3 $4 $5 $6" = "call adb 1 i32 1 s16" ]; then
   echo "$7" >> /t/adb-calls; [ -s /t/adb-android-writes ] && echo "$7" >> "$(cat /t/adb-android-writes)"
   echo "Result: Parcel(00000000    '....')"; exit 0
 fi
+# allowDebugging(false, key), Android's plain "Allow" (this connection only): recorded in /t/adb-once-calls.
+if [ "$1 $2 $3 $4 $5 $6" = "call adb 1 i32 0 s16" ]; then
+  echo "$7" >> /t/adb-once-calls; echo "Result: Parcel(00000000    '....')"; exit 0
+fi
 [ "$1 $2 $3 $4" = "call alarm 3 s16" ] || exit 1
 echo "$5" >> /t/tz-calls
 if grep -qx -- "$5" /t/tz-unknown 2>/dev/null; then printf GMT > /t/props/persist.sys.timezone
@@ -1352,7 +1356,7 @@ rm -rf "$BTP" "$T/not-ours" "$T/settings.secure.bluetooth_address"
 # Every key here is made up (random bytes in adb's key layout).
 echo "--- computers over USB adb"
 reset_radio; echo off > "$T/props/persist.glassworks.radio_mode"
-AP=$T/adbpub; AK=$T/adb/adb_keys; rm -rf "$AP" "$T/adb" /t/adb-calls /t/adb-android-writes /t/logcat.args; mkdir -p "$T/adb"
+AP=$T/adbpub; AK=$T/adb/adb_keys; rm -rf "$AP" "$T/adb" /t/adb-calls /t/adb-once-calls /t/adb-android-writes /t/logcat.args; mkdir -p "$T/adb"
 rm -f "$T/settings.global.adb_allowed_connection_time"; : > "$T/settings.calls"
 w "$T/bin/logcat" <<'EOF'
 #!/bin/sh
@@ -1411,6 +1415,14 @@ adbreq "r3 allow $F5"; adbrun
 check "allowed where Android writes nothing (it knew the key): the agent writes it" test "$(result)/$(grep -cxF "$K5" "$AK")" = "r3 ok allowed/1"
 check "...adb_keys keeps its owner and mode" test "$(stat -c %u:%g:%a "$AK")" = 1000:2000:640
 check "...and the keys it had" sh -c "grep -qxF '$K1' '$AK' && grep -qxF '$K2' '$AK' && grep -qxF '$K3' '$AK'"
+echo "$(($(date +%s) - 1)).100  $SSP   900 D AdbDebuggingManager: Received public key: $K4" >> /t/logcat.out; adbrun
+adbreq "r3b once $F4"; adbrun
+check "once: Android answers it for this connection only (allowDebugging, not always)" test "$(cat /t/adb-once-calls 2>/dev/null)" = "$K4"
+check "...ok once, nothing written, no longer asking" test "$(result)/$(grep -cxF "$K4" "$AK")/$(asking)" = "r3b ok once/0/"
+echo "$(date +%s).200  $SSP   900 D AdbDebuggingManager: Received public key: $K4" >> /t/logcat.out; sleep 1; adbrun
+check "...and when it connects again (a new log line), it asks again" test "$(asking)" = "$F4"
+adbreq "r3c once $F4"; adbrun
+check "...once again: answered, nothing written" test "$(result)/$(grep -cxF "$K4" "$AK")/$(asking)" = "r3c ok once/0/"
 adbreq "r4 allow $F5" 200; adbrun 1
 check "a request over 2 minutes old: ignored" has "$(result)" "r4 error too old ("
 adbreq "r5 allow $F3"; adbrun 1
@@ -1438,7 +1450,7 @@ check "the installer's computer allowed again: in, and no longer recorded as rem
 grep -vxF "$K1" "$AK" > "$AK.t"; cat "$AK.t" > "$AK"; rm -f "$AK.t"; adbrun 1
 check "...so it comes back the next time Android drops it" test "$(grep -cxF "$K1" "$AK")" = 1
 pkill -x system_server 2>/dev/null; mv "$T/boot-adb-keys.bak" "$TB/glassworks_adb_keys"
-rm -rf "$AP" "$T/adb" "$APP/files/adb" /t/logcat.out /t/logcat.args /t/adb-calls "$T/bin/logcat" "$T/settings.global.adb_allowed_connection_time"
+rm -rf "$AP" "$T/adb" "$APP/files/adb" /t/logcat.out /t/logcat.args /t/adb-calls /t/adb-once-calls "$T/bin/logcat" /data/s1kiosk/radio/adb-once "$T/settings.global.adb_allowed_connection_time"
 
 # ------------------------------------------------------------------------- setup hotspot portal
 # #197: while hostapd runs and the kiosk (uid 10050) has its DNS (udp:8053) and redirect (tcp:8098)
@@ -1697,7 +1709,7 @@ AA=$T/aa; rm -rf "$AA"; mkdir -p "$AA/modules" "$AA/magisk"; : > "$AA/magisk/bus
 python3 -c 'import os,sys; b=bytearray(os.urandom(30336)); b[0x20ce:0x20d2]=bytes([0,0x20,0x20,0x70]); open(sys.argv[1],"wb").write(b); b[0x20d0:0x20d2]=bytes([0,0xbf]); open(sys.argv[2],"wb").write(b)' "$AA/adbd" "$AA/adbd.fixed"
 AS=$(sha256sum "$AA/adbd" | cut -d' ' -f1); AF=$(sha256sum "$AA/adbd.fixed" | cut -d' ' -f1)
 rm -f "$T/props/persist.glassworks.adb_auth" "$T/props/sys.glassworks.adb.auth"
-aa() { LOOPS=1 helper GWA_MODULES="$AA/modules" GWA_MAGISK_BB="$AA/magisk/busybox" GWA_AA_STOCK="$AS" GWA_AA_FIXED="$AF" GWA_AA_WAIT=2 GWA_AA_EVERY=1 "$@"; prop sys.glassworks.adb.auth; }
+aa() { LOOPS=1 helper GWA_MODULES="$AA/modules" GWA_MAGISK_BB="$AA/magisk/busybox" GWA_AA_STOCK="$AS" GWA_AA_FIXED="$AF" GWA_AA_WAIT=3 GWA_AA_EVERY=1 GWA_AA_STEADY=2 "$@"; prop sys.glassworks.adb.auth; }
 AM=$AA/modules/glassworks_adbd_auth
 st=$(aa GWA_AA_LIVE="$AA/adbd")
 check "Aqara's adbd: the module is made, from the next restart" test "$st" = "on after a restart"
@@ -1714,7 +1726,7 @@ check "disabled in Magisk: said so" test "$st" = "off: the module is disabled in
 rm -f "$AM/disable"; st=$(aa GWA_AA_LIVE="$AA/adbd" GWA_MAGISK_BB="$AA/magisk/none")
 check "Magisk loads no modules here: said so" has "$st" "off: Magisk loads no modules here"
 echo stopped > "$T/props/init.svc.adbd"
-aa GWA_AA_LIVE="$AA/adbd.fixed" >/dev/null; sleep 4
+aa GWA_AA_LIVE="$AA/adbd.fixed" >/dev/null; sleep 5
 check "the patched adbd mounted but not running: the module goes" test ! -e "$AM"
 check "...remembered, root 0600" test "$(stat -c %a:%u /data/s1kiosk/radio/adbd-auth-failed)" = 600:0
 check "...and said" has "$(prop sys.glassworks.adb.auth)" "error: the patched adbd didn't run"

@@ -17,10 +17,10 @@ import java.security.SecureRandom
  * - [pub]`/adb-keys`: `<installer|added> <fingerprint> <key line>` per key in `adb_keys`. `installer` is the boot
  *   image's key (Kiln's, or the command-line installer's computer). It's listed and can be removed: the agent puts it
  *   back after Android drops it, but not after an administrator removed it here.
- * - [request]: `<id> allow|remove <fingerprint>`, which the agent takes within a loop (3 s) and answers in
- *   [pub]`/adb-result` as `<id> <ok|error> <detail>`.
- * Android forgets no key by itself here (the agent turns its 7-day timeout off), so every computer allowed stays
- * until Remove: [alwaysRemembers]. Who added a computer and when is the app's own note, in [notes].
+ * - [request]: `<id> allow|once|remove <fingerprint>`, which the agent takes within a loop (3 s) and answers in
+ *   [pub]`/adb-result` as `<id> <ok|error> <detail>`. `once` is Android's plain "Allow": this connection only.
+ * Android forgets no key by itself here (the agent turns its 7-day timeout off), so a computer allowed each time it
+ * connects stays until Remove. Who added a computer and when is the app's own note, in [notes].
  */
 class S1AdbComputers(
     private val pub: File,
@@ -36,7 +36,6 @@ class S1AdbComputers(
     /** The agent's adbd key check ([AUTH]): "on" when adbd checks keys, so the list decides who gets in. */
     private val authStatus: () -> String = { dev.glassworks.manage.AppManage.prop(AUTH) },
 ) : UsbComputers {
-    override val alwaysRemembers get() = true
     override val listsInstaller get() = true
 
     override fun notice(): String? = when (authStatus().trim()) {
@@ -82,7 +81,7 @@ class S1AdbComputers(
             event("$who tried to allow adb key $shown over USB: refused, adb key ${key.fingerprint} asked since")
             return Allowed.CHANGED
         }
-        val (ok, detail) = ask("allow", shown) ?: run {
+        val (ok, detail) = ask(if (remember) "allow" else "once", shown) ?: run {
             event("$who tried to allow ${AdbComputers.label(key)} over USB: the panel's root side didn't answer")
             return Allowed.NO_ANSWER
         }
@@ -93,6 +92,10 @@ class S1AdbComputers(
                 "changed" -> Allowed.CHANGED
                 else -> Allowed.FAILED
             }
+        }
+        if (detail == "once") {
+            event("$who allowed ${AdbComputers.label(key)} over USB, for this connection")
+            return Allowed.ONCE
         }
         if (detail != "already") note(key.fingerprint, who)
         event("$who allowed ${AdbComputers.label(key)} over USB, from now on")

@@ -78,7 +78,7 @@ class S1AdbComputersTest {
         assertEquals(listOf(installer to true, desk to false), computers.list().map { it.key to it.installer })
         assertEquals("allowed on the panel itself: nobody recorded it", 0L, computers.list().single { it.key == desk }.addedMs)
         asks(laptop)
-        assertEquals(Allowed.FROM_NOW_ON, computers.allowAsking(laptop.fingerprint, remember = false, who = "Alex"))
+        assertEquals(Allowed.FROM_NOW_ON, computers.allowAsking(laptop.fingerprint, remember = true, who = "Alex"))
         lists("installer" to installer, "added" to desk, "added" to laptop)
         val l = computers.list().single { it.key == laptop }
         assertEquals(now to "Alex", l.addedMs to l.by)
@@ -92,6 +92,16 @@ class S1AdbComputersTest {
         assertEquals(listOf("allow ${laptop.fingerprint}"), requests.toList())
         assertTrue(events.last().contains("allowed adb key ${laptop.fingerprint} (me@laptop) over USB"))
         assertFalse("never the key in the Log", events.any { it.contains(laptop.base64.take(40)) })
+    }
+
+    @Test fun `allow for this connection only asks the agent for once, and notes nobody`() {
+        asks(laptop)
+        answer = { op, _ -> if (op == "once") "ok once" else "ok allowed" }
+        assertEquals(Allowed.ONCE, computers.allowAsking(laptop.fingerprint, remember = false, who = "Alex"))
+        assertEquals(listOf("once ${laptop.fingerprint}"), requests.toList())
+        assertTrue(events.last().contains("for this connection"))
+        lists("added" to laptop)
+        assertEquals("not added here: the agent wrote nothing", 0L, computers.list().single().addedMs)
     }
 
     @Test fun `the agent's refusals come back as the card's results`() {
@@ -137,13 +147,13 @@ class S1AdbComputersTest {
         assertFalse(on.contains(S1AdbComputers.AUTH_OFF) || on.contains(S1AdbComputers.AUTH_AFTER_RESTART))
     }
 
-    @Test fun `the card on the S1 has no each-time switch, since every computer allowed stays`() {
+    @Test fun `the card on the S1 has the each-time switch, and lists Kiln's key`() {
         val f = ManageFixture(usb = ManageUsbDebugging(computers, { "09:41" }, { events += it }))
         asks(laptop)
         lists("installer" to installer, "added" to desk)
         val page = f.Browser().apply { signInWithHa() }.get("/security").text()
         assertTrue(page.contains(">Allow this computer</button>"))
-        assertFalse(page.contains("Let it in each time it connects"))
+        assertTrue("allow once or each time, as on the Mirror", page.contains("Let it in each time it connects"))
         assertTrue(page.contains(ManageUsbDebugging.ALLOWED_ELSEWHERE))
         assertTrue("Kiln's key, named and removable", page.contains("<b>Kiln</b><span>${ManageUsbDebugging.INSTALLED}</span>"))
         assertTrue(page.contains("""name="fingerprint" value="${installer.fingerprint}"><button class="pill sm" type="submit">Remove</button>"""))

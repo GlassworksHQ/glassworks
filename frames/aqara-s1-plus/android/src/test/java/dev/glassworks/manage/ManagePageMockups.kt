@@ -155,7 +155,7 @@ class ManagePageMockups {
         save("13e-security-refused", ub.get("/security?usb=refused"))
         save("13f-security-not-waiting", ub.get("/security?usb=notwaiting"))
 
-        // The S1: its frame agent keeps adb_keys, so there's no "each time" switch, and Kiln's key is listed. A fake
+        // The S1: its frame agent keeps adb_keys, so Kiln's key is listed. A fake
         // agent's files, made-up keys.
         val pub = File(f.dir, "s1-adb-pub").apply { mkdirs() }
         fun line(kind: String, k: dev.glassworks.manage.AdbKey) = "$kind ${k.fingerprint} ${k.base64} ${k.name}\n"

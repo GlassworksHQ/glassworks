@@ -465,13 +465,16 @@ this way is in [adb-keys.md](../research/adb-keys.md).
 |---|---|---|
 | The computer asking: `<epoch> <fingerprint> <key line>` | `/data/glassworks-pub/adb-asking` (root 0644) | the agent, from `Received public key:` lines that system_server's pid logged under `AdbDebuggingManager` in the last 10 minutes |
 | The allowed keys: `<installer\|added> <fingerprint> <key line>` per line of `/data/misc/adb/adb_keys` | `/data/glassworks-pub/adb-keys` | the agent; `installer` = a key in the boot image's `glassworks_adb_keys` |
-| A request: `<id> allow\|remove <fingerprint>` | the app's `files/adb/request` (taken with `--move`, at most 2 minutes old) | the app |
+| A request: `<id> allow\|once\|remove <fingerprint>` | the app's `files/adb/request` (taken with `--move`, at most 2 minutes old) | the app |
 | The answer: `<id> <ok\|error> <detail>` | `/data/glassworks-pub/adb-result` | the agent |
 | Status: `starting`, `ok`, `error <detail>` | `sys.glassworks.adb.status` | the agent |
 
 - `allow` takes only the computer asking now, by its fingerprint, so the app can never name a key of its own. The
   agent answers Android with `IAdbManager.allowDebugging(true, key)` (`service call adb 1 i32 1 s16 <key>`, as root),
   which lets the computer in at once, and then makes sure the key is in `adb_keys`.
+- `once` is the same with `allowDebugging(false, key)`, Android's plain "Allow": the computer gets in for this
+  connection only, nothing is written, and it asks again the next time it connects. The agent keeps the question it
+  answered in `$DIR/adb-once` (root 0600), so reading the same log line again doesn't show it as asking.
 - `remove` takes a key out of `adb_keys`, keeping the file's owner, mode and label. A computer that is connected stays
   connected until it disconnects. The installer's key (Kiln's, or the command-line installer's computer) can be
   removed too. Its fingerprint then goes to `$DIR/adb-revoked` (root 0600), so it stays out.

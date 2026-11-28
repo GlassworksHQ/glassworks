@@ -51,8 +51,8 @@ class ManageUsbDebugging(
             """<section class="card list"><div class="lh"><b>Allowed computers</b><span>${list.size}</span></div>$rows</section>$CSS"""
     }
 
-    /** The "each time it connects" switch, where Allow can also let a computer in for this connection only. */
-    private fun remember() = if (computers.alwaysRemembers) "" else
+    /** The "each time it connects" switch: off, Allow lets the computer in for this connection only. */
+    private fun remember() =
         """<label class="sw"><input type="checkbox" name="remember" value="1" checked> Let it in each time it connects</label>"""
 
     /** A computer's lines: [what] (or its name, when it gives one), then its fingerprint. */
@@ -82,7 +82,7 @@ class ManageUsbDebugging(
             AdbComputers.Removed.NOT_SAVED -> Result.NOT_REMOVED
             AdbComputers.Removed.NO_ANSWER -> Result.NO_ANSWER
         })
-        return done(when (computers.allowAsking(fingerprint, computers.alwaysRemembers || form["remember"] == "1", who)) {
+        return done(when (computers.allowAsking(fingerprint, form["remember"] == "1", who)) {
             AdbComputers.Allowed.ONCE -> Result.ONCE
             AdbComputers.Allowed.FROM_NOW_ON -> Result.FROM_NOW_ON
             AdbComputers.Allowed.CHANGED -> Result.CHANGED

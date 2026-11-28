@@ -29,9 +29,6 @@ interface UsbComputers {
     /** Takes the computer with [fingerprint] off the list. */
     fun remove(fingerprint: String, who: String): AdbComputers.Removed
 
-    /** True when every computer allowed stays on the list: the card then has no "each time it connects" switch. */
-    val alwaysRemembers: Boolean get() = false
-
     /** True when [list] holds the computer that installed Glassworks, which Remove can take off like any other. */
     val listsInstaller: Boolean get() = false
 
