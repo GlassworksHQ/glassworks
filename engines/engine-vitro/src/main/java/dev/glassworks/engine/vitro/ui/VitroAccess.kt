@@ -239,7 +239,12 @@ internal class AdjustableAccess(
         if (v < max()) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)
         if (v > min()) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD)
         if (Platform.hasSetProgressAction) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS)
-        if (Platform.hasStateDescription) valueText?.let { info.stateDescription = it(v) }
+        if (Platform.hasStateDescription) valueText?.let { Api30.setStateDescription(info, it(v)) }
+    }
+
+    /** Android 11's call in a class of its own, so Android 10 verifies this one at install (StartPathVerifyTest). */
+    private object Api30 {
+        fun setStateDescription(info: AccessibilityNodeInfo, text: CharSequence) { info.stateDescription = text }
     }
 
     /**

@@ -1,0 +1,53 @@
+# The Glassworks core: the classes and methods that run in a cold start, through the first dashboard frame, as an ART
+# baseline profile (human-readable rules; docs/research/art-start-path.md). The release build merges every module's
+# file into the APK (assets/dexopt/baseline.prof), and ProfileInstaller hands it to Android at the first start:
+# Android compiles these ahead of time the next time it optimizes the app. `*` is one package level, `**` any depth.
+# A package listed here runs at every start; the ones left out run only when someone opens them (settings, setup screens, Improv provisioning).
+
+# The shell: MainActivity, KioskService, the runtime, prefs
+HSPLdev/glassworks/*;->**(**)**
+Ldev/glassworks/*;
+
+# Setup state the shell reads at every start, and the setup channel the panel serves
+HSPLdev/glassworks/setup/Setup*;->**(**)**
+Ldev/glassworks/setup/Setup*;
+
+# Every start's services: the screen policy, Manage and the web server, HA sign-in and discovery, updates, secrets, the UI kit
+HSPLdev/glassworks/engine/*;->**(**)**
+Ldev/glassworks/engine/*;
+HSPLdev/glassworks/screen/**;->**(**)**
+Ldev/glassworks/screen/**;
+HSPLdev/glassworks/manage/**;->**(**)**
+Ldev/glassworks/manage/**;
+HSPLdev/glassworks/web/**;->**(**)**
+Ldev/glassworks/web/**;
+HSPLdev/glassworks/auth/**;->**(**)**
+Ldev/glassworks/auth/**;
+HSPLdev/glassworks/discovery/**;->**(**)**
+Ldev/glassworks/discovery/**;
+HSPLdev/glassworks/net/**;->**(**)**
+Ldev/glassworks/net/**;
+HSPLdev/glassworks/update/**;->**(**)**
+Ldev/glassworks/update/**;
+HSPLdev/glassworks/secrets/**;->**(**)**
+Ldev/glassworks/secrets/**;
+HSPLdev/glassworks/device/**;->**(**)**
+Ldev/glassworks/device/**;
+HSPLdev/glassworks/dashboard/**;->**(**)**
+Ldev/glassworks/dashboard/**;
+HSPLdev/glassworks/ui/**;->**(**)**
+Ldev/glassworks/ui/**;
+HSPLdev/glassworks/audio/**;->**(**)**
+Ldev/glassworks/audio/**;
+HSPLdev/glassworks/dock/**;->**(**)**
+Ldev/glassworks/dock/**;
+HSPLdev/glassworks/brand/**;->**(**)**
+Ldev/glassworks/brand/**;
+
+# The libraries the core starts: the ESPHome API server, the websocket client (libs/esphome-api, libs/sendspin)
+HSPLdev/glassworks/esphome/*;->**(**)**
+Ldev/glassworks/esphome/*;
+HSPLdev/glassworks/esphome/android/**;->**(**)**
+Ldev/glassworks/esphome/android/**;
+HSPLdev/glassworks/sendspin/**;->**(**)**
+Ldev/glassworks/sendspin/**;

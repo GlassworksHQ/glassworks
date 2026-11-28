@@ -11,6 +11,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Changed
+- **The app starts faster.** The app now tells Android which of its code runs at start, so Android prepares that code
+  ahead of time the next time it optimizes its apps, and Android 10 and older check less of the app's code at every start.
+
 ### Fixed
 - **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
   saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing

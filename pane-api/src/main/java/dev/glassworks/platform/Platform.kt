@@ -36,6 +36,10 @@ import android.system.OsConstants
  *
  * The queries live in an open class so a test can build one for any level without Robolectric:
  * [Platform] is the one for the device the app runs on.
+ *
+ * The call a query guards, when it is above Android 10, goes in a nested `private object ApiNN` (as [Api30] here),
+ * never inline in the class that asks: Android 10 would verify that whole class again at every start
+ * (docs/research/art-start-path.md, StartPathVerifyTest).
  */
 open class PlatformApi(
     /** The API level this instance answers for. Use it for logs, not for decisions. */
@@ -248,12 +252,7 @@ open class PlatformApi(
      * default, and AlarmManager lends none of its own. The option exists from Android 14; below it
      * the default already lends it, so null.
      */
-    @Suppress("DEPRECATION") // MODE_BACKGROUND_ACTIVITY_START_ALLOWED: ALLOW_IF_VISIBLE needs a visible window, and a restart has none
-    fun backgroundStartOptions(): Bundle? =
-        if (apiLevel >= 34) ActivityOptions.makeBasic()
-            .setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
-            .toBundle()
-        else null
+    fun backgroundStartOptions(): Bundle? = if (apiLevel >= 34) Api34.backgroundStartOptions() else null
 
     /**
      * Calls [callback] as the default network comes, goes and changes. Below Android 7 there is no
@@ -292,9 +291,7 @@ open class PlatformApi(
      */
     fun lastExitReason(context: Context, processName: String): Int? {
         if (!hasApplicationExitInfo) return null
-        val am = context.getSystemService(ActivityManager::class.java) ?: return null
-        return am.getHistoricalProcessExitReasons(context.packageName, 0, 0)
-            .firstOrNull { it.processName == processName }?.reason
+        return Api30.lastExitReason(context, processName)
     }
 
     /** How one of this app's processes ended, as Android kept it ([processExit]). */
@@ -313,11 +310,7 @@ open class PlatformApi(
      */
     fun processExit(context: Context, pid: Int): ProcessExit? {
         if (!hasApplicationExitInfo) return null
-        return runCatching {
-            context.getSystemService(ActivityManager::class.java)
-                ?.getHistoricalProcessExitReasons(context.packageName, pid, 1)?.firstOrNull { it.pid == pid }
-                ?.let { ProcessExit(it.reason, it.description, it.timestamp) }
-        }.getOrNull()
+        return runCatching { Api30.processExit(context, pid) }.getOrNull()
     }
 
     /** How many times this device has booted ([hasBootCount]); null below Android 7, or where the device doesn't say. */
@@ -377,8 +370,38 @@ open class PlatformApi(
 
     /** An [Intent] extra, read with the typed getter from Android 13 and the deprecated one below. */
     fun intentExtra(intent: Intent, name: String): Intent? =
-        if (apiLevel >= 33) intent.getParcelableExtra(name, Intent::class.java)
+        if (apiLevel >= 33) Api33.intentExtra(intent, name)
         else @Suppress("DEPRECATION") intent.getParcelableExtra<Intent>(name)
+
+    // The calls above Android 10, each in a class of its own and reached only behind its query. Android 10's verifier
+    // can't find them, and one it can't find in PlatformApi itself would have it verify PlatformApi, Platform and
+    // everything that extends them again at every start (docs/research/art-start-path.md, StartPathVerifyTest).
+    // Their arguments and results are types Android 10 has.
+
+    private object Api30 {
+        fun lastExitReason(context: Context, processName: String): Int? {
+            val am = context.getSystemService(ActivityManager::class.java) ?: return null
+            return am.getHistoricalProcessExitReasons(context.packageName, 0, 0)
+                .firstOrNull { it.processName == processName }?.reason
+        }
+
+        fun processExit(context: Context, pid: Int): ProcessExit? =
+            context.getSystemService(ActivityManager::class.java)
+                ?.getHistoricalProcessExitReasons(context.packageName, pid, 1)?.firstOrNull { it.pid == pid }
+                ?.let { ProcessExit(it.reason, it.description, it.timestamp) }
+    }
+
+    private object Api33 {
+        fun intentExtra(intent: Intent, name: String): Intent? = intent.getParcelableExtra(name, Intent::class.java)
+    }
+
+    private object Api34 {
+        // MODE_BACKGROUND_ACTIVITY_START_ALLOWED: ALLOW_IF_VISIBLE needs a visible window, and a restart has none
+        @Suppress("DEPRECATION")
+        fun backgroundStartOptions(): Bundle = ActivityOptions.makeBasic()
+            .setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+            .toBundle()
+    }
 }
 
 /** The ways an ordinary app opens a Wi-Fi hotspot ([PlatformApi.hotspotKind]). */

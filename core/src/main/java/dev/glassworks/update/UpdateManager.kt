@@ -757,10 +757,15 @@ class UpdateManager(
             PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
                 setAppPackageName(packageName)
                 setSize(size)
-                if (platform.canInstallWithoutUserAction) {
-                    setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
-                }
+                if (platform.canInstallWithoutUserAction) Api31.needNoUserAction(this)
             }
+
+        /** Android 12's call in a class of its own, so Android 10 verifies UpdateManager at install (StartPathVerifyTest). */
+        private object Api31 {
+            fun needNoUserAction(params: PackageInstaller.SessionParams) {
+                params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            }
+        }
 
         private fun readCapped(input: InputStream, max: Int): ByteArray = input.use {
             val out = java.io.ByteArrayOutputStream()
