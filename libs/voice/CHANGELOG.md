@@ -5,6 +5,13 @@ What changed in each release of `dev.glassworks:voice` on Maven Central. Version
 cut from `libs/voice/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
+## [Unreleased]
+
+### Fixed
+- **Works beside other libraries that carry the same licence.** The AAR's extra licence texts and its NOTICE moved
+  from `META-INF/` to a folder of their own, `META-INF/dev.glassworks/voice/`. An app that also used another library
+  with a `META-INF/LICENSE-BSD-3-CLAUSE` (`dev.glassworks:ha-webrtc`, for one) failed to build on the duplicate file.
+
 ## [0.2.0] - 2026-11-26
 
 ### Changed

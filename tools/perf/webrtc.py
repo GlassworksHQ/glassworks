@@ -359,8 +359,10 @@ class _Relay(asyncio.DatagramProtocol):
 # ---- the service: an asyncio loop in its own thread, called from the fake's request threads
 
 class WebRTC:
-    def __init__(self, turn_port, streams, fps, record=lambda e: None, transport="adb"):
-        """streams(profile): the path of its Annex B stream (camera.annexb); record: the fake's log."""
+    def __init__(self, turn_port, streams, fps, record=lambda e: None, transport="adb", preload=()):
+        """streams(profile): the path of its Annex B stream (camera.annexb); record: the fake's log;
+        preload: the profiles whose streams are read, and one throwaway offer answered, as the
+        service starts (warm()), so the first offers are answered as promptly as later ones."""
         self.turn_port, self.streams, self.fps, self.record = turn_port, streams, fps, record
         if transport not in TRANSPORTS:
             raise ValueError(f"transport {transport!r} isn't one of {', '.join(TRANSPORTS)}")
@@ -384,6 +386,61 @@ class WebRTC:
         self.conns = set()
         threading.Thread(target=self.loop.run_forever, daemon=True).start()
         self.call(self._listen())
+        if preload:
+            self.warm(preload)
+
+    def warm(self, profiles):
+        """Gets the first answers ready in the background (the service is up meanwhile): each
+        profile's access units read, and one offer answered and closed. A cold fake answered a
+        view's first offers in 6.6 to 7.2 s on a Windows host (METIS, 2026-11-28, run 21: the
+        360p cameras, whose stream no offer had read yet), so the panel gave up on WebRTC and the
+        grade measured the fake. The panel's own offers still go through a whole exchange."""
+        self.warmed = asyncio.run_coroutine_threadsafe(self._warm(list(profiles)), self.loop)
+        return self.warmed
+
+    async def _warm(self, profiles):
+        t0 = time.monotonic()
+        for p in profiles:
+            t = time.monotonic()
+            try:
+                n = len(await self._access_units(p))
+                self.record({"t": time.time(), "webrtc_warm": p, "access_units": n, "ms": round((time.monotonic() - t) * 1000)})
+            except Exception as e:      # an offer for it tries again, and says why it failed
+                self.record({"t": time.time(), "webrtc_warm_error": p, "error": repr(e)})
+        t = time.monotonic()
+        try:
+            await self._warm_peer()
+            self.record({"t": time.time(), "webrtc_warm": "peer", "ms": round((time.monotonic() - t) * 1000)})
+        except Exception as e:
+            self.record({"t": time.time(), "webrtc_warm_error": "peer", "error": repr(e)})
+        return round((time.monotonic() - t0) * 1000)
+
+    async def _warm_peer(self):
+        """One offer, made here as a browser makes it (recvonly H.264), answered as _offer answers
+        one, then both closed: the first session's one-time costs (aiortc's modules, the DTLS
+        certificate, the codecs, gathering) are paid before a panel's offer comes."""
+        from aiortc import RTCConfiguration, RTCPeerConnection, RTCRtpSender, RTCSessionDescription
+        browser = RTCPeerConnection(RTCConfiguration(iceServers=[]))
+        peer = RTCPeerConnection(RTCConfiguration(iceServers=[]))
+        try:
+            browser.addTransceiver("video", direction="recvonly")
+            await browser.setLocalDescription(await browser.createOffer())
+            peer.addTransceiver("video", direction="sendonly")
+            peer.getTransceivers()[0].setCodecPreferences(
+                [c for c in RTCRtpSender.getCapabilities("video").codecs if c.mimeType == "video/H264"])
+            await peer.setRemoteDescription(RTCSessionDescription(sdp=browser.localDescription.sdp, type="offer"))
+            await peer.setLocalDescription(await peer.createAnswer())
+        finally:
+            await peer.close()
+            await browser.close()
+
+    def _access_units(self, profile):
+        """The profile's access units, read once (on the loop's thread): offers that come at once
+        (a view's cameras) wait for the same read. A read that failed is tried again."""
+        fut = self.aus.get(profile)
+        if fut is None or (fut.done() and (fut.cancelled() or fut.exception() is not None)):
+            fut = self.aus[profile] = self.loop.run_in_executor(None, lambda: camera.access_units(self.streams(profile)))
+        return fut
 
     def call(self, coro, timeout=30):
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
@@ -427,8 +484,7 @@ class WebRTC:
         from aiortc import RTCConfiguration, RTCPeerConnection, RTCRtpSender, RTCSessionDescription
         s = self.sessions[sid] = {"ready": asyncio.Event(), "pc": None, "entity_id": entity_id}
         try:
-            if profile not in self.aus:
-                self.aus[profile] = await self.loop.run_in_executor(None, lambda: camera.access_units(self.streams(profile)))
+            aus = await self._access_units(profile)
             if not any("H264" in line for line in sdp.splitlines() if line.startswith("a=rtpmap")):
                 raise RuntimeError("the offer has no H.264 video")
             first = {}
@@ -443,7 +499,7 @@ class WebRTC:
             pc = s["pc"] = RTCPeerConnection(RTCConfiguration(iceServers=[]))
             # Before the offer is read, so the video m-line takes this transceiver and its codecs:
             # aiortc settles the common codecs when it reads the offer.
-            pc.addTransceiver(_track_class()(self.aus[profile], self.fps, on_frame), direction="sendonly")
+            pc.addTransceiver(_track_class()(aus, self.fps, on_frame), direction="sendonly")
             pc.getTransceivers()[0].setCodecPreferences(
                 [c for c in RTCRtpSender.getCapabilities("video").codecs if c.mimeType == "video/H264"])
             await pc.setRemoteDescription(RTCSessionDescription(sdp=sdp, type="offer"))

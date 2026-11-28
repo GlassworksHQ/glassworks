@@ -568,8 +568,13 @@ class IslandSessionsTest {
         try {
             val p = page()
             p.load("$base/wall-test/wall")
-            awaitCondition("ready, strings in", timeoutMs = 30_000, tick = { idle() }) {
-                readyCount() == 1 && islandPages().size == 1 && HaText.language != null && indexReads.get() >= 1
+            try {
+                awaitCondition("ready, strings in", timeoutMs = 30_000, tick = { idle() }) {
+                    readyCount() == 1 && islandPages().size == 1 && HaText.language != null && indexReads.get() >= 1
+                }
+            } catch (e: AssertionError) {
+                throw AssertionError("${e.message}: ready ${readyCount()}, island pages ${islandPages().size}, " +
+                    "language ${HaText.language}, index reads ${indexReads.get()}, fallback opens ${fallback.opens.size}", e)
             }
             Thread.sleep(100)
             idle()

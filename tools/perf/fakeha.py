@@ -927,7 +927,8 @@ def serve(port, log_path=None, harness=True, turn_port=None, transport="adb", ho
     # A home with Clarity's cameras (its CAMERA_PROFILES; WEBRTC_CAMERAS = True) gets the peer too.
     if webrtc.available() and (D is CLARITY or getattr(D, "WEBRTC_CAMERAS", False)):
         hub.webrtc = webrtc.WebRTC((port + 1 if port else 0) if turn_port is None else turn_port, camera.annexb,
-                                   camera.FPS, record=hub.record, transport=transport)
+                                   camera.FPS, record=hub.record, transport=transport,
+                                   preload=sorted(set(D.CAMERA_PROFILES.values())))
         hub.turn_port = hub.webrtc.turn_port
         hub.record({"t": time.time(), "webrtc_transport": transport, "media": hub.webrtc.addr})
     # The frontend fetches dozens of modules at once; the default backlog (5) resets connections.
