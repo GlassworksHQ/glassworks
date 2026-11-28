@@ -61,6 +61,10 @@ object S1Settings {
                 fullScreen = fullScreen,
                 presenceRange = { runtime.screen.applyPresenceRange() },
                 brightness = { runtime.screen.refreshBrightness() },
+                screenAwake = {
+                    val wake = { if (!runtime.screen.screenOn) runtime.screen.wake("settings") }
+                    if (Looper.myLooper() == Looper.getMainLooper()) wake() else Handler(Looper.getMainLooper()).post(wake)
+                },
                 closeSetup = { runtime.lanSetup?.close() },
                 factoryReset = { done -> factoryReset(runtime, prefs, context).run(done) },
             ),

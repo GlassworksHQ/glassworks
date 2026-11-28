@@ -77,7 +77,7 @@ Manage renders live values when each page loads rather than streaming updates ov
 Manage offers two ways to authenticate:
 
 1. **Continue with Home Assistant (recommended):** Redirects to your local Home Assistant login page so the panel never sees your password. Only **Home Assistant administrators** are granted access. Manage only talks to Home Assistant addresses on your local network (private IP or `.local` hostname)—never public or Nabu Casa URLs.
-2. **Use the code on the panel:** Use this fallback if Home Assistant is offline. The panel displays a one-time 6-digit code for 5 minutes; enter it in your browser to sign in. *(If you sign in with a code before configuring a Home Assistant URL, that session resets once Home Assistant is configured.)*
+2. **Show a code on the panel:** Use this fallback if Home Assistant is offline. The panel displays a one-time 6-digit code for 5 minutes; enter it in your browser to sign in. *(If you sign in with a code before configuring a Home Assistant URL, that session resets once Home Assistant is configured.)*
 
 Check **Remember this browser for 30 days** to stay signed in across browser restarts; otherwise your session ends when you close the browser (or after 12 hours). You can review and revoke active browser sessions anytime on the **Security** page. Changing the panel's Home Assistant address automatically signs out all active Manage sessions.
 

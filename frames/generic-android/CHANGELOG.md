@@ -11,6 +11,37 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Fixed
+- **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
+  saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing
+  the panel to refuse dashboard authentication tokens, dashboard lists, theme updates, and permissions. Default ports
+  are now stripped from origins and omitted for port 80 discovery.
+- **Home Assistant addresses entered without `http://` or a port now work.** Typing a bare address such as
+  `192.0.2.10` or `homeassistant.local` in Settings or manual setup now fills in `http://` and port `8123`
+  automatically, while explicit `http://` and `https://` addresses keep their scheme and port. Invalid addresses
+  are rejected with an inline error instead of being saved.
+- **Sign-in errors and loading timeouts no longer trap the panel on the connecting screen or leave a blank dark screen.**
+  If Home Assistant rejects authentication without revoking the panel's token (for example during a temporary error or
+  IP ban), the panel now stops bouncing between the dashboard and the login page, hides the connecting screen right
+  away, and reveals Home Assistant's launch screen on auth failure or fallback timeout so any error is visible.
+- **Changing Screen settings to stay on wakes a sleeping panel right away.** Setting *Turn off when idle* to *Never*
+  or turning *Wake when someone's near* off from Manage or Settings now wakes a sleeping or blacked-out display
+  immediately instead of leaving it dark until restart.
+- **Lockdown messages are no longer hidden behind the connecting screen.** When the legacy browser engine blocks a
+  page or waits on its lockdown, the connecting screen now steps aside so you can read the message. In the legacy
+  build.
+- **Manage sign-in clarifies how to show a panel code and keeps the screen awake while it is displayed.** On the
+  Manage sign-in page, the fallback link now reads *Show a code on the panel* so it is clear you need to click it to
+  display a code, and the panel keeps its screen awake for the full 5 minutes while a code is on screen instead of
+  dimming on its idle timeout.
+- **Manage's Log page now captures app logs on Android 6.** Older Android builds do not support `logcat -v epoch`,
+  which left Manage's Log showing only Manage events; Glassworks now falls back to `threadtime` format on Android 6
+  so app, sign-in, and screen logs appear as expected. In the legacy build.
+
+## [0.9.1] - 2026-11-27
+
+**One volume for everything the panel plays, and a round of fixes for the lululemon Mirror: a real camera picture, Wi-Fi that stays on, and a screen that wakes without lines.**
+
 ### Added
 - **Vitro, an experimental native dashboard renderer, in a new Labs section.** Turn on *Vitro renderer* under
   *Settings → Labs*, on the panel or the Manage page, and after the app restarts your Home Assistant dashboard is drawn
@@ -51,10 +82,17 @@ line of each version is what Home Assistant shows on the update card. A change o
   Nothing looks different.
 
 ### Fixed
+- **Kiln recovers from a brief USB hiccup during the Mirror's first start.** On Windows and slow first boots,
+  a brief `getprop` stall or busy USB handle while reconnecting used to stop the install instead of retrying.
+  Kiln now waits for the dropped connection to close, retries transient busy errors, and allows more time per
+  first-start read. Comes with Kiln, not the app.
+- **Setup wakes a sleeping Mirror instead of staying dark.** When a no-touch Mirror enters setup while its
+  screen is blacked out (for example, after losing Wi-Fi), it now turns the backlight back on and keeps the
+  screen awake until setup finishes.
 - **Kiln explains a USB connection this computer won't open.** When Windows or Linux won't let the browser open
   the Mirror or the panel, or another program such as adb already holds it, Kiln now says which it is and what to do,
-  instead of saying it disconnected. The Mirror's fastboot screen also shows the one-time USB setup for Windows (the
-  Google USB Driver or WinUSB) and Linux (a udev rule), with a link to the steps. Comes with Kiln, not the app.
+  instead of saying it disconnected. The Mirror's fastboot screen also shows the one-time USB setup for Windows
+  (WinUSB via Zadig) and Linux (a udev rule), with a link to the steps. Comes with Kiln, not the app.
 - **Kiln checks the Mirror's and Android's app against GitHub's own checksum.** The app Kiln downloads from a release
   is now checked only against the SHA-256 GitHub publishes for it, as the S1's already was, never against the
   checksum file that comes from the same download server as the app. Comes with Kiln, not the app.
@@ -105,7 +143,7 @@ line of each version is what Home Assistant shows on the update card. A change o
   details over Bluetooth, the Mirror joined the network, but the phone or Home Assistant kept saying it was
   connecting because the Mirror dropped the Bluetooth connection before it could report back. It now stays
   connected and reports the join, so the setup finishes. In the legacy build.
-- **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
+- **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back. In the legacy build.
 - **A Wi-Fi network you give Glassworks stays saved after a restart on Android 6 and 7.** The legacy build joined
   the network from Kiln or your phone, but Android forgot it at the next restart, so a lululemon Mirror on its stock
   system asked you to send Wi-Fi from a phone every time it started. It now keeps the network, as Android 8 and newer

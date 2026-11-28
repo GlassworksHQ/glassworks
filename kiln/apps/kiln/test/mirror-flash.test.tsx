@@ -215,10 +215,10 @@ describe('installing Glassworks over fastboot', () => {
     // the by-hand steps, numbered, each one ticked off by the person as they go
     const steps = [...document.querySelectorAll('.isteps li')].map((li) => li.querySelector('.itext')!.textContent);
     expect(steps).toHaveLength(7);
-    expect(steps[5]).toMatch(/^Press and hold VOL− \(SW3\) on the small green board at the top end: of its two buttons, the one closer to the top edge\.$/);
+    expect(steps[2]).toMatch(/rear service hatch/);
+    expect(steps[5]).toMatch(/^Press and hold VOL− \(SW3\) on the small green board at the top end: of its two buttons, the one closer to the top edge \(only VOL−; VOL\+ or both buttons start other modes\)\.$/);
     expect(steps[6]).toMatch(/^Keep holding while you switch the Mirror on/);
     expect(steps[3]).toMatch(/^Plug the power cord back in/);
-    expect(screen.getByText(/Hold only VOL−: VOL\+ or both buttons start other modes/)).toBeTruthy();
     const first = screen.getByRole('button', { name: 'Step 1' });
     fireEvent.click(first);
     expect(first.getAttribute('aria-pressed')).toBe('true');

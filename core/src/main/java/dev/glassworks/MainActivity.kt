@@ -33,6 +33,7 @@ import dev.glassworks.setup.HotspotPermission
 import dev.glassworks.setup.HotspotStep
 import dev.glassworks.setup.LanSetup
 import dev.glassworks.setup.SetupHotspot
+import dev.glassworks.auth.AuthRedirectGuard
 import dev.glassworks.auth.FrontendUrls
 import dev.glassworks.auth.HaAuth
 import dev.glassworks.auth.HaTokenClient
@@ -121,6 +122,9 @@ open class MainActivity : Activity() {
     /** Signed out on this panel (HA button / frontend logout) and not signed in again (this process). */
     private var signedOutHere = false
 
+    /** Breaks `/auth/authorize` → `external_auth=1` bounce loops when HA rejects auth without revoking the token. */
+    private val authRedirectGuard = AuthRedirectGuard(clock = SystemClock::elapsedRealtime)
+
     /** Setup screen preview (`--ez show_setup true`, `--es setup_step …`): never changes state. */
     private var setupPreview = false
     private var setupPreviewStep: String? = null
@@ -149,12 +153,14 @@ open class MainActivity : Activity() {
         val testing = glassworks.screen.testDashboard != null
         if (signedIn) {
             Log.i(TAG, "Signed in; loading the dashboard with external auth")
+            authRedirectGuard.reset()
             usePanelLogin = false
             signedOutHere = false
             if (setupPreview) closeSetupPreview()
             if (!testing) loadDashboard()
         } else {
             Log.i(TAG, "Signed out; showing the sign-in screen")
+            authRedirectGuard.reset()
             usePanelLogin = false
             signedOutHere = true
             if (!testing) prefs.url.takeIf { it.isNotEmpty() }?.let { page?.load(it) }
@@ -190,19 +196,32 @@ open class MainActivity : Activity() {
         }
     }
 
+    private var setupWakeHeld = false
+
+    private fun syncSetupScreenStay() {
+        // #449: a frame with no presence sensor has nothing to wake it, so it stays on through setup and the
+        // connecting screen. The S1's sensor wakes it as before. Setup, which covers the connecting screen, only until
+        // Home Assistant has added the panel: a set-up panel that lost Wi-Fi sleeps on its idle timeout (#484).
+        val notReady = !presenceSensor && if (setupOverlay.isShowing) setupOverlay.needsHomeAssistant else loadingOverlay.isShowing
+        glassworks.screen.stayOn(NOT_READY, notReady)
+        // Without touch nothing on the panel can wake its screen during setup, and the person reads it from a
+        // computer's steps: wake it if it was asleep/blacked out and keep it on for as long as the setup screen is up.
+        val noTouchSetup = setupOverlay.input == Input.NONE && setupOverlay.isShowing && !setupPreview
+        glassworks.screen.stayOn(SETUP_NO_TOUCH, noTouchSetup)
+        val wakeForSetup = noTouchSetup || (!presenceSensor && setupOverlay.isShowing && setupOverlay.needsHomeAssistant && !setupPreview)
+        if (wakeForSetup && !setupWakeHeld && !glassworks.screen.screenOn) {
+            glassworks.screen.wake(SETUP_NO_TOUCH)
+        }
+        setupWakeHeld = wakeForSetup
+    }
+
     private val setupTick = object : Runnable {
         override fun run() {
             refreshSetup()
             setupOverlay.tick() // the panes' steps follow their state
             if (resumed) requestRuntimePermissions() // a pane turned on since (from Home Assistant) asks once
             refreshOffline()
-            // #449: a frame with no presence sensor has nothing to wake it, so it stays on through setup and the
-            // connecting screen. The S1's sensor wakes it as before. Setup, which covers the connecting screen, only until
-            // Home Assistant has added the panel: a set-up panel that lost Wi-Fi sleeps on its idle timeout (#484).
-            glassworks.screen.stayOn(NOT_READY, !presenceSensor && if (setupOverlay.isShowing) setupOverlay.needsHomeAssistant else loadingOverlay.isShowing)
-            // Without touch nothing on the panel can wake its screen during setup, and the person reads it from a
-            // computer's steps: it stays on for as long as the setup screen is up (a Mirror run, 2026-11-20).
-            glassworks.screen.stayOn(SETUP_NO_TOUCH, setupOverlay.input == Input.NONE && setupOverlay.isShowing && !setupPreview)
+            syncSetupScreenStay()
             handler.postDelayed(this, SETUP_TICK_MS)
         }
     }
@@ -368,6 +387,7 @@ open class MainActivity : Activity() {
             }
         }
         dashboardLoadAt = SystemClock.elapsedRealtime()
+        authRedirectGuard.onDashboardLoad()
         page?.load(externalize(url))
     }
 
@@ -536,6 +556,7 @@ open class MainActivity : Activity() {
             setupOverlay.finish { loadDashboardIfNeeded() }
         }
         if (setupOverlay.isShowing || d.step == SetupFlow.DONE) setupCarried = false
+        syncSetupScreenStay()
         syncImprovInline()
     }
 
@@ -666,7 +687,10 @@ open class MainActivity : Activity() {
         override fun run() {
             val waited = SystemClock.uptimeMillis() - pageStoppedAt
             if (frontendLoading && waited < LAUNCH_FALLBACK_MS) handler.postDelayed(this, LAUNCH_FALLBACK_MS - waited)
-            else hideConnecting(if (frontendLoading) "fallback 45 s, the frontend still loading" else "fallback 15 s, no word from the page")
+            else {
+                page?.post(JSONObject().put("type", "revealLaunch"))
+                hideConnecting(if (frontendLoading) "fallback 45 s, the frontend still loading" else "fallback 15 s, no word from the page")
+            }
         }
     }
 
@@ -981,7 +1005,10 @@ open class MainActivity : Activity() {
             restartProcess()
             return
         }
-        if (fromNewIntent && intent.getBooleanExtra("reload", false)) page?.reload()
+        if (fromNewIntent && intent.getBooleanExtra("reload", false)) {
+            authRedirectGuard.onDashboardLoad()
+            page?.reload()
+        }
         // One-off navigation that does NOT change the saved dashboard URL.
         if (fromNewIntent) intent.getStringExtra("open")?.takeIf { it.isNotBlank() }?.let { page?.load(it) }
     }
@@ -1261,6 +1288,14 @@ open class MainActivity : Activity() {
             }
         }
 
+        override fun onBlocked(reason: String) {
+            handler.post {
+                frontendLoading = false
+                handler.removeCallbacks(hideLoading)
+                hideConnecting("engine blocked")
+            }
+        }
+
         override fun onLocationChange(url: String?) {
             currentUrl = url
             // An unauthenticated HA frontend redirects to /auth/authorize: the setup screen covers it
@@ -1279,7 +1314,20 @@ open class MainActivity : Activity() {
             if (!HaAuth.signedIn) return null
             val base = HaAuth.signedInBase
             return when {
-                FrontendUrls.isAuthorizePage(url, base) -> prefs.url.takeIf { it.isNotEmpty() }?.let(::externalize)
+                FrontendUrls.isAuthorizePage(url, base) -> {
+                    val target = prefs.url.takeIf { it.isNotEmpty() }?.let(::externalize) ?: return null
+                    if (!authRedirectGuard.onAuthorizeRedirect()) {
+                        Log.w(TAG, "Stopping /auth/authorize redirect loop; letting the sign-in page load")
+                        handler.post {
+                            frontendLoading = false
+                            handler.removeCallbacks(hideLoading)
+                            hideConnecting("auth redirect loop")
+                        }
+                        null
+                    } else {
+                        target
+                    }
+                }
                 FrontendUrls.needsFlag(url, base) -> FrontendUrls.withFlag(url)
                 else -> null
             }
@@ -1291,7 +1339,9 @@ open class MainActivity : Activity() {
             frontendLoading = false
             pageStartedAt = SystemClock.uptimeMillis()
             offlineShown = false
-            if (url.startsWith("http")) loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, prefs.shownHost(url)))
+            if (url.startsWith("http") && !(authRedirectGuard.loopBroken && FrontendUrls.isAuthorizePage(url, prefs.haBase))) {
+                loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, prefs.shownHost(url)))
+            }
         }
 
         override fun onPageStop(success: Boolean) {
@@ -1381,6 +1431,7 @@ open class MainActivity : Activity() {
      */
     private fun onPageReady(sender: PagePort, why: String) {
         if (!sender.topLevel) { Log.i(TAG, "A frame said ready ($why): ignored"); return }
+        if (!FrontendUrls.isAuthorizePage(sender.url, HaAuth.signedInBase)) authRedirectGuard.reset()
         handler.post {
             frontendLoading = false
             handler.removeCallbacks(hideLoading)
@@ -1448,6 +1499,13 @@ open class MainActivity : Activity() {
     private fun externalAuth(msg: JSONObject, sender: PagePort, reply: (JSONObject) -> Unit) {
         if (!senderAllowed(sender)) {
             Log.w(TAG, "getExternalAuth from ${sender.url} refused (not the signed-in Home Assistant)")
+            if (sender.topLevel) {
+                handler.post {
+                    frontendLoading = false
+                    handler.removeCallbacks(hideLoading)
+                    hideConnecting("external auth refused")
+                }
+            }
             reply(JSONObject().put("success", false))
             return
         }
@@ -1460,6 +1518,12 @@ open class MainActivity : Activity() {
                     .put("expires_in", a.expiresIn.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt())
                 is HaAuth.Access.Failed -> {
                     Log.w(TAG, "getExternalAuth failed: ${a.reason}")
+                    authRedirectGuard.onExternalAuthFailed()
+                    handler.post {
+                        frontendLoading = false
+                        handler.removeCallbacks(hideLoading)
+                        hideConnecting("external auth failed: ${a.reason}")
+                    }
                     JSONObject().put("success", false)
                 }
             }

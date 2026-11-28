@@ -27,6 +27,8 @@ class ManageServerTest {
         val html = r.text()
         assertTrue(html.contains("Manage this panel</h1>"))
         assertTrue(html.contains("""name="next" value="/log?level=error""""))
+        assertTrue(html.contains("""formaction="/manage/code">Show a code on the panel</button>"""))
+        assertFalse(html.contains("Use the code on the panel"))
         assertFalse("no Manage content before signing in", html.contains("Download diagnostics"))
         val cb = b.signInWithHa(next = "/log?level=error")
         assertTrue("the callback sends the browser on to /log", cb.text().contains("url=/log?level=error"))

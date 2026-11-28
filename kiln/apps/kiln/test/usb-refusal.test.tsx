@@ -54,11 +54,17 @@ function fastbootFails(e: unknown) {
 const app = () => new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('off'); } }, true);
 
 describe('the Mirror\'s fastboot screen', () => {
-  it('shows the one-time USB setup for Windows and Linux, with its guide, and none on a Mac', () => {
+  it('shows the one-time USB setup near the top for Windows and Linux, with its guide, and none on a Mac', () => {
     const guide = mirrorFrame.drivers!.guide!;
-    for (const [ua, line] of [['Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0', mirrorFrame.drivers!.win], ['Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0', mirrorFrame.drivers!.linux]] as const) {
+    for (const [ua, title, line] of [
+      ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0', 'One-time USB setup on Windows', mirrorFrame.drivers!.win],
+      ['Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0', 'One-time USB setup on Linux', mirrorFrame.drivers!.linux],
+    ] as const) {
       as(ua);
       render(<ImageFlow image={fastbootFails(DENIED())} app={app()} />);
+      const heading = screen.getByText(title);
+      const steps = screen.getByRole('list', { name: 'Fastboot mode, by hand' });
+      expect(heading.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(screen.getByText(line)).toBeTruthy();
       expect(screen.getByRole('link', { name: 'Setup guide' }).getAttribute('href')).toBe(guide);
       cleanup();

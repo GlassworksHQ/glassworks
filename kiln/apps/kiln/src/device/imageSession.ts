@@ -2061,14 +2061,22 @@ export class ImageSession {
       if (left() <= 0) throw late();
       let started: boolean;
       try {
-        // bounded: a shell stream that never ends is a stall, handled like a dropped connection
-        started = (await bounded(p, this.d.frame).run('getprop sys.boot_completed')).out.trim() === '1';
+        // bounded (2× readMs): first-boot dexopt can pause adbd longer than a normal read, while a true stall still aborts
+        started = (await within(p, 'getprop sys.boot_completed', this.d.frame.timings.readMs * 2, this.d.frame.the)).out.trim() === '1';
       } catch (e) {
         if (!reopenAdb || run !== this.connects) throw e;
         const why = (e as Error).message;
         this.log('', `${cap(this.d.frame.the)} dropped the USB connection while it starts (${why}). Connecting again.`);
         const stale = p;
-        void stale.close?.().catch(() => {});
+        // Wait briefly for the dropped USB handle to release before reopening; on Windows WinUSB, reopening
+        // immediately while close() is still tearing down the old claim can transiently throw AdbBusy.
+        if (stale.close) {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          await Promise.race([
+            stale.close().catch(() => {}),
+            new Promise<void>((r) => { timer = setTimeout(r, 2000); }),
+          ]).finally(() => clearTimeout(timer));
+        }
         try { p = await this.reconnect(reopenAdb, wait, e, left); } catch (e2) { if (left() <= 5000) throw late(); throw e2; }
         this.panel = p;
         continue;
@@ -2081,15 +2089,17 @@ export class ImageSession {
   /**
    * The device picked, again with no list, every 5 s until it lets in: as the first connect, at most `adbTries` times,
    * and only while `left()` (the caller's deadline) has time; each try's wait for its key is cut to what is left.
+   * Allows up to 3 consecutive `AdbBusy` results in case our own stale handle is still releasing, then stops.
    */
   private async reconnect(reopen: NonNullable<ImageDeps['reopenAdb']>, sleep: (ms: number) => Promise<void>, first: unknown, left: () => number = () => Infinity): Promise<PanelShell> {
     let last = first;
+    let busy = 0;
     for (let i = 0; i < (this.d.adbTries ?? 60); i++) {
       if (left() <= 5000) break;
       await sleep(5000);
       const authMs = Math.min(this.d.frame.timings.authMs, Math.max(left(), 1000));
       try { return await reopen.call(this.d, { authMs }); } catch (e) { last = e; }
-      if (last instanceof AdbBusy) break;
+      if (last instanceof AdbBusy) { if (++busy >= 3) break; } else busy = 0;
     }
     throw last;
   }

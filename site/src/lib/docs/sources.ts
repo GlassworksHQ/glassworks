@@ -100,6 +100,7 @@ function load(): Source[] {
   }
 
   /* 2. Developers & Hardware Makers: Principles, Frames, Panes, Libraries, Kiln, Security, Ops */
+  add({ file: "docs/why-glassworks.md", url: "/docs/why-glassworks", section: "developers", label: "Why Glassworks" });
   add({ file: "docs/principles.md", url: "/docs/principles", section: "developers", label: "Principles" });
   add({ file: PANE_API, url: "/docs/what-makes-a-pane", section: "developers", cut: "What makes a pane", label: "What makes a pane" });
   add({ file: "frames/README.md", url: "/docs/frames", section: "developers", label: "Writing a frame" });

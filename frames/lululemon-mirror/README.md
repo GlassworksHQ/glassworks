@@ -104,7 +104,7 @@ The Mirror shows up in Chrome's USB list as `Android` (USB ID `18d1:d00d` in fas
 | Operating system | One-time preparation |
 |---|---|
 | **macOS** | None. If you have `adb` installed, run `adb kill-server` first so nothing else holds the USB connection. |
-| **Windows** | With the Mirror in fastboot mode, install the [Google USB Driver](https://developer.android.com/studio/run/win-usb), or open [Zadig](https://zadig.akeo.ie/), turn on *Options → List all devices*, pick the device with USB ID `18d1:d00d`, choose **WinUSB** and click **Replace driver**. |
+| **Windows** | With the Mirror in fastboot mode, open [Zadig](https://zadig.akeo.ie/), turn on *Options → List All Devices*, pick the device with USB ID `18d1:d00d` (usually listed as `Android`), choose **WinUSB**, and click **Install Driver** (or **Replace Driver**). Google's USB Driver package doesn't list `18d1:d00d` in its `.inf` file, so use Zadig instead. |
 | **Linux** | Save the udev rule below to `/etc/udev/rules.d/51-mirror.rules`, run `sudo udevadm control --reload`, then unplug the Mirror and plug it back in. Stop `adb` if it's running (`adb kill-server`). |
 
 ```

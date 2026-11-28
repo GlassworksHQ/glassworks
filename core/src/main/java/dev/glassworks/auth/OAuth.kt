@@ -9,6 +9,7 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
+import java.util.Locale
 
 /**
  * Home Assistant OAuth2 / IndieAuth client logic for the QR sign-in (pure JVM, see OAuthTest).
@@ -59,14 +60,20 @@ object OAuth {
             "&code_challenge_method=S256"
 
     /**
-     * `http://h:8123/` or `http://h:8123/lovelace/x` → `http://h:8123` (scheme://host[:port]). A user and password in the
-     * URL aren't part of its origin: they stay out of the base the panel logs, shows and signs in to (#449).
+     * `http://h:8123/` or `http://h:8123/lovelace/x` → `http://h:8123` (scheme://host[:port]), stripping default
+     * ports (`:80` for `http`, `:443` for `https`) per RFC 6454 so origins match what browsers report. A user and
+     * password in the URL aren't part of its origin: they stay out of the base the panel logs, shows and signs in to (#449).
      */
     fun origin(url: String): String? = try {
         val u = URI(url.trim())
-        val scheme = u.scheme?.lowercase()
-        if ((scheme != "http" && scheme != "https") || u.host.isNullOrEmpty()) null
-        else scheme + "://" + u.rawAuthority.substringAfterLast('@').lowercase()
+        val scheme = u.scheme?.lowercase(Locale.ROOT)
+        val host = u.host?.lowercase(Locale.ROOT)
+        if ((scheme != "http" && scheme != "https") || host.isNullOrEmpty()) null
+        else {
+            val defaultPort = if (scheme == "http") 80 else 443
+            val port = u.port
+            if (port == -1 || port == defaultPort) "$scheme://$host" else "$scheme://$host:$port"
+        }
     } catch (_: Exception) {
         null
     }

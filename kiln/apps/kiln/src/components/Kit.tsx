@@ -219,6 +219,20 @@ export function Note({ tone = 'info', title, children, action, icon, role }: {
   );
 }
 
+/**
+ * One-time USB setup for Windows or Linux (a WinUSB driver or udev rule), shown near the top of a recovery or fastboot
+ * screen when the browser runs on one of those systems. Nothing on macOS or when the frame gives none.
+ */
+export function DriverNote({ os, line, guide }: { os: 'win' | 'linux' | 'other'; line?: string; guide?: string }) {
+  if (os === 'other' || !line) return null;
+  return (
+    <Note tone="info" title={os === 'win' ? 'One-time USB setup on Windows' : 'One-time USB setup on Linux'}>
+      {line}
+      {guide && <>{' '}<a className="link" href={guide} target="_blank" rel="noopener">Setup guide</a></>}
+    </Note>
+  );
+}
+
 /* ------------------------------------------------------------------ instructions */
 
 /**
