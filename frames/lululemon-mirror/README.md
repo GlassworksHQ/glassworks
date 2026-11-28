@@ -168,7 +168,7 @@ If your Mirror already runs the Glass Panes image and you only want to install t
 | **Sendspin** | Stable | Synced Music Assistant playback over the Mirror's stereo speakers. |
 | **Notifications** | Stable | Because the Mirror has no touchscreen, high/critical alerts without a tag or timeout dismiss automatically after 2 minutes. |
 | **Camera** | Stable | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. The live video stream costs memory and can make the dashboard reload ([Known issues](#known-issues)). |
-| **Bluetooth proxy** | Stable | Uses the built-in Bluetooth LE radio once location permission is granted. *Listen and connect* needs the Android 6 handle numbering (#987): before it, Home Assistant sees one service per device. |
+| **Bluetooth proxy** | Stable | Uses the built-in Bluetooth LE radio once location permission is granted. |
 | **Diagnostics** | Stable | Reports uptime and memory (no CPU temperature sensor on this board). |
 | **Zigbee / Thread radio** | Not supported | No 802.15.4 radio hardware. |
 | **Time zone** | Not supported | Aqara S1 Plus only. |
