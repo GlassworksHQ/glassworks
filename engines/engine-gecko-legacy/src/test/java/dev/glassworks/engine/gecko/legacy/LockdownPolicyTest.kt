@@ -39,6 +39,29 @@ class LockdownPolicyTest {
         assertFalse(fresh.allows(Load.PAGE, "$ha/"))
     }
 
+    /**
+     * The Mirror (Android 6): `--es open /history` with Vitro on reached the fallback as the bare path, which has no
+     * origin, so the lockdown refused it. The app puts a path on the dashboard's origin first (FrontendUrls.resolve), and
+     * that URL is the lockdown's origin, whatever port the dashboard's address names: an explicit default one, or another.
+     */
+    @Test fun `a path the app puts on the dashboard's origin loads, the bare path doesn't`() {
+        for (dashboard in listOf(
+            "$ha/lovelace/0?external_auth=1",
+            "http://homeassistant.local:80/lovelace/0",
+            "http://homeassistant.local/",
+            "https://ha.example.com:443/dashboard-wall/0",
+            "https://ha.example.com:8443/",
+            "http://[2001:db8::10]:8123/",
+        )) {
+            val fresh = LockdownPolicy().also { it.start(dashboard) }
+            for (path in listOf("/history", "/logbook?entity_id=light.kitchen#top", "config/dashboard")) {
+                assertFalse("$dashboard: the bare $path", fresh.allows(Load.PAGE, path))
+                val url = dev.glassworks.auth.FrontendUrls.resolve(path, dashboard)!!
+                assertTrue("$dashboard: $url", fresh.allows(Load.PAGE, url))
+            }
+        }
+    }
+
     @Test fun `before the engine starts nothing from the network loads`() {
         val fresh = LockdownPolicy()
         assertNull(fresh.origin)
