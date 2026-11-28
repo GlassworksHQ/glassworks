@@ -44,6 +44,8 @@ class CoreSettings(
     private val screenLock: () -> Boolean = { false },
     /** The master volume, for the Sound page; null leaves the page out. */
     private val volume: MasterVolume? = null,
+    /** How Vitro draws the dashboard now, for Labs ([dev.glassworks.engine.Engine.drawing]); null while Vitro is off. */
+    private val drawing: () -> dev.glassworks.engine.Drawing? = { null },
 ) {
     class Live(
         /** Full screen: the page hides or shows HA's header and sidebar. */
@@ -130,7 +132,7 @@ class CoreSettings(
             SettingsItem.Note { LABS_NOTE },
             vitroTurnedOff(),
             vitro(),
-        )),
+        ) + VitroDrawingRows.items(drawing)),
         SettingsPlace.ABOUT to SettingsSection("about", "About", listOf(
             SettingsItem.Info(title = { "$product $version" }, detail = { "" }),
             licences,

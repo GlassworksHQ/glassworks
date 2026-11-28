@@ -42,6 +42,7 @@ class SettingsMockups {
         radioRunning: Boolean, deviceSettings: Boolean = true, facts: RadioFollowUp.Facts = off,
         extra: List<dev.glassworks.pane.PaneDefinition> = emptyList(), panelIp: String? = null,
         volume: dev.glassworks.audio.MasterVolume = MenuFixture.volume(),
+        drawing: dev.glassworks.engine.Drawing? = null,
     ): KioskSettingsOverlay {
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         val app = RuntimeEnvironment.getApplication()
@@ -55,7 +56,7 @@ class SettingsMockups {
             ),
             radio,
         ) + MenuFixture.switchOnly(app) + extra
-        o.show(MenuFixture.model(app, radio, deviceSettings, status = "screen on · presence near · voice=idle", panes = panes, panelIp = { panelIp }, volume = volume))
+        o.show(MenuFixture.model(app, radio, deviceSettings, status = "screen on · presence near · voice=idle", panes = panes, panelIp = { panelIp }, volume = volume, drawing = drawing))
         Mockup.idle()
         return o
     }
@@ -142,6 +143,16 @@ class SettingsMockups {
         KioskPrefs(RuntimeEnvironment.getApplication()).turnVitroOffAfterCrashes("ClassCastException in WeatherCardView.showMetric", 0L)
         shot("settings-22c-labs-vitro-turned-off", menu(radioRunning = true), CoreSettings.LABS)
         KioskPrefs(RuntimeEnvironment.getApplication()).run { vitroEnabled = true; vitroEnabled = false } // its record goes
+        // Vitro draws the dashboard: Labs says how it draws the view on screen, its cards in browser views and why, and
+        // each view. The before is the same state without the rows (22d-before), as main draws it.
+        KioskPrefs(RuntimeEnvironment.getApplication()).vitroEnabled = true
+        shot("settings-22d-labs-vitro-drawing-before", menu(radioRunning = true), CoreSettings.LABS)
+        shot("settings-22d-labs-vitro-drawing", menu(radioRunning = true, drawing = VitroDrawingMockup.drawing), CoreSettings.LABS)
+        shot("settings-22e-labs-vitro-drawing-scrolled", menu(radioRunning = true, drawing = VitroDrawingMockup.drawing), CoreSettings.LABS) { o ->
+            Mockup.layout(o)
+            o.previewScrollTo(Mockup.label(o, "Cameras"), alignBottom = true)
+        }
+        KioskPrefs(RuntimeEnvironment.getApplication()).vitroEnabled = false
         shot("settings-16-screen-scrolled", menu(radioRunning = true), "screen") { o ->
             Mockup.layout(o)
             o.previewScrollTo(Mockup.label(o, "Brightness"), alignBottom = true)

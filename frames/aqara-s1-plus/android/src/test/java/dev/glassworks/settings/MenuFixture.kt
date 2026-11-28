@@ -74,6 +74,8 @@ object MenuFixture {
         hardware: ScreenHardware = S1_HARDWARE,
         /** The master volume, for the Sound page; none leaves the page out. */
         volume: dev.glassworks.audio.MasterVolume? = null,
+        /** How Vitro draws the dashboard, for Labs; null while Vitro is off. */
+        drawing: dev.glassworks.engine.Drawing? = null,
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
@@ -85,6 +87,7 @@ object MenuFixture {
             account = { account },
             panelIp = panelIp,
             volume = volume,
+            drawing = { drawing },
         )
         val sections = paneSections(panes, blueprints, running)
         return KioskSettingsOverlay.Model(withHaLink(settingsOrder(core.sections(), sections), link), version, sections.map { it.id }.toSet())

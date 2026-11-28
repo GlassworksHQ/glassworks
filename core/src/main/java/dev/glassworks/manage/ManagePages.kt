@@ -5,6 +5,7 @@
 package dev.glassworks.manage
 
 import dev.glassworks.dock.DockRow
+import dev.glassworks.settings.VitroDrawingRows
 import dev.glassworks.pane.BLUEPRINTS
 import dev.glassworks.pane.BlueprintAction
 import dev.glassworks.pane.BlueprintSurface
@@ -179,11 +180,18 @@ ${foot(viewer)}"""
             """${state?.let { """<span class="pchip">${chip(it)}</span>""" }.orEmpty()}$master</div>"""
         // A page whose rows change by themselves (the dock row) reloads itself: the page has no scripts. Never under a
         // dialog, and the person can pause it (WCAG 2.2.1: a reload restarts a screen reader).
-        val live = sec != null && DockRow.shownIn(sec.items)
+        // Labs follows the view on screen while Vitro draws it (VitroDrawingRows).
+        val follows = when {
+            sec == null -> null
+            DockRow.shownIn(sec.items) -> LIVE_DOCK
+            VitroDrawingRows.shownIn(sec.items) -> LIVE_DASHBOARD
+            else -> null
+        }
+        val live = follows != null
         val lines = listOfNotNull(
             why?.let { """<p class="sub">${esc("This pane can't run on this panel: $it.")}</p>""" },
-            if (!live) null else if (paused) """<p class="sub">${esc(LIVE_PAUSED)} <a href="${esc(path)}">Resume</a></p>"""
-                else """<p class="sub">${esc(LIVE_ON)} <a href="${esc(path)}?$LIVE_PARAM=off">Pause</a></p>""",
+            if (follows == null) null else if (paused) """<p class="sub">${esc(livePaused(follows))} <a href="${esc(path)}">Resume</a></p>"""
+                else """<p class="sub">${esc(liveOn(follows))} <a href="${esc(path)}?$LIVE_PARAM=off">Pause</a></p>""",
             problem?.let { """<p class="err" role="alert">${see(it, problemSee)}</p>""" },
             if (restart) """<div class="banner"><i class="dot work"></i><span>${esc(SettingsChange.RESTART_TEXT)}</span>${action(v, "/action/restart", "Restart now", "pill primary")}</div>""" else null,
         ).joinToString("")
@@ -594,12 +602,14 @@ label.row.cp{cursor:pointer}.row.cp input{width:20px;height:20px;accent-color:va
 @media (max-width:900px){.cph{flex-direction:column;align-items:stretch}.cph .arrow{display:none}.cpf{flex-direction:column;align-items:stretch}}"""
 
         /** The sidebar's foot for a browser signed in with the code the panel showed. */
-        /** How often a page with a live row ([DockRow]) reloads, in seconds: about as often as the panel's menu reads it (2 s). */
+        /** How often a page with a live row ([DockRow], [VitroDrawingRows]) reloads, in seconds: about as often as the panel's menu reads it (2 s). */
         const val LIVE_RELOAD_S = 3
-        /** The query parameter that pauses it (`?live=off`), and the line that says which it does. */
+        /** The query parameter that pauses it (`?live=off`), and the line that says which it does, for what it follows. */
         const val LIVE_PARAM = "live"
-        const val LIVE_ON = "This page reloads every 3 seconds to follow the dock."
-        const val LIVE_PAUSED = "Paused: this page doesn't follow the dock until you resume it."
+        const val LIVE_DOCK = "the dock"
+        const val LIVE_DASHBOARD = "the dashboard"
+        fun liveOn(follows: String) = "This page reloads every $LIVE_RELOAD_S seconds to follow $follows."
+        fun livePaused(follows: String) = "Paused: this page doesn't follow $follows until you resume it."
         const val SIGNED_IN_WITH_CODE = "Signed in with the panel's code"
 
         /** A sign-in's Show on the page of a browser signed in with the panel's code. */

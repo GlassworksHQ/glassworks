@@ -11,6 +11,13 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **Labs shows how Vitro draws your dashboard.** With Vitro on, *Settings → Labs*, on the panel and on the Manage page,
+  says how the view on screen is drawn: all natively, natively with some cards in small browser views of their own, or
+  by Home Assistant's frontend. It lists each card that runs in a browser view, with where it sits in the dashboard and
+  why, and shows how each view of the dashboard is drawn. It follows the view on screen as it changes, and the Manage
+  page's Engine tile says the same in a few words and opens Labs.
+
 ### Changed
 - **Softer voice chimes.** The wake word and finished timers now play a soft, rounded chime that swells in and
   rings out, instead of electronic beeps. The timer chime is the wake chime followed by a higher one, so it still

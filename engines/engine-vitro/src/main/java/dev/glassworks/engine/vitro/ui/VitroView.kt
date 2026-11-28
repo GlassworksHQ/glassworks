@@ -123,6 +123,7 @@ import dev.glassworks.engine.vitro.theme.CssBackground
 import dev.glassworks.engine.vitro.theme.ThemeBackground
 import dev.glassworks.engine.vitro.theme.ThemeCatalog
 import dev.glassworks.engine.vitro.theme.ThemeResolver
+import dev.glassworks.engine.CardInBrowser
 import dev.glassworks.ui.Inter
 import org.json.JSONArray
 import org.json.JSONObject
@@ -140,6 +141,10 @@ data class VitroMetrics(
     val cacheHit: Boolean = false,
     /** Every card in the view that falls back to an island, with why (`CompatChecker`). */
     val islands: List<String> = emptyList(),
+    /** The view's place in its dashboard; -1 before a view is built. */
+    val viewIndex: Int = -1,
+    /** Every card in the view that runs in an island page, `iframe` cards too, with where and why (Settings → Labs). */
+    val islandCards: List<CardInBrowser> = emptyList(),
 )
 
 /**
@@ -557,6 +562,19 @@ class VitroView(
      * held when it ran (an auto-entities child carries the entity it matched, which the view's own config doesn't).
      */
     private val gaveUpViews = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /**
+     * Why [view] went to HA's frontend this session after its islands kept failing ([gaveUpViews]), or null. Any thread:
+     * Settings → Labs reads it for each view of the dashboard.
+     */
+    fun gaveUpReason(view: ViewConfig): String? = if (gaveUpViews.isEmpty()) null else gaveUpViews[viewKey(view)]
+
+    /**
+     * Why [view] goes to HA's frontend for a card an island learned this session needs HA's own elements, or that kept
+     * failing ([learnedReason]), or null. Any thread, as [gaveUpReason]: what it reads are concurrent maps.
+     */
+    fun learnedViewReason(view: ViewConfig, resources: List<LovelaceResource> = resourcesList): String? =
+        if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resources) }
 
     /** A view of this dashboard, as [gaveUpViews] keys it: its place and its config. */
     private fun viewKey(view: ViewConfig): String = "${view.index}:${view.raw}"
@@ -1614,7 +1632,8 @@ class VitroView(
         val elapsed = SystemClock.elapsedRealtime() - t0
         // The report follows the tree on screen: a cached tree keeps the card-mod state it was built with.
         val scripts = builtScripts[index] ?: IslandScripts.of(resourcesList)
-        val islands = CompatChecker.islands(viewCfg, scripts)
+        val pages = CompatChecker.islands(viewCfg, scripts, iframes = true)
+        val islands = pages.filter { it.verdict.type != "iframe" || !it.verdict.isNative }
         val tiers = CardRouter.tierCounts(viewCfg, scripts)
         val entities = CardRouter.referencedEntities(viewCfg)
         val metrics = VitroMetrics(
@@ -1627,6 +1646,8 @@ class VitroView(
             subscribedEntities = entities.size,
             cacheHit = cached,
             islands = islands.map { "${it.path}: ${it.verdict.reasons.joinToString("; ")}" },
+            viewIndex = index,
+            islandCards = pages.map { CardInBrowser(it.path, it.verdict.reasons.joinToString("; ")) },
         )
         lastMetrics = metrics
         val sliced = if (slices > 1) ", slices=$slices, longest slice=$longestSliceMs ms" else ""

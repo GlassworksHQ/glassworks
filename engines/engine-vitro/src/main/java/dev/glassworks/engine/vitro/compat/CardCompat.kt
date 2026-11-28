@@ -230,7 +230,7 @@ object CardCompat {
         if (!card.nativeOnly) reasons += card.unsupportedOptions
         when (card.type) {
             // Native, but its page is a web page: it takes a browser session, as HA's iframe does.
-            "iframe" -> notes += "the `iframe` card shows its page in a browser island of its own"
+            "iframe" -> notes += CompatChecker.IFRAME_ISLAND
             "custom:button-card" -> ButtonCardCompat.check(raw, reasons, notes)
             "custom:swipe-card" -> {
                 val params = raw.optJSONObject("parameters") ?: JSONObject()

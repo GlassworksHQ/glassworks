@@ -9,6 +9,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Labs shows how Vitro draws your dashboard.** With Vitro on, *Settings → Labs*, on the panel and on the Manage page,
+  says how the view on screen is drawn: all natively, natively with some cards in small browser views of their own, or
+  by Home Assistant's frontend. It lists each card that runs in a browser view, with where it sits in the dashboard and
+  why, and shows how each view of the dashboard is drawn. It follows the view on screen as it changes, and the Manage
+  page's Engine tile says the same in a few words and opens Labs.
 - **Vitro, an experimental native dashboard renderer, in a new Labs section.** Turn on *Vitro renderer* under
   *Settings → Labs*, on the panel or the Manage page, and after the app restarts your Home Assistant dashboard is drawn
   with the panel's own views instead of a browser. Vitro draws a card natively only when it can match Home Assistant's

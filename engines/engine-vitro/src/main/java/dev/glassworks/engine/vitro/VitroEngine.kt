@@ -23,7 +23,9 @@ import dev.glassworks.auth.FrontendUrls
 import dev.glassworks.auth.HaSocket
 import dev.glassworks.auth.OAuth
 import dev.glassworks.auth.WsHaSocket
+import dev.glassworks.engine.Drawing
 import dev.glassworks.engine.Engine
+import dev.glassworks.engine.ViewDrawing
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
@@ -32,6 +34,7 @@ import dev.glassworks.engine.vitro.clarity.ClarityHttp
 import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatWarmup
 import dev.glassworks.engine.vitro.compat.IslandCardSizes
+import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.HaFrontend
 import dev.glassworks.engine.vitro.data.HaText
@@ -162,6 +165,10 @@ class VitroEngine(
         get() = activeInProcess == true
 
     override fun isContentProcess(processName: String): Boolean = fallback.isContentProcess(processName)
+
+    /** While Vitro draws in this process, the page's ([VitroPage.drawing]): nothing on screen yet before it opens. */
+    override fun drawing(): Drawing? =
+        if (activeInProcess == true) activePage?.drawing ?: Drawing(null) else fallback.drawing()
 
     override fun open(activity: Activity, host: PageHost, background: Int): Page {
         seeApp(activity)
@@ -340,6 +347,7 @@ class VitroEngine(
                 // HA's page moved on from the view the dialog opened over: closing the dialog is no way back now.
                 if (url != null && moreInfoReturn?.let { samePage(it, url) } != true) moreInfoReturn = null
                 pendingHandBack = null
+                url?.let(::followFrontend)
                 host.onLocationChange(url)
             }
             override fun redirect(url: String): String? = host.redirect(url)
@@ -397,6 +405,9 @@ class VitroEngine(
          * [webDashboards] they are Vitro's again on the next connection or Reload dashboard.
          */
         private val failedDashboards = HashSet<Pair<String?, String?>>()
+
+        /** Why each of [webDashboards] and [failedDashboards] is HA's frontend's, for Settings → Labs ([frontendAt]). */
+        private val webDashboardReasons = HashMap<Pair<String?, String?>, String>()
 
         /** The fallback page's latest location: where it was opened, then where Home Assistant's frontend went. */
         private var fallbackLocation: String? = null
@@ -767,6 +778,9 @@ class VitroEngine(
             container.addView(vitroView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
             vitroView.onMetrics = { m ->
                 lastMetrics = m
+                nativeDrawn = VitroDrawing.built(vitroView.dashboard?.views?.firstOrNull { it.index == m.viewIndex }, m)
+                nativeIndex = m.viewIndex
+                publishDrawing()
                 // The view waited for its states: it's on screen now. Only while the native dashboard still owns the
                 // page: leaving it for the fallback or disposing drops the pending readiness.
                 readyOnBuild?.let { why ->
@@ -817,7 +831,7 @@ class VitroEngine(
                         Log.i(logTag, "Vitro doesn't draw $reason; Home Assistant's frontend shows ${forLog(url)}")
                         leaveNativeDashboard()
                         currentUrl = url
-                        openInFallback(url)
+                        openInFallback(url, VitroDrawing.frontend(v, reason), v.index)
                     }
                 }
             }
@@ -835,7 +849,7 @@ class VitroEngine(
                         currentUrl?.let(::remember)
                         moreInfoReturn = url
                         currentUrl = withDialog
-                        openInFallback(withDialog)
+                        openInFallback(withDialog, VitroDrawing.frontend(v, reason), v.index)
                     }
                 }
             }
@@ -966,14 +980,14 @@ class VitroEngine(
             // island's) is a page, shown as it is, as HA's frontend opens an outside URL.
             if (!LovelaceParser.isDashboardUrl(url) || !onPanelsHa(url)) {
                 leaveNativeDashboard()
-                openInFallback(url)
+                openInFallback(url, VitroDrawing.NOT_A_DASHBOARD_PAGE)
                 return
             }
 
             showVitroLayer()
             val origin = OAuth.origin(url) ?: run {
                 leaveNativeDashboard()
-                openInFallback(url)
+                openInFallback(url, VitroDrawing.NOT_A_DASHBOARD_PAGE)
                 return
             }
             nativeActive = true
@@ -1016,6 +1030,7 @@ class VitroEngine(
                 store.clear()
                 VitroCardContext.clearImageCache()
                 webDashboards.clear()
+                webDashboardReasons.clear()
                 failedDashboards.clear()
             }
             currentOrigin = origin
@@ -1239,6 +1254,10 @@ class VitroEngine(
 
         private fun showVitroLayer() {
             val left = fallbackInFront()
+            if (frontendDrawn != null) {
+                frontendDrawn = null
+                publishDrawing()
+            }
             vitroView.visibility = View.VISIBLE
             showIslandSurfaces()
             vitroView.dashboardShown = true
@@ -1281,9 +1300,12 @@ class VitroEngine(
          * engine's too (its lockdown allows the dashboard's origin), so the page's WebSocket and its external auth are
          * Home Assistant's own, and its frontend extras (an integration's panel or script) load where HA serves them.
          */
-        private fun openInFallback(url: String) {
+        private fun openInFallback(url: String, why: ViewDrawing, viewIndex: Int = -1) {
             Log.i(logTag, "Routing non-dashboard URL to fallback engine: ${forLog(url)}")
             fallbackLocation = url
+            frontendDrawn = why
+            frontendIndex = viewIndex
+            publishDrawing()
             val fp = fallbackPage ?: fallback.open(activity, fallbackHost, backgroundColor).also { created ->
                 fallbackPage = created
                 container.addView(created.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -1299,6 +1321,67 @@ class VitroEngine(
             if (!fallbackFresh) fp.restart()
             fallbackFresh = false
             fp.load(url)
+        }
+
+        /** The native view last built ([VitroView.onMetrics]) and its place, shown again when HA's frontend hands the page back. */
+        private var nativeDrawn: ViewDrawing? = null
+        private var nativeIndex = -1
+
+        /**
+         * What the fallback shows in the dashboard's place, and why ([openInFallback]), or null while the native view shows.
+         * [frontendIndex]: the view of the dashboard on screen it is, or -1 for a page or a dashboard Vitro leaves whole.
+         */
+        private var frontendDrawn: ViewDrawing? = null
+        private var frontendIndex = -1
+
+        /** What Settings → Labs shows ([Engine.drawing]). Made on the main thread when the page changes, read on any. */
+        @Volatile var drawing: Drawing = Drawing(null)
+            private set
+
+        /** A new [drawing] from what the page shows now. Main thread. */
+        private fun publishDrawing() {
+            val front = frontendDrawn
+            val index = if (front != null) frontendIndex else nativeIndex
+            // A dashboard HA's frontend draws whole, or a page that isn't one, has no views of Vitro's to list.
+            val dashboard = if (front != null && frontendIndex < 0) null else vitroView.dashboard
+            val view = vitroView
+            drawing = VitroDrawing.of(
+                front ?: nativeDrawn, index, dashboard, currentUserId(), IslandScripts.of(view.resourcesList), view.islandBudget,
+                runCatching { view.haOrigin() }.getOrNull(),
+            ) { v -> view.gaveUpReason(v) ?: view.learnedViewReason(v) }
+        }
+
+        /** A dashboard Vitro leaves whole to HA's frontend, for [reason]. */
+        private fun wholeDashboard(reason: String) = ViewDrawing(VitroDrawing.THIS_DASHBOARD, frontend = VitroDrawing.plain(reason))
+
+        /**
+         * HA's frontend went to [url] and keeps the page (it isn't handed back to Vitro): Labs says what it shows now, not
+         * why the page first went there ([frontendAt]).
+         */
+        private fun followFrontend(url: String) {
+            val (drawn, index) = frontendAt(url) ?: return
+            if (drawn == frontendDrawn && index == frontendIndex) return
+            frontendDrawn = drawn
+            frontendIndex = index
+            publishDrawing()
+        }
+
+        /**
+         * What HA's frontend shows at [url], with the place of the view in the dashboard on screen (or -1): a page that
+         * isn't one of the panel's dashboards, a dashboard Vitro leaves whole, or a view of the dashboard on screen Vitro
+         * sends there. Null keeps what Labs says: a dialog or the editor over the page, or a place Vitro can't tell.
+         */
+        private fun frontendAt(url: String): Pair<ViewDrawing, Int>? {
+            if (inFrontendWorkflow(runCatching { java.net.URI(url).rawQuery }.getOrNull().orEmpty())) return null
+            val origin = OAuth.origin(url)
+            if (origin == null || !LovelaceParser.isDashboardUrl(url) || !onPanelsHa(url)) return VitroDrawing.NOT_A_DASHBOARD_PAGE to -1
+            val (dash, view) = LovelaceParser.parseRoute(url)
+            webDashboardReasons[origin to dash]?.takeIf { (origin to dash).let { k -> k in webDashboards || k in failedDashboards } }
+                ?.let { return wholeDashboard(it) to -1 }
+            if (displayedDashboard != (origin to dash)) return null
+            val d = vitroView.dashboard ?: return null
+            val v = d.views.getOrNull(d.viewIndex(view, currentUserId())) ?: return null
+            return vitroView.fallbackReason(v)?.let { VitroDrawing.frontend(v, it) to v.index }
         }
 
         /** Why the page signals ready once the current view is built (it waits for its first states), or null. */
@@ -1430,9 +1513,10 @@ class VitroEngine(
                         val url = currentUrl
                         // Like a dashboard with no config: HA's frontend draws it, so it's no way back to Vitro.
                         webDashboards += currentOrigin to urlPath
+                        webDashboardReasons[currentOrigin to urlPath] = reason
                         leaveNativeDashboard()
                         forgetDisplayed(urlPath)
-                        url?.let(::openInFallback)
+                        url?.let { openInFallback(it, wholeDashboard(reason)) }
                         return@post
                     }
                     val forced = rebuildNextConfig
@@ -1449,6 +1533,7 @@ class VitroEngine(
                         if (nativeActive) readyWhenBuilt("vitro")
                         return@post
                     }
+                    val anotherDashboard = displayedDashboard != (currentOrigin to urlPath)
                     displayedDashboard = currentOrigin to urlPath
                     // It has a config now (made in HA since it failed): Vitro's to draw again.
                     webDashboards -= currentOrigin to urlPath
@@ -1461,7 +1546,14 @@ class VitroEngine(
                     walkedViews.clear()
                     walkGeneration++
                     vitroView.setConnectionBanner(null)
+                    // Another dashboard: the view last built was the old one's, until this one's first is. A new config of the
+                    // same one keeps it until the view is built again, so Labs doesn't blink "Nothing on screen yet".
+                    if (anotherDashboard) {
+                        nativeDrawn = null
+                        nativeIndex = -1
+                    }
                     vitroView.setDashboard(config, pendingViewPath)
+                    publishDrawing()
                     client?.dashboardShown()
                     // The view it opens may have gone to the fallback ([VitroView.onWebView]), which signals ready; then
                     // it's no return target, and the native view before it stays the way back.
@@ -1478,9 +1570,10 @@ class VitroEngine(
                     // if it's a dashboard Vitro draws. It's no way back to Vitro, as a dashboard with no config isn't.
                     val url = currentUrl
                     webDashboards += currentOrigin to urlPath
+                    webDashboardReasons[currentOrigin to urlPath] = VitroDrawing.ADMIN_ONLY
                     leaveNativeDashboard()
                     forgetDisplayed(urlPath)
-                    url?.let(::openInFallback)
+                    url?.let { openInFallback(it, wholeDashboard(VitroDrawing.ADMIN_ONLY)) }
                 }
             }
 
@@ -1498,9 +1591,11 @@ class VitroEngine(
                     val url = currentUrl
                     if (code == HaDashboardClient.CONFIG_NOT_FOUND) webDashboards += currentOrigin to urlPath
                     else failedDashboards += currentOrigin to urlPath
+                    val why = if (code == HaDashboardClient.CONFIG_NOT_FOUND) VitroDrawing.NO_CONFIG else VitroDrawing.configFailed(code)
+                    webDashboardReasons[currentOrigin to urlPath] = why
                     leaveNativeDashboard()
                     forgetDisplayed(urlPath)
-                    url?.let(::openInFallback)
+                    url?.let { openInFallback(it, wholeDashboard(why)) }
                 }
             }
 
