@@ -63,7 +63,7 @@ While Vitro is on, **Settings → Labs** on the panel, and **Labs** on the Manag
 |---|---|
 | **On screen now** | The view on screen and who draws it: Vitro, every card natively; Vitro, with some cards in small browser views of their own; or Home Assistant's frontend, with the reason Vitro left it there |
 | A row for each card in a browser view | Where the card sits, such as `home › section 2 › card 3 (custom:mushroom-media-player-card)`, and why Vitro doesn't draw it natively |
-| **Each view** | Every view of the dashboard: **Native**, how many **browser views** it runs, or **Home Assistant's frontend** |
+| **Each view** | Every view with a tab on the panel: **Native**, how many **browser views** it runs, or **Home Assistant's frontend**. Subviews and views hidden from the panel's user show only while they're on screen |
 
 Each browser view is a small browser of its own, which costs the panel memory, so a view with fewer of them runs lighter. A view you haven't opened yet is judged from its cards. Some things only show once the view is open, such as the rows an auto-entities card matches, so its line can change when you open it.
 

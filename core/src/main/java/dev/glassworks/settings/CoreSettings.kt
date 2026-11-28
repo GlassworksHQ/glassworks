@@ -132,7 +132,7 @@ class CoreSettings(
             SettingsItem.Note { LABS_NOTE },
             vitroTurnedOff(),
             vitro(),
-        ) + VitroDrawingRows.items(runCatching { drawing() }.getOrNull())),
+        ) + VitroDrawingRows.items(drawing)),
         SettingsPlace.ABOUT to SettingsSection("about", "About", listOf(
             SettingsItem.Info(title = { "$product $version" }, detail = { "" }),
             licences,

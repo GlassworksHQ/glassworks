@@ -32,11 +32,11 @@ class VitroDrawingRowsTest {
     private fun info(i: SettingsItem) = (i as SettingsItem.Info).let { it.title() to it.detail() }
 
     @Test fun nothingWhileVitroIsOff() {
-        assertTrue(VitroDrawingRows.items(null).isEmpty())
+        assertTrue(VitroDrawingRows.items { null }.isEmpty())
     }
 
     @Test fun beforeAViewIsUpItSaysSo() {
-        val items = VitroDrawingRows.items(Drawing(null))
+        val items = VitroDrawingRows.items { Drawing(null) }
         val group = items.single() as SettingsItem.Group
         assertEquals(VitroDrawingRows.SHOWN_TITLE, group.title)
         assertEquals(VitroDrawingRows.NOTHING_YET to VitroDrawingRows.NOTHING_YET_DETAIL, info(group.items.single()))
@@ -44,7 +44,7 @@ class VitroDrawingRowsTest {
     }
 
     @Test fun theViewOnScreenListsEachIslandWithWhereAndWhy() {
-        val items = VitroDrawingRows.items(Drawing(home) { listOf(home, energy, rooms) })
+        val items = VitroDrawingRows.items { Drawing(home) { listOf(home, energy, rooms) } }
         val group = items[0] as SettingsItem.Group
         assertEquals(
             listOf(
@@ -63,7 +63,7 @@ class VitroDrawingRowsTest {
     }
 
     @Test fun aViewHomeAssistantsFrontendDrawsSaysWhyAndCountsNoIslands() {
-        val group = VitroDrawingRows.items(Drawing(energy)).single() as SettingsItem.Group
+        val group = VitroDrawingRows.items { Drawing(energy) }.single() as SettingsItem.Group
         assertEquals(
             "Energy" to "Home Assistant's frontend shows it, because Vitro doesn't draw the built-in `energy-date-selection` card.",
             info(group.items.single()),
@@ -77,7 +77,7 @@ class VitroDrawingRowsTest {
     }
 
     @Test fun aDashboardWithOneViewListsItOnce() {
-        val items = VitroDrawingRows.items(Drawing(rooms) { listOf(rooms) })
+        val items = VitroDrawingRows.items { Drawing(rooms) { listOf(rooms) } }
         assertEquals(1, items.size)
         assertFalse(items.any { it is SettingsItem.States })
     }
@@ -93,6 +93,21 @@ class VitroDrawingRowsTest {
         assertNull(AppManage.engineTile("GeckoView 159.0").href)
         // Turned off after crashes wins.
         assertEquals(AppManage.VITRO_OFF_TILE, AppManage.engineTile(name, vitroTurnedOff = true, drawing = Drawing(home)).detail)
+    }
+
+    /** The panel's menu keeps the rows while it's open and reads them again: they follow the engine, not the first read. */
+    @Test fun theRowsReadTheDrawingEachTime() {
+        var now: Drawing? = Drawing(home) { listOf(home, energy) }
+        val items = VitroDrawingRows.items { now }
+        val head = (items[0] as SettingsItem.Group).items[0]
+        val each = items[1] as SettingsItem.States
+        now = Drawing(ViewDrawing("Home", islands = listOf(clock))) { listOf(rooms, energy) }
+        assertEquals("Home" to "Vitro draws it natively, with 1 card in a browser view of its own.", info(head))
+        assertEquals(clock.where, info((items[0] as SettingsItem.Group).items[1]).first)
+        assertEquals("the second island row is gone with its card", "", info((items[0] as SettingsItem.Group).items[2]).first)
+        assertEquals(listOf("Rooms", "Energy"), each.rows().map { it.name })
+        now = null
+        assertEquals(VitroDrawingRows.NOTHING_YET, info(head).first)
     }
 
     @Test fun theViewsAreWorkedOutOnceAndAFailureListsNone() {

@@ -9,6 +9,7 @@ import dev.glassworks.engine.Drawing
 import dev.glassworks.engine.ViewDrawing
 import dev.glassworks.engine.vitro.compat.BubbleFallback
 import dev.glassworks.engine.vitro.compat.CompatChecker
+import dev.glassworks.engine.vitro.compat.CompatEntry
 import dev.glassworks.engine.vitro.compat.IslandBudget
 import dev.glassworks.engine.vitro.compat.IslandScripts
 import dev.glassworks.engine.vitro.compat.WebFallback
@@ -41,31 +42,42 @@ internal object VitroDrawing {
 
     /** The view [metrics] reports as built: drawn by Vitro, with the cards that run in island pages. */
     fun built(view: ViewConfig?, metrics: VitroMetrics): ViewDrawing =
-        ViewDrawing(view?.let(::name) ?: metrics.viewTitle.ifBlank { "View ${metrics.viewIndex + 1}" }, islands = metrics.islandCards)
+        ViewDrawing(view?.let(::name) ?: metrics.viewTitle.ifBlank { "View ${metrics.viewIndex + 1}" },
+            islands = metrics.islandCards.map { it.copy(why = plain(it.why)) })
+
+    /** Vitro leaves the view at [index] of the dashboard on screen to HA's frontend, for [reason]. */
+    fun frontend(view: ViewConfig, reason: String) = ViewDrawing(name(view), frontend = plain(reason))
 
     /**
      * [view] as its config says Vitro draws it, from the same reasons the view's build reads ([dev.glassworks.engine.vitro.ui.VitroView.fallbackReason]),
      * except what only the running dashboard knows: the rows auto-entities matches now, and a custom card an island
      * found drawing with HA's own elements. Those show once the view is open. Any thread: each answer is the config's.
      */
-    fun planned(view: ViewConfig, scripts: IslandScripts, budget: Int, haOrigin: String?, gaveUp: String?): ViewDrawing {
-        val frontend = view.webFallbackReason ?: gaveUp ?: WebFallback.haIframeReason(view, haOrigin)
+    fun planned(view: ViewConfig, scripts: IslandScripts, budget: Int, haOrigin: String?, learned: (ViewConfig) -> String?): ViewDrawing {
+        val frontend = view.webFallbackReason ?: learned(view) ?: WebFallback.haIframeReason(view, haOrigin)
             ?: IslandBudget.reason(view, scripts, budget) ?: BubbleFallback.reason(view, scripts)
-        if (frontend != null) return ViewDrawing(name(view), frontend = frontend)
-        return ViewDrawing(name(view), islands = CompatChecker.islands(view, scripts, iframes = true)
-            .map { CardInBrowser(it.path, it.verdict.reasons.joinToString("; ")) })
+        if (frontend != null) return ViewDrawing(name(view), frontend = plain(frontend))
+        return ViewDrawing(name(view), islands = CompatChecker.islands(view, scripts, iframes = true).map(::card))
     }
 
+    /** An island card for Labs: where it sits, and why in words without the checker's Markdown. */
+    fun card(entry: CompatEntry) = CardInBrowser(entry.path, plain(entry.verdict.reasons.joinToString("; ")))
+
+    /** [reason] as Labs shows it: the checker writes names in Markdown code spans (`` `map` ``), which a settings row shows raw. */
+    fun plain(reason: String): String = reason.replace("`", "")
+
     /**
-     * The snapshot: [shown] on screen, the view at [shownIndex] of [dashboard] (or -1), and every view of [dashboard]
-     * worked out when the Labs page first reads them ([planned]), [shown] in its own place. No [dashboard]: no views.
+     * The snapshot: [shown] on screen, the view at [shownIndex] of [dashboard] (or -1), and the views of [dashboard] that
+     * have a tab for [userId], as HA's tab bar lists them (no subviews, none hidden from this user), worked out when the
+     * Labs page first reads them ([planned]); [shown] in its own place, matched by its index, and listed even if it has
+     * no tab. No [dashboard]: no views. [learned]: why a view goes to HA's frontend for what its islands learned.
      */
     fun of(
-        shown: ViewDrawing?, shownIndex: Int, dashboard: DashboardConfig?,
-        scripts: IslandScripts, budget: Int, haOrigin: String?, gaveUp: (ViewConfig) -> String?,
+        shown: ViewDrawing?, shownIndex: Int, dashboard: DashboardConfig?, userId: String?,
+        scripts: IslandScripts, budget: Int, haOrigin: String?, learned: (ViewConfig) -> String?,
     ): Drawing = Drawing(shown) {
-        dashboard?.views.orEmpty().map { v ->
-            if (v.index == shownIndex && shown != null) shown else planned(v, scripts, budget, haOrigin, gaveUp(v))
-        }
+        dashboard?.views.orEmpty()
+            .filter { v -> (v.index == shownIndex && shown != null) || (!v.subview && !v.tabHiddenFor(userId)) }
+            .map { v -> if (v.index == shownIndex && shown != null) shown else planned(v, scripts, budget, haOrigin, learned) }
     }
 }

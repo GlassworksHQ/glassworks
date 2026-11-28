@@ -22,18 +22,24 @@ object VitroDrawingRows {
     const val NATIVE = "Native"
     const val FRONTEND = "Home Assistant's frontend"
 
-    /** The rows for [drawing], or none while Vitro is off. */
-    fun items(drawing: Drawing?): List<SettingsItem> {
-        drawing ?: return emptyList()
-        val shown = drawing.shown
-        val head = if (shown == null) SettingsItem.Info(title = { NOTHING_YET }, detail = { NOTHING_YET_DETAIL })
-            else SettingsItem.Info(title = { shown.name }, detail = { detail(shown) })
-        val cards = shown?.islands.orEmpty().map { c -> SettingsItem.Info(title = { c.where }, detail = { c.why }) }
-        val views = drawing.views
+    /**
+     * The rows for what [drawing] says now, or none while Vitro is off. Which rows there are follows the drawing when they
+     * are made; each row reads [drawing] again whenever a surface reads it (the panel's open menu every couple of
+     * seconds), so a row never shows a view that's gone. A new count of rows makes the page draw itself again.
+     */
+    fun items(drawing: () -> Drawing?): List<SettingsItem> {
+        fun now() = runCatching(drawing).getOrNull()
+        val first = now() ?: return emptyList()
+        fun shown() = now()?.shown
+        val head = SettingsItem.Info(title = { shown()?.name ?: NOTHING_YET }, detail = { shown()?.let(::detail) ?: NOTHING_YET_DETAIL })
+        val cards = first.shown?.islands.orEmpty().indices.map { i ->
+            SettingsItem.Info(title = { shown()?.islands?.getOrNull(i)?.where.orEmpty() }, detail = { shown()?.islands?.getOrNull(i)?.why.orEmpty() })
+        }
         return listOfNotNull(
             SettingsItem.Group(SHOWN_TITLE, listOf(head) + cards),
             // One view is the one on screen: listed once.
-            if (views.size < 2) null else SettingsItem.States(VIEWS_TITLE) { views.map { SettingsItem.StateRow(it.name, summary(it)) } },
+            if (first.views.size < 2) null
+            else SettingsItem.States(VIEWS_TITLE) { now()?.views.orEmpty().map { SettingsItem.StateRow(it.name, summary(it)) } },
         )
     }
 

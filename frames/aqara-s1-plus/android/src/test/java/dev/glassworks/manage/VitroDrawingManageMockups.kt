@@ -30,7 +30,7 @@ class VitroDrawingManageMockups {
         val labs = SettingsSection(CoreSettings.LABS, CoreSettings.LABS_TITLE, listOf(
             SettingsItem.Note { CoreSettings.LABS_NOTE },
             SettingsItem.Switch(CoreSettings.VITRO_TITLE, CoreSettings.VITRO_DETAIL, { true }, restartsApp = true) { _, d -> d(null) },
-        ) + VitroDrawingRows.items(drawing))
+        ) + VitroDrawingRows.items { drawing })
         f.status = f.status.copy(
             tiles = f.status.tiles.map { if (it.label == "Engine") AppManage.engineTile(name, drawing = drawing) else it },
             sections = f.status.sections + labs,

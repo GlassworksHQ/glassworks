@@ -569,6 +569,13 @@ class VitroView(
      */
     fun gaveUpReason(view: ViewConfig): String? = if (gaveUpViews.isEmpty()) null else gaveUpViews[viewKey(view)]
 
+    /**
+     * Why [view] goes to HA's frontend for a card an island learned this session needs HA's own elements, or that kept
+     * failing ([learnedReason]), or null. Any thread, as [gaveUpReason]: what it reads are concurrent maps.
+     */
+    fun learnedViewReason(view: ViewConfig, resources: List<LovelaceResource> = resourcesList): String? =
+        if (IslandFrontend.isEmpty && gaveUpIslands.isEmpty()) null else WebFallback.viewReason(view) { learnedReason(it, resources) }
+
     /** A view of this dashboard, as [gaveUpViews] keys it: its place and its config. */
     private fun viewKey(view: ViewConfig): String = "${view.index}:${view.raw}"
 

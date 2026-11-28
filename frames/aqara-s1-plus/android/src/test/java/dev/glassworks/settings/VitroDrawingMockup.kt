@@ -13,11 +13,11 @@ object VitroDrawingMockup {
     val home = ViewDrawing(
         "Home",
         islands = listOf(
-            CardInBrowser("home › section 2 › card 3 (custom:mushroom-media-player-card)", "the `layout: horizontal` option isn't drawn natively yet"),
-            CardInBrowser("home › section 4 › card 1 (custom:clock-weather-card)", "`custom:clock-weather-card` isn't a card Vitro draws"),
+            CardInBrowser("home › section 2 › card 3 (custom:mushroom-media-player-card)", "the layout: horizontal option isn't drawn natively yet"),
+            CardInBrowser("home › section 4 › card 1 (custom:clock-weather-card)", "custom:clock-weather-card isn't a card Vitro draws"),
         ),
     )
     val drawing = Drawing(home) {
-        listOf(home, ViewDrawing("Rooms"), ViewDrawing("Energy", frontend = "the built-in `energy-date-selection` card"), ViewDrawing("Cameras"))
+        listOf(home, ViewDrawing("Rooms"), ViewDrawing("Energy", frontend = "the built-in energy-date-selection card"), ViewDrawing("Cameras"))
     }
 }
