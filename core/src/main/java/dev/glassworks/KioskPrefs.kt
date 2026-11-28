@@ -615,11 +615,7 @@ class KioskPrefs(
 
         /** [engineStart] for [secureHosts] and a dashboard [url]: also what an engine [started][dev.glassworks.engine.Engine.started] with. */
         fun engineStart(secureHosts: List<String>, url: String?): List<String> =
-            secureHosts + listOfNotNull(url?.let { OAuth.origin(it) ?: authority(it) })
-
-        /** `scheme://authority` as Android's Uri reads it, for URLs java.net.URI refuses (a non-ASCII host). */
-        private fun authority(url: String): String? =
-            Uri.parse(url.trim()).let { u -> if (u.scheme.isNullOrEmpty() || u.authority.isNullOrEmpty()) null else "${u.scheme}://${u.authority}" }
+            secureHosts + listOfNotNull(url?.let { OAuth.origin(it) ?: OAuth.authority(it) })
 
         /** Decodes a base64 API key; null unless it is exactly 32 bytes. */
         fun decodeApiKey(b64: String): ByteArray? = try {

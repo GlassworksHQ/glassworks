@@ -192,6 +192,8 @@ class VitroFallbackReturnTest {
             "http://192.0.2.10:80/lovelace/0" to "http://192.0.2.10/history",
             "https://192.0.2.10:443/lovelace/0" to "https://192.0.2.10/history",
             "https://192.0.2.10:8443/lovelace/0" to "https://192.0.2.10:8443/history",
+            // A host java.net.URI reads none from (an underscore): the origin as Android's Uri reads it.
+            "http://home_assistant:8123/lovelace/0" to "http://home_assistant:8123/history",
         )) {
             val fb = RecordingEngine(lockedDown = true)
             val page = page(engine(fb, settings.copy(dashboard = dashboard)))

@@ -1019,7 +1019,7 @@ open class MainActivity : Activity() {
      * ([KioskPrefs.url]). The legacy engine's lockdown started with that same origin ([engineStartWanted]).
      */
     private fun openOnce(ref: String) {
-        val base = glassworks.screen.testDashboard ?: prefs.url.ifEmpty { prefs.haBase }
+        val base = glassworks.screen.testDashboard ?: prefs.url
         val url = FrontendUrls.resolve(ref, base)
         if (url == null) {
             Log.w(TAG, "open: not a URL, nor a path on a known Home Assistant; nothing opens")
