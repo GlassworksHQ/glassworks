@@ -353,7 +353,7 @@ learns HA's URL without asking, in order:
    `external_url`, `internal_url` and `base_url` (= external or internal, "for backward
    compatibility"). Candidates are tried in order: `internal_url`, `base_url`, then the resolved
    `http://<ip>:<port>` (Android 10 can't resolve `.local` names). Verified: HA here advertises
-   `internal_url=http://192.168.1.100:8123`, and the panel found it over mDNS.
+   `internal_url=http://<HA's LAN address>:8123` (redacted here), and the panel found it over mDNS.
 2. ✅ The address of the first ESPHome API client whose Hello `client_info` starts with
    "Home Assistant" (HA's `CLIENT_INFO`), with port 8123.
 3. ✅ Manual entry on the sign-in screen when nothing was found.

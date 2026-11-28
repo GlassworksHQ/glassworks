@@ -13,7 +13,7 @@ You can install Glassworks on the Aqara Panel Hub S1 Plus in two ways: using **K
 - [Troubleshooting](#troubleshooting)
 
 > [!NOTE]
-> The S1 Plus installation recipe has been verified end to end on real hardware (firmware 4.5.80) using the original S1 installer and command-line scripts, and the boot patch has been verified across two firmware versions (4.5.80 and the December 2025 factory image). Full end-to-end testing through the newer Kiln web interface on hardware is still ongoing. If anything looks unexpected at any point, stop and [open an issue](https://github.com/GlassworksHQ/glassworks/issues)—your backup remains safe.
+> The S1 Plus installation recipe has been verified end to end on real hardware (firmware 4.5.80), through Kiln at kiln.glassworks.dev as well as the command-line scripts, and the boot patch has been verified across two firmware versions (4.5.80 and the December 2025 factory image). If anything looks unexpected at any point, stop and [open an issue](https://github.com/GlassworksHQ/glassworks/issues)—your backup remains safe.
 
 ## Before you start
 

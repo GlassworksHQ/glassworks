@@ -193,7 +193,7 @@
       "A micro-USB data cable",
       "On a first install from lululemon's software, a screwdriver for the back cover"
     ],
-    "wayBack": "The Mirror's bootloader can't read its software back, so there is no backup. Kiln can always install the plain Glass Panes image instead.",
+    "wayBack": "The Mirror's bootloader can't read its software back, so the Glassworks image has no backup, and Kiln can always install the plain Glass Panes image instead. The experimental install on the stock software keeps lululemon's system and saves a restore point first.",
     "why": "The picker's What you'll need bar (#672), as the frame's README and its fastboot steps say it"
   }
 }
