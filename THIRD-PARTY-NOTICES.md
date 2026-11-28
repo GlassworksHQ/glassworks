@@ -429,6 +429,13 @@ The page's JavaScript and WebAssembly ([`kiln/`](kiln)):
   [`kiln/packages/fastboot`](kiln/packages/fastboot) is a fork of its `fastboot.ts`, `sparse.ts` and
   `common.ts`, changed by this project. Its licence is in `kiln/packages/fastboot/LICENSE`, and what we
   changed is in that package's README.
+- **Heimdall**: MIT, "Copyright (c) 2010-2017 Benjamin Dobell, Glass Echidna" and "Copyright (c) 2021-2024
+  Henrik Grimler". https://github.com/Benjamin-Dobell/Heimdall, read in Henrik Grimler's maintained fork
+  (https://git.sr.ht/~grimler/Heimdall) at commit `8f3044db985fd9710038f04886b51240ddbb2834`.
+  [`kiln/packages/odin`](kiln/packages/odin) ports its Odin protocol (`heimdall/source`: `BridgeManager.cpp`,
+  the packet classes, `FlashAction.cpp`) and its PIT format (`libpit`) to TypeScript. Its licence, with
+  both copyright lines, is in `kiln/packages/odin/LICENSE` (the text is [`LICENSES/MIT.txt`](LICENSES/MIT.txt)),
+  and the ported files name their sources. No Kiln page loads it yet.
 - **`bootpatch.wasm`**: this project's `kiln/packages/bootpatch/src/wasm` (MIT), statically linked with these
   crates:
   - flate2 1.1.10 (MIT OR Apache-2.0)
