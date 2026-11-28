@@ -713,7 +713,7 @@ class GeckoBehaviourPinTest {
     fun `config, state and unknown requests are answered on the port with their id`() = harness().use { h ->
         val port = h.connect(dash)
         assertEquals(
-            listOf("""{"config":{"hideHeader":true,"hideSidebar":true},"type":"reply","id":1}"""),
+            listOf("""{"config":{"hideHeader":true,"hideSidebar":true,"pageStorage":false},"type":"reply","id":1}"""),
             h.send(port, org.json.JSONObject().put("type", "config").put("id", 1)).map { it.toString() },
         )
         val state = h.send(port, org.json.JSONObject().put("type", "state").put("id", 2)).single()
@@ -784,6 +784,21 @@ class GeckoBehaviourPinTest {
     }
 
     @Test
+    fun `with Vitro off the app keeps no copy of Home Assistant's localStorage`() = harness().use { h ->
+        // GeckoView alone (Vitro off): the helper is told not to read the page's storage, and a copy sent anyway is
+        // dropped, even from the top-level Home Assistant page that Vitro would believe.
+        val top = h.connect(dash)
+        val config = h.send(top, org.json.JSONObject().put("type", "config").put("id", 7)).single().getJSONObject("config")
+        assertFalse(config.getBoolean("pageStorage"))
+        h.send(top, org.json.JSONObject().put("type", "pageStorage").put("json", """{"thc_snooze":"1"}"""), replies = 0)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        Thread.sleep(300) // a copy that is kept is written off the main thread: give it the time
+        val stored = h.activity.getSharedPreferences("ha_page_storage", android.content.Context.MODE_PRIVATE)
+        assertTrue(stored.all.isEmpty())
+        assertNull(dev.glassworks.web.HaPageStorage.of(h.activity).items(dash))
+    }
+
+    @Test
     fun `Home Assistant's dark mode is believed only from the top-level Home Assistant page`() = harness().use { h ->
         val prefs = dev.glassworks.KioskPrefs(h.activity)
         val frame = h.connect(dash, topLevel = false)
@@ -816,7 +831,7 @@ class GeckoBehaviourPinTest {
         h.activity.glassworks.screen.onStateChanged!!.invoke()
         assertEquals(listOf("state", "state"), a.posted.map { it.getString("type") })
         h.newIntent(Intent().putExtra("hide_header", false))
-        assertEquals("""{"type":"config","config":{"hideHeader":false,"hideSidebar":true}}""", b.posted.last().toString())
+        assertEquals("""{"type":"config","config":{"hideHeader":false,"hideSidebar":true,"pageStorage":false}}""", b.posted.last().toString())
         b.delegate!!.onDisconnect(b)
         h.activity.glassworks.screen.onStateChanged!!.invoke()
         assertEquals(4, a.posted.size)

@@ -1,0 +1,175 @@
+{
+ "case": "auto-entities",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 259
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 242.8,
+   "type": "auto-entities"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Open blinds",
+   "x": 17,
+   "y": 21,
+   "w": 122.97,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Office Blind",
+   "x": 73,
+   "y": 81.59,
+   "w": 70.92,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Patio",
+   "x": 73,
+   "y": 137.59,
+   "w": 32.33,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Patio Blinds",
+   "x": 73,
+   "y": 193.59,
+   "w": 74.16,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "cover.office_blind": {
+   "s": "open",
+   "a": {
+    "is_closed": false,
+    "current_position": 100,
+    "assumed_state": true,
+    "friendly_name": "Office Blind",
+    "supported_features": 11
+   },
+   "lc": 1794491700,
+   "lu": 1794491700
+  },
+  "cover.patio": {
+   "s": "open",
+   "a": {
+    "is_closed": false,
+    "current_position": 100,
+    "assumed_state": true,
+    "friendly_name": "Patio",
+    "supported_features": 11
+   },
+   "lc": 1794498240,
+   "lu": 1794498240
+  },
+  "cover.patio_blinds": {
+   "s": "open",
+   "a": {
+    "is_closed": false,
+    "assumed_state": true,
+    "friendly_name": "Patio Blinds",
+    "supported_features": 11
+   },
+   "lc": 1794493740,
+   "lu": 1794493740
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   },
+   {
+    "ei": "cover.patio",
+    "pl": "template",
+    "en": "Patio"
+   },
+   {
+    "ei": "cover.patio_blinds",
+    "pl": "group",
+    "en": "Patio Blinds"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "cover"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "cover": {
+     "_": {
+      "default": "mdi:window-open",
+      "state": {
+       "closed": "mdi:window-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.cover.entity_component._.state.closed": "Closed",
+    "component.cover.entity_component._.state.closing": "Closing",
+    "component.cover.entity_component._.state.open": "Open",
+    "component.cover.entity_component._.state.opening": "Opening",
+    "component.cover.entity_component._.state.stopped": "Stopped"
+   },
+   "entity": {}
+  }
+ }
+}

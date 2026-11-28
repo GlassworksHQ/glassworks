@@ -1,0 +1,96 @@
+{
+ "title": "History graph: a binary sensor as a timeline",
+ "card": {
+  "type": "history-graph",
+  "entities": [
+   {
+    "entity": "binary_sensor.office_occupancy",
+    "name": "Occupancy"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "binary_sensor.office_occupancy": {
+    "state": "off",
+    "last_changed": -2400,
+    "attributes": {
+     "friendly_name": "Office Occupancy"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "binary_sensor.office_occupancy",
+    "pl": "group",
+    "en": "Office Occupancy"
+   }
+  ],
+  "history": {
+   "binary_sensor.office_occupancy": {
+    "steps": [
+     [
+      "-24h",
+      "off"
+     ],
+     [
+      "-23h10m",
+      "on"
+     ],
+     [
+      "-22h20m",
+      "off"
+     ],
+     [
+      "-20h5m",
+      "on"
+     ],
+     [
+      "-19h50m",
+      "off"
+     ],
+     [
+      "-16h",
+      "on"
+     ],
+     [
+      "-15h30m",
+      "off"
+     ],
+     [
+      "-9h40m",
+      "on"
+     ],
+     [
+      "-8h55m",
+      "off"
+     ],
+     [
+      "-7h",
+      "on"
+     ],
+     [
+      "-5h45m",
+      "off"
+     ],
+     [
+      "-3h20m",
+      "on"
+     ],
+     [
+      "-2h",
+      "off"
+     ],
+     [
+      "-1h15m",
+      "on"
+     ],
+     [
+      "-40m",
+      "off"
+     ]
+    ]
+   }
+  }
+ }
+}

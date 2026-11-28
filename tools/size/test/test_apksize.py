@@ -93,6 +93,37 @@ class Owners(unittest.TestCase):
         self.assertEqual(A.owner_of_class("org.lib.inner.X", parts), ("library", "inner"))
         self.assertEqual(A.owner_of_class("org.lib.Y", parts), ("pane", "q"))
 
+    def test_vitro_is_its_own_engine_row(self):
+        """Vitro, the second engine: its classes and its icon table are `engine:vitro`, a row of its own (not core's),
+        and the icon table isn't an assets lint finding."""
+        self.assertEqual(A.owner_of_class("dev.glassworks.engine.vitro.VitroEngine", PARTS), ("engine", "vitro"))
+        self.assertEqual(A.owner_of_class("dev.glassworks.engine.gecko.GeckoEngine", PARTS), ("core", None))
+        lint = []
+        self.assertEqual(A.owner_of_file("assets/vitro-mdi.tsv", PARTS, lint), (("engine", "vitro"), "assets"))
+        self.assertEqual(lint, [])
+        b = {"owners": {"engine:vitro": dict(A.empty(), dex=7, assets=3)}, "bytes": 10, "stored_bytes": 10}
+        r = A.rows(b, PARTS)
+        self.assertEqual(r["engine:vitro"]["total"], 10)
+        self.assertEqual(A.label("engine:vitro"), "Engine (Vitro)")
+
+    def test_vitro_owns_its_java_resources(self):
+        """Vitro's Java resources (its locale tables, native-options.json) sit at the APK's root under its package
+        path: Vitro's row, not core's."""
+        for path in ("dev/glassworks/engine/vitro/locale/de.json", "dev/glassworks/engine/vitro/compat/native-options.json"):
+            self.assertEqual(A.owner_of_file(path, PARTS, []), (("engine", "vitro"), "other"))
+        self.assertEqual(A.owner_of_file("dev/glassworks/other.json", PARTS, []), (("core", None), "other"))
+
+    def test_vitro_carries_libwebrtc(self):
+        """Vitro's WebRTC cameras (libs/ha-webrtc, engines/engine-vitro-webrtc): libwebrtc's classes, the library's and
+        its native library count in Vitro's row, not core's."""
+        lint = []
+        self.assertEqual(A.owner_of_file("lib/arm64-v8a/liblkjingle_peerconnection_so.so", PARTS, lint),
+                         (("engine", "vitro"), "native"))
+        self.assertEqual(lint, [])
+        for cls in ("livekit.org.webrtc.PeerConnection", "dev.glassworks.hawebrtc.HaWebRtcPlayer",
+                    "dev.glassworks.engine.vitro.webrtc.VitroWebRtc"):
+            self.assertEqual(A.owner_of_class(cls, PARTS), ("engine", "vitro"))
+
     def test_a_panes_classes_outside_its_package(self):
         """The verifier's note 6: classes only a pane uses, outside its package, are that pane's."""
         for name in ("dev.glassworks.VoiceOverlay", "dev.glassworks.VoiceOverlay$show$1",

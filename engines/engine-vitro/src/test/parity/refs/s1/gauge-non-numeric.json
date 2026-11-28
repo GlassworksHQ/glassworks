@@ -1,0 +1,98 @@
+{
+ "case": "gauge-non-numeric",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 73
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 56.3,
+   "type": "hui-gauge-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Entity is non-numeric: sensor.printer_black_ink",
+   "x": 48,
+   "y": 19.95,
+   "w": 294.81,
+   "h": 16,
+   "size": 14,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.printer_black_ink": {
+   "s": "low",
+   "a": {
+    "unit_of_measurement": "%",
+    "friendly_name": "Office Printer Black ink"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.printer_black_ink",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Black ink"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Office Printer"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

@@ -1,0 +1,33 @@
+{
+ "title": "Alarm panel: the home alarm, disarmed, with HA's default arm buttons and keypad",
+ "expect": {
+  "alarm_control_panel.house_alarm": "disarmed"
+ },
+ "card": {
+  "type": "alarm-panel",
+  "entity": "alarm_control_panel.house_alarm",
+  "name": "Alarm"
+ },
+ "fixture": {
+  "states": {
+   "alarm_control_panel.house_alarm": {
+    "state": "disarmed",
+    "last_changed": "-230m",
+    "attributes": {
+     "code_format": "number",
+     "changed_by": null,
+     "code_arm_required": false,
+     "friendly_name": "House Alarm",
+     "supported_features": 6
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alarm_control_panel.house_alarm",
+    "pl": "template",
+    "en": "House Alarm"
+   }
+  ]
+ }
+}

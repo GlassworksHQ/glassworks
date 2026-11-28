@@ -1,0 +1,77 @@
+{
+ "case": "mushroom-title",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 112
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 96,
+   "type": "mushroom-title-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Living room",
+   "x": 12,
+   "y": 26,
+   "w": 121.97,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Lights and blinds",
+   "x": 12,
+   "y": 66,
+   "w": 121.08,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {},
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ }
+}

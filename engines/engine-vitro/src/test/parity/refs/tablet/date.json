@@ -1,0 +1,65 @@
+{
+ "case": "date",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-date-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Thursday, November 12",
+   "x": 17.38,
+   "y": 16,
+   "w": 211.23,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {},
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ }
+}

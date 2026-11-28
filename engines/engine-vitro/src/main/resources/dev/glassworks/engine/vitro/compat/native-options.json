@@ -1,0 +1,1943 @@
+{
+  "version": 1,
+  "about": "What each card Vitro draws natively supports: every option and value it draws exactly as Home Assistant does. A card whose config has anything else falls back (an island for a custom card, HA's frontend for a built-in one). Read by compat/NativeOptions.kt in the engine, site/src/lib/vitroCompat.ts and the audit script; the format is in NativeOptions.kt.",
+  "defs": {
+    "action": {
+      "by": "action",
+      "default": "(default)",
+      "cases": {
+        "(default)": {"keys": {"confirmation": "@confirmation"}},
+        "none": {"keys": {"action": "any"}},
+        "toggle": {"keys": {"action": "any", "confirmation": "@confirmation"}},
+        "more-info": {"keys": {"action": "any", "entity": {"entity": ["*"]}, "confirmation": "@confirmation"}},
+        "navigate": {
+          "keys": {
+            "action": "any",
+            "navigation_path": {"pattern": "^/", "why": "a path that isn't absolute resolves against the current page in HA"},
+            "navigation_replace": "any",
+            "confirmation": "@confirmation"
+          }
+        },
+        "url": {"keys": {"action": "any", "url_path": "any", "confirmation": "@confirmation"}},
+        "perform-action": {
+          "keys": {
+            "action": "any",
+            "perform_action": "any",
+            "service": "any",
+            "data": "any",
+            "service_data": "any",
+            "target": "any",
+            "confirmation": "@confirmation"
+          }
+        },
+        "call-service": {
+          "keys": {
+            "action": "any",
+            "perform_action": "any",
+            "service": "any",
+            "data": "any",
+            "service_data": "any",
+            "target": "any",
+            "confirmation": "@confirmation"
+          }
+        }
+      }
+    },
+    "name": {
+      "anyOf": ["text", "@namePart", {"list": "@namePart"}],
+      "note": "HA's formatEntityName (app.js module 360): a string, or the name picker's part or list of parts, which HaEntityName joins as HA does"
+    },
+    "namePart": {
+      "by": "type",
+      "why": "a name part HA's name picker doesn't write",
+      "cases": {
+        "text": {"keys": {"type": "any", "text": "text"}},
+        "entity": {"keys": {"type": "any"}},
+        "device": {"keys": {"type": "any"}},
+        "parent_device": {"keys": {"type": "any"}},
+        "area": {"keys": {"type": "any"}},
+        "floor": {"keys": {"type": "any"}}
+      }
+    },
+    "entitylessAction": {
+      "by": "action",
+      "default": "none",
+      "why": "a card without an entity has nothing to toggle or show More-Info for",
+      "cases": {
+        "none": {"keys": {"action": "any"}},
+        "navigate": {"keys": {"action": "any", "navigation_path": {"pattern": "^/", "why": "a path that isn't absolute resolves against the current page in HA"}, "navigation_replace": "any", "confirmation": "@confirmation"}},
+        "url": {"keys": {"action": "any", "url_path": "any", "confirmation": "@confirmation"}},
+        "perform-action": {"keys": {"action": "any", "perform_action": "any", "service": "any", "data": "any", "service_data": "any", "target": "any", "confirmation": "@confirmation"}},
+        "call-service": {"keys": {"action": "any", "perform_action": "any", "service": "any", "data": "any", "service_data": "any", "target": "any", "confirmation": "@confirmation"}}
+      }
+    },
+    "noAction": {
+      "by": "action",
+      "default": "none",
+      "why": "Vitro doesn't run this action on this card",
+      "cases": {"none": {"keys": {"action": "any"}}}
+    },
+    "doubleTap": {
+      "by": "action",
+      "default": "none",
+      "why": "Vitro has no double tap yet",
+      "cases": {"none": {"keys": {"action": "any"}}}
+    },
+    "confirmation": {"anyOf": [{"values": [true, false, "true", "false"]}, {"keys": {"text": "any"}}]},
+    "visibility": {"list": "@condition"},
+    "conditions": {"list": "@condition"},
+    "condition": {
+      "by": "condition",
+      "default": "state",
+      "cases": {
+        "state": {
+          "keys": {
+            "condition": "any",
+            "entity": "any",
+            "entity_id": "any",
+            "state": "any",
+            "state_not": "any",
+            "attribute": "any"
+          }
+        },
+        "numeric_state": {
+          "keys": {
+            "condition": "any",
+            "entity": "any",
+            "entity_id": "any",
+            "above": "any",
+            "below": "any",
+            "attribute": "any"
+          }
+        },
+        "screen": {"keys": {"condition": "any", "media_query": "any"}},
+        "user": {"keys": {"condition": "any", "users": "any"}},
+        "time": {
+          "keys": {
+            "condition": "any",
+            "after": {"pattern": "^\\d{1,2}:\\d{2}(:\\d{2})?$", "why": "a time from an entity isn't read"},
+            "before": {"pattern": "^\\d{1,2}:\\d{2}(:\\d{2})?$", "why": "a time from an entity isn't read"},
+            "weekdays": "any"
+          }
+        },
+        "and": {"keys": {"condition": "any", "conditions": "@conditions"}},
+        "or": {"keys": {"condition": "any", "conditions": "@conditions"}},
+        "not": {"keys": {"condition": "any", "conditions": "@conditions"}}
+      }
+    },
+    "icon": {
+      "pattern": "^\\s*(mdi|hass):[A-Za-z0-9-]+\\s*$",
+      "why": "only Material Design Icons are bundled; another icon set would draw the home glyph"
+    },
+    "rowEntity": {
+      "entity": [
+        "automation", "fan", "input_boolean", "light", "siren", "switch", "alarm_control_panel", "binary_sensor",
+        "calendar", "counter", "plant", "schedule", "sensor", "sun", "todo", "zone", "input_number", "number",
+        "input_select", "select", "script", "scene", "button", "input_button", "lock"
+      ],
+      "why": "HA draws this domain's row with its own control or picture",
+      "note": "HA draws this domain's row with its own control (a button, slider, dropdown, cover controls, a picture or a timer); Vitro would draw a switch or plain state text. The number, select, script, scene, button and lock rows are drawn by EntityRowControls (parity cases entities-controls, entities-number, entities-select, entities-buttons, entities-lock)"
+    },
+    "plainRow": {
+      "keys": {
+        "entity": "@rowEntity",
+        "name": "@name",
+        "icon": "@icon",
+        "secondary_info": {
+          "values": ["last-changed", "last-updated", "last-triggered", "entity-id", "brightness", "position", "tilt-position", "area", "none"],
+          "why": "a secondary line Vitro doesn't draw as HA does",
+          "note": "HA's entities card migrates these to state-display contents (last_triggered, current_position, ...); EntityRowControls.secondaryText draws them (parity case entities-secondary-info)"
+        },
+        "action_name": "text",
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap",
+        "state_color": {"values": [true], "why": "Vitro always colors an active row's icon"},
+        "color": {"values": ["state"], "why": "Vitro always colors an active row's icon by its state"}
+      }
+    },
+    "rowConfig": {
+      "by": "type",
+      "default": "(entity)",
+      "why": "a row type Vitro doesn't draw as HA does (section, attribute, cast, an explicit *-entity type or a custom row)",
+      "cases": {
+        "(entity)": "@plainRow",
+        "divider": {"keys": {"type": "any"}},
+        "button": {
+          "keys": {
+            "type": "any",
+            "entity": {"entity": ["*"]},
+            "name": "@name",
+            "icon": "@icon",
+            "action_name": "text",
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "call-service": {
+          "keys": {
+            "type": "any",
+            "entity": {"entity": ["*"]},
+            "name": "@name",
+            "icon": "@icon",
+            "action_name": "text",
+            "action": "text",
+            "service": "text",
+            "data": "any",
+            "service_data": "any",
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "perform-action": {
+          "keys": {
+            "type": "any",
+            "entity": {"entity": ["*"]},
+            "name": "@name",
+            "icon": "@icon",
+            "action_name": "text",
+            "action": "text",
+            "service": "text",
+            "data": "any",
+            "service_data": "any",
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "text": {"keys": {"type": "any", "name": "text", "text": "text", "icon": "@icon"}},
+        "weblink": {
+          "keys": {
+            "type": "any",
+            "name": "text",
+            "url": "text",
+            "icon": "@icon",
+            "new_tab": {"values": [false], "why": "Vitro opens a dashboard path in place"}
+          }
+        },
+        "buttons": {"keys": {"type": "any", "entities": {"list": "@buttonsRowEntry"}}},
+        "conditional": {"keys": {"type": "any", "conditions": {"list": "@condition"}, "row": "@rowConfig"}}
+      }
+    },
+    "entityRow": {"anyOf": ["@rowEntity", "@rowConfig"]},
+    "buttonsRowEntry": {
+      "anyOf": [
+        {"entity": ["*"]},
+        {
+          "keys": {
+            "entity": {"entity": ["*"]},
+            "name": "@name",
+            "icon": "@icon",
+            "show_name": {"values": [true, false]},
+            "show_icon": {"values": [true, false]},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        }
+      ]
+    },
+    "glanceEntityId": {
+      "entity": [
+        "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "climate", "counter", "cover",
+        "fan", "group", "humidifier", "input_boolean", "input_number", "input_select", "input_text", "lawn_mower",
+        "light", "lock", "number", "plant", "remote", "schedule", "script", "select", "sensor", "siren", "sun",
+        "switch", "text", "timer", "todo", "vacuum", "valve", "water_heater", "weather", "zone"
+      ],
+      "why": "HA shows this domain's state as a relative time or a formatted date, or the entity's picture instead of its icon"
+    },
+    "glanceEntity": {
+      "anyOf": [
+        "@glanceEntityId",
+        {
+          "keys": {
+            "entity": "@glanceEntityId",
+            "name": "@name",
+            "icon": "@icon",
+            "show_state": {"values": [true], "why": "Vitro reads the card's show_state, not an entity's"},
+            "show_last_changed": {"values": [false], "why": "Vitro always shows the state"},
+            "state_color": {"values": [true]},
+            "color": {"values": ["state"]},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        }
+      ]
+    },
+    "stateTextEntity": {
+      "entity": [
+        "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "camera", "climate", "counter",
+        "cover", "device_tracker", "fan", "group", "humidifier", "input_boolean", "input_number", "input_select",
+        "input_text", "lawn_mower", "light", "lock", "media_player", "number", "person", "plant", "remote",
+        "schedule", "script", "select", "sensor", "siren", "sun", "switch", "text", "timer", "todo", "update",
+        "vacuum", "valve", "water_heater", "weather", "zone"
+      ],
+      "why": "HA shows this domain's state as a relative time or a formatted date; Vitro would show the raw value"
+    },
+    "buttonCard": {
+      "by": "show_state",
+      "default": "false",
+      "why": "show_state takes true or false",
+      "cases": {
+        "false": {
+          "keys": {
+            "entity": {"entity": ["*"]},
+            "name": "@name",
+            "icon": "@icon",
+            "show_name": {"values": [true, false]},
+            "show_icon": {"values": [true, false]},
+            "show_state": "any",
+            "state_color": {"values": [true], "why": "Vitro always colors an active entity's icon"},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "true": {
+          "keys": {
+            "entity": "@stateTextEntity",
+            "name": "@name",
+            "icon": "@icon",
+            "show_name": {"values": [true, false]},
+            "show_icon": {"values": [true, false]},
+            "show_state": "any",
+            "state_color": {"values": [true], "why": "Vitro always colors an active entity's icon"},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        }
+      }
+    },
+    "stateContent": {
+      "pattern": "^(?!(device_name|parent_device_name|area_name|floor_name|device_class)$)[\\s\\S]+$",
+      "why": "Vitro doesn't show a name or a device class as a state",
+      "note": "HA's state-display (frontend 20261028.5): state, entity-id, last_changed/last-changed, last_updated/last-updated, last_triggered, remaining_time (timer), install_status (update), a domain's timestamp attributes as a relative time, or any attribute formatted by formatEntityAttributeValue. The name contents and device_class (a translated class name) aren't drawn"
+    },
+    "tileFeature": {
+      "by": "type",
+      "why": "a tile feature Vitro doesn't draw as HA does",
+      "cases": {
+        "light-brightness": {"keys": {"type": "any"}},
+        "toggle": {"keys": {"type": "any"}},
+        "cover-open-close": {"keys": {"type": "any"}},
+        "fan-speed": {"keys": {"type": "any"}},
+        "select-options": {"keys": {"type": "any", "style": {"values": ["dropdown"], "why": "Vitro draws the dropdown only"}}},
+        "numeric-input": {
+          "by": "style",
+          "default": "(unset)",
+          "why": "without a style HA draws a slider; Vitro draws the buttons",
+          "cases": {"buttons": {"keys": {"type": "any", "style": "any"}}}
+        }
+      }
+    },
+    "filterEntity": {"anyOf": ["@rowEntity", "@plainRow"]},
+    "stateFilter": {
+      "anyOf": [
+        {
+          "pattern": "^(?!\\s*[-+]?(\\.?\\d|Infinity))",
+          "why": "a number compares as a number in HA; Vitro compares the text"
+        },
+        {
+          "by": "operator",
+          "default": "(unset)",
+          "why": "Vitro compares the state with the value only: other operators and attributes aren't evaluated",
+          "cases": {
+            "==": {
+              "keys": {
+                "operator": "any",
+                "value": {"pattern": "^(?!\\s*[-+]?(\\.?\\d|Infinity))", "why": "a number compares as a number in HA"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "filterCard": {
+      "by": "type",
+      "default": "entities",
+      "why": "Vitro draws the filtered entities as an entities card only",
+      "cases": {
+        "entities": {
+          "keys": {
+            "type": "any",
+            "title": "text",
+            "show_header_toggle": {"values": [false]},
+            "state_color": {"values": [true]},
+            "color": {"values": ["state"]}
+          }
+        }
+      }
+    },
+    "badgeEntity": {
+      "entity": [
+        "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "climate", "counter", "cover",
+        "device_tracker", "fan", "group", "input_boolean", "input_number", "input_select", "input_text", "lawn_mower",
+        "light", "lock", "media_player", "number", "person", "plant", "remote", "schedule", "script", "select", "sensor",
+        "siren", "sun", "switch", "text", "timer", "todo", "update", "vacuum", "water_heater", "weather", "zone"
+      ],
+      "why": "HA's badge shows its state differently for this domain (a relative time)",
+      "note": "HA's state-display defaults (a light's brightness, a fan's speed, a cover's state and position, a climate's state and temperature, a timer's countdown, an update's status) compared in heading-badges and heading-badges-options. Left out: humidifier and valve (not compared yet) and the timestamp domains"
+    },
+    "viewBadgeEntity": {
+      "entity": [
+        "alarm_control_panel", "alert", "automation", "binary_sensor", "button", "calendar", "counter", "cover", "date",
+        "datetime", "device_tracker", "event", "fan", "group", "image", "input_boolean", "input_button", "input_datetime",
+        "input_number", "input_select", "input_text", "lawn_mower", "light", "lock", "media_player", "number", "person",
+        "plant", "remote", "scene", "schedule", "script", "select", "sensor", "siren", "sun", "switch", "text", "time",
+        "todo", "vacuum", "water_heater", "weather", "zone"
+      ],
+      "why": "HA's badge shows more than the state for this domain (a climate's temperature, a humidifier's humidity, a timer's countdown, an update's progress, a valve's position)",
+      "note": "state-display's default content (frontend 20261028.5): climate, humidifier and valve add an attribute, timer and update a countdown or install status that Vitro's badge doesn't draw; a light's brightness, a fan's speed and a cover's position it does"
+    },
+    "headingBadge": {
+      "by": "type",
+      "default": "entity",
+      "why": "a heading badge type Vitro doesn't draw",
+      "cases": {
+        "entity": {
+          "keys": {
+            "type": "any",
+            "entity": "@badgeEntity",
+            "name": "@name",
+            "icon": "@icon",
+            "show_state": "@bool",
+            "show_icon": "@bool",
+            "color": {"anyOf": [{"values": ["none", "state"]}, "@cssColor"]},
+            "state_content": {"list": "@stateContent"},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        }
+      }
+    },
+    "hexColor": {
+      "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+      "why": "only a plain hex color is read the same as HA's theme2hex"
+    },
+    "cssHexColor": {
+      "pattern": "^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+      "why": "a CSS name, var() or theme color name is resolved differently from HA's raw CSS"
+    },
+    "graphFooter": {
+      "by": "type",
+      "default": "(none)",
+      "why": "only a graph footer is drawn",
+      "cases": {
+        "graph": {
+          "keys": {
+            "type": "any",
+            "entity": {"entity": ["counter", "input_number", "number", "sensor"], "why": "HA shows an error for another domain"},
+            "detail": {"values": [1, 2]},
+            "hours_to_show": {"range": [0.1, null]},
+            "limits": {"keys": {"min": {"range": [null, null]}, "max": {"range": [null, null]}}}
+          }
+        }
+      }
+    },
+    "clockDatePart": {
+      "values": [
+        "weekday-short", "weekday-long", "day-numeric", "day-2-digit", "month-short", "month-long", "month-numeric",
+        "month-2-digit", "year-2-digit", "year-numeric", "separator-dash", "separator-slash", "separator-dot",
+        "separator-new-line"
+      ],
+      "why": "presets and separator-comma are newer than the pinned HA"
+    },
+    "todoOptions": {
+      "keys": {
+        "entity": {"entity": ["todo"]},
+        "title": "text",
+        "hide_completed": {"values": [true, false]},
+        "hide_create": {"values": [true, false]},
+        "hide_section_headers": {"values": [false]},
+        "display_order": {"values": ["none"], "why": "Vitro doesn't sort the items"},
+        "item_tap_action": {"values": ["toggle"], "why": "a row tap toggles in Vitro; HA's edit dialog isn't there"}
+      }
+    },
+    "bool": {
+      "values": [true, false],
+      "why": "Vitro reads a YAML boolean; HA treats any non-empty string (even \"false\") as true"
+    },
+    "cssColor": {
+      "anyOf": [
+        {
+          "values": [
+            "primary", "accent", "red", "pink", "purple", "deep-purple", "indigo", "blue", "light-blue", "cyan",
+            "teal", "green", "light-green", "lime", "yellow", "amber", "orange", "deep-orange", "brown", "grey",
+            "blue-grey", "black", "white", "disabled"
+          ]
+        },
+        {
+          "pattern": "^\\s*(#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgba?\\(\\s*[\\d.]+\\s*,\\s*[\\d.]+\\s*,\\s*[\\d.]+\\s*([,/]\\s*[\\d.]+%?\\s*)?\\)|hsla?\\(\\s*[\\d.]+(deg)?\\s*,\\s*[\\d.]+%\\s*,\\s*[\\d.]+%\\s*([,/]\\s*[\\d.]+%?\\s*)?\\))\\s*$"
+        }
+      ],
+      "why": "HA's computeCssColor: a theme color name or a CSS color; Vitro parses these names, hex, and comma rgb()/hsl() only"
+    },
+    "imageUrl": {
+      "pattern": "^\\s*(?!media-source://)\\S",
+      "why": "a media-source image (or the object form the UI writes) needs HA's media resolver"
+    },
+    "aspectRatio": {
+      "pattern": "^(\\d+(\\.\\d*)?|\\.\\d+)(%|[x:](\\d+(\\.\\d*)?|\\.\\d+))?$",
+      "why": "a ratio HA's parseAspectRatio and Vitro read alike: 16:9, 16x9, 1.78, 50%"
+    },
+    "percent": {
+      "pattern": "^\\s*(100(\\.0+)?|\\d{1,2}(\\.\\d+)?)%\\s*$",
+      "why": "Vitro places an element by a 0-100% left/top only"
+    },
+    "elementStyle": {"keys": {"left": "@percent", "top": "@percent"}, "why": "Vitro reads only the element's left and top"},
+    "unboundAction": {
+      "by": "action",
+      "default": "none",
+      "why": "the picture card binds no actions natively (it has no entity to bind them to)",
+      "cases": {"none": {"keys": {"action": "any"}}}
+    },
+    "pictureGlanceEntity": {
+      "anyOf": [
+        {"entity": ["*"]},
+        {
+          "keys": {
+            "entity": {"entity": ["*"]},
+            "name": "@name",
+            "icon": "any",
+            "show_state": {"values": [false], "why": "Vitro draws no state under the icons"},
+            "attribute": "text",
+            "prefix": "text",
+            "suffix": "text",
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        }
+      ]
+    },
+    "pictureElement": {
+      "by": "type",
+      "default": "(none)",
+      "cases": {
+        "state-icon": {
+          "keys": {
+            "type": "any",
+            "entity": {"entity": ["*"]},
+            "icon": "any",
+            "state_color": {"values": [true], "why": "Vitro always colors the icon by state"},
+            "title": "text",
+            "style": "@elementStyle",
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "state-label": {
+          "keys": {
+            "type": "any",
+            "entity": {"entity": ["*"]},
+            "attribute": "text",
+            "prefix": "text",
+            "suffix": "text",
+            "title": "text",
+            "style": "@elementStyle",
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "icon": {
+          "keys": {
+            "type": "any",
+            "icon": "any",
+            "title": "text",
+            "style": "@elementStyle",
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "state-badge": {"gap": "HA draws a label badge with the name under it; Vitro draws the circle only"},
+        "service-button": {"gap": "Vitro's pill and its 'Run' default aren't HA's ha-call-service-button"},
+        "image": {"gap": "image elements aren't drawn"},
+        "conditional": {"gap": "conditional elements aren't drawn"}
+      }
+    },
+    "entityBadge": {
+      "by": "show_name",
+      "default": "(unset)",
+      "cases": {
+        "true": {
+          "keys": {
+            "type": "any",
+            "show_name": "any",
+            "entity": "@viewBadgeEntity",
+            "name": "@name",
+            "icon": "any",
+            "show_state": "@bool",
+            "show_icon": "@bool",
+            "show_entity_picture": {"values": [false]},
+            "state_content": {"list": {"values": ["state"]}},
+            "display_type": {"values": ["standard"]},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap",
+            "visibility": "@visibility"
+          }
+        },
+        "false": {
+          "keys": {
+            "type": "any",
+            "show_name": {"values": [false]},
+            "entity": "@viewBadgeEntity",
+            "name": "@name",
+            "icon": "any",
+            "show_state": "@bool",
+            "show_icon": "@bool",
+            "show_entity_picture": {"values": [false]},
+            "state_content": {"list": {"values": ["state"]}},
+            "display_type": {"values": ["standard"]},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap",
+            "visibility": "@visibility"
+          }
+        },
+        "(unset)": {
+          "why": "without show_name HA hides the name; Vitro shows a set name",
+          "keys": {
+            "type": "any",
+            "entity": "@viewBadgeEntity",
+            "icon": "any",
+            "show_state": "@bool",
+            "show_icon": "@bool",
+            "show_entity_picture": {"values": [false]},
+            "state_content": {"list": {"values": ["state"]}},
+            "display_type": {"values": ["standard"]},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap",
+            "visibility": "@visibility"
+          }
+        }
+      }
+    },
+    "badge": {
+      "anyOf": [
+        {"anyOf": ["@viewBadgeEntity"], "note": "a bare entity id: HA's ensureBadgeConfig makes it an entity badge with show_name: true, as Vitro's badge parser does"},
+        {"by": "type", "default": "entity", "cases": {"entity": "@entityBadge"}}
+      ]
+    },
+    "section": {
+      "keys": {
+        "type": {"values": ["grid"]},
+        "cards": "any",
+        "column_span": {"values": [1, 2, 3, 4], "why": "Vitro clamps a section to 4 columns"},
+        "visibility": "@visibility"
+      }
+    },
+    "bubbleText": {
+      "pattern": "^(?![\\s\\S]*(\\{\\{|\\{%|\\[\\[\\[))[\\s\\S]*$",
+      "why": "Bubble renders templates (Jinja or its JavaScript) itself"
+    },
+    "bubbleIcon": {"anyOf": ["@icon", {"values": [""]}], "why": "only Material Design Icons are bundled; another icon set would draw the home glyph"},
+    "bubbleLayout": {"values": ["normal", "large"], "why": "Vitro draws Bubble's normal and large layouts"},
+    "bubbleRows": {
+      "range": [1, 24],
+      "why": "a row size Vitro doesn't lay out",
+      "note": "Below one row a large button is too short for its 42 px icon (Bubble clips it; rows 0.125 leaves no height at all). BubbleCardView's BUBBLE_MIN_ROWS"
+    },
+    "bubbleSeparatorRows": {
+      "range": [0.8, 24],
+      "why": "a row size Vitro doesn't lay out",
+      "note": "Bubble's own separator default is 0.8; BubbleCardView's BUBBLE_MIN_ROWS_SEPARATOR"
+    },
+    "bubbleGridOptions": {
+      "keys": {
+        "columns": "any",
+        "min_columns": "any",
+        "max_columns": "any",
+        "min_rows": "any",
+        "max_rows": "any",
+        "rows": {"anyOf": ["@bubbleRows", {"values": ["auto"]}], "why": "a row size Vitro doesn't lay out"}
+      }
+    },
+    "bubbleSeparatorGridOptions": {
+      "keys": {
+        "columns": "any",
+        "min_columns": "any",
+        "max_columns": "any",
+        "min_rows": "any",
+        "max_rows": "any",
+        "rows": {"anyOf": ["@bubbleSeparatorRows", {"values": ["auto"]}], "why": "a row size Vitro doesn't lay out"}
+      }
+    },
+    "bubbleButton": {
+      "keys": {
+        "card_type": "any",
+        "button_type": "any",
+        "entity": {
+          "entity": [
+            "alarm_control_panel", "automation", "binary_sensor", "button", "calendar", "camera", "counter", "cover",
+            "date", "datetime", "device_tracker", "event", "fan", "group", "image", "input_boolean", "input_button",
+            "input_datetime", "input_number", "input_select", "input_text", "lawn_mower", "light", "lock", "media_player",
+            "number", "person", "remote", "scene", "schedule", "script", "select", "sensor", "siren", "sun", "switch",
+            "text", "time", "todo", "update", "vacuum", "valve", "weather", "zone"
+          ],
+          "why": "Bubble colors a climate, humidifier or water heater icon by its mode and counts a timer down its own way",
+          "note": "getClimateColor (cards/climate/helpers.js) and computeDisplayTimer aren't ported"
+        },
+        "name": "@bubbleText",
+        "icon": "@bubbleIcon",
+        "force_icon": "@bool",
+        "show_name": "@bool",
+        "show_icon": "@bool",
+        "show_state": "@bool",
+        "show_attribute": "@bool",
+        "attribute": {
+          "pattern": "^(?![\\s\\S]*forecast)(?!(start_time|end_time|timestamp|next_dawn|next_dusk|next_midnight|next_noon|next_rising|next_setting)$)[A-Za-z0-9_]+$",
+          "why": "Bubble formats a forecast, a nested attribute or a time (a calendar's, an input_datetime's or the sun's) its own way",
+          "note": "TIMESTAMP_DOMAIN_CONTENTS (tools/state-content.js): Bubble writes these as relative times and keeps them current; BubbleStateLine doesn't"
+        },
+        "show_last_changed": "@bool",
+        "show_last_updated": "@bool",
+        "use_accent_color": "@bool",
+        "scrolling_effect": "@bool",
+        "card_layout": "@bubbleLayout",
+        "rows": "@bubbleRows",
+        "grid_options": "@bubbleGridOptions",
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap",
+        "button_action": {
+          "keys": {"tap_action": "@action", "hold_action": "@action", "double_tap_action": "@doubleTap"}
+        },
+        "modules": "any"
+      }
+    },
+    "mushroomTemplate": {
+      "why": "a template reading user, config or area renders differently without Mushroom's variables",
+      "anyOf": [
+        {"pattern": "^(?![\\s\\S]*(\\{\\{|\\{%))[\\s\\S]*$"},
+        {"pattern": "^(?![\\s\\S]*\\b(user|config|area)\\b)[\\s\\S]*$"}
+      ],
+      "note": "Mushroom renders templates with the variables config and user (plus entity, and area on the template card), strict; Vitro's render_template gets only `entity` (a {% set %} prefix), so a template that reads user, config or area renders differently"
+    },
+    "mushroomTemplateIcon": {
+      "why": "as mushroomTemplate; an icon `weather-<condition>` (no mdi: prefix) draws Mushroom's weather SVG, Vitro an MDI glyph",
+      "pattern": "^(?!weather-)(?:(?![\\s\\S]*(\\{\\{|\\{%))|(?![\\s\\S]*\\b(user|config|area)\\b))[\\s\\S]*$"
+    },
+    "mushroomRgbColor": {
+      "why": "Vitro reads Mushroom's color names and #hex only",
+      "anyOf": [
+        {
+          "values": [
+            "primary", "accent", "red", "pink", "purple", "deep-purple", "indigo", "blue", "light-blue", "cyan",
+            "teal", "green", "light-green", "lime", "yellow", "amber", "orange", "deep-orange", "brown", "grey",
+            "blue-grey", "black", "white"
+          ]
+        },
+        {"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"}
+      ],
+      "note": "Mushroom's computeRgbColor: a name from its COLORS or #hex; anything else (rgba(), CSS names) is invalid there and Mushroom keeps its default, where Vitro would draw it. light-grey/dark-grey aren't in Vitro's table; `disabled` is theme-dependent in Mushroom"
+    },
+    "mushroomTemplateRgbColor": {
+      "anyOf": ["@mushroomRgbColor", {"pattern": "^(?=[\\s\\S]*(\\{\\{|\\{%))(?![\\s\\S]*\\b(user|config|area)\\b)[\\s\\S]*$"}]
+    },
+    "mushroomCssColor": {
+      "why": "the template card (Mushroom 5) uses HA's computeCssColor: a theme color name or any CSS color",
+      "anyOf": [
+        {
+          "values": [
+            "primary", "accent", "red", "pink", "purple", "deep-purple", "indigo", "blue", "light-blue", "cyan",
+            "teal", "green", "light-green", "lime", "yellow", "amber", "orange", "deep-orange", "brown", "grey",
+            "blue-grey", "black", "white"
+          ]
+        },
+        {"pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"},
+        {"pattern": "^rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*(,\\s*(0|1|0?\\.\\d+)\\s*)?\\)$"}
+      ]
+    },
+    "mushroomTemplateCssColor": {
+      "anyOf": ["@mushroomCssColor", {"pattern": "^(?=[\\s\\S]*(\\{\\{|\\{%))(?![\\s\\S]*\\b(user|config|area)\\b)[\\s\\S]*$"}]
+    },
+    "mushroomChipInner": {
+      "by": "type",
+      "default": "(none)",
+      "why": "a chip type Vitro doesn't draw as Mushroom does (a chip without `type` is an error in Mushroom)",
+      "cases": {
+        "entity": {
+          "keys": {
+            "type": "any",
+            "entity": {"entity": ["*"]},
+            "name": "text",
+            "content_info": {"values": ["state", "name", "last-changed", "none"]},
+            "icon": "text",
+            "use_entity_picture": {"values": [false]},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "template": {
+          "keys": {
+            "type": "any",
+            "entity": {"entity": ["*"]},
+            "content": "@mushroomTemplate",
+            "icon": "@mushroomTemplateIcon",
+            "icon_color": "@mushroomTemplateRgbColor",
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "weather": {
+          "keys": {
+            "type": "any",
+            "entity": {"entity": ["weather"]},
+            "show_conditions": {"values": [true, false]},
+            "show_temperature": {"values": [true, false]},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "action": {
+          "keys": {
+            "type": "any",
+            "icon": "text",
+            "icon_color": "@mushroomRgbColor",
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "spacer": {"keys": {"type": "any"}},
+        "light": {"gap": "Vitro's light chip taps, holds and colors differently from Mushroom's"},
+        "back": {"gap": "Vitro's back chip does nothing on tap"},
+        "menu": {"gap": "Vitro's menu chip does nothing on tap"}
+      }
+    },
+    "mushroomChip": {
+      "anyOf": [
+        "@mushroomChipInner",
+        {"keys": {"type": {"values": ["conditional"]}, "conditions": "@visibility", "chip": "@mushroomChipInner"}}
+      ]
+    },
+    "mushroomLightCard": {
+      "keys": {
+        "entity": {"entity": ["light"]},
+        "name": "text",
+        "icon": "text",
+        "layout": "any",
+        "hide_state": {"values": [true, false]},
+        "hide_name": {"values": [false], "why": "the tile path (no controls) doesn't read it"},
+        "hide_icon": {"values": [false], "why": "the tile path doesn't read it"},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "show_brightness_control": {"values": [true, false]},
+        "show_color_temp_control": {"values": [false]},
+        "show_color_control": {"values": [false]},
+        "use_light_color": {"values": [true, false]},
+        "collapsible_controls": {"values": [true, false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "mushroomLightCardVertical": {
+      "why": "only the tile path draws layout: vertical; the controls card draws it as default",
+      "keys": {
+        "entity": {"entity": ["light"]},
+        "name": "text",
+        "icon": "text",
+        "layout": "any",
+        "hide_state": {"values": [true, false]},
+        "hide_name": {"values": [false]},
+        "hide_icon": {"values": [false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "show_brightness_control": {"values": [false]},
+        "show_color_temp_control": {"values": [false]},
+        "show_color_control": {"values": [false]},
+        "use_light_color": {"values": [true, false]},
+        "collapsible_controls": {"values": [true, false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "mushroomFanCard": {
+      "keys": {
+        "entity": {"entity": ["fan"]},
+        "name": "text",
+        "icon": "text",
+        "layout": "any",
+        "hide_state": {"values": [true, false]},
+        "hide_name": {"values": [false]},
+        "hide_icon": {"values": [false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "icon_animation": {"values": [false]},
+        "show_percentage_control": {"values": [true, false]},
+        "show_oscillate_control": {"values": [false]},
+        "show_direction_control": {"values": [false]},
+        "collapsible_controls": {"values": [true, false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "mushroomFanCardVertical": {
+      "keys": {
+        "entity": {"entity": ["fan"]},
+        "name": "text",
+        "icon": "text",
+        "layout": "any",
+        "hide_state": {"values": [true, false]},
+        "hide_name": {"values": [false]},
+        "hide_icon": {"values": [false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "icon_animation": {"values": [false]},
+        "show_percentage_control": {"values": [false]},
+        "show_oscillate_control": {"values": [false]},
+        "show_direction_control": {"values": [false]},
+        "collapsible_controls": {"values": [true, false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "mushroomCoverCard": {
+      "keys": {
+        "entity": {"entity": ["cover"]},
+        "name": "text",
+        "icon": "text",
+        "layout": "any",
+        "hide_state": {"values": [true, false]},
+        "hide_name": {"values": [false]},
+        "hide_icon": {"values": [false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "show_buttons_control": {"values": [true, false]},
+        "show_position_control": {"values": [true, false]},
+        "show_tilt_position_control": {"values": [false]},
+        "collapsible_controls": {"values": [true, false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "mushroomCoverCardVertical": {
+      "keys": {
+        "entity": {"entity": ["cover"]},
+        "name": "text",
+        "icon": "text",
+        "layout": "any",
+        "hide_state": {"values": [true, false]},
+        "hide_name": {"values": [false]},
+        "hide_icon": {"values": [false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "show_buttons_control": {"values": [false]},
+        "show_position_control": {"values": [false]},
+        "show_tilt_position_control": {"values": [false]},
+        "collapsible_controls": {"values": [true, false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "autoEntitiesValue": {
+      "why": "a match Vitro doesn't evaluate as auto-entities does",
+      "anyOf": [
+        {"pattern": "^(?:<=|>=|==|<|>|=)\\s*-?\\d+(?:\\.\\d+)?\\s*$"},
+        {
+          "pattern": "^(?!\\s*[<>=!])(?!\\$\\$)(?!.*[mhdMHD]\\s+[aA][gG][oO]\\s*$)(?:/.*/|(?!/)[^*]*|(?!/)[^*+?()\\[\\]{}|^$\\\\]*\\*[^+?()\\[\\]{}|^$\\\\]*)$"
+        }
+      ],
+      "note": "auto-entities 1.16.1 value match (Me): a numeric comparison, a /regex/, a * glob or an exact string. Left out: `!=` and `!` (parseFloat of '=5' is NaN, so the real card matches everything), comparisons with a non-number, a leading space before an operator (Vitro's COMPARE trims it, the real card doesn't), `$$` (JSON.stringify), 'N m/h/d ago', a value starting with / but not ending with it, and globs with regex characters (the real card doesn't escape them, Vitro does). Strings only: the real card compares a number or boolean with ===, Vitro coerces it"
+    },
+    "autoEntitiesState": {
+      "why": "auto-entities also matches the translated state; Vitro matches the raw state only",
+      "anyOf": [{"pattern": "^(?:<=|>=|==|<|>|=)\\s*-?\\d+(?:\\.\\d+)?\\s*$"}, {"pattern": "^[a-z0-9_.*-]+$"}],
+      "note": "the real `state` rule also matches the translated state (formatEntityState: 'On', 'Open', '21.5 °C'); Vitro matches only the raw state. So only numeric comparisons and lowercase raw-state tokens or globs; regexes and capitalized values could target the translation"
+    },
+    "autoEntitiesRule": {
+      "keys": {
+        "domain": "@autoEntitiesValue",
+        "entity_id": "@autoEntitiesValue",
+        "name": "@autoEntitiesValue",
+        "state": "@autoEntitiesState",
+        "attributes": "any",
+        "group": {"entity": ["*"]},
+        "not": "@autoEntitiesRule",
+        "or": {"list": "@autoEntitiesRule"},
+        "and": {"list": "@autoEntitiesRule"},
+        "options": "any",
+        "sort": "@autoEntitiesSort"
+      }
+    },
+    "autoEntitiesSort": {
+      "by": "method",
+      "default": "(unset)",
+      "cases": {
+        "(unset)": {
+          "keys": {
+            "reverse": {
+              "values": [false],
+              "why": "without a method auto-entities sorts nothing, so reverse does nothing; Vitro reverses the list"
+            },
+            "numeric": "text",
+            "ignore_case": "text",
+            "attribute": "text",
+            "count": {"range": [1, null], "why": "count: 0 is falsy and ignored by auto-entities; Vitro shows nothing"},
+            "first": {"range": [0, null]}
+          }
+        },
+        "none": {
+          "keys": {
+            "method": "any",
+            "reverse": {"values": [false], "why": "the 'none' comparator returns 0, so the real card never reverses; Vitro does"},
+            "numeric": "text",
+            "ignore_case": "text",
+            "attribute": "text",
+            "count": {"range": [1, null]},
+            "first": {"range": [0, null]}
+          }
+        },
+        "entity_id": {
+          "keys": {
+            "method": "any",
+            "reverse": {
+              "values": [true, false],
+              "why": "entity ids never tie, so reversing the sorted list equals the reversed comparator"
+            },
+            "numeric": {
+              "values": [false],
+              "why": "numeric: Vitro treats non-numbers as equal (no order); the real card compares them as strings"
+            },
+            "ignore_case": {"values": [true, false]},
+            "count": {"range": [1, null]},
+            "first": {"range": [0, null]}
+          }
+        },
+        "domain": {
+          "keys": {
+            "method": "any",
+            "reverse": {
+              "values": [false],
+              "why": "Vitro reverses the sorted list, which flips ties; the real card flips only the comparator (stable ties)"
+            },
+            "numeric": {"values": [false]},
+            "ignore_case": {"values": [true, false]},
+            "count": {"range": [1, null]},
+            "first": {"range": [0, null]}
+          }
+        },
+        "name": {
+          "keys": {
+            "method": "any",
+            "reverse": {"values": [false]},
+            "numeric": {"values": [false]},
+            "ignore_case": {"values": [true, false]},
+            "count": {"range": [1, null]},
+            "first": {"range": [0, null]}
+          }
+        },
+        "friendly_name": {
+          "keys": {
+            "method": "any",
+            "reverse": {"values": [false]},
+            "numeric": {"values": [false]},
+            "ignore_case": {"values": [true, false]},
+            "count": {"range": [1, null]},
+            "first": {"range": [0, null]}
+          }
+        },
+        "state": {
+          "keys": {
+            "method": "any",
+            "reverse": {"values": [false]},
+            "numeric": {"values": [true, false]},
+            "ignore_case": {"values": [true, false]},
+            "count": {"range": [1, null]},
+            "first": {"range": [0, null]}
+          }
+        },
+        "attribute": {
+          "keys": {
+            "method": "any",
+            "attribute": "text",
+            "reverse": {"values": [false]},
+            "numeric": {"values": [true, false]},
+            "ignore_case": {"values": [true, false]},
+            "count": {"range": [1, null]},
+            "first": {"range": [0, null]}
+          }
+        },
+        "last_changed": {
+          "keys": {
+            "method": "any",
+            "reverse": {"values": [false], "why": "many entities share last_changed after an HA restart: ties"},
+            "numeric": "text",
+            "count": {"range": [1, null]},
+            "first": {"range": [0, null]}
+          }
+        },
+        "last_updated": {
+          "keys": {
+            "method": "any",
+            "reverse": {"values": [false]},
+            "numeric": "text",
+            "count": {"range": [1, null]},
+            "first": {"range": [0, null]}
+          }
+        }
+      }
+    },
+    "stackInCardKeep": {
+      "why": "Vitro draws only these combinations of stack-in-card's keep options as it does",
+      "anyOf": [
+        {
+          "keys": {
+            "background": {"values": [true]},
+            "border_radius": {"values": [true, false]},
+            "box_shadow": {"values": [false]},
+            "margin": {"values": [true, false]},
+            "outer_padding": {"values": [true, false]}
+          },
+          "required": ["background"]
+        },
+        {
+          "keys": {
+            "background": {"values": [false]},
+            "border_radius": {"values": [false]},
+            "box_shadow": {"values": [false]},
+            "margin": {"values": [true, false]},
+            "outer_padding": {"values": [true, false]}
+          }
+        }
+      ],
+      "note": "box_shadow: Vitro always takes the children's shadow off. border_radius without background: stack-in-card keeps the child's rounded border, but Vitro strokes it square (applySeamlessSurface)"
+    },
+    "cssBox": {
+      "pattern": "^\\s*(?:0|\\d+(?:\\.\\d+)?px)(?:\\s+(?:0|\\d+(?:\\.\\d+)?px)){0,3}\\s*$",
+      "why": "paddingDp reads em/rem as 16 px, unitless numbers as px, and drops negatives; only px and 0 behave as CSS does"
+    },
+    "layoutCardGrid": {
+      "keys": {
+        "grid-template-columns": {
+          "pattern": "^\\s*(?:(?:\\d+(?:\\.\\d+)?(?:fr|px|%)|minmax\\(\\s*(?:0|\\d+(?:\\.\\d+)?(?:px|%))\\s*,\\s*\\d+(?:\\.\\d+)?(?:fr|px|%)\\s*\\))|repeat\\(\\s*\\d+\\s*,\\s*(?:\\d+(?:\\.\\d+)?(?:fr|px|%)|minmax\\(\\s*(?:0|\\d+(?:\\.\\d+)?(?:px|%))\\s*,\\s*\\d+(?:\\.\\d+)?(?:fr|px|%)\\s*\\))(?:\\s+(?:\\d+(?:\\.\\d+)?(?:fr|px|%)|minmax\\(\\s*(?:0|\\d+(?:\\.\\d+)?(?:px|%))\\s*,\\s*\\d+(?:\\.\\d+)?(?:fr|px|%)\\s*\\)))*\\s*\\))(?:\\s+(?:(?:\\d+(?:\\.\\d+)?(?:fr|px|%)|minmax\\(\\s*(?:0|\\d+(?:\\.\\d+)?(?:px|%))\\s*,\\s*\\d+(?:\\.\\d+)?(?:fr|px|%)\\s*\\))|repeat\\(\\s*\\d+\\s*,\\s*(?:\\d+(?:\\.\\d+)?(?:fr|px|%)|minmax\\(\\s*(?:0|\\d+(?:\\.\\d+)?(?:px|%))\\s*,\\s*\\d+(?:\\.\\d+)?(?:fr|px|%)\\s*\\))(?:\\s+(?:\\d+(?:\\.\\d+)?(?:fr|px|%)|minmax\\(\\s*(?:0|\\d+(?:\\.\\d+)?(?:px|%))\\s*,\\s*\\d+(?:\\.\\d+)?(?:fr|px|%)\\s*\\)))*\\s*\\)))*\\s*$",
+          "why": "tracks Vitro lays out as CSS grid does: fr, px or %, minmax() and repeat()",
+          "note": "fr/px/% tracks, minmax(px|%|0, fr|px|%), repeat(<integer>, …). Left out: auto-fill/auto-fit (Vitro counts tracks against the display width, not the card's), auto and min-content (drawn as 1fr), em, calc, named lines, commas"
+        },
+        "grid-gap": {
+          "pattern": "^\\s*(?:0|\\d+(?:\\.\\d+)?px)\\s*$",
+          "why": "one px value; Vitro uses the first number for both row and column gap"
+        },
+        "margin": "@cssBox",
+        "padding": "@cssBox"
+      }
+    },
+    "layoutCardColumns": {
+      "keys": {
+        "width": {"range": [1, null]},
+        "max_width": {"range": [1, null]},
+        "max_cols": {
+          "range": [1, null],
+          "why": "0 is falsy in layout-card (default 4, or 3 with a docked sidebar); Vitro clamps it to 1"
+        },
+        "min_height": {"range": [1, null], "why": "0 is falsy in layout-card (default 5); Vitro uses 0"},
+        "card_margin": "@cssBox",
+        "margin": "@cssBox",
+        "padding": "@cssBox"
+      }
+    }
+  },
+  "common": {
+    "type": "any",
+    "card_mod": "any",
+    "theme": "any",
+    "visibility": "@visibility",
+    "view_layout": "any",
+    "layout_options": "any",
+    "grid_options": "any"
+  },
+  "cards": {
+    "tile": {
+      "keys": {
+        "entity": {
+          "entity": [
+            "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "climate", "counter", "cover",
+            "fan", "group", "input_boolean", "input_number", "input_select", "input_text", "lawn_mower", "light", "lock",
+            "media_player", "number", "person", "plant", "remote", "schedule", "script", "select", "sensor", "siren",
+            "sun", "switch", "text", "timer", "todo", "update", "vacuum", "water_heater", "weather", "zone"
+          ],
+          "why": "HA's tile adds a badge, a countdown, a position or a date Vitro doesn't draw for this domain",
+          "note": "Compared with HA: climate (its action badge), person (its zone badge), timer (the live countdown) and update (its install status) in tile-climate, tile-person*, tile-timer* and tile-update*. Still left out: device_tracker and humidifier (badges not compared yet), valve, and the timestamp domains (button, scene, event, image, ...), whose state HA shows as a relative time"
+        },
+        "color": "@cssColor",
+        "state_content": {"list": "@stateContent"},
+        "name": "@name",
+        "icon": "@icon",
+        "vertical": {"values": [true, false]},
+        "hide_state": {"values": [true, false]},
+        "show_entity_picture": {"values": [true, false]},
+        "features": {"list": "@tileFeature"},
+        "features_position": {"values": ["bottom"], "why": "inline features aren't compared with HA yet"},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "icon_tap_action": "@action",
+        "double_tap_action": "@doubleTap",
+        "icon_hold_action": "@noAction",
+        "icon_double_tap_action": "@doubleTap"
+      }
+    },
+    "entities": {
+      "keys": {
+        "title": "text",
+        "entities": {"list": "@entityRow"},
+        "show_header_toggle": {"values": [false], "why": "Vitro shows the header toggle only under a title"},
+        "state_color": {"values": [true], "why": "Vitro always colors an active row's icon"},
+        "color": {"values": ["state"], "why": "Vitro always colors an active row's icon by its state"}
+      }
+    },
+    "glance": {
+      "keys": {
+        "title": "text",
+        "entities": {"list": "@glanceEntity"},
+        "show_name": {"values": [true, false]},
+        "show_state": {"values": [true, false]},
+        "show_icon": {"values": [true, false]},
+        "columns": {"values": [1, 2, 3, 4, 5, 6], "why": "Vitro lays out 1 to 6 whole columns"},
+        "state_color": {"values": [true]},
+        "color": {"values": ["state"]}
+      }
+    },
+    "button": "@buttonCard",
+    "entity-button": "@buttonCard",
+    "entity-filter": {
+      "keys": {
+        "entities": {"list": "@filterEntity"},
+        "state_filter": {"list": "@stateFilter"},
+        "card": "@filterCard",
+        "show_empty": {"values": [true], "why": "Vitro shows the card when no entity passes"}
+      }
+    },
+    "heading": {
+      "keys": {
+        "heading": {
+          "pattern": "^(?![\\s\\S]*\\{\\{)",
+          "why": "HA shows a heading's text as it is; Vitro would render it as a template"
+        },
+        "heading_style": {"values": ["title", "subtitle"]},
+        "icon": "@icon",
+        "tap_action": "@entitylessAction",
+        "badges": {"list": "@headingBadge"}
+      }
+    },
+    "sensor": {
+      "keys": {
+        "entity": {"entity": ["counter", "input_number", "number", "sensor"], "why": "HA shows an error for another domain"},
+        "name": "@name",
+        "icon": "@icon",
+        "graph": "any",
+        "detail": {"values": [1, 2]},
+        "hours_to_show": {"range": [0, null]},
+        "limits": {"keys": {"min": {"range": [null, null]}, "max": {"range": [null, null]}}},
+        "state_color": {"values": [false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "entity": {
+      "keys": {
+        "entity": {"entity": ["*"]},
+        "name": "@name",
+        "icon": "@icon",
+        "state_color": {"values": [false]},
+        "footer": "@graphFooter",
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "history-graph": {
+      "keys": {
+        "entities": {
+          "list": {
+            "anyOf": [{"entity": ["*"]}, {"keys": {"entity": {"entity": ["*"]}, "name": "@name", "color": "@hexColor"}}]
+          }
+        },
+        "title": "text",
+        "hours_to_show": {"range": [0, null]},
+        "show_names": {"values": [true, false]},
+        "expand_legend": {"values": [true, false]},
+        "min_y_axis": {"range": [null, null]},
+        "max_y_axis": {"range": [null, null]},
+        "fit_y_data": {"values": [true, false]},
+        "logarithmic_scale": {"values": [false]},
+        "split_device_classes": {"values": [false]},
+        "label_position": {"values": ["side"]}
+      }
+    },
+    "statistics-graph": {
+      "keys": {
+        "entities": {
+          "list": {
+            "anyOf": [
+              {"pattern": "^[a-z0-9_]+[.:][^\\s]+$"},
+              {"keys": {"entity": {"pattern": "^[a-z0-9_]+[.:][^\\s]+$"}, "name": "@name"}}
+            ]
+          }
+        },
+        "title": "text",
+        "days_to_show": {"range": [0, null]},
+        "period": {"values": ["5minute", "hour", "day", "week", "auto"], "why": "the month axis isn't drawn"},
+        "stat_types": {"list": {"values": ["change", "state", "sum", "min", "max", "mean"]}},
+        "chart_type": {"values": ["line"]},
+        "unit": "text",
+        "min_y_axis": {"range": [null, null]},
+        "max_y_axis": {"range": [null, null]},
+        "fit_y_data": {"values": [true, false]},
+        "hide_legend": {"values": [true, false]},
+        "expand_legend": {"values": [true, false]},
+        "logarithmic_scale": {"values": [false]},
+        "energy_date_selection": {"values": [false]}
+      }
+    },
+    "gauge": {
+      "keys": {
+        "entity": {"entity": ["*"]},
+        "name": "@name",
+        "min": {"range": [null, null]},
+        "max": {"range": [null, null]},
+        "needle": {"values": [true, false]},
+        "severity": {
+          "keys": {"green": {"range": [null, null]}, "yellow": {"range": [null, null]}, "red": {"range": [null, null]}}
+        },
+        "segments": {"list": {"keys": {"from": {"range": [null, null]}, "color": "@cssHexColor", "label": "text"}}},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "thermostat": {
+      "keys": {
+        "entity": {"entity": ["climate", "water_heater"], "why": "HA shows an error for another domain"},
+        "name": "@name",
+        "show_current_as_primary": {"values": [false]},
+        "features": {"list": {"gap": "Vitro's hvac mode bar isn't HA's card feature yet (mode order, colors, style, hvac_modes)"}}
+      }
+    },
+    "humidifier": {
+      "keys": {
+        "entity": {"entity": ["humidifier"], "why": "HA shows an error for another domain"},
+        "name": "@name",
+        "show_current_as_primary": {"values": [false]},
+        "features": {"list": {"gap": "humidifier card features aren't drawn"}}
+      }
+    },
+    "weather-forecast": {
+      "by": "show_forecast",
+      "default": "true",
+      "why": "only the daily forecast is drawn as HA does",
+      "cases": {
+        "false": {
+          "keys": {
+            "entity": {"entity": ["weather"]},
+            "name": "@name",
+            "show_forecast": "any",
+            "show_current": "any",
+            "forecast_type": "any",
+            "forecast_slots": "any",
+            "round_temperature": {"values": [false]},
+            "tap_action": "@action",
+            "hold_action": "@action",
+            "double_tap_action": "@doubleTap"
+          }
+        },
+        "true": {
+          "by": "forecast_type",
+          "default": "(none)",
+          "why": "without forecast_type HA shows no forecast (only a legacy attribute one); hourly and twice_daily aren't drawn as HA does",
+          "cases": {
+            "daily": {
+              "keys": {
+                "entity": {"entity": ["weather"]},
+                "name": "@name",
+                "show_forecast": "any",
+                "forecast_type": "any",
+                "show_current": {"values": [true]},
+                "forecast_slots": {"values": [5]},
+                "round_temperature": {"values": [false]},
+                "tap_action": "@action",
+                "hold_action": "@action",
+                "double_tap_action": "@doubleTap"
+              }
+            }
+          }
+        }
+      }
+    },
+    "light": {
+      "keys": {
+        "entity": {"entity": ["light"], "why": "HA shows an error for another domain"},
+        "name": "@name",
+        "icon": "@icon",
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "alarm-panel": {
+      "keys": {
+        "entity": {"entity": ["alarm_control_panel"], "why": "HA shows an error for another domain"},
+        "name": "@name",
+        "states": {"list": {"values": ["arm_away", "arm_home", "arm_night", "arm_vacation", "arm_custom_bypass"]}}
+      }
+    },
+    "media-control": {"keys": {"entity": {"entity": ["media_player"], "why": "HA shows an error for another domain"}, "name": "@name"}},
+    "clock": {
+      "keys": {
+        "title": "text",
+        "clock_style": {"values": ["digital"], "why": "the analog clock isn't drawn"},
+        "clock_size": {"values": ["small", "medium", "large"]},
+        "show_seconds": {"values": [true, false]},
+        "time_format": {"values": ["language", "system", "12", "24"]},
+        "time_zone": {
+          "pattern": "^(UTC|GMT|[A-Z][A-Za-z_-]+(/[A-Za-z0-9_+-]+){1,2})$",
+          "why": "HA passes the zone to Intl as it is (no local/server)"
+        },
+        "no_background": {"values": [true, false]},
+        "date_format": {"list": "@clockDatePart"},
+        "seconds_motion": "any",
+        "border": "any",
+        "ticks": "any",
+        "face_style": "any"
+      }
+    },
+    "date": {
+      "keys": {
+        "title": "text",
+        "date_size": {"values": ["small", "medium", "large"]},
+        "date_format": {"list": "@clockDatePart"},
+        "time_zone": "text",
+        "no_background": {"values": [true, false]}
+      }
+    },
+    "markdown": {
+      "keys": {
+        "content": {
+          "pattern": "^(?=[\\s\\S])(?![\\s\\S]*\\{#)(?![\\s\\S]*\\{[{%](?:(?![%}]\\})[\\s\\S])*?\\b(?:user|config)\\b)[\\s\\S]*$",
+          "why": "a template reading `user` or `config`, or a Jinja comment, renders differently without HA's variables"
+        },
+        "title": "text",
+        "text_only": {"values": [true, false]},
+        "show_empty": {"values": [true]},
+        "entity_id": "any",
+        "entity_ids": "any",
+        "tap_action": "@noAction",
+        "hold_action": "@noAction",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "todo-list": "@todoOptions",
+    "shopping-list": "@todoOptions",
+    "calendar": {
+      "keys": {
+        "entities": {"list": {"entity": ["calendar"]}},
+        "title": "text",
+        "initial_view": {"values": ["dayGridMonth"], "why": "the day and list views aren't drawn as HA does"},
+        "show_add_event": {"values": [false]},
+        "add_event_style": "any",
+        "add_event_size": "any"
+      }
+    },
+    "logbook": {
+      "keys": {
+        "entities": {"list": {"anyOf": [{"entity": ["*"]}, {"keys": {"entity": {"entity": ["*"]}}}]}},
+        "title": "text",
+        "hours_to_show": {"range": [1, 720]},
+        "name_detail": {"values": ["auto"]},
+        "state_filter": {"list": {"gap": "the state filter isn't applied"}}
+      }
+    },
+    "statistic": {
+      "keys": {
+        "entity": "any",
+        "name": "@name",
+        "icon": "@icon",
+        "unit": "text",
+        "stat_type": {"values": ["change", "max", "mean", "min"]},
+        "period": {
+          "keys": {
+            "calendar": {"keys": {"period": {"values": ["day", "month", "year"]}, "offset": {"range": [null, null]}}},
+            "fixed_period": {"keys": {"start": "text", "end": "text"}},
+            "rolling_window": {"keys": {"duration": "any", "offset": "any"}}
+          }
+        },
+        "energy_date_selection": {"values": [false]}
+      }
+    },
+    "picture": {
+      "keys": {
+        "image": "@imageUrl",
+        "tap_action": "@unboundAction",
+        "hold_action": "@unboundAction",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "picture-entity": {
+      "keys": {
+        "entity": {"entity": ["*"]},
+        "name": "@name",
+        "image": "@imageUrl",
+        "camera_image": {"entity": ["camera"]},
+        "camera_view": {"values": ["auto", "live"]},
+        "state_filter": "any",
+        "aspect_ratio": "@aspectRatio",
+        "fit_mode": {"values": ["cover"], "why": "stills are always cropped to cover"},
+        "show_name": "@bool",
+        "show_state": "@bool",
+        "show_entity_picture": {"values": [false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "picture-glance": {
+      "keys": {
+        "title": "text",
+        "entities": {"list": "@pictureGlanceEntity"},
+        "image": "@imageUrl",
+        "camera_image": {"entity": ["camera"]},
+        "camera_view": {"values": ["auto", "live"]},
+        "entity": {"entity": ["*"]},
+        "state_filter": "any",
+        "aspect_ratio": "@aspectRatio",
+        "fit_mode": {"values": ["cover"], "why": "stills are always cropped to cover"},
+        "show_state": {"values": [false], "why": "Vitro draws no state under the icons"},
+        "force_dialog": "@bool",
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "picture-elements": {"keys": {"image": "@imageUrl", "aspect_ratio": "@aspectRatio", "elements": {"list": "@pictureElement"}}},
+    "area": {
+      "keys": {
+        "area": "text",
+        "name": "text",
+        "color": "@cssColor",
+        "navigation_path": {"pattern": "^/", "why": "a path that isn't absolute resolves against the current page in HA"},
+        "display_type": {"values": ["picture", "compact"], "why": "the camera picture isn't refreshed every 10 s as hui-image does"},
+        "show_camera": {"values": [false]},
+        "camera_view": "any",
+        "aspect_ratio": "@aspectRatio",
+        "sensor_classes": {"list": "text"},
+        "alert_classes": {"list": "text"},
+        "exclude_entities": {"list": "text"},
+        "features": {"list": {"gap": "area card features aren't drawn yet"}},
+        "features_position": {"values": ["bottom", "inline"]},
+        "vertical": "@bool",
+        "tap_action": "@action",
+        "image_tap_action": "@action"
+      }
+    },
+    "plant-status": {"keys": {"entity": "any", "name": "@name"}},
+    "toggle-group": {"keys": {"title": "text", "entities": {"list": {"entity": ["*"]}}, "color": "@cssColor", "vertical": "@bool"}},
+    "shortcut": {
+      "keys": {
+        "label": "text",
+        "description": "text",
+        "icon": "any",
+        "color": "@cssColor",
+        "vertical": "@bool",
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "alert": {
+      "keys": {
+        "entity": "any",
+        "name": "@name",
+        "icon": "any",
+        "alert_color": {"anyOf": [{"values": ["state", "none"]}, "@cssColor"]},
+        "clear_color": {"anyOf": [{"values": ["state", "none"]}, "@cssColor"]},
+        "pulse": "@bool",
+        "hide_state": "@bool",
+        "vertical": "@bool",
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "iframe": {
+      "keys": {
+        "url": {
+          "pattern": "^[A-Za-z][A-Za-z0-9+.\\-]*://",
+          "why": "a Home Assistant page needs HA's origin (X-Frame-Options: SAMEORIGIN)"
+        },
+        "aspect_ratio": "@aspectRatio",
+        "title": "text",
+        "allow": "text",
+        "disable_sandbox": "@bool",
+        "allow_open_top_navigation": "@bool",
+        "hide_background": "@bool"
+      }
+    },
+    "section": "any",
+    "vertical-stack": {"keys": {"cards": "any", "title": "any"}},
+    "horizontal-stack": {"keys": {"cards": "any", "title": "any"}},
+    "grid": {
+      "keys": {
+        "cards": "any",
+        "title": "any",
+        "square": "any",
+        "columns": {
+          "values": [1, 2, 3, 4, 5, 6, "1", "2", "3", "4", "5", "6"],
+          "why": "Vitro clamps the grid to 1-6 whole columns"
+        }
+      }
+    },
+    "conditional": {"keys": {"conditions": {"list": "@condition"}, "card": "any"}},
+    "custom:mushroom-entity-card": {
+      "keys": {
+        "entity": {"entity": ["*"]},
+        "name": "text",
+        "icon": "text",
+        "layout": {"values": ["default", "horizontal", "vertical"]},
+        "vertical": {"values": [true, false]},
+        "hide_state": {"values": [true, false]},
+        "hide_name": {"values": [false]},
+        "hide_icon": {"values": [false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "use_entity_picture": {"values": [false]},
+        "fill_container": {"values": [false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "custom:mushroom-person-card": {"gap": "Vitro draws no home/away badge and other colors than Mushroom's person card"},
+    "custom:mushroom-light-card": {
+      "by": "layout",
+      "default": "default",
+      "cases": {"default": "@mushroomLightCard", "horizontal": "@mushroomLightCard", "vertical": "@mushroomLightCardVertical"}
+    },
+    "custom:mushroom-fan-card": {
+      "by": "layout",
+      "default": "default",
+      "cases": {"default": "@mushroomFanCard", "horizontal": "@mushroomFanCard", "vertical": "@mushroomFanCardVertical"}
+    },
+    "custom:mushroom-cover-card": {
+      "by": "layout",
+      "default": "default",
+      "cases": {"default": "@mushroomCoverCard", "horizontal": "@mushroomCoverCard", "vertical": "@mushroomCoverCardVertical"}
+    },
+    "custom:mushroom-template-card": {
+      "keys": {
+        "entity": {"entity": ["*"]},
+        "primary": "@mushroomTemplate",
+        "secondary": "@mushroomTemplate",
+        "icon": "@mushroomTemplateIcon",
+        "icon_color": "@mushroomTemplateCssColor",
+        "picture": "@mushroomTemplate",
+        "badge_icon": "@mushroomTemplate",
+        "badge_color": "@mushroomTemplateCssColor",
+        "layout": {"values": ["default", "horizontal", "vertical"]},
+        "vertical": {"values": [true, false]},
+        "multiline_secondary": {"values": [true, false]},
+        "fill_container": {"values": [true, false], "why": "Mushroom 5 drops it (migrateTemplateCardConfig); Vitro ignores it"},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap",
+        "icon_tap_action": "@action",
+        "icon_hold_action": "@noAction",
+        "icon_double_tap_action": "@doubleTap"
+      }
+    },
+    "custom:mushroom-title-card": {
+      "keys": {
+        "title": "@mushroomTemplate",
+        "subtitle": "@mushroomTemplate",
+        "alignment": {"values": ["start", "end", "center", "justify"]},
+        "title_tap_action": "@action",
+        "subtitle_tap_action": "@action"
+      }
+    },
+    "custom:mushroom-chips-card": {"keys": {"alignment": {"values": ["start", "end", "center", "justify"]}, "chips": {"list": "@mushroomChip"}}},
+    "custom:mushroom-climate-card": {
+      "keys": {
+        "entity": {"entity": ["climate"]},
+        "name": "text",
+        "icon": "text",
+        "layout": {"values": ["default", "horizontal"]},
+        "hide_name": {"values": [true, false]},
+        "hide_state": {"values": [true, false]},
+        "hide_icon": {"values": [true, false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "show_temperature_control": {"values": [true, false]},
+        "hvac_modes": {"list": {"values": ["auto", "heat_cool", "heat", "cool", "dry", "fan_only", "off"]}},
+        "collapsible_controls": {"values": [true, false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "custom:mushroom-media-player-card": {"gap": "Vitro's controls and layout don't match Mushroom's media player card"},
+    "custom:mushroom-lock-card": {"gap": "Vitro shows other buttons and icons than Mushroom's lock card"},
+    "custom:mushroom-alarm-control-panel-card": {
+      "keys": {
+        "entity": {"entity": ["alarm_control_panel"]},
+        "name": "text",
+        "icon": "text",
+        "layout": {"values": ["default", "horizontal"]},
+        "hide_name": {"values": [true, false]},
+        "hide_state": {"values": [true, false]},
+        "hide_icon": {"values": [true, false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "states": {"list": {"values": ["armed_home", "armed_away", "armed_night", "armed_vacation", "armed_custom_bypass"]}},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "custom:mushroom-vacuum-card": {
+      "keys": {
+        "entity": {"entity": ["vacuum"]},
+        "name": "text",
+        "icon": "text",
+        "layout": {"values": ["default", "horizontal"]},
+        "hide_name": {"values": [true, false]},
+        "hide_state": {"values": [true, false]},
+        "hide_icon": {"values": [true, false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "icon_animation": {"values": [false]},
+        "commands": {
+          "list": {"values": ["on_off", "start_pause", "stop", "locate", "clean_spot", "return_home"]},
+          "why": "same as Mushroom when listed in Mushroom's order and the vacuum supports each; see unsure"
+        },
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "custom:mushroom-humidifier-card": {"gap": "Vitro's state text, slider and taps don't match Mushroom's humidifier card"},
+    "custom:mushroom-number-card": {
+      "keys": {
+        "entity": {"entity": ["number", "input_number"]},
+        "name": "text",
+        "icon": "text",
+        "layout": {"values": ["default", "horizontal"]},
+        "hide_name": {"values": [true, false]},
+        "hide_state": {"values": [true, false]},
+        "hide_icon": {"values": [true, false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "icon_color": "@mushroomRgbColor",
+        "display_mode": {"values": ["slider"]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "custom:mushroom-select-card": {
+      "keys": {
+        "entity": {"entity": ["select", "input_select"]},
+        "name": "text",
+        "icon": "text",
+        "layout": {"values": ["default", "horizontal"]},
+        "hide_name": {"values": [true, false]},
+        "hide_state": {"values": [true, false]},
+        "hide_icon": {"values": [true, false]},
+        "primary_info": {"values": ["name"]},
+        "secondary_info": {"values": ["state"]},
+        "icon_type": {"values": ["icon"]},
+        "fill_container": {"values": [false]},
+        "tap_action": "@action",
+        "hold_action": "@action",
+        "double_tap_action": "@doubleTap"
+      }
+    },
+    "custom:mushroom-empty-card": {"keys": {}},
+    "custom:bubble-card": {
+      "by": "card_type",
+      "default": "button",
+      "why": "a Bubble Card type Vitro doesn't draw as Bubble Card 3.4.3 does",
+      "note": "BubbleCardView (cards/BubbleCard.kt) draws the separator and the switch, state and name buttons from Bubble 3.4.3's own stylesheets and rules; parity cases bubble-card-* and m-bubble-*. Sub-buttons, styles, state_content, the slider and every other card type go to the island. On a Home Assistant with Bubble Card modules every Bubble card goes there (data/BubbleModules.kt), so `modules` is accepted here.",
+      "cases": {
+        "button": {
+          "by": "button_type",
+          "default": "switch",
+          "why": "Vitro draws Bubble's switch, state and name buttons, not its slider",
+          "cases": {
+            "switch": "@bubbleButton",
+            "state": "@bubbleButton",
+            "name": "@bubbleButton"
+          }
+        },
+        "separator": {
+          "keys": {
+            "card_type": "any",
+            "name": "@bubbleText",
+            "icon": "@bubbleIcon",
+            "card_layout": "@bubbleLayout",
+            "rows": "@bubbleSeparatorRows",
+            "grid_options": "@bubbleSeparatorGridOptions",
+            "modules": "any"
+          }
+        }
+      }
+    },
+    "custom:mini-graph-card": {
+      "gap": "Vitro's graph doesn't match mini-graph-card 0.13.0: no smoothed, filled line, a smaller state and extra min/max labels"
+    },
+    "custom:clock-weather-card": {"gap": "Vitro draws HA's weather forecast, without the clock, the date or the temperature bars"},
+    "custom:modern-circular-gauge": {"gap": "Vitro draws the gauge at its own size instead of filling its slot"},
+    "custom:bar-card": {"gap": "Vitro's bars don't match bar-card 3.2.0 in shape, size, colors or title"},
+    "custom:mini-media-player": {"gap": "Vitro's volume and progress bars and cover art don't match mini-media-player 1.16.12"},
+    "custom:vertical-stack-in-card": {"gap": "Vitro keeps the inner cards' borders and gaps, which vertical-stack-in-card removes"},
+    "custom:auto-entities": {
+      "keys": {
+        "card": "any",
+        "card_param": "text",
+        "entities": {
+          "list": {
+            "anyOf": [
+              {"pattern": "^[a-z0-9_]+\\.[a-z0-9_]+$"},
+              {
+                "keys": {"entity": {"entity": ["*"]}, "type": "any", "name": "text", "icon": "any"},
+                "required": ["entity"]
+              }
+            ]
+          },
+          "why": "an entity id, or an entry with one: Vitro drops an entry without `entity` (a section or divider row) that auto-entities passes through"
+        },
+        "filter": {"keys": {"include": {"list": "@autoEntitiesRule"}, "exclude": {"list": "@autoEntitiesRule"}}},
+        "sort": "@autoEntitiesSort",
+        "show_empty": {"values": [true, false]},
+        "unique": {"values": [true, false]}
+      }
+    },
+    "custom:stack-in-card": {"keys": {"cards": "any", "mode": {"values": ["vertical", "horizontal"]}, "keep": "@stackInCardKeep"}},
+    "custom:layout-card": {
+      "by": "layout_type",
+      "default": "(unset)",
+      "why": "a layout Vitro doesn't draw (without a layout_type, layout-card uses HA's own masonry view)",
+      "cases": {
+        "grid-layout": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardGrid"}},
+        "custom:grid-layout": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardGrid"}},
+        "grid": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardGrid"}},
+        "custom:grid": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardGrid"}},
+        "masonry-layout": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "custom:masonry-layout": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "masonry": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "custom:masonry": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "horizontal-layout": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "custom:horizontal-layout": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "horizontal": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "custom:horizontal": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "vertical-layout": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "custom:vertical-layout": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "vertical": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}},
+        "custom:vertical": {"keys": {"layout_type": "any", "cards": "any", "layout": "@layoutCardColumns"}}
+      },
+      "note": "with no layout_type, layout-card uses HA's own hui-masonry-view, whose columns differ; Vitro draws layout-card masonry"
+    },
+    "custom:swipe-card": {
+      "keys": {
+        "cards": "any",
+        "parameters": "any",
+        "start_card": {"range": [1, null]},
+        "reset_after": {
+          "range": [0.1, null],
+          "why": "0 turns the reset off in swipe-card (`if (reset_after)`); Vitro would post the reset at once"
+        }
+      }
+    },
+    "custom:weather-card": {
+      "keys": {
+        "entity": {"entity": ["weather"]},
+        "name": "text",
+        "icons": "text",
+        "current": "text",
+        "details": "text",
+        "forecast": "text",
+        "number_of_forecasts": "text",
+        "hourly_forecast": "text",
+        "hide_precipitation": "text"
+      }
+    }
+  },
+  "view": {
+    "keys": {
+      "title": "any",
+      "path": "any",
+      "icon": "any",
+      "theme": "any",
+      "type": {
+        "values": [
+          "masonry", "panel", "sidebar", "sections", "custom:masonry-layout", "custom:horizontal-layout",
+          "custom:vertical-layout", "custom:grid-layout"
+        ]
+      },
+      "panel": "@bool",
+      "background": {
+        "pattern": "^(?![\\s\\S]*[uU][rR][lL]\\()",
+        "why": "the object form and url() images aren't drawn as HA sizes them (Vitro stretches the image)"
+      },
+      "cards": "any",
+      "sections": {"list": "@section"},
+      "badges": {"list": "@badge"},
+      "max_columns": {"values": [1, 2, 3, 4, 5, 6], "why": "Vitro clamps to 1-6 whole columns"},
+      "subview": "@bool",
+      "back_path": "text",
+      "visible": {"anyOf": ["any"], "why": "only the tab bar reads it; the view is drawn the same"},
+      "show_icon_and_title": {"anyOf": ["any"], "why": "only the tab bar reads it; the view is drawn the same"},
+      "layout": "any",
+      "dense_section_placement": {"values": [false]},
+      "top_margin": {"values": [false]},
+      "header": {
+        "keys": {
+          "card": {"gap": "the view header card isn't drawn"},
+          "layout": {"values": ["center"]},
+          "badges_position": {"values": ["bottom"]},
+          "badges_wrap": {"values": ["wrap", "scroll"]}
+        }
+      },
+      "footer": {"gap": "the view footer isn't drawn"},
+      "sidebar": {"gap": "the sections view sidebar isn't drawn"}
+    }
+  }
+}

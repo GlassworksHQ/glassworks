@@ -59,6 +59,8 @@ This folder defines the **Generic Android** frame (`design/frame.json`, [format]
 
 The app bundles Glassworks Core with the hardware-neutral panes: **Assist** (with **Timers**), **Sendspin**, **Notifications**, **Bluetooth proxy**, **Camera**, and **Diagnostics**. Any pane whose required hardware is missing (such as a microphone, speaker, Bluetooth LE, or camera) is hidden automatically from setup, settings, the Manage page, and Home Assistant.
 
+Both builds also carry **Vitro**, an experimental renderer that draws your dashboard with native views instead of the browser. It's off by default and lives under *Settings → Labs*. The legacy build has seen the least testing so far. [Try Vitro](../../docs/vitro.md) explains how to turn it on and off, and what happens if it fails.
+
 Key behaviors to know on non-rooted Android tablets and phones:
 
 - **Screen and sensors:** Uses Android's built-in proximity sensor (short-range hand wave, typically under 5 cm) and ambient light sensor when available. On tablets without a proximity sensor, you can enable the **Camera** pane for motion-based wake on approach, or simply let the screen sleep after your idle timeout and wake on touch. The screen stays awake until initial setup finishes and until you configure an idle timeout under **Settings → Screen → Turn off when idle**.

@@ -1,0 +1,39 @@
+{
+ "title": "Gauge: a percentage sensor, default arc",
+ "card": {
+  "type": "gauge",
+  "entity": "sensor.printer_black_ink",
+  "name": "Black ink"
+ },
+ "fixture": {
+  "states": {
+   "sensor.printer_black_ink": {
+    "state": "74",
+    "last_changed": "-69m",
+    "attributes": {
+     "state_class": "measurement",
+     "marker_high_level": 100,
+     "marker_low_level": 15,
+     "marker_type": "ink",
+     "unit_of_measurement": "%",
+     "friendly_name": "Office Printer Black ink"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.printer_black_ink",
+    "pl": "demo",
+    "di": "dev-office-printer",
+    "en": "Black ink",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-office-printer",
+    "name": "Office Printer"
+   }
+  ]
+ }
+}

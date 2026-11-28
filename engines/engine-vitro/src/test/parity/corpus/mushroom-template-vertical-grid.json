@@ -1,0 +1,39 @@
+{
+ "title": "Vertical Mushroom template cards inside a grid card, with card-mod padding (the Mirror's lights stack)",
+ "card": {
+  "type": "grid",
+  "columns": 2,
+  "square": false,
+  "cards": [
+   {
+    "type": "custom:mushroom-template-card",
+    "layout": "vertical",
+    "icon": "mdi:sofa",
+    "primary": "Living",
+    "secondary": "Lights off · 21°",
+    "icon_color": "rgba(255,255,255,0.6)",
+    "tap_action": {
+     "action": "none"
+    },
+    "card_mod": {
+     "style": "ha-card { background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.07); border-radius: 24px; padding: 12px 10px; }"
+    }
+   },
+   {
+    "type": "custom:mushroom-template-card",
+    "layout": "vertical",
+    "icon": "mdi:bed",
+    "primary": "Bedroom",
+    "secondary": "1 of 2 on",
+    "icon_color": "#fbbf24",
+    "tap_action": {
+     "action": "none"
+    }
+   }
+  ]
+ },
+ "fixture": {
+  "states": {},
+  "entities": []
+ }
+}

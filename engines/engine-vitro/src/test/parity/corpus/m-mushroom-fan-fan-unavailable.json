@@ -1,0 +1,43 @@
+{
+ "title": "mushroom-fan: fan unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "fan.fan_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "custom:mushroom-fan-card",
+  "entity": "fan.fan_unavailable",
+  "show_percentage_control": true
+ },
+ "fixture": {
+  "states": {
+   "fan.fan_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "restored": true,
+     "supported_features": 49,
+     "friendly_name": "Bedroom Ceiling Fan"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "fan.fan_unavailable",
+    "pl": "demo",
+    "di": "dev-bedroom",
+    "en": "Ceiling Fan",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-bedroom",
+    "name": "Bedroom"
+   }
+  ]
+ }
+}

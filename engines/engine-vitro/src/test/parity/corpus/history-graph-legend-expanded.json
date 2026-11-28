@@ -1,0 +1,218 @@
+{
+ "title": "History graph: the same six sensors with expand_legend, every entry shown and HA's Less chip",
+ "card": {
+  "type": "history-graph",
+  "title": "Temperatures",
+  "entities": [
+   "sensor.living_room_temperature",
+   "sensor.bedroom_temperature",
+   "sensor.hallway_temperature",
+   "sensor.balcony_temperature",
+   "sensor.fridge_temperature",
+   "sensor.freezer_temperature"
+  ],
+  "expand_legend": true
+ },
+ "fixture": {
+  "states": {
+   "sensor.living_room_temperature": {
+    "state": "19.72",
+    "last_changed": -480,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Sensor Temperature"
+    }
+   },
+   "sensor.bedroom_temperature": {
+    "state": "19.12",
+    "last_changed": -480,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Bedroom Sensor Temperature"
+    }
+   },
+   "sensor.hallway_temperature": {
+    "state": "19.67",
+    "last_changed": -480,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Hallway Sensor Temperature"
+    }
+   },
+   "sensor.balcony_temperature": {
+    "state": "11.91",
+    "last_changed": -480,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Balcony Sensor Temperature"
+    }
+   },
+   "sensor.fridge_temperature": {
+    "state": "4.21",
+    "last_changed": -480,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Fridge Temperature"
+    }
+   },
+   "sensor.freezer_temperature": {
+    "state": "-19.42",
+    "last_changed": -480,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Freezer Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.living_room_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "dev-living-room-sensor",
+    "np": "device",
+    "en": "Temperature"
+   },
+   {
+    "ei": "sensor.bedroom_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "dev-bedroom-sensor",
+    "np": "device",
+    "en": "Temperature"
+   },
+   {
+    "ei": "sensor.hallway_temperature",
+    "pl": "zha",
+    "dp": 1,
+    "di": "dev-hallway-sensor",
+    "np": "device",
+    "en": "Temperature"
+   },
+   {
+    "ei": "sensor.balcony_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "dev-balcony-sensor",
+    "np": "device",
+    "en": "Temperature"
+   },
+   {
+    "ei": "sensor.fridge_temperature",
+    "pl": "demo",
+    "dp": 1,
+    "di": "dev-fridge",
+    "np": "device",
+    "en": "Temperature"
+   },
+   {
+    "ei": "sensor.freezer_temperature",
+    "pl": "demo",
+    "dp": 1,
+    "di": "dev-freezer",
+    "np": "device",
+    "en": "Temperature"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-sensor",
+    "name": "Living Room Sensor"
+   },
+   {
+    "id": "dev-bedroom-sensor",
+    "name": "Bedroom Sensor"
+   },
+   {
+    "id": "dev-hallway-sensor",
+    "name": "Hallway Sensor"
+   },
+   {
+    "id": "dev-balcony-sensor",
+    "name": "Balcony Sensor"
+   },
+   {
+    "id": "dev-fridge",
+    "name": "Fridge"
+   },
+   {
+    "id": "dev-freezer",
+    "name": "Freezer"
+   }
+  ],
+  "history": {
+   "sensor.living_room_temperature": {
+    "wave": {
+     "min": 19.6,
+     "max": 23.4,
+     "period": "24h",
+     "step": "10m",
+     "decimals": 2,
+     "phase": 4.4
+    }
+   },
+   "sensor.bedroom_temperature": {
+    "wave": {
+     "min": 18.0,
+     "max": 21.0,
+     "period": "24h",
+     "step": "10m",
+     "decimals": 2,
+     "phase": 3.6
+    }
+   },
+   "sensor.hallway_temperature": {
+    "wave": {
+     "min": 17.2,
+     "max": 20.1,
+     "period": "24h",
+     "step": "10m",
+     "decimals": 2,
+     "phase": 2.2
+    }
+   },
+   "sensor.balcony_temperature": {
+    "wave": {
+     "min": 6.0,
+     "max": 12.5,
+     "period": "24h",
+     "step": "10m",
+     "decimals": 2,
+     "phase": 1.1
+    }
+   },
+   "sensor.fridge_temperature": {
+    "wave": {
+     "min": 2.6,
+     "max": 5.2,
+     "period": "24h",
+     "step": "10m",
+     "decimals": 2,
+     "phase": 0.5
+    }
+   },
+   "sensor.freezer_temperature": {
+    "wave": {
+     "min": -19.5,
+     "max": -16.8,
+     "period": "24h",
+     "step": "10m",
+     "decimals": 2,
+     "phase": 5.0
+    }
+   }
+  }
+ }
+}

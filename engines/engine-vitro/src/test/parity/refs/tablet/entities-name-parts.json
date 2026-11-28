@@ -1,0 +1,236 @@
+{
+ "case": "entities-name-parts",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 186
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 170,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Kitchen Pendant",
+   "x": 73,
+   "y": 28.8,
+   "w": 102.09,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Study Reading Lamp",
+   "x": 73,
+   "y": 76.8,
+   "w": 127.86,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Kitchen Kitchen Pendant",
+   "x": 73,
+   "y": 124.8,
+   "w": 152.48,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12.4 W",
+   "x": 439.84,
+   "y": 124.8,
+   "w": 43.16,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.kitchen_pendant_ceiling": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": "brightness",
+    "brightness": 180,
+    "off_with_transition": false,
+    "off_brightness": null,
+    "friendly_name": "Kitchen Pendant Ceiling",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "light.reading_lamp": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": "brightness",
+    "brightness": 180,
+    "off_with_transition": false,
+    "off_brightness": null,
+    "friendly_name": "Reading Lamp",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "sensor.kitchen_pendant_power": {
+   "s": "12.4",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "friendly_name": "Kitchen Pendant Power"
+   },
+   "lc": 1794499380,
+   "lu": 1794499380
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.kitchen_pendant_ceiling",
+    "pl": "zha",
+    "tk": "light",
+    "di": "device-1",
+    "en": "Ceiling",
+    "np": "device"
+   },
+   {
+    "ei": "light.reading_lamp",
+    "pl": "zha",
+    "tk": "light",
+    "di": "device-2",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.kitchen_pendant_power",
+    "pl": "zha",
+    "di": "device-1",
+    "en": "Power",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Kitchen Pendant",
+    "area_id": "kitchen"
+   },
+   {
+    "id": "device-2",
+    "name": "Reading Lamp"
+   }
+  ],
+  "areas": [
+   {
+    "area_id": "kitchen",
+    "name": "Kitchen"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light",
+    "sensor"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "power": {
+      "default": "mdi:flash"
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

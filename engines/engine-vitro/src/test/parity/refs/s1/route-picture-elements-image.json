@@ -1,0 +1,171 @@
+{
+ "case": "route-picture-elements-image",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 516
+ },
+ "docSize": {
+  "width": 960,
+  "height": 548
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 500,
+   "type": "hui-picture-elements-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "74%",
+   "x": 336.6,
+   "y": 341.4,
+   "w": 25.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.bedroom_accent": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
+    "supported_features": 40
+   },
+   "lc": 1794496680,
+   "lu": 1794496680
+  },
+  "sensor.printer_black_ink": {
+   "s": "74",
+   "a": {
+    "state_class": "measurement",
+    "marker_high_level": 100,
+    "marker_low_level": 15,
+    "marker_type": "ink",
+    "unit_of_measurement": "%",
+    "friendly_name": "Office Printer Black ink"
+   },
+   "lc": 1794495540,
+   "lu": 1794495540
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "device-1",
+    "en": "Accent",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.printer_black_ink",
+    "pl": "demo",
+    "di": "device-2",
+    "en": "Black ink",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Bedroom Strip"
+   },
+   {
+    "id": "device-2",
+    "name": "Office Printer"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light",
+    "sensor"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

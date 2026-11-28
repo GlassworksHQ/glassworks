@@ -1,0 +1,51 @@
+{
+ "title": "media-control: media_player paused (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "media_player.media_player_paused": "paused"
+ },
+ "card": {
+  "type": "media-control",
+  "entity": "media_player.media_player_paused"
+ },
+ "fixture": {
+  "states": {
+   "media_player.media_player_paused": {
+    "state": "paused",
+    "last_changed": "-10m",
+    "attributes": {
+     "volume_level": 0.31,
+     "is_volume_muted": false,
+     "media_content_type": "music",
+     "media_duration": 245,
+     "media_position": 92,
+     "media_position_updated_at": "@-10m",
+     "media_title": "Evening Tide",
+     "media_artist": "The Placeholder Trio",
+     "entity_picture": "/local/vitro-harness-fixtures/images/album.png",
+     "device_class": "speaker",
+     "supported_features": 152511,
+     "friendly_name": "Den Speaker"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "media_player.media_player_paused",
+    "pl": "demo",
+    "di": "dev-den",
+    "en": "Speaker",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-den",
+    "name": "Den"
+   }
+  ]
+ }
+}

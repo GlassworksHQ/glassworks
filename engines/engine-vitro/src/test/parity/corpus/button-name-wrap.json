@@ -1,0 +1,94 @@
+{
+ "title": "Masonry view: a button card's long name wraps as HA's does, and the card grows with it",
+ "view_config": {
+  "cards": [
+   {
+    "type": "horizontal-stack",
+    "cards": [
+     {
+      "type": "button",
+      "entity": "light.kitchen_pendant"
+     },
+     {
+      "type": "button",
+      "entity": "light.hall_lamp"
+     },
+     {
+      "type": "button",
+      "entity": "light.porch_lamp",
+      "show_state": true
+     },
+     {
+      "type": "button",
+      "entity": "light.desk_lamp",
+      "name": "Desk"
+     }
+    ]
+   },
+   {
+    "type": "entities",
+    "entities": [
+     "light.kitchen_pendant",
+     "light.hall_lamp",
+     "light.porch_lamp"
+    ]
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.kitchen_pendant": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 200,
+     "friendly_name": "Kitchen Island Pendant",
+     "supported_features": 40
+    }
+   },
+   "light.hall_lamp": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Hall",
+     "supported_features": 40
+    }
+   },
+   "light.porch_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 120,
+     "friendly_name": "Porch",
+     "supported_features": 40
+    }
+   },
+   "light.desk_lamp": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Desk Lamp",
+     "supported_features": 40
+    }
+   }
+  }
+ }
+}

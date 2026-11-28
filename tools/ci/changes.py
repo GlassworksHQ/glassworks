@@ -83,9 +83,15 @@ RULES = {
     # Markdown (their tests and sources only name it) and the modules' Kotlin, Java, resources and tests.
     'web': Rule('web', unless_only=(
         '**/*.md', f'{MODULES}/**/{{*.kt,*.java}}', f'{MODULES}/**/src/{{test,androidTest}}/**', f'{MODULES}/**/src/*/res/**',
-        '!testing/kotlin/dev/glassworks/testing/RepoFiles.kt', '!core/src/main/res/font/**')),
+        '!testing/kotlin/dev/glassworks/testing/RepoFiles.kt', '!core/src/main/res/font/**',
+        # site/src/lib/vitroCompat.test.ts checks the site's card lists against these files.
+        '!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/model/LovelaceModel.kt',
+        '!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt',
+        '!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/cards/HacsParityCards.kt',
+        # ... and routes the strict compat rule's shared cases as the engine's NativeOptionsTest does.
+        '!engines/engine-vitro/src/test/resources/dev/glassworks/engine/vitro/compat/native-options-cases.json')),
     'refract': Rule('refract', when=('kiln/workers',)),
-    'perf': Rule('scripts: Clarity tests (ffmpeg, fast and slow sets)', when=PERF + ('docs/perf.md',)),  # test_notes
+    'perf': Rule('scripts: Clarity tests (ffmpeg, fast and slow sets)', when=PERF + ('docs/perf.md', 'tools/vitro-camera-e2e')),  # test_notes; the camera e2e's off-device tests
     'perf_webrtc': Rule('perf-webrtc', when=PERF),
     'root': Rule('root', when=('frames/aqara-s1-plus/tools/root', 'frames/aqara-s1-plus/tools/radio')),
     'size': Rule('size', when=ANDROID + APK_INPUTS + (

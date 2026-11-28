@@ -1,0 +1,27 @@
+{
+ "title": "Clock in French: the language's 24-hour time and its weekday and month names",
+ "card": {
+  "type": "clock",
+  "clock_size": "large",
+  "date_format": [
+   "weekday-long",
+   "day-numeric",
+   "month-long",
+   "year-numeric"
+  ]
+ },
+ "fixture": {
+  "states": {},
+  "entities": [],
+  "user_data": {
+   "language": {
+    "language": "fr",
+    "number_format": "space_comma"
+   }
+  }
+ },
+ "frames": [
+  "s1",
+  "tablet"
+ ]
+}

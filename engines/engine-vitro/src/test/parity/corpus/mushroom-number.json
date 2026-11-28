@@ -1,0 +1,33 @@
+{
+ "title": "Mushroom number card: an input number as a slider",
+ "card": {
+  "type": "custom:mushroom-number-card",
+  "entity": "input_number.target_temperature"
+ },
+ "fixture": {
+  "states": {
+   "input_number.target_temperature": {
+    "state": "22.0",
+    "last_changed": "-190m",
+    "attributes": {
+     "min": 18,
+     "max": 26,
+     "step": 0.5,
+     "mode": "box",
+     "initial": null,
+     "editable": true,
+     "unit_of_measurement": "°C",
+     "icon": "mdi:thermometer",
+     "friendly_name": "Target temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "input_number.target_temperature",
+    "pl": "input_number",
+    "en": "Target temperature"
+   }
+  ]
+ }
+}

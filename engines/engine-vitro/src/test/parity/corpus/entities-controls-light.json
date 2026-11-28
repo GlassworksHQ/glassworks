@@ -1,0 +1,153 @@
+{
+ "title": "Entities rows HA draws as controls, in the light theme",
+ "dark": false,
+ "card": {
+  "type": "entities",
+  "entities": [
+   "input_number.speaker_volume",
+   "input_number.away_target",
+   "input_select.house_mode",
+   "input_select.guest_scene",
+   "script.goodnight",
+   "script.chime",
+   "button.reboot_hub",
+   "lock.front_door"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "input_number.speaker_volume": {
+    "state": "35.0",
+    "last_changed": "-20m",
+    "attributes": {
+     "initial": null,
+     "editable": true,
+     "min": 0,
+     "max": 100,
+     "step": 1,
+     "mode": "slider",
+     "icon": "mdi:volume-high",
+     "friendly_name": "Speaker volume"
+    }
+   },
+   "input_number.away_target": {
+    "state": "16.5",
+    "last_changed": "-300m",
+    "attributes": {
+     "initial": null,
+     "editable": true,
+     "min": 10,
+     "max": 25,
+     "step": 0.5,
+     "mode": "box",
+     "unit_of_measurement": "°C",
+     "icon": "mdi:thermometer-low",
+     "friendly_name": "Away target"
+    }
+   },
+   "input_select.house_mode": {
+    "state": "Evening",
+    "last_changed": "-90m",
+    "attributes": {
+     "options": [
+      "Day",
+      "Evening",
+      "Night",
+      "Away"
+     ],
+     "editable": true,
+     "icon": "mdi:home",
+     "friendly_name": "House mode"
+    }
+   },
+   "input_select.guest_scene": {
+    "state": "unavailable",
+    "last_changed": "-10m",
+    "attributes": {
+     "friendly_name": "Guest scene"
+    }
+   },
+   "script.goodnight": {
+    "state": "off",
+    "last_changed": "-600m",
+    "attributes": {
+     "last_triggered": null,
+     "mode": "single",
+     "current": 0,
+     "icon": "mdi:weather-night",
+     "friendly_name": "Goodnight"
+    }
+   },
+   "script.chime": {
+    "state": "on",
+    "last_changed": "-1m",
+    "attributes": {
+     "last_triggered": "@-1m",
+     "mode": "queued",
+     "current": 2,
+     "max": 10,
+     "icon": "mdi:bell-ring",
+     "friendly_name": "Chime"
+    }
+   },
+   "button.reboot_hub": {
+    "state": "unavailable",
+    "last_changed": "-15m",
+    "attributes": {
+     "device_class": "restart",
+     "friendly_name": "Hub Restart"
+    }
+   },
+   "lock.front_door": {
+    "state": "locked",
+    "last_changed": "-120m",
+    "attributes": {
+     "friendly_name": "Front door",
+     "supported_features": 0
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "input_number.speaker_volume",
+    "pl": "input_number",
+    "en": "Speaker volume"
+   },
+   {
+    "ei": "input_number.away_target",
+    "pl": "input_number",
+    "en": "Away target"
+   },
+   {
+    "ei": "input_select.house_mode",
+    "pl": "input_select",
+    "en": "House mode"
+   },
+   {
+    "ei": "input_select.guest_scene",
+    "pl": "input_select",
+    "en": "Guest scene"
+   },
+   {
+    "ei": "script.goodnight",
+    "pl": "script",
+    "en": "Goodnight"
+   },
+   {
+    "ei": "script.chime",
+    "pl": "script",
+    "en": "Chime"
+   },
+   {
+    "ei": "button.reboot_hub",
+    "pl": "demo",
+    "en": "Hub Restart"
+   },
+   {
+    "ei": "lock.front_door",
+    "pl": "demo",
+    "en": "Front door"
+   }
+  ]
+ }
+}

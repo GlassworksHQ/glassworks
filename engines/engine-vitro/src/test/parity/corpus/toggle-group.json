@@ -1,0 +1,59 @@
+{
+ "title": "Toggle group: two of three lights on",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "toggle-group",
+  "title": "Downstairs lights",
+  "entities": [
+   "light.hall_lamp",
+   "light.porch_lamp",
+   "light.stair_lamp"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.hall_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Hall Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.porch_lamp": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Porch Lamp",
+     "supported_features": 40
+    }
+   },
+   "light.stair_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Stair Lamp",
+     "supported_features": 40
+    }
+   }
+  }
+ }
+}

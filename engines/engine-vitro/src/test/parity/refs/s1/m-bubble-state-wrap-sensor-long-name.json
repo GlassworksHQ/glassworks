@@ -1,0 +1,125 @@
+{
+ "case": "m-bubble-state-wrap-sensor-long-name",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 72
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 56,
+   "type": "bubble-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Upstairs Guest Bedroom Reading Nook Temperature Next To The Window By The Big Old Oak Desk",
+   "x": 60,
+   "y": 2,
+   "w": 378.06,
+   "h": 33,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "21.4 °C",
+   "x": 60,
+   "y": 39,
+   "w": 38.64,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.sensor_long_name": {
+   "s": "21.42",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Upstairs Guest Bedroom Reading Nook Temperature Next To The Window"
+   },
+   "lc": 1794499560,
+   "lu": 1794499560
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.sensor_long_name",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Temperature Next To The Window",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Upstairs Guest Bedroom Reading Nook"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state_attributes.last_reset.name": "Last reset",
+    "component.sensor.entity_component._.state_attributes.options.name": "Possible states",
+    "component.sensor.entity_component._.state_attributes.state_class.name": "State class",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement": "Measurement",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement_angle": "Measurement angle",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total": "Total",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total_increasing": "Total increasing"
+   },
+   "entity": {}
+  }
+ }
+}

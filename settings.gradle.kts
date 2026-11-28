@@ -49,6 +49,8 @@ include(":sendspin")
 project(":sendspin").projectDir = file("libs/sendspin")
 include(":voice")
 project(":voice").projectDir = file("libs/voice")
+include(":ha-webrtc")
+project(":ha-webrtc").projectDir = file("libs/ha-webrtc")
 
 // Glassworks modules (#21): the pane API, the core, engines and panes. The S1 app above depends on them.
 include(":glassworks-pane-api")
@@ -61,6 +63,16 @@ project(":engine-gecko").projectDir = file("engines/engine-gecko")
 // a debug-only test APK (dev.glassworks.s1.legacy) until the generic-android frame (#23) replaces it.
 include(":engine-gecko-legacy")
 project(":engine-gecko-legacy").projectDir = file("engines/engine-gecko-legacy")
+include(":engine-vitro")
+project(":engine-vitro").projectDir = file("engines/engine-vitro")
+// Vitro's WebRTC cameras on libs/ha-webrtc, for the apps that register them (libwebrtc is big).
+include(":engine-vitro-webrtc")
+project(":engine-vitro-webrtc").projectDir = file("engines/engine-vitro-webrtc")
+// The engine contract on emulators (docs/engine-contract.md): test code only, nothing ships.
+include(":engine-conformance")
+project(":engine-conformance").projectDir = file("engines/conformance")
+include(":vitro-test")
+project(":vitro-test").projectDir = file("engines/engine-vitro/test-app")
 include(":kiosk-legacy")
 project(":kiosk-legacy").projectDir = file("engines/engine-gecko-legacy/test-app")
 include(":pane-diagnostics")

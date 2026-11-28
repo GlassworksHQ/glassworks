@@ -1,0 +1,67 @@
+{
+ "title": "More Info of a docked vacuum: HA's robot on its dock, every command button it supports (stop disabled while docked), the fan speed menu and the device's battery at the time row's end; a user who isn't an administrator, so HA's header shows only History",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "vacuum.robot"
+ },
+ "more_info": "vacuum.robot",
+ "expect": {
+  "vacuum.robot": "docked",
+  "sensor.robot_battery": "87"
+ },
+ "fixture": {
+  "admin": false,
+  "states": {
+   "vacuum.robot": {
+    "state": "docked",
+    "last_changed": -2700,
+    "attributes": {
+     "supported_features": 13884,
+     "fan_speed": "standard",
+     "fan_speed_list": [
+      "quiet",
+      "standard",
+      "max"
+     ],
+     "friendly_name": "Robot"
+    }
+   },
+   "sensor.robot_battery": {
+    "state": "87",
+    "last_changed": -600,
+    "attributes": {
+     "device_class": "battery",
+     "unit_of_measurement": "%",
+     "state_class": "measurement",
+     "friendly_name": "Robot Battery"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "vacuum.robot",
+    "pl": "roborock",
+    "di": "dev-robot",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.robot_battery",
+    "pl": "roborock",
+    "di": "dev-robot",
+    "en": "Battery",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-robot",
+    "name": "Robot"
+   }
+  ]
+ }
+}

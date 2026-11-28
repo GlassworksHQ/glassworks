@@ -1,0 +1,73 @@
+{
+ "title": "Plant status: four readings, one problem",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "plant-status",
+  "entity": "plant.window_fern"
+ },
+ "fixture": {
+  "states": {
+   "plant.window_fern": {
+    "state": "problem",
+    "last_changed": "-2h",
+    "attributes": {
+     "problem": "moisture low",
+     "sensors": {
+      "moisture": "sensor.fern_moisture",
+      "temperature": "sensor.fern_temperature",
+      "brightness": "sensor.fern_light",
+      "conductivity": "sensor.fern_conductivity"
+     },
+     "unit_of_measurement_dict": {
+      "moisture": "%",
+      "temperature": "°C",
+      "brightness": "lx",
+      "conductivity": "µS/cm"
+     },
+     "moisture": 12,
+     "temperature": 21.5,
+     "brightness": 1830,
+     "conductivity": 410,
+     "friendly_name": "Window Fern"
+    }
+   },
+   "sensor.fern_moisture": {
+    "state": "12",
+    "last_changed": "-20m",
+    "attributes": {
+     "unit_of_measurement": "%",
+     "friendly_name": "Fern Moisture"
+    }
+   },
+   "sensor.fern_temperature": {
+    "state": "21.5",
+    "last_changed": "-20m",
+    "attributes": {
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Fern Temperature"
+    }
+   },
+   "sensor.fern_light": {
+    "state": "1830",
+    "last_changed": "-20m",
+    "attributes": {
+     "unit_of_measurement": "lx",
+     "device_class": "illuminance",
+     "friendly_name": "Fern Light"
+    }
+   },
+   "sensor.fern_conductivity": {
+    "state": "410",
+    "last_changed": "-20m",
+    "attributes": {
+     "unit_of_measurement": "µS/cm",
+     "friendly_name": "Fern Conductivity"
+    }
+   }
+  }
+ }
+}

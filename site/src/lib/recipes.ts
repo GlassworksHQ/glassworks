@@ -140,6 +140,32 @@ Design:
 Accept climate_entity and an optional lights array in the Lovelace card config.`,
     matches: (s) => Math.abs(s.ratio - 1) <= 0.2,
   },
+  {
+    id: "vitro-native-rewrite",
+    title: "Convert any dashboard to Vitro-native",
+    formFactor: "Vitro native (zero browser)",
+    summary:
+      "Rewrites an existing custom JS or HACS Lovelace dashboard (including two-way mirror panels) into pure Vitro-native Sections YAML and a matching theme so GeckoView never has to boot.",
+    entities: ["light.*", "weather.<home>", "climate.<room>", "media_player.<room>"],
+    tips: [
+      "Stick to built-in Lovelace cards plus Vitro's 26 native HACS cards (the whole Mushroom suite, Bubble Card, mini-graph-card, mini-media-player, clock-weather-card, modern-circular-gauge, bar-card, auto-entities, stack-in-card and layout-card) so zero browser processes start.",
+      "Replace custom JS presence timers with Home Assistant visibility conditions backed by a binary_sensor with delay_off.",
+      "Move visual polish (pure #000000 mirror black, translucent glass cards, shadows, accents) into a Home Assistant YAML theme instead of Shadow-DOM card-mod.",
+    ],
+    prompt: `Rewrite my attached Home Assistant Lovelace dashboard (and any custom JS card it uses) so it looks as close to the original as possible while being 100% Vitro-native (zero GeckoView / zero browser micro-islands).
+
+Strict card rules (use ONLY these card types):
+- Built-in Lovelace cards: tile (features: light-brightness, light-color-temp, fan-speed, cover-open-close, cover-position, climate-hvac-modes, target-temperature, select-options, media-player-volume-slider, toggle, media-player-playback, light-color-favorites, numeric-input, vacuum-commands), entities, glance, button, heading, clock, sensor, history-graph, statistics-graph, gauge, thermostat, humidifier, weather-forecast, markdown (Jinja2 templates), picture, picture-entity, picture-glance, picture-elements, media-control, alarm-panel, todo-list, calendar, logbook, area, entity, light, grid, horizontal-stack, vertical-stack, conditional, entity-filter.
+- Native HACS cards (zero browser): custom:mushroom-entity-card, custom:mushroom-light-card, custom:mushroom-title-card, custom:mushroom-chips-card, custom:mushroom-template-card, custom:mushroom-climate-card, custom:mushroom-fan-card, custom:mushroom-cover-card, custom:mushroom-person-card, custom:bubble-card, custom:mini-graph-card, custom:clock-weather-card, custom:modern-circular-gauge, custom:bar-card, custom:mushroom-media-player-card, custom:mushroom-lock-card, custom:mushroom-alarm-control-panel-card, custom:mushroom-vacuum-card, custom:mushroom-humidifier-card, custom:mushroom-number-card, custom:mushroom-select-card, custom:mini-media-player, custom:auto-entities, custom:stack-in-card, custom:vertical-stack-in-card, custom:layout-card.
+- Do NOT use any other custom:* card (no custom JS panel cards, button-card, apexcharts-card, or mod-card).
+
+Layout, styling & behavior rules:
+- Use HA Sections views (type: sections) with max_columns, column_span, grid, horizontal-stack, and vertical-stack to match the original layout and screen aspect ratio.
+- Express all visual styling as a Home Assistant YAML theme (primary-background-color, lovelace-background including #000000 for two-way mirrors or CSS gradients/urls, rgba() ha-card-background, ha-card-border-color/width/radius, ha-card-box-shadow, and --state-<domain>-active-color). Avoid Shadow-DOM card-mod selectors ($: |, ::before, @keyframes).
+- Replace JS presence or mode switching with native Lovelace visibility conditions on sections/cards. If presence needs a hold delay (e.g., 60 seconds after motion clears), include a clean Home Assistant template binary_sensor YAML snippet with delay_off.
+- Keep every original entity ID, friendly label, and tap/hold action intact. Output both the complete Lovelace YAML and the companion YAML theme, plus a short list of any small visual trade-offs.`,
+    matches: () => false,
+  },
 ];
 
 const toPublic = ({ matches: _matches, ...recipe }: RecipeEntry): DashboardRecipe => {

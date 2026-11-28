@@ -1,0 +1,1588 @@
+{
+ "title": "History graph: a climate entity's current and target temperature, filled while it heats",
+ "card": {
+  "type": "history-graph",
+  "title": "Heat pump",
+  "entities": [
+   {
+    "entity": "climate.heat_pump",
+    "name": "Heat pump"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "climate.heat_pump": {
+    "state": "off",
+    "last_changed": -14400,
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat",
+      "cool",
+      "auto",
+      "dry",
+      "fan_only"
+     ],
+     "min_temp": 16,
+     "max_temp": 31,
+     "target_temp_step": 0.5,
+     "fan_modes": [
+      "low",
+      "medium",
+      "high",
+      "auto"
+     ],
+     "current_temperature": 17.5,
+     "temperature": null,
+     "target_temp_high": null,
+     "target_temp_low": null,
+     "fan_mode": "auto",
+     "hvac_action": "off",
+     "friendly_name": "Heat Pump",
+     "supported_features": 395
+    },
+    "last_updated": 0
+   }
+  },
+  "entities": [
+   {
+    "ei": "climate.heat_pump",
+    "pl": "demo",
+    "di": "dev-heat-pump",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-heat-pump",
+    "name": "Heat Pump"
+   }
+  ],
+  "history": {
+   "climate.heat_pump": {
+    "points": [
+     [
+      "-86400s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-84600s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-82800s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-81000s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-79200s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-77400s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-75600s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-73800s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-72000s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-70200s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-68400s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-66600s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-64800s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-63000s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-61200s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-59400s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-57600s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-55800s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-54000s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-52200s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-50400s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-48600s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-46800s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-45000s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-43200s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-41400s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-39600s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-37800s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-36000s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-34200s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-32400s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-30600s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-28800s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-27000s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-25200s",
+      "heat",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.5,
+       "temperature": 22,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "heating",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-23400s",
+      "heat",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 19.0,
+       "temperature": 22,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "heating",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-21600s",
+      "heat",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 19.5,
+       "temperature": 22,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "heating",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-19800s",
+      "heat",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 19.5,
+       "temperature": 22,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "heating",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-18000s",
+      "heat",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 20.0,
+       "temperature": 22,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "heating",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-16200s",
+      "heat",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 20.5,
+       "temperature": 22,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "heating",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-14400s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-12600s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-10800s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-9000s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-7200s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-5400s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-3600s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "-1800s",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 18.0,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ],
+     [
+      "0",
+      "off",
+      {
+       "hvac_modes": [
+        "off",
+        "heat",
+        "cool",
+        "auto",
+        "dry",
+        "fan_only"
+       ],
+       "min_temp": 16,
+       "max_temp": 31,
+       "target_temp_step": 0.5,
+       "fan_modes": [
+        "low",
+        "medium",
+        "high",
+        "auto"
+       ],
+       "current_temperature": 17.5,
+       "temperature": null,
+       "target_temp_high": null,
+       "target_temp_low": null,
+       "fan_mode": "auto",
+       "hvac_action": "off",
+       "friendly_name": "Heat Pump",
+       "supported_features": 395
+      }
+     ]
+    ]
+   }
+  }
+ }
+}

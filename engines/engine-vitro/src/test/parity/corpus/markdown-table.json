@@ -1,0 +1,104 @@
+{
+ "title": "Markdown table with ha-icon cells and card-mod (the real dashboards' room list)",
+ "theme": "Vitro Glass",
+ "card": {
+  "type": "markdown",
+  "text_only": true,
+  "content": "###### Inside\n<table role=\"presentation\"><tr><td><ha-icon icon=\"mdi:sofa\"></ha-icon></td><td>Living Room</td><td>{{ '%.1f' | format(states('sensor.living_room_temperature') | float(0)) }}°</td><td>{{ states('sensor.living_room_humidity') | float(0) | round(0) | int }}%</td></tr><tr><td><ha-icon icon=\"mdi:fridge\"></ha-icon></td><td>Fridge</td><td>{{ '%.1f' | format(states('sensor.fridge_temperature') | float(0)) }}°</td><td>{{ states('sensor.fridge_power') | float(0) | round(0) | int }} W</td></tr></table>",
+  "card_mod": {
+   "style": {
+    ".": "ha-card { padding: 18px; } ha-card ha-markdown { padding: 0; }",
+    "ha-markdown$": "ha-markdown-element { font-size: 14px; line-height: 1.6; color: #f4f4f5; }ha-markdown-element p { margin: 0; }ha-markdown-element table { width: 100%; border-spacing: 0; }ha-markdown-element h6 { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #63636b; line-height: 1.6; margin: 0; }ha-markdown-element td { font-size: 15px; line-height: 1.6; padding-top: 9px; white-space: nowrap; }ha-markdown-element td:nth-child(1) { width: 32px; color: #63636b; --mdc-icon-size: 20px; }ha-markdown-element td:nth-child(2) { color: #a1a1aa; }ha-markdown-element td:nth-child(3) { text-align: right; font-size: 17px; }ha-markdown-element td:nth-child(4) { width: 44px; text-align: right; color: #63636b; }"
+   }
+  }
+ },
+ "fixture": {
+  "states": {
+   "sensor.fridge_power": {
+    "state": "48.6",
+    "last_changed": "-199m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "W",
+     "device_class": "power",
+     "friendly_name": "Fridge Power"
+    }
+   },
+   "sensor.fridge_temperature": {
+    "state": "3.4",
+    "last_changed": "-93m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "icon": "mdi:thermometer",
+     "friendly_name": "Fridge Temperature"
+    }
+   },
+   "sensor.living_room_humidity": {
+    "state": "47.3",
+    "last_changed": "-148m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "%",
+     "device_class": "humidity",
+     "friendly_name": "Living Room Sensor Humidity"
+    }
+   },
+   "sensor.living_room_temperature": {
+    "state": "21.42",
+    "last_changed": "-131m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Sensor Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.fridge_power",
+    "pl": "demo",
+    "dp": 0,
+    "di": "dev-fridge",
+    "en": "Power",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.fridge_temperature",
+    "pl": "demo",
+    "dp": 1,
+    "di": "dev-fridge",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.living_room_humidity",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "dev-living-room-sensor",
+    "en": "Humidity",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.living_room_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "dev-living-room-sensor",
+    "en": "Temperature",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-fridge",
+    "name": "Fridge"
+   },
+   {
+    "id": "dev-living-room-sensor",
+    "name": "Living Room Sensor"
+   }
+  ]
+ }
+}

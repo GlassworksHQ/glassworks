@@ -1,0 +1,123 @@
+{
+ "case": "mushroom-lock",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "mushroom-lock-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Front Door",
+   "x": 56,
+   "y": 17,
+   "w": 67.11,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Locked",
+   "x": 56,
+   "y": 36,
+   "w": 41.08,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "lock.front_door": {
+   "s": "locked",
+   "a": {
+    "friendly_name": "Front Door",
+    "supported_features": 1
+   },
+   "lc": 1794496980,
+   "lu": 1794496980
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "lock.front_door",
+    "pl": "demo",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Front Door"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "lock"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "lock": {
+     "_": {
+      "default": "mdi:lock",
+      "state": {
+       "jammed": "mdi:lock-alert",
+       "locking": "mdi:lock-clock",
+       "open": "mdi:lock-open-variant",
+       "opening": "mdi:lock-clock",
+       "unlocked": "mdi:lock-open-variant",
+       "unlocking": "mdi:lock-clock"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.lock.entity_component._.state.jammed": "Jammed",
+    "component.lock.entity_component._.state.locked": "Locked",
+    "component.lock.entity_component._.state.locking": "Locking",
+    "component.lock.entity_component._.state.open": "Open",
+    "component.lock.entity_component._.state.opening": "Opening",
+    "component.lock.entity_component._.state.unlocked": "Unlocked",
+    "component.lock.entity_component._.state.unlocking": "Unlocking"
+   },
+   "entity": {}
+  }
+ }
+}

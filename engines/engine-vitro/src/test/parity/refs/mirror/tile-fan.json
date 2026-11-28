@@ -1,0 +1,148 @@
+{
+ "case": "tile-fan",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Ceiling Fan",
+   "x": 56,
+   "y": 17.61,
+   "w": 70.52,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "20%",
+   "x": 56,
+   "y": 37,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "fan.ceiling_fan": {
+   "s": "on",
+   "a": {
+    "preset_modes": [
+     "auto"
+    ],
+    "percentage": 20,
+    "percentage_step": 10,
+    "preset_mode": null,
+    "friendly_name": "Ceiling Fan",
+    "supported_features": 57
+   },
+   "lc": 1794484020,
+   "lu": 1794484020
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "fan.ceiling_fan",
+    "pl": "zha",
+    "tk": "fan",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Ceiling Fan"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "fan"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "fan": {
+     "_": {
+      "default": "mdi:fan",
+      "state": {
+       "off": "mdi:fan-off"
+      },
+      "state_attributes": {
+       "direction": {
+        "default": "mdi:rotate-right",
+        "state": {
+         "reverse": "mdi:rotate-left"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {}
+       }
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "fan": {
+      "fan": {
+       "state_attributes": {
+        "preset_mode": {
+         "state": {
+          "auto": "mdi:fan-auto",
+          "smart": "mdi:fan-auto"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.fan.entity_component._.state.off": "Off",
+    "component.fan.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

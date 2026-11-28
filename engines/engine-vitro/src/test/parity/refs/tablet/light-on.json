@@ -1,0 +1,113 @@
+{
+ "case": "light-on",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 280
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 263.75,
+   "type": "hui-light-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Pendant",
+   "x": 219,
+   "y": 222.88,
+   "w": 62,
+   "h": 20,
+   "size": 16.8,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.kitchen_pendant": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": "onoff",
+    "friendly_name": "Kitchen Pendant",
+    "supported_features": 0
+   },
+   "lc": 1794482580,
+   "lu": 1794482580
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.kitchen_pendant",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Pendant"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Kitchen"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

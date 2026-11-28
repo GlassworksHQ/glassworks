@@ -5,10 +5,29 @@
 # The key is per file and call, not per line, on purpose: lines move with every edit, and a listed call
 # that a file makes again is already known there. A new call, or a known one in a new file, fails.
 # AppManage.kt: DevicePolicyManager.reboot behind Platform.hasDeviceOwnerReboot (#198 Phase B).
+# MarkdownRenderer.kt: TextView.setFallbackLineSpacing behind Platform.hasFallbackLineSpacing (Vitro, #797).
+# WebFonts.kt: Typeface.Builder (a variable web font at a weight) behind Platform.hasTypefaceBuilder (Vitro, #811).
+# MoreInfoSheet.kt: View.setAccessibilityPaneTitle behind Platform.hasAccessibilityPaneTitle (Vitro a11y, #814).
+# VitroAccess.kt: View.getFocusable behind Platform.hasFocusableAuto (Vitro a11y, #814).
+# VitroAccess.kt: AccessibilityNodeInfo.setStateDescription behind Platform.hasStateDescription, and
+#   ACTION_SET_PROGRESS behind Platform.hasSetProgressAction (Vitro sliders, AdjustableAccess).
+# OutlineClip.kt: Outline.getRadius behind Platform.hasGradientDrawableGetters (Vitro's card clip, #980): below
+#   Android 7 every rounded card keeps its clip, as before.
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.Collection#removeIf
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/camera/onvif/RtspServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/diagnostics/AndroidProbe.kt|android.os.Process#getStartElapsedRealtime
+dev/glassworks/engine/vitro/cards/MarkdownRenderer.kt|android.widget.TextView#setFallbackLineSpacing
+dev/glassworks/engine/vitro/cards/MoreInfoSheet.kt|android.view.View#setAccessibilityPaneTitle
+dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#build
+dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#setFontVariationSettings
+dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#setItalic
+dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#setWeight
+dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder()
+dev/glassworks/engine/vitro/ui/OutlineClip.kt|android.graphics.Outline#getRadius
+dev/glassworks/engine/vitro/ui/VitroAccess.kt|android.view.accessibility.AccessibilityNodeInfo#setStateDescription
+dev/glassworks/engine/vitro/ui/VitroAccess.kt|android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction#ACTION_SET_PROGRESS
+dev/glassworks/engine/vitro/ui/VitroAccess.kt|android.view.View#getFocusable
 dev/glassworks/manage/HaSignIn.kt|java.util.Base64#getUrlEncoder
 dev/glassworks/manage/HaSignIn.kt|java.util.Base64.Encoder#encodeToString
 dev/glassworks/manage/HaSignIn.kt|java.util.Base64.Encoder#withoutPadding
@@ -31,8 +50,11 @@ dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOn
 dev/glassworks/platform/Platform.kt|TransportInfo
 dev/glassworks/platform/Platform.kt|android.app.ActivityManager#getHistoricalProcessExitReasons
 dev/glassworks/platform/Platform.kt|android.app.ActivityOptions#setPendingIntentCreatorBackgroundActivityStartMode
+dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getDescription
+dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getPid
 dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getProcessName
 dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getReason
+dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getTimestamp
 dev/glassworks/platform/Platform.kt|android.app.Service#startForeground
 dev/glassworks/platform/Platform.kt|android.content.Context#registerReceiver
 dev/glassworks/platform/Platform.kt|android.content.Intent#getParcelableExtra

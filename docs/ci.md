@@ -45,9 +45,9 @@ A pattern matches a path and everything under it. `*` stays within one folder, `
 | api23 | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `tools/legacy` |
 | libs-publish | `libs`, `build-logic`, `LICENSE`, `LICENSES`, `THIRD-PARTY-NOTICES.md`, `tools/release/check-lib-artifact.sh`, `tools/release/lib-consumer-check.sh` |
 | wake-word | `libs`, `build-logic`, `tools/voice` |
-| web | anything but `**/*.md`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/{*.kt,*.java}`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/{test,androidTest}/**`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/*/res/**`, `!testing/kotlin/dev/glassworks/testing/RepoFiles.kt`, `!core/src/main/res/font/**` |
+| web | anything but `**/*.md`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/{*.kt,*.java}`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/{test,androidTest}/**`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/*/res/**`, `!testing/kotlin/dev/glassworks/testing/RepoFiles.kt`, `!core/src/main/res/font/**`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/model/LovelaceModel.kt`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt`, `!engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/cards/HacsParityCards.kt`, `!engines/engine-vitro/src/test/resources/dev/glassworks/engine/vitro/compat/native-options-cases.json` |
 | refract | `kiln/workers` |
-| scripts: Clarity tests (ffmpeg, fast and slow sets) | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity`, `docs/perf.md` |
+| scripts: Clarity tests (ffmpeg, fast and slow sets) | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity`, `docs/perf.md`, `tools/vitro-camera-e2e` |
 | perf-webrtc | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity` |
 | root | `frames/aqara-s1-plus/tools/root`, `frames/aqara-s1-plus/tools/radio` |
 | size | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `frames/*/budgets.json`, `tools/size`, `tools/release/frame-abis.sh`, `frames/aqara-s1-plus/tools/radio`, `kiln/assets.lock.json` |
@@ -82,10 +82,11 @@ Android PR in a shared pool (see above).
 
 | Job | What | Runs |
 |---|---|---|
-| `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`) | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
+| `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`), and on API 23 and 34 the [engine contract](engine-contract.md) (`engines/conformance`) on the same emulator | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
 | `libs-api23` | `esphome-api-android` and `improv` androidTest on Android 6 | the same |
 | `legacy-verify` | The generic app's legacy APK (the Mirror's) installed on Android 6: fails when its verifier rejects a Glassworks class (`tools/legacy/verify-api23.sh`, #435). Before a Mirror flash, run the script on the build you flash | the same |
-| `report` | Opens, updates or closes the red-main issue | after those two, on `main` only |
+| `Vitro cameras on API 23, 29` (`vitro-camera`) | Vitro's camera end-to-end test ([tools/vitro-camera-e2e](../tools/vitro-camera-e2e/README.md)): a live camera card over each transport Vitro plays, against Clarity's fake Home Assistant on the runner, checked on screen | the same |
+| `report` | Opens, updates or closes the red-main issue | after the jobs above, on `main` only |
 
 A PR still gets the fast checks for the same code: the unit tests (`app`), lint's NewApi at minSdk 23
 (`pr.yml`'s `libs-api23` and `api23`). None of the emulator jobs is a required check, so a PR never waits
@@ -167,7 +168,8 @@ run, a manual run) save them, and a PR only reads them.
 
 | Cache | What | Named by | Why |
 |---|---|---|---|
-| `apt-<image>-<arch>-<packages>-<version>` | The `.deb` files of Ubuntu packages a job installs (`ffmpeg` in `scripts` and `perf-webrtc`), through `.github/actions/apt-install` | The runner image (`ImageOS`, then `ImageVersion`) and the packages. Several image versions serve at once, so without its own version's entry a run restores another's, and apt fetches only what differs | On 2026-11-18 and 19 `apt-get update && apt-get install ffmpeg` took 0.3 to 26 minutes (median 10 in `perf-webrtc`, which then hit its 30-minute limit) and failed twice on a mirror's 503. From the cache there's no `apt-get update` and no download: the files are installed by path, whatever versions the image's lists name. When that fails (another image's files), it tries the image's lists, then updated lists. The cache keeps only the files of the versions installed. It also skips man-db's index rebuild |
+| `apt-<image>-<arch>-<packages>-<version>` | The `.deb` files of Ubuntu packages a job installs (`ffmpeg` in `scripts` and `perf-webrtc`, `libgbm1` for the island end to end's Chromium in `app`), through `.github/actions/apt-install` | The runner image (`ImageOS`, then `ImageVersion`) and the packages. Several image versions serve at once, so without its own version's entry a run restores another's, and apt fetches only what differs | On 2026-11-18 and 19 `apt-get update && apt-get install ffmpeg` took 0.3 to 26 minutes (median 10 in `perf-webrtc`, which then hit its 30-minute limit) and failed twice on a mirror's 503. From the cache there's no `apt-get update` and no download: the files are installed by path, whatever versions the image's lists name. When that fails (another image's files), it tries the image's lists, then updated lists. The cache keeps only the files of the versions installed. It also skips man-db's index rebuild |
+| `vitro-islands-<lock and pins>` | Playwright's Chromium headless shell (`~/.cache/ms-playwright`) and the parity harness's pinned community cards (`~/.cache/glassworks-perf/cards`), in `app`, for the island end to end (`IslandEndToEndTest`) | The parity tools' `package-lock.json` (Playwright's version) and `cards.json` (the cards' pins) | Without it each run downloads the browser and the cards (GitHub releases) before the tests. The cards are checked by SHA-256 either way |
 | `robolectric-<version>-<jars>` | Robolectric's Android jars (`~/.m2/repository/org/robolectric`), in `app` | Robolectric's version, then the jars it holds; a run restores the newest for its version | Robolectric fetches them from Maven Central while the tests run, outside Gradle's caches, and a failed fetch fails the whole test class: 6 of the 13 red `app` runs on 2026-11-18 and 19 |
 
 Clarity's own cache (`~/.cache/glassworks-perf`) isn't kept between runs: its tests make the camera streams

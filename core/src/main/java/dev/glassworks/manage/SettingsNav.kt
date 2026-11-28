@@ -10,7 +10,7 @@ import dev.glassworks.pane.SettingsSection
 /**
  * The settings sidebar, the same on the panel's menu and on the Manage page: Overview, then Panel (the
  * core's own sections), Panes (each with its state; the ones turned off fold under "Off · N"), then
- * System (Log, About). Only its foot differs: Done on the panel, who is signed in on the Manage page.
+ * System (Log, Labs, About). Only its foot differs: Done on the panel, who is signed in on the Manage page.
  */
 data class SettingsNav(val panel: List<Item>, val panes: List<Item>, val off: List<Item>, val system: List<Item>) {
     /** A row: a section's id and title, and a pane's state (null for the core's own). */
@@ -20,7 +20,7 @@ data class SettingsNav(val panel: List<Item>, val panes: List<Item>, val off: Li
         /** The Overview's id, never a section's. */
         const val OVERVIEW = "overview"
         /** The pages under System, in their order: sections of the core's, or pages of a surface's own. */
-        val SYSTEM = listOf("log", "security", "about")
+        val SYSTEM = listOf("log", "security", "labs", "about")
     }
 }
 

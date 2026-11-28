@@ -123,6 +123,7 @@ def main():
     print(f"  {now['headline']}")
     try:
         summary = S.summarise(rep, report_url, allow)
+        S.check_publishable(summary, summary_path)
     except S.Refused as e:
         summary = None
         print(f"  summary not written: {e}")

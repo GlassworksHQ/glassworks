@@ -1,0 +1,174 @@
+{
+ "case": "picture-glance-dialog",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 516
+ },
+ "docSize": {
+  "width": 960,
+  "height": 548
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 500,
+   "type": "hui-picture-glance-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Front porch",
+   "x": 17,
+   "y": 465,
+   "w": 82.09,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(255, 255, 255)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.porch_lantern": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": "brightness",
+    "brightness": 180,
+    "off_with_transition": false,
+    "off_brightness": null,
+    "friendly_name": "Porch Lantern",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "lock.front_door": {
+   "s": "locked",
+   "a": {
+    "friendly_name": "Front Door",
+    "supported_features": 0
+   },
+   "lc": 1794494280,
+   "lu": 1794494280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.porch_lantern",
+    "pl": "zha",
+    "tk": "light",
+    "di": "device-1",
+    "np": "device"
+   },
+   {
+    "ei": "lock.front_door",
+    "pl": "zha",
+    "tk": "lock",
+    "di": "device-2",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Porch Lantern"
+   },
+   {
+    "id": "device-2",
+    "name": "Front Door"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light",
+    "lock"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "lock": {
+     "_": {
+      "default": "mdi:lock",
+      "state": {
+       "jammed": "mdi:lock-alert",
+       "locking": "mdi:lock-clock",
+       "open": "mdi:lock-open-variant",
+       "opening": "mdi:lock-clock",
+       "unlocked": "mdi:lock-open-variant",
+       "unlocking": "mdi:lock-clock"
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.lock.entity_component._.state.jammed": "Jammed",
+    "component.lock.entity_component._.state.locked": "Locked",
+    "component.lock.entity_component._.state.locking": "Locking",
+    "component.lock.entity_component._.state.open": "Open",
+    "component.lock.entity_component._.state.opening": "Opening",
+    "component.lock.entity_component._.state.unlocked": "Unlocked",
+    "component.lock.entity_component._.state.unlocking": "Unlocking"
+   },
+   "entity": {}
+  }
+ }
+}

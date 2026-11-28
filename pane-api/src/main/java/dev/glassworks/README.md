@@ -407,8 +407,8 @@ password when the field was left empty (keep the stored one), or null for Clear.
 diagnostics.
 
 **Order.** `settingsOrder` puts the core's Dashboard, Screen and Network first, then the panes'
-sections in definition order (Voice, Music, Radio, Wall base, Time zone), then Log, Security and
-About: the Manage page's nav (#33). A section without items is left out. The panel's menu draws them
+sections in definition order (Voice, Music, Radio, Wall base, Time zone), then Log, Security, Labs
+and About: the Manage page's nav (#33). A section without items is left out. The panel's menu draws them
 in the same rail as setup (`ui/GroupedRail`): the panes' sections under a Panes group that opens while
 one of them is picked. Panes whose `master` is off fold under "Off · N" at the end of the group
 (#212); the fold opens while one of them is picked. Every pane's row has a status chip after its name

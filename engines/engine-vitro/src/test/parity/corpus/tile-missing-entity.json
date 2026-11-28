@@ -1,0 +1,10 @@
+{
+ "title": "Tile: an entity HA doesn't have, for an administrator (hui-warning titled \"Entity not found\")",
+ "card": {
+  "type": "tile",
+  "entity": "text.missing_night_window"
+ },
+ "fixture": {
+  "states": {}
+ }
+}

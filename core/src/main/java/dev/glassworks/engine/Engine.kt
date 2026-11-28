@@ -39,6 +39,13 @@ interface Engine {
      * shows a Legacy chip that says so, and the app never turns on remote debugging for it (#29).
      */
     val lockedDown: Boolean get() = false
+
+    /**
+     * True when the engine draws cards outside Home Assistant's origin that start from the copy of HA's `localStorage`
+     * the app keeps (Vitro's web islands, [dev.glassworks.web.HaPageStorage]). Only then does the helper extension read
+     * the page's storage and the app keep it: with any other engine, nothing is copied.
+     */
+    val keepsPageStorage: Boolean get() = false
 }
 
 /** What an engine starts with. */
@@ -55,6 +62,13 @@ data class EngineSettings(
      * settings it can't change in this process, so a new dashboard address needs a process restart.
      */
     val dashboard: String? = null,
+    /**
+     * The app's own loopback server (`http://127.0.0.1:<port>`, Vitro's island server), or null. An engine that holds
+     * pages to the dashboard's origin also lets pages of exactly this origin load, each page held to its own origin:
+     * Home Assistant's pages fetch only from Home Assistant, the server's only from the server. Set once, like
+     * [dashboard].
+     */
+    val localOrigin: String? = null,
 )
 
 /** A page in one activity. Call it on the main thread. */
@@ -67,7 +81,16 @@ interface Page {
     /** Goes back one page, if the page has history. */
     fun goBack()
 
-    /** Replaces the page with a new, empty one in the same view, after [PageHost.onContentGone]. */
+    /**
+     * True when [goBack] has a page of the page's own history to go back to. False when the engine can't tell: a page
+     * that wraps this one (Vitro's fallback) then takes Back for itself.
+     */
+    val canGoBack: Boolean get() = false
+
+    /**
+     * Replaces the page with a new, empty one in the same view, with no history: after [PageHost.onContentGone], or
+     * when a page that wraps this one starts it over.
+     */
     fun restart()
 
     /** Sends [message] to every connected [PagePort]. A port that fails is skipped. */
@@ -81,9 +104,19 @@ interface Page {
     fun capture(done: (android.graphics.Bitmap?) -> Unit) = done(null)
 
     /**
-     * Ends the page for good: its view lets go of the engine's session and the session closes, so an activity that is
-     * destroyed (a recreate for a new locale or font scale) leaves no live session holding it. Idempotent; the page
-     * does nothing after it.
+     * Whether the page is shown. A page that isn't shown stops painting and runs as a background tab does, its
+     * timers slowed; [active] true shows it again. Only a page in a view that is on screen should be active: an
+     * engine may also follow the view's own surface (GeckoView does), so call it when the page is hidden or shown
+     * inside an activity that stays in front, not to show a page behind another app. Does nothing after [close].
+     */
+    fun setActive(active: Boolean) {}
+
+    /**
+     * Ends the page for good: its content (scripts, timers, sockets) stops and the engine frees what it held. Its
+     * view lets go of the engine's session and the session closes, so an activity that is destroyed (a recreate for a
+     * new locale or font scale) leaves no live session holding it. The [view] stays where it is, empty. Every call
+     * after it does nothing, a second [close] included. A page that leaves before its activity (a Vitro island whose
+     * card is gone) closes too.
      */
     fun close() {}
 }
@@ -108,6 +141,13 @@ interface PageHost {
 
     /** A top-level load in the page's own window. Return a URL to load instead, or null to let it load. */
     fun redirect(url: String): String?
+
+    /**
+     * Whether the page may load [url] at the top level, in its own window or in one it opens (a link, `window.open`).
+     * False drops the load: the page stays where it is. Asked before [redirect]. A page that hosts a card in a frame of
+     * the dashboard (a Vitro island) says no to everything but its own address, so a link can't replace the card.
+     */
+    fun allowsLoad(url: String): Boolean = true
 
     /** The content process crashed, or the system [killed] it. The page shows nothing until [Page.restart]. */
     fun onContentGone(killed: Boolean)

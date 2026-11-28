@@ -50,7 +50,18 @@ export type ClaritySummary = Summary & {
   apk?: { file?: string; abis?: string[]; bytes?: number }[] | null;
   /** the report's plain-words notes; they judge by the rubric version they name (#201) */
   notes?: { text?: string; rubric?: number } | null;
+  /** the engine measured, only when it isn't the web engine ("vitro", docs/perf.md "Vitro") */
+  engine?: string;
 };
+
+/**
+ * The summary as the frame's grade, or null: only the web engine's. A summary of another engine (Vitro) is never shown
+ * as the frame's grade; publishing one is the maintainer's call, so the site shows none (summary.py refuses to write one
+ * as clarity.json too).
+ */
+export function frameGradeSummary(s: ClaritySummary | null): ClaritySummary | null {
+  return s && (!s.engine || s.engine === "web") ? s : null;
+}
 
 export type Graded = { state: "graded"; summary: ClaritySummary; grade: Grade };
 export type Clarity =
@@ -84,7 +95,7 @@ const cache = new Map<string, Clarity>();
 /** A frame's Clarity: its summary and the grade worked out from it, or "none" without a summary. */
 export function clarityFor(id: string): Clarity {
   if (!cache.has(id)) {
-    const summary = read(id);
+    const summary = frameGradeSummary(read(id));
     if (!summary) cache.set(id, { state: "none" });
     else {
       let grade = gradeSummary(summary, rubric);

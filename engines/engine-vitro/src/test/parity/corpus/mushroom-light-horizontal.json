@@ -1,0 +1,29 @@
+{
+ "title": "Mushroom light card, horizontal, with the brightness control: the slider fills the half beside the info",
+ "expect": {
+  "light.living_room": "on"
+ },
+ "card": {
+  "type": "custom:mushroom-light-card",
+  "entity": "light.living_room",
+  "layout": "horizontal",
+  "show_brightness_control": true
+ },
+ "fixture": {
+  "states": {
+   "light.living_room": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Living room",
+     "supported_features": 0
+    }
+   }
+  }
+ }
+}

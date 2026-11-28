@@ -1,0 +1,60 @@
+{
+ "title": "A view with string badges: HA shows each one's name above its state (a scene's state is a timestamp)",
+ "view_config": {
+  "type": "sections",
+  "max_columns": 1,
+  "badges": [
+   "sensor.fridge_temperature",
+   "scene.movie_night"
+  ],
+  "sections": [
+   {
+    "type": "grid",
+    "cards": [
+     {
+      "type": "tile",
+      "entity": "sensor.fridge_temperature"
+     }
+    ]
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "sensor.fridge_temperature": {
+    "state": "3.4",
+    "last_changed": "-93m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "icon": "mdi:thermometer",
+     "friendly_name": "Fridge Temperature"
+    }
+   },
+   "scene.movie_night": {
+    "state": "@-2m",
+    "last_changed": "-2m",
+    "attributes": {
+     "friendly_name": "Movie night"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.fridge_temperature",
+    "pl": "demo",
+    "dp": 1,
+    "di": "dev-fridge",
+    "en": "Temperature",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-fridge",
+    "name": "Fridge"
+   }
+  ]
+ }
+}

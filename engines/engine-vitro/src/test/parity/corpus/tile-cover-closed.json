@@ -1,0 +1,36 @@
+{
+ "title": "Tile: a closed curtain, its close button disabled",
+ "card": {
+  "type": "tile",
+  "entity": "cover.living_room_curtain",
+  "features": [
+   {
+    "type": "cover-open-close"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "cover.living_room_curtain": {
+    "state": "closed",
+    "last_changed": "-5h",
+    "attributes": {
+     "current_position": 0,
+     "device_class": "curtain",
+     "friendly_name": "Living Room Curtain",
+     "supported_features": 15
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.living_room_curtain",
+    "pl": "template",
+    "en": "Living Room Curtain"
+   }
+  ]
+ },
+ "expect": {
+  "cover.living_room_curtain": "closed"
+ }
+}

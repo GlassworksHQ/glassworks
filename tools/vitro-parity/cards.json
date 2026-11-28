@@ -1,0 +1,893 @@
+{
+ "_comment": "Community cards the parity harness's fake HA serves at /hacsfiles/, pinned by release and SHA-256 (tools/vitro-parity/cards.py pin). The files are downloaded to a cache, never committed.",
+ "cards": [
+  {
+   "name": "lovelace-card-mod",
+   "repo": "thomasloven/lovelace-card-mod",
+   "version": "v4.2.1",
+   "license": "MIT",
+   "main": "card-mod.js",
+   "files": {
+    "card-mod.js": {
+     "url": "https://raw.githubusercontent.com/thomasloven/lovelace-card-mod/v4.2.1/card-mod.js",
+     "sha256": "5e7e71ad61796f59070f8c4621e69fa8e71a9864d0be0922bc4dbc72f990cd35"
+    }
+   }
+  },
+  {
+   "name": "lovelace-mushroom",
+   "repo": "piitaya/lovelace-mushroom",
+   "version": "v5.3.0",
+   "license": "Apache-2.0",
+   "main": "mushroom.js",
+   "files": {
+    "mushroom.js": {
+     "url": "https://github.com/piitaya/lovelace-mushroom/releases/download/v5.3.0/mushroom.js",
+     "sha256": "d2faf441f449489e4997533db248c2061b845eb633011f46d9aa6e78111fa237"
+    }
+   }
+  },
+  {
+   "name": "stack-in-card",
+   "repo": "custom-cards/stack-in-card",
+   "version": "0.2.0",
+   "license": "MIT",
+   "main": "stack-in-card.js",
+   "files": {
+    "stack-in-card.js": {
+     "url": "https://github.com/custom-cards/stack-in-card/releases/download/0.2.0/stack-in-card.js",
+     "sha256": "3eb3c890907277c5e49f0951fff787af700f04c3315be4c0d7ad948e4ef011bd"
+    }
+   }
+  },
+  {
+   "name": "lovelace-layout-card",
+   "repo": "thomasloven/lovelace-layout-card",
+   "version": "v2.4.7",
+   "license": "MIT",
+   "main": "layout-card.js",
+   "files": {
+    "layout-card.js": {
+     "url": "https://raw.githubusercontent.com/thomasloven/lovelace-layout-card/v2.4.7/layout-card.js",
+     "sha256": "aa7ed2f010b7453687b02a54dc5372bb0c98451244c1aa40e85d6f7c71608191"
+    }
+   }
+  },
+  {
+   "name": "lovelace-auto-entities",
+   "repo": "thomasloven/lovelace-auto-entities",
+   "version": "v1.16.1",
+   "license": "MIT",
+   "main": "auto-entities.js",
+   "files": {
+    "auto-entities.js": {
+     "url": "https://raw.githubusercontent.com/thomasloven/lovelace-auto-entities/v1.16.1/auto-entities.js",
+     "sha256": "b7327b2fcd39f1fb859b60b53c869760d1d762ab4d4e4617b748971f528bd407"
+    }
+   }
+  },
+  {
+   "name": "mini-graph-card",
+   "repo": "kalkih/mini-graph-card",
+   "version": "v0.13.0",
+   "license": "MIT",
+   "main": "mini-graph-card-bundle.js",
+   "files": {
+    "mini-graph-card-bundle.js": {
+     "url": "https://github.com/kalkih/mini-graph-card/releases/download/v0.13.0/mini-graph-card-bundle.js",
+     "sha256": "4d8b986f3cd693c0f7771d2f5574008bc39c45ecb450aec067906150be2dfabd"
+    }
+   }
+  },
+  {
+   "name": "mini-media-player",
+   "repo": "kalkih/mini-media-player",
+   "version": "v1.16.12",
+   "license": "MIT",
+   "main": "mini-media-player-bundle.js",
+   "files": {
+    "mini-media-player-bundle.js": {
+     "url": "https://github.com/kalkih/mini-media-player/releases/download/v1.16.12/mini-media-player-bundle.js",
+     "sha256": "ab3b3b71c3c69d0310cdb451ee019b5dace2b6125eb08672e896db17440b5df9"
+    }
+   }
+  },
+  {
+   "name": "Bubble-Card",
+   "repo": "Clooos/Bubble-Card",
+   "version": "v3.4.3",
+   "license": "MIT",
+   "main": "bubble-card.js",
+   "files": {
+    "bubble-card.js": {
+     "url": "https://github.com/Clooos/Bubble-Card/releases/download/v3.4.3/bubble-card.js",
+     "sha256": "51b54894e51624d8a4596a576ad82b084df69cc7c9473aeaa167f255e01fb396"
+    },
+    "bubble-pop-up-fix.js": {
+     "url": "https://github.com/Clooos/Bubble-Card/releases/download/v3.4.3/bubble-pop-up-fix.js",
+     "sha256": "9340b419eef502e31b1fa468f87621205bf2e44c1cc741c307a991aaaf7e4325"
+    }
+   }
+  },
+  {
+   "name": "vertical-stack-in-card",
+   "repo": "ofekashery/vertical-stack-in-card",
+   "version": "v1.1.4",
+   "license": "MIT",
+   "main": "vertical-stack-in-card.js",
+   "files": {
+    "vertical-stack-in-card.js": {
+     "url": "https://github.com/ofekashery/vertical-stack-in-card/releases/download/v1.1.4/vertical-stack-in-card.js",
+     "sha256": "8e3775a19ae79664acf94afe4ebfacdc701f7294d3c5da24a74f99b0deb39c37"
+    }
+   }
+  },
+  {
+   "name": "bar-card",
+   "repo": "custom-cards/bar-card",
+   "version": "3.2.0",
+   "license": "MIT",
+   "main": "bar-card.js",
+   "files": {
+    "bar-card.js": {
+     "url": "https://github.com/custom-cards/bar-card/releases/download/3.2.0/bar-card.js",
+     "sha256": "88dfbadb9a9f042aaa91bfc81e74fb919166aee4a615c643ea790346f04ffc9a"
+    }
+   }
+  },
+  {
+   "name": "clock-weather-card",
+   "repo": "pkissling/clock-weather-card",
+   "version": "v3.1.0",
+   "license": "MIT",
+   "main": "clock-weather-card.js",
+   "files": {
+    "clear-day-2-IZLV3u.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-day-2-IZLV3u.svg",
+     "sha256": "a32c170724d1c5f72e2f608c4d7202ef30b36c680d720e9cf5c1b8b9399e0f50"
+    },
+    "clear-day-BnuQghc0.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-day-BnuQghc0.svg",
+     "sha256": "6020f0ef5cb7d7493c6efac2596908003dbcc0b34428023d97de9cd6bf3e48d4"
+    },
+    "clear-day-DeHil3Ax.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-day-DeHil3Ax.svg",
+     "sha256": "2fea6c6287ddbd72f059ce6639cf0b2e43e76d0c657e9f7646dbdf5d1ce7417d"
+    },
+    "clear-day-DtG_au8u.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-day-DtG_au8u.svg",
+     "sha256": "cb51d037d4db24b42b0d4816508defd34c7567a7b7b774b94ccdfee61ee44474"
+    },
+    "clear-day-It6qZbEt.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-day-It6qZbEt.svg",
+     "sha256": "4b1f6766e201163dfabfc8e1e73387c9e5bba09f1c468b35c7be68b6bce54169"
+    },
+    "clear-day-SXEvluxZ.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-day-SXEvluxZ.svg",
+     "sha256": "12adc93e15093977b37809b6e5964494d1e1f809989a34da4050cb60fb47caed"
+    },
+    "clear-day-WEeJ3y5P.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-day-WEeJ3y5P.svg",
+     "sha256": "9dedbae4b0f6654434cf800a9c71459c087b0e5929aec6f061bc99d1c46ad57c"
+    },
+    "clear-day-ibdzwqXm.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-day-ibdzwqXm.svg",
+     "sha256": "f840ce63e5bc6dbaa7e5f6b0d26adc696e6a9cc1985c90bdbfdfdaf9dbf1f3ed"
+    },
+    "clear-night-8HzEXXT7.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-night-8HzEXXT7.svg",
+     "sha256": "8a539d69e9c980a34d747c97bdc787a8f2842de33c8ea3c9d4f9b7cbf5272e4d"
+    },
+    "clear-night-B6c_CdYs.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-night-B6c_CdYs.svg",
+     "sha256": "2aa5f39362a2396d5bcc8916eece55b1d8a174b3ab4b9bcb7932ba0b945aec85"
+    },
+    "clear-night-BCqovh_r.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-night-BCqovh_r.svg",
+     "sha256": "a383cb55e909fb2cdb39f9f413c558d58ce654c8771e7e1274f2d0605476f527"
+    },
+    "clear-night-BNFVGprA.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-night-BNFVGprA.svg",
+     "sha256": "7e2f2042f5389af304c73880f013dfae7b45d7dfa13d1f167fe00e7fc4cf7d60"
+    },
+    "clear-night-BgqyktBf.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-night-BgqyktBf.svg",
+     "sha256": "6ed833434a573a441555e386c8d06bfeaf04a0157190e168846f9c7a17554390"
+    },
+    "clear-night-CageRwZm.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-night-CageRwZm.svg",
+     "sha256": "93b4d005ef1254eb502da514edd1664cb3e514125562f430719e64a1ea768535"
+    },
+    "clear-night-CdeW-E8r.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-night-CdeW-E8r.svg",
+     "sha256": "582a4ba8cd8db3f2d6db3fdb5744e6f504832d36cb6cfc7db50fe842b5143694"
+    },
+    "clear-night-wmsPVeOy.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clear-night-wmsPVeOy.svg",
+     "sha256": "0f47f46097f0d7c03c315b6d21e2ff42f351a587340bb9f865e69456c3d9f4f4"
+    },
+    "clock-weather-card-editor-B-AnynEq.js": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clock-weather-card-editor-B-AnynEq.js",
+     "sha256": "31b65259c7ed8ca372f178897721915c971d9aedd4d6a1185954b872d70fa1f3"
+    },
+    "clock-weather-card.js": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/clock-weather-card.js",
+     "sha256": "e2dca288a13a271551ba5e87de522c1c6521384f0b9e1be3594dbc1e23c6d9d3"
+    },
+    "cloudy-BDYUNNIv.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/cloudy-BDYUNNIv.svg",
+     "sha256": "4512661f6fda8bc6e9e432a92e575d937200a258bb3030f08cb24285e6ba4824"
+    },
+    "cloudy-C4AvXuM5.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/cloudy-C4AvXuM5.svg",
+     "sha256": "1a9cbb1f9e89b6471ff49921b879914a723033d9c2d2c0130e29ff1d5c7a2728"
+    },
+    "cloudy-C5vaEGqx.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/cloudy-C5vaEGqx.svg",
+     "sha256": "57e286257f5880dc4d9b4e73c51db22f4179469bb5b59065baff67da4dea9bc8"
+    },
+    "cloudy-DNzKc6yd.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/cloudy-DNzKc6yd.svg",
+     "sha256": "270c0dcfd6f0b2376c88849642a9abe17ded788da3b3d15a5420dc7dc5a27a71"
+    },
+    "cloudy-DUaNEG_U.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/cloudy-DUaNEG_U.svg",
+     "sha256": "d5e50a8509aa6065261e9217d104bc7658e38c93d58b8e4fe64d1dc510b6fb53"
+    },
+    "cloudy-DmvvniId.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/cloudy-DmvvniId.svg",
+     "sha256": "b102f353f16b6ef016ed7274ae59284e13b5334ab31506811238362afb4d2b9c"
+    },
+    "cloudy-PiRYVGsj.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/cloudy-PiRYVGsj.svg",
+     "sha256": "5080957e9a4371869feddb4a422ef6954e0140a0287308ec909f82b72c9da78d"
+    },
+    "cloudy-T9zXt8V6.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/cloudy-T9zXt8V6.svg",
+     "sha256": "b58eefcde3e9b0c307d846a597503ce4b9eedd7732726e0a73de61913c5700d3"
+    },
+    "extreme-rain-91FtQCNJ.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/extreme-rain-91FtQCNJ.svg",
+     "sha256": "21a387a59b92ebcb853187b412fa2b76c466cc10fb5709038789f3be99c39f7a"
+    },
+    "extreme-rain-Bg9guH7s.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/extreme-rain-Bg9guH7s.svg",
+     "sha256": "ddb21a2bb0e62ba2e5e9bd7ef627bbb0e2c2cb61930ed85f3748fbb407b821a7"
+    },
+    "extreme-rain-BqMKVnoj.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/extreme-rain-BqMKVnoj.svg",
+     "sha256": "d93c0358e1b7757aa29b81358b1787bfdb9c2906bd3b3991b7bc67c4f5493f6a"
+    },
+    "extreme-rain-Bzafvs5d.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/extreme-rain-Bzafvs5d.svg",
+     "sha256": "9141993eab264d1e722e02582bdf7261298f62e60d02057b4dde6228dac87a16"
+    },
+    "extreme-rain-Cz1oAU42.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/extreme-rain-Cz1oAU42.svg",
+     "sha256": "e5f1769c3f11095e45f9295f72f097bca1822394d7c4df3743441d1451bec751"
+    },
+    "extreme-rain-D8ecPzFR.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/extreme-rain-D8ecPzFR.svg",
+     "sha256": "aebd824209007cee2e2f090c6d4f3cfd7b3e49b3775c293666a3a54427e5b497"
+    },
+    "extreme-rain-DeRpmpbq.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/extreme-rain-DeRpmpbq.svg",
+     "sha256": "cc8c5620508ef80cf561b63b07ecd75f4db7f83eb5c47dab13f531d8d4a7237e"
+    },
+    "extreme-rain-wL_etFLL.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/extreme-rain-wL_etFLL.svg",
+     "sha256": "e076834cc9c50e4c0369b0416508256cffaef2fa1c1a9033f5d4b3ccf5ba7bec"
+    },
+    "fog-day-B2o5NCOD.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-day-B2o5NCOD.svg",
+     "sha256": "6000b2b7bf02aea7e144dfe2101e65715aff62a06b1665f3251b7ab0b19bd7b2"
+    },
+    "fog-day-BGsMCaKv.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-day-BGsMCaKv.svg",
+     "sha256": "77af8d8a10d6b62da08b230b7c80f9e328962dacbb37cda4eec9969576e526ca"
+    },
+    "fog-day-BqLvl7Zr.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-day-BqLvl7Zr.svg",
+     "sha256": "87c492f6403b75cc8197135da615f8e5939a80938b49a075c72ff5a10923d2c3"
+    },
+    "fog-day-C4_4qUZi.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-day-C4_4qUZi.svg",
+     "sha256": "7977a9d852c11ed07a6c9e89a808a1895953bfcceff5a36cd5b993e88c91fae7"
+    },
+    "fog-day-CIfVOTtm.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-day-CIfVOTtm.svg",
+     "sha256": "870b041a16376da3d59df240d009795ca97aa84e05f54d8ae503b483f7c3af9c"
+    },
+    "fog-day-Co5PN86k.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-day-Co5PN86k.svg",
+     "sha256": "dbbd1e3b989d6db2061b43d89a6041cfb271734c0ce8947b7163c8828ecd062f"
+    },
+    "fog-day-Dkv9nWKu.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-day-Dkv9nWKu.svg",
+     "sha256": "e99b153ca5c678eb91d247c5fd7d54e5e05c396c8ee6b58924606fe6a2725ef6"
+    },
+    "fog-day-IbfZK2w-.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-day-IbfZK2w-.svg",
+     "sha256": "20c468af8a8e4855d0f8450a7e021d89d364dd1d645e4b44f2ec07f9b374ad92"
+    },
+    "fog-night--wm-qIVR.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-night--wm-qIVR.svg",
+     "sha256": "a2f8d5790466667d1b63e13818f0d6fdce3c97529575ae55cf1cacd7890a43cc"
+    },
+    "fog-night-CKet5bKG.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-night-CKet5bKG.svg",
+     "sha256": "01b15adfbcf8652116c066db38b6b0e3d6cdf57c7b4b0eb46fdb731fb5ec3f91"
+    },
+    "fog-night-CaU-0Hu7.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-night-CaU-0Hu7.svg",
+     "sha256": "d37e40a85aae0ad4a3dc0b13a67f13d70d0bdbca417fbf198a0f635a6c07a334"
+    },
+    "fog-night-DC4XSQ4d.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-night-DC4XSQ4d.svg",
+     "sha256": "b31e8108103ffe5a0b9303579f4b7add97f214574536bc8fc9023d0dc2f96a2c"
+    },
+    "fog-night-DQ-wrf2c.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-night-DQ-wrf2c.svg",
+     "sha256": "8a9aa067bbae92bbe4c4b610653a9803fa5a546431b0e336ac03e819e87c9191"
+    },
+    "fog-night-D_P94a53.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-night-D_P94a53.svg",
+     "sha256": "8900e6cdee1cc02724ae27f75744c062d9f69d7613da9020beaf884b28bbf469"
+    },
+    "fog-night-MHdJOcU-.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-night-MHdJOcU-.svg",
+     "sha256": "d4d40ce6c6c5973baf26f38481cdea9f641fdafab8f978e20e68f16c33dcb899"
+    },
+    "fog-night-b4Kqq9l0.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/fog-night-b4Kqq9l0.svg",
+     "sha256": "959894895356b720b59315fa7b5fe4e7f5164c586b679f929bafb1e456a3a57a"
+    },
+    "hail-B3MnihF-.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/hail-B3MnihF-.svg",
+     "sha256": "52593a09e3044219809e73942afb962bea28b5213a2845b7787f552b70fb78a3"
+    },
+    "hail-BDQPeHF3.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/hail-BDQPeHF3.svg",
+     "sha256": "7e43adce0e6ae21d39de60648e158e8a79298ea273ccc8b82fa5973dd284f6dd"
+    },
+    "hail-BdcnkGov.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/hail-BdcnkGov.svg",
+     "sha256": "3017405bd6eb927763313ef630f9612dcd1f7490fb2f30f38a4424463d3fb619"
+    },
+    "hail-BrJ8L6_u.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/hail-BrJ8L6_u.svg",
+     "sha256": "208ac4d388b769105562a5457f8e39f0140495ba374c01b77e8389e6c32adeb8"
+    },
+    "hail-CLT0zWlC.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/hail-CLT0zWlC.svg",
+     "sha256": "cc158ab5e41bf15bdf6c0e04bee76f19dc7a9e440fe30abb50b41a853cd2811a"
+    },
+    "hail-CR9bR5QN.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/hail-CR9bR5QN.svg",
+     "sha256": "0c1449f61e36babd285466e26744753233241e619354c0771e1c6f7ada1e49bd"
+    },
+    "hail-DOz_2quA.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/hail-DOz_2quA.svg",
+     "sha256": "b057fcaa6b6f6e48f9c92f0986bae027d8269591f3f0679cc2675d83c3d322ff"
+    },
+    "hail-GFHb9GHM.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/hail-GFHb9GHM.svg",
+     "sha256": "1eb9c162afc64cf7f170e232c2fe4eaa1438899c8af199091b239096c7107407"
+    },
+    "index.m-D-OWBoON.js": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/index.m-D-OWBoON.js",
+     "sha256": "2326165c53334006f5c24732503fb3b3b124558f6dbe07ef6622ab2aa32cb0d1"
+    },
+    "not-available-BGFi5Odt.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/not-available-BGFi5Odt.svg",
+     "sha256": "e293c7c63688010f62dd26b4406ce52af99059dd5318cfb6f211289afb9a1082"
+    },
+    "not-available-C-g2ad1R.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/not-available-C-g2ad1R.svg",
+     "sha256": "8591a127cee10683030e46941fba10909f5590922df43ebee458c0586c4206e9"
+    },
+    "not-available-CE-zFzKb.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/not-available-CE-zFzKb.svg",
+     "sha256": "8fb2048b91ba298708a6000259742f5ad284f0694eb4182f1f3d56b9afa18fe2"
+    },
+    "not-available-DrWCyrTS.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/not-available-DrWCyrTS.svg",
+     "sha256": "4db42e66c867bb3d643960ad332e5225e88090c6d0693d5b2a1eb3594b306a0d"
+    },
+    "partly-cloudy-day-BhSY-uJH.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-day-BhSY-uJH.svg",
+     "sha256": "657951a52b3e5585f3d7f04494a9d935a75e3a22d6e5a687e42dda5641c2f5c5"
+    },
+    "partly-cloudy-day-BmKEG13F.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-day-BmKEG13F.svg",
+     "sha256": "dac25296bc4a50c072949f5a18d953cc274f785b567e08d4aa7aca142c270175"
+    },
+    "partly-cloudy-day-BuDcbczK.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-day-BuDcbczK.svg",
+     "sha256": "6fdaea20667eee93deadd3665329ba57ec848881786d4bd055662581b80d706f"
+    },
+    "partly-cloudy-day-COKMtx4I.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-day-COKMtx4I.svg",
+     "sha256": "93787cad55b4b7ec01b67ef635c67ad54ff09075361c8fa5d81df07ac2a461e7"
+    },
+    "partly-cloudy-day-D3PP_PgC.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-day-D3PP_PgC.svg",
+     "sha256": "1f24f6817733ca133e7f4e1ed146f5682f8b2d7dfd3cfc381568f6ea339c39dc"
+    },
+    "partly-cloudy-day-DXoKTJbV.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-day-DXoKTJbV.svg",
+     "sha256": "1ed1e019e205dfc88b884177c570c16ef4d8a8c36bbe2d6a120969e49de9454e"
+    },
+    "partly-cloudy-day-DYvhRNEU.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-day-DYvhRNEU.svg",
+     "sha256": "99c2c8a3db91da66c434dd592bdbb615126759e41d2d6b9f93c4e4d27f9d9703"
+    },
+    "partly-cloudy-day-u5Q7OsMq.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-day-u5Q7OsMq.svg",
+     "sha256": "64267e73ea687d50e5754d7c5d0006f36f8a0a95bed8f085b57c9bf1f2c47cb5"
+    },
+    "partly-cloudy-night-2xHAnD0T.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-night-2xHAnD0T.svg",
+     "sha256": "ef576174e5074b6fa4903ba3e5d2986f19d0e35b236f0aaba0a4e5358a89f23c"
+    },
+    "partly-cloudy-night-C10HC6cc.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-night-C10HC6cc.svg",
+     "sha256": "8b8b3715c32811001f8f8facf1a70feed44ec9b13437c438c16252e43d1415aa"
+    },
+    "partly-cloudy-night-CGgyMLZN.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-night-CGgyMLZN.svg",
+     "sha256": "b0ad0cf00ce945b03608c87064f92fa461ec78abc1c8e5a380cecd862687f1b5"
+    },
+    "partly-cloudy-night-DHAzHlNI.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-night-DHAzHlNI.svg",
+     "sha256": "b792b2dfe947a2e6e0154eceabff582996c8ca75fa009baa183f6aa39e363e3a"
+    },
+    "partly-cloudy-night-YhOBtIAs.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-night-YhOBtIAs.svg",
+     "sha256": "1c8b74c3455ee86e0f6439e7639ff0c7f3d4b72b214eadc1df674b064a929ff6"
+    },
+    "partly-cloudy-night-bj89gJWJ.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-night-bj89gJWJ.svg",
+     "sha256": "5ee269aaff50373b048647ceab6d77cc27be2b517af894ab5083e08f5d3d17ee"
+    },
+    "partly-cloudy-night-vkCxXsiA.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-night-vkCxXsiA.svg",
+     "sha256": "5db198b9138a8ddd0896933ee881dc041fcacbfe52f6f9fe18e2dd9b4d376c12"
+    },
+    "partly-cloudy-night-wzqiylcF.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/partly-cloudy-night-wzqiylcF.svg",
+     "sha256": "635859a1ebc6d82e61c96bedeb4a468ee15757687de1c724a0632660d952e2be"
+    },
+    "rain-B0E1YRnr.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/rain-B0E1YRnr.svg",
+     "sha256": "c5f489940a6eaf462f18b755d90451bd062a5bb0c13dccb0bd72425c47f756dd"
+    },
+    "rain-BlqKfBQ6.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/rain-BlqKfBQ6.svg",
+     "sha256": "d11c1263812825fd13347a1021f41d4bbf9d7a48bb0a08fc1e5768f8e414b045"
+    },
+    "rain-CYD1r9Rz.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/rain-CYD1r9Rz.svg",
+     "sha256": "3cc5d84aa9e1a3bf56439a842529140a68141ae4d908b8d526bf12eb40db3cfe"
+    },
+    "rain-CnSbyyey.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/rain-CnSbyyey.svg",
+     "sha256": "72cd15dc8042804e0c7842eb0af960645662ef6d17ea55e5ccf47ef90d542098"
+    },
+    "rain-CooQ1WmT.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/rain-CooQ1WmT.svg",
+     "sha256": "6a0205d939e05b70766fa483a17d194e101f72b9ce07c80314f675de1bd807d5"
+    },
+    "rain-DpgrbFMw.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/rain-DpgrbFMw.svg",
+     "sha256": "82ed7379de2b4f4b4e202a6ca8224b8f5b2627a4e97ade0e07c1389b7e0f7b23"
+    },
+    "rain-ucVTiFZh.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/rain-ucVTiFZh.svg",
+     "sha256": "62090e3dc5503f14c8b1bed16f4e744ce1c96584a12f03ab0556b679e25c7ba4"
+    },
+    "rain-zGcGq1JE.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/rain-zGcGq1JE.svg",
+     "sha256": "34b596d4ffe6adca347a9b23985eae5bec9094d674b3e4d240944640efe277f3"
+    },
+    "sleet-BZThzQg4.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sleet-BZThzQg4.svg",
+     "sha256": "91307bcd113f843a7385da4695eeb23e49a1d2824d601e00c9cee56d4c10925f"
+    },
+    "sleet-C_4fBDE2.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sleet-C_4fBDE2.svg",
+     "sha256": "db381641358659b1d6b66b36b37a697153c824bdc194928c6686384bd9cd548a"
+    },
+    "sleet-CerM_k3f.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sleet-CerM_k3f.svg",
+     "sha256": "c45b6ffa7b4fa7cb1ea5d36cf3298d9c7338b22a93516dcd45d01104707f1005"
+    },
+    "sleet-CgHHA01R.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sleet-CgHHA01R.svg",
+     "sha256": "ba9f6565fd4fff04a3f06737e134a4ac018c86a926a7e2301fe246db78e9b9c7"
+    },
+    "sleet-Cv2gGU0k.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sleet-Cv2gGU0k.svg",
+     "sha256": "5e6c3b52b2d318255472d3ebc79b1f9dbcb1253a57b1c4a8d5180b4b4c5d1d03"
+    },
+    "sleet-D4L2pb2c.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sleet-D4L2pb2c.svg",
+     "sha256": "79868db18ec43fd65b1c2045ebcc167abecbce263e01dc2b58b88a11191909a3"
+    },
+    "sleet-tfISiOAE.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sleet-tfISiOAE.svg",
+     "sha256": "4922ddf95d84f723ee17a54806bdabda4032d7c04d4645764d8390353a35c46f"
+    },
+    "sleet-zcReUq89.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sleet-zcReUq89.svg",
+     "sha256": "23024e722d948a573e2174dcb875e94851ec207bc2fd2fa225e392f6b4c84867"
+    },
+    "snow-BLP9nHz_.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/snow-BLP9nHz_.svg",
+     "sha256": "f5c401d4793a6c5701d91aa0433d8c684a102f1df12f790bdd9932c90f8b2791"
+    },
+    "snow-BxoAdjTi.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/snow-BxoAdjTi.svg",
+     "sha256": "02803118eb8d5a9cb59654478ad8f81f29b931389e454b45953fd6de27b9d478"
+    },
+    "snow-CKIpp7G9.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/snow-CKIpp7G9.svg",
+     "sha256": "f03082d0af66dd84bc3effd00a0a163fa990d3b5cb6a8f9d51d6af58563e39a6"
+    },
+    "snow-CMzEnSqJ.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/snow-CMzEnSqJ.svg",
+     "sha256": "8a56abc893d68693ebb30fc2e357106fe0e3fdc770098c3fe0c2f2453d155dc6"
+    },
+    "snow-DSOryqO-.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/snow-DSOryqO-.svg",
+     "sha256": "93ea3b316aa0de5fa2cf8aa3f9400f3284b6d958ba6aad1c09a368b9474f5eab"
+    },
+    "snow-DVE60GPW.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/snow-DVE60GPW.svg",
+     "sha256": "e9c4415d4110ce8a4cdc16a4af1d47adff8913cbf616784a56b84e18eedc6dec"
+    },
+    "snow-Uu7M_Czj.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/snow-Uu7M_Czj.svg",
+     "sha256": "fa91e1624c21afc27e20b7e407504ca851468564bd7a88e103610dcc95c069c7"
+    },
+    "snow-nEncRnZX.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/snow-nEncRnZX.svg",
+     "sha256": "d58268fdae42a64b82f1bacb107d5de1c1d766461e79b1187ce135fab222feba"
+    },
+    "sunrise-B8o208_b.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunrise-B8o208_b.svg",
+     "sha256": "45077a1fbc70613fb5e42f87968424518172e5e98254af72c47acda9db573327"
+    },
+    "sunrise-BuLu9Z8_.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunrise-BuLu9Z8_.svg",
+     "sha256": "6243d1525c7a3e261278494c46f8f8d6a5ce94f84d46ac3642fd1ea7fd2e9cdd"
+    },
+    "sunrise-Bvngjesk.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunrise-Bvngjesk.svg",
+     "sha256": "f7abec516f664b6a029cefc1741cd4978ed93847329ff8990a57b233a3dd8976"
+    },
+    "sunrise-D21Fm7lI.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunrise-D21Fm7lI.svg",
+     "sha256": "fd6ac8d7aaebe6e76359074a8a8fa5311da80c97c95400ff6f44829f075c382e"
+    },
+    "sunrise-DFUJoftk.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunrise-DFUJoftk.svg",
+     "sha256": "a044124053b81c37eac91483ebebd81d1e24f000f8b73fb42acb86c128f95a03"
+    },
+    "sunrise-DGlmpTT_.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunrise-DGlmpTT_.svg",
+     "sha256": "5dddc976c73524772401d4fb9a53f5e3e29c9c712bf3631ffe59f9c4c6dca3c1"
+    },
+    "sunrise-DXVt10WP.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunrise-DXVt10WP.svg",
+     "sha256": "7a6768c1696e272ae8b946dc57c622b737b24a39752166a4d9dd805cd3295ad6"
+    },
+    "sunrise-Dxt6HOyI.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunrise-Dxt6HOyI.svg",
+     "sha256": "784bbd833afadecf283fe61cf5284709186c4cfedcb657b08e45bf42a323b6ad"
+    },
+    "sunset-BkaVCcva.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunset-BkaVCcva.svg",
+     "sha256": "a4ae3c80ae4bc2bebe457eb7eab448ae4b9352b77f85c3a62100fb908f6c2c3a"
+    },
+    "sunset-BvoRP1_c.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunset-BvoRP1_c.svg",
+     "sha256": "e376aae4ba3ebed7433b7d11f1c94f4ff763253af8c5b2e4b5c910c768987c54"
+    },
+    "sunset-CLHQqxxn.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunset-CLHQqxxn.svg",
+     "sha256": "14d41daa367286e9cfc49c0e1cd8c35637b6d6918c83e9befacdf59981cc9af6"
+    },
+    "sunset-CcqxbK6B.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunset-CcqxbK6B.svg",
+     "sha256": "ee77185e2f3bea45386a03dce3de032ebbb6e12c73800552cb500e9294f91638"
+    },
+    "sunset-CoDwrhIQ.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunset-CoDwrhIQ.svg",
+     "sha256": "925824d408b9a5b9a946546a201375aed872b61eb56d0f6028421ad1c9e76612"
+    },
+    "sunset-DDBwZ8F9.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunset-DDBwZ8F9.svg",
+     "sha256": "aec39e66ea3dc75f43569dba4033bd3610ab1d233ebd8c03bc42669f200d28ac"
+    },
+    "sunset-DcD1202_.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunset-DcD1202_.svg",
+     "sha256": "b33270f36dfb73fff53a08b201cfe5b1b3973ecc85d68242e127c6ad9fd6d5b5"
+    },
+    "sunset-DeZZ85PS.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/sunset-DeZZ85PS.svg",
+     "sha256": "1aaf9a14d5a4639530559c46852cdfe3a736ef37ff35f3249df969e8a2995c62"
+    },
+    "thunderstorms-day-AvjvP05S.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-AvjvP05S.svg",
+     "sha256": "2780dae558b19950d272991d90b1fa2a425ede12d1b673ae6694b483979def74"
+    },
+    "thunderstorms-day-B13SsMEJ.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-B13SsMEJ.svg",
+     "sha256": "e8eeecf85312bce57580ad95fa11d7465aa72042970e55d69b5a931070ccfe15"
+    },
+    "thunderstorms-day-Bkn41SDg.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-Bkn41SDg.svg",
+     "sha256": "13dbc6270cc7970372021104e13eabd063ee2ca9340db0501aa9a9379b816f61"
+    },
+    "thunderstorms-day-ByJI0CWP.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-ByJI0CWP.svg",
+     "sha256": "803c59e9605557ce8baceb62b4e02c2218080ccf9704de496c62daa84eea872d"
+    },
+    "thunderstorms-day-CAdbE1St.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-CAdbE1St.svg",
+     "sha256": "0154cbf018d11cd07c12d998a450ed5910a987e50d1f5802e642aa51931bedef"
+    },
+    "thunderstorms-day-Cjn8aMGZ.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-Cjn8aMGZ.svg",
+     "sha256": "c1f8ba2f7d089e27b5a3cde251f72084b87b14d0f073af6fe32a2cf34ae8194e"
+    },
+    "thunderstorms-day-DMvHzctF.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-DMvHzctF.svg",
+     "sha256": "e460455370d2042cd04b136e7759bd7a1509e6480c21ede89375daaa2d1495de"
+    },
+    "thunderstorms-day-DuSkJ5qR.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-DuSkJ5qR.svg",
+     "sha256": "5eae7ceb3b8ee0bb58366eb903cb5b165a20643b3f7c154aa2a061d0cb6fbc17"
+    },
+    "thunderstorms-day-rain-4KQ0WHZ9.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-rain-4KQ0WHZ9.svg",
+     "sha256": "a82a041553fc996ff8038ce5234617714d78c3332b32ea086270d01e0fc4ee34"
+    },
+    "thunderstorms-day-rain-B2q42W7M.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-rain-B2q42W7M.svg",
+     "sha256": "080c61af7aee8476d0d99958f508e92f45b7dd38ed95604ecb81740b3a316713"
+    },
+    "thunderstorms-day-rain-CIvlzouM.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-rain-CIvlzouM.svg",
+     "sha256": "c032f4cd48c0ef7e89a1388407936c4007004f2c5eb040e11e340c25b31b5332"
+    },
+    "thunderstorms-day-rain-DETA8YRA.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-rain-DETA8YRA.svg",
+     "sha256": "dd2ce543d4c23c2b8767129775f88e7e5d899b94d4554fd9033ea212aed0b42f"
+    },
+    "thunderstorms-day-rain-FRwIAOXB.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-rain-FRwIAOXB.svg",
+     "sha256": "afa2ecd44f2969ff9f7c0d1330dc7b63da64b4a53d155fafcac8c7b1dd2f53cd"
+    },
+    "thunderstorms-day-rain-FzhxEKnC.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-rain-FzhxEKnC.svg",
+     "sha256": "d671e220a945fdd429543870ae3211f9b439b1063752697e05c3367200ea72b1"
+    },
+    "thunderstorms-day-rain-U9Pou-bj.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-rain-U9Pou-bj.svg",
+     "sha256": "32ed8d13c4ddb20010e378c508818367ce523bc50c5cf9167ff3e8a9e3b1ec7e"
+    },
+    "thunderstorms-day-rain-Z1PsJEBW.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-day-rain-Z1PsJEBW.svg",
+     "sha256": "9c89e7ce22d43bec2de84b32541efef43e431204f0d6be2f85641f12b81bc4ac"
+    },
+    "thunderstorms-night-BBGrv3b_.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-BBGrv3b_.svg",
+     "sha256": "683c1eb7c791bdc5708daaee81ac6113484fce9333a00c037c75412e99039a67"
+    },
+    "thunderstorms-night-BS12MIXY.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-BS12MIXY.svg",
+     "sha256": "9cc88d65459875c8c85c86a856538be84b8c3130416a4b928dfe5207f38d2645"
+    },
+    "thunderstorms-night-BVRn49mM.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-BVRn49mM.svg",
+     "sha256": "07c068a54193f6862c72bed4dd5ce7edae6ce33fbec1e33f55ef4b153e2fb0af"
+    },
+    "thunderstorms-night-BsUp24j6.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-BsUp24j6.svg",
+     "sha256": "06ff98dce0fd9ef14b4187ad64cb385598198085504b8c310c69ca8416993837"
+    },
+    "thunderstorms-night-CUKoHqUM.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-CUKoHqUM.svg",
+     "sha256": "399a62f16ecc30fdbfb3eb541d43258f6c996806c5d06bc57924bf40057f2bb5"
+    },
+    "thunderstorms-night-XvACHS6z.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-XvACHS6z.svg",
+     "sha256": "5dd5490bf13884ba92eea6aafe5804baa15be217d7749fb24eec81da0a114c86"
+    },
+    "thunderstorms-night-oDXIkyex.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-oDXIkyex.svg",
+     "sha256": "3944a0ebc86699793c19643eb223eee04787e24914c7841c8de58ae9ec234316"
+    },
+    "thunderstorms-night-rain-BEnyGyFf.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-rain-BEnyGyFf.svg",
+     "sha256": "b63ab74737dd5974bb5b001421ff951526a1ff80b7d63c2d3cf63fb730f0f132"
+    },
+    "thunderstorms-night-rain-BXkyv3Qj.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-rain-BXkyv3Qj.svg",
+     "sha256": "1e2d605bcde59cf1e2c595cc90eece76c2f83ac354a650bbb2d741577577eb3d"
+    },
+    "thunderstorms-night-rain-Bsf5EVbX.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-rain-Bsf5EVbX.svg",
+     "sha256": "148b9174f5c978c4e5e580e527af83596ab7792f00f74d0ea2b8017c22499c7e"
+    },
+    "thunderstorms-night-rain-BxH8vztP.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-rain-BxH8vztP.svg",
+     "sha256": "a75b8eee38a148b385f4ecfe2174de6651c6ae0855a63ac5b212b8edbfcc1634"
+    },
+    "thunderstorms-night-rain-D06JZiFq.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-rain-D06JZiFq.svg",
+     "sha256": "8f04e8658d336ad753ae450a5c198f7a164aa99fbaa10272422a76a738855af8"
+    },
+    "thunderstorms-night-rain-DMSEKNeO.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-rain-DMSEKNeO.svg",
+     "sha256": "738c226799e66305b3eabc73b90388725060b9f847e0ce6322bfde49913a6791"
+    },
+    "thunderstorms-night-rain-DOPBGgdh.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-rain-DOPBGgdh.svg",
+     "sha256": "e0ff0ad0c1cf7db182305a343832e20254492994507801648ca1ac91fb400954"
+    },
+    "thunderstorms-night-rain-DTJ1XUZa.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-rain-DTJ1XUZa.svg",
+     "sha256": "998896838efec9720938ccfc71e86c63b52d1012dd8f9d8fde3d2aedfa9cca82"
+    },
+    "thunderstorms-night-vxeVHBb4.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/thunderstorms-night-vxeVHBb4.svg",
+     "sha256": "470785ddd88c4d8d0524b49758067e1a869ffd419d108df3ec9bef96b153e1ed"
+    },
+    "weather-alert-99pKGMWk.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/weather-alert-99pKGMWk.svg",
+     "sha256": "a544aa96ca4c4622263ec6fa797d85aafa2bc5f3118b87cc15c68d00ab1f90f5"
+    },
+    "weather-alert-B8hBln_a.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/weather-alert-B8hBln_a.svg",
+     "sha256": "b7a93fd123766e41cc58da34b84ad4f9e84cd77115c1da39d06f96daa3a33ea5"
+    },
+    "weather-alert-BHxmCt_d.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/weather-alert-BHxmCt_d.svg",
+     "sha256": "8f03284f913654c63d64cac3e694f07e7be21b14d066f726369610c3b3c94da8"
+    },
+    "weather-alert-BK-hDkDz.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/weather-alert-BK-hDkDz.svg",
+     "sha256": "f1738571094fe5e81409c81a5c800efe2fb11dc01877e9d5dbb0e0bd45d4943e"
+    },
+    "weather-alert-Bi_rqB4e.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/weather-alert-Bi_rqB4e.svg",
+     "sha256": "510847d45dfdc72d6fe04c0a5caa973c7c963fb35ddd77a1ecfb7b9785355b48"
+    },
+    "weather-alert-CCLRt1im.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/weather-alert-CCLRt1im.svg",
+     "sha256": "04677d92315a412e5f47f374a4aabda4d7433296fac5416ef8f040567777ae09"
+    },
+    "weather-alert-CF0tzbD_.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/weather-alert-CF0tzbD_.svg",
+     "sha256": "2ebcb119a1c8186e7ab8e4221238ac0dd5801548ead278248370db9df1b50123"
+    },
+    "weather-alert-DFtH6hE1.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/weather-alert-DFtH6hE1.svg",
+     "sha256": "0e3deb4fd5bcf66062f7472e36d16980f31fe199edff334dc6052fb61271f8bd"
+    },
+    "wind-BmvJoCwv.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/wind-BmvJoCwv.svg",
+     "sha256": "f5b3349f4f09c041726722f96befe62988eb4df41a489bd1300d286651e74458"
+    },
+    "wind-CuuJYGe_.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/wind-CuuJYGe_.svg",
+     "sha256": "ad5ed1c9bc25ec8ad3d102821e73d77f2d02ce569f1f0751e72f1cd89a26db9a"
+    },
+    "wind-DKBU3uOC.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/wind-DKBU3uOC.svg",
+     "sha256": "8f2baf08b7becb672434ae509c1792b801024545109bff4f88bedcfb265c9f81"
+    },
+    "wind-alert-BrrhM7Ci.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/wind-alert-BrrhM7Ci.svg",
+     "sha256": "67f5ef611e08390dc468eaa5a036ffa681e30164706698539ab196e39824af97"
+    },
+    "wind-alert-CATYhhBz.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/wind-alert-CATYhhBz.svg",
+     "sha256": "8c87c7e051c06a414c843c1787167418710c8a7e12ab156bb2309b4d7c1f3424"
+    },
+    "wind-alert-C_MGeQrA.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/wind-alert-C_MGeQrA.svg",
+     "sha256": "d586fb78bdb2424fd467a4f467d01d8708bed22dcbeecafc0ebf5ccc3efaa3a2"
+    },
+    "wind-alert-CembqCl9.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/wind-alert-CembqCl9.svg",
+     "sha256": "4844439865b687b894276014c8fefe62eeaea6f94d57f4fb6d533d0c3322acfe"
+    },
+    "wind-alert-DK25X7VV.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/wind-alert-DK25X7VV.svg",
+     "sha256": "168e0a7b4f34275e4ab929e683728a9e4722c5fff496ce4a14426154986950f9"
+    },
+    "wind-alert-LMvQthw7.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/wind-alert-LMvQthw7.svg",
+     "sha256": "58c0f3afa9ca0295de62e6a91fca2f050b04b11edc48a159979c386698e820b2"
+    },
+    "wind-m9RV3nT4.svg": {
+     "url": "https://github.com/pkissling/clock-weather-card/releases/download/v3.1.0/wind-m9RV3nT4.svg",
+     "sha256": "2f41b57f3a1c8ad951d0466bb8986af41be86115970bfbafb834234a64093e04"
+    }
+   }
+  },
+  {
+   "name": "modern-circular-gauge",
+   "repo": "selvalt7/modern-circular-gauge",
+   "version": "v0.15.0",
+   "license": "MIT",
+   "main": "modern-circular-gauge.js",
+   "files": {
+    "modern-circular-gauge.js": {
+     "url": "https://github.com/selvalt7/modern-circular-gauge/releases/download/v0.15.0/modern-circular-gauge.js",
+     "sha256": "317eca5d6d31af86f8b71d1abc8766ca9823f7140f74cdcb637f90f8bb6698ca"
+    }
+   }
+  },
+  {
+   "name": "better-thermostat-ui-card",
+   "repo": "KartoffelToby/better-thermostat-ui-card",
+   "version": "3.4.0",
+   "license": "AGPL-3.0",
+   "main": "better-thermostat-ui-card.js",
+   "files": {
+    "better-thermostat-ui-card.js": {
+     "url": "https://github.com/KartoffelToby/better-thermostat-ui-card/releases/download/3.4.0/better-thermostat-ui-card.js",
+     "sha256": "23ece9ce9598a6b1c4e274ee966e13374e031715caa9398f6e7ca9dd2f1f09dd"
+    }
+   },
+   "on_demand": true
+  },
+  {
+   "name": "battery-state-card",
+   "repo": "maxwroc/battery-state-card",
+   "version": "v4.3.0",
+   "license": "MIT",
+   "main": "battery-state-card.js",
+   "files": {
+    "battery-state-card.js": {
+     "url": "https://github.com/maxwroc/battery-state-card/releases/download/v4.3.0/battery-state-card.js",
+     "sha256": "2cb38119fcdc13f614288f72ff77d523d7c3ed340630d8b467c4a46a79ded60f"
+    }
+   },
+   "on_demand": true
+  },
+  {
+   "name": "scheduler-card",
+   "repo": "nielsfaber/scheduler-card",
+   "version": "v4.0.20",
+   "license": "Apache-2.0",
+   "main": "scheduler-card.js",
+   "files": {
+    "scheduler-card.js": {
+     "url": "https://github.com/nielsfaber/scheduler-card/releases/download/v4.0.20/scheduler-card.js",
+     "sha256": "4a9edae94dce8627bfa30c7e085db54809b966a39d32bcd01f18915af6f9da40"
+    }
+   },
+   "on_demand": true
+  },
+  {
+   "name": "calendar-card-pro",
+   "repo": "alexpfau/calendar-card-pro",
+   "version": "v6.0.0",
+   "license": "MIT",
+   "main": "calendar-card-pro.js",
+   "files": {
+    "calendar-card-pro.js": {
+     "url": "https://github.com/alexpfau/calendar-card-pro/releases/download/v6.0.0/calendar-card-pro.js",
+     "sha256": "2acb155e9a1298e915392168c9c9e263054fc91c7b862839e7ce7fc875eed90f"
+    }
+   },
+   "on_demand": true
+  }
+ ]
+}

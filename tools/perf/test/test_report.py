@@ -225,6 +225,45 @@ class SurfaceViewLayers(unittest.TestCase):
         self.assertEqual(P.surfaceview_layers(api37, pkg), [f"f5fea55 SurfaceView[{act}](BLAST)#163", f"f5fea55 SurfaceView[{act}]#162"])
         self.assertEqual(P.layer_number(f"f5fea55 SurfaceView[{act}](BLAST)#163"), 163)
 
+    def test_vitro_window_on_android_15_and_later_is_its_vri_layer(self):
+        # Vitro draws into the app's own window. Verified 2026-11-26 on the Pixel Tablet, Android 17 (API 37): the
+        # frames are on the ViewRootImpl's BLAST layer, `VRI-<pkg>/<activity>#n` (WindowManager logs `setClientSurface
+        # Surface(name=VRI-…)`); the window's container, `<hash> <pkg>/<activity>#n`, has none. Before the fix the
+        # runner took only the container: open, live updates and restart were "not measured" on every page
+        # (frames/google-pixel-tablet/research/window-layers.md).
+        pkg = "dev.glassworks.generic_android"
+        act = f"{pkg}/dev.glassworks.generic.Launcher"
+        api37 = (
+            "RequestedLayerState{Display 0 name=\"Built-in Screen\"#41}\n"
+            f"RequestedLayerState{{ActivityRecord{{104391098 u0 {act} t10}}#6405 parentId=146}}\n"
+            f"RequestedLayerState{{ac7b2d9 {act}#6407 parentId=6405}}\n"
+            f"RequestedLayerState{{VRI-{act}#6408 parentId=6407}}\n"
+            f"RequestedLayerState{{VRI-Splash Screen {pkg}#6402 parentId=6401}}\n"
+            f"RequestedLayerState{{Background for f5fea55 SurfaceView[{act}]#6412 parentId=6410 z=-2147483648}}\n"
+            f"RequestedLayerState{{f5fea55 SurfaceView[{act}](BLAST)#6411 parentId=6410}}\n"
+            f"RequestedLayerState{{f5fea55 SurfaceView[{act}]#6410 parentId=6408 z=-2}}\n"
+            f"RequestedLayerState{{VRI-{pkg}.legacy/dev.glassworks.MainActivity#77 parentId=76}}\n"
+            "RequestedLayerState{VRI-com.android.settings/com.android.settings.SubSettings#6355 parentId=6354}\n"
+            "RequestedLayerState{VRI-NotificationShade#88 parentId=87}\n")
+        self.assertEqual(P.window_layers(api37, pkg), [f"ac7b2d9 {act}#6407", f"VRI-{act}#6408"])
+        self.assertEqual(P.app_layers(api37, pkg, "vitro"), [f"ac7b2d9 {act}#6407", f"VRI-{act}#6408"])
+        # The runner reads the newest layer first (sf_relist): the VRI layer, a child created after its container.
+        self.assertEqual(max(P.window_layers(api37, pkg), key=P.layer_number), f"VRI-{act}#6408")
+        # The web engine's frames stay GeckoView's SurfaceView on the same listing: nothing in the window.
+        self.assertEqual(P.app_layers(api37, pkg, "web"), [f"f5fea55 SurfaceView[{act}](BLAST)#6411", f"f5fea55 SurfaceView[{act}]#6410"])
+
+    def test_vitro_window_on_older_androids_is_unchanged(self):
+        # The S1 (Android 10, 2026-11-24's probe): the window's one layer, never its SurfaceView.
+        s1 = ("Display Root#0\nSurfaceView - sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0\n"
+              "sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0\nBackground for -SurfaceView - sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0\n")
+        self.assertEqual(P.window_layers(s1, "sh.edm.s1kiosk"), ["sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0"])
+        self.assertEqual(P.app_layers(s1, "sh.edm.s1kiosk", "web"), ["SurfaceView - sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0"])
+        # Android 12–14: the window and its BLAST child, both in the app's name.
+        a12 = "p.q/p.q.A#5\np.q/p.q.A(BLAST)#6\nSurfaceView[p.q/p.q.A]#7\n"
+        self.assertEqual(P.window_layers(a12, "p.q"), ["p.q/p.q.A#5", "p.q/p.q.A(BLAST)#6"])
+        # Android 6: the bare window name.
+        self.assertEqual(P.window_layers("DimLayer\nSurfaceView\np.q/p.q.A\nStatusBar\n", "p.q"), ["p.q/p.q.A"])
+
     def test_layer_names(self):
         self.assertEqual(P.sf_layer_name("RequestedLayerState{SurfaceView[a/b](BLAST)#169 parentId=168}"), "SurfaceView[a/b](BLAST)#169")
         self.assertEqual(P.sf_layer_name("RequestedLayerState{Task=187#582}"), "Task=187#582")
@@ -1291,6 +1330,124 @@ class CameraFallback(unittest.TestCase):
         old = camera_line("typical")
         del old["path"]
         self.assertEqual(R.camera_run(old, "typical")["path"], "hls")
+
+
+def vitro_camera_line(tier, shown="web_rtc"):
+    """VitroClarity's camera line (ClarityCameras.window): each camera played on `shown`; on another kind than the view's
+    WebRTC, its WebRTC stream never showed a picture (a fallback)."""
+    n = {"typical": 1, "heavy": 4}[tier]
+    ok = shown == "web_rtc"
+    return {"t": "camera", "stage": tier, "path": "web_rtc", "window_ms": 30000, "fps": 15, "expected": n, "found": n,
+            "streams": [{"path": "web_rtc", "entity": f"camera.clarity_cam_{i}", "found": True, "w": None, "h": None,
+                         "first_frame_ms": 640.0 if ok else None, "shown_pct": 100.0 if ok else None,
+                         "max_gap_ms": 66.7 if ok else None, "stall_total_ms": 0.0 if ok else None,
+                         "span_ms": 30000.0 if ok else None, "freezes": 0 if ok else None,
+                         "gaps_source": "vitro-frames (freeze rule)" if ok else None, "transport": shown,
+                         "others": [] if ok else [{"path": shown, "first_frame_ms": 400.0, "connected": True}],
+                         "errors": [] if ok else ["web_rtc: ice failed"]} for i in range(n)],
+            "fetches": None}
+
+
+class VitroCameras(unittest.TestCase):
+    """docs/perf.md, "Vitro": Vitro's camera line is read as the web harness's, and says which kind each camera played."""
+
+    def test_cameras_that_played_are_graded_with_nothing_left_out(self):
+        run = R.camera_run(vitro_camera_line("heavy"), "heavy")
+        self.assertEqual(run["transports"], ["web_rtc"] * 4)
+        self.assertNotIn("fell_back", run)
+        self.assertEqual(run["uncovered_ms"], 0.0)
+        self.assertEqual(G.camera_level(run), "good")
+        self.assertEqual(run["detail"][0]["transport"], "web_rtc")
+        self.assertEqual(run["detail"][0]["freezes"], 0)
+
+    def test_a_fallback_to_mjpeg_fails_the_task_and_is_said_plainly(self):
+        run = R.camera_run(vitro_camera_line("typical", shown="mjpeg"), "typical")
+        self.assertEqual(run["fell_back"], ["mjpeg"])
+        self.assertIsNone(run["first_frame_ms"])
+        self.assertEqual(G.camera_level(run), G.BELOW)
+        ref = {"tiers": {"typical": {"camera_runs": [run, R.camera_run(vitro_camera_line("typical"), "typical")]}}}
+        self.assertEqual(R.camera_transports(ref), [
+            "typical cameras on Vitro: over WebRTC, 0 of 1 and 1 of 1 camera in runs 1 to 2; **fell back to MJPEG, 1 of 1 "
+            "and 0 of 1 camera in runs 1 to 2**, graded on WebRTC as on the web engine (web_rtc: ice failed)."])
+        self.assertEqual(R.task_phrase("camera", {"camera_runs": [run]}),
+                         "a camera fell back to MJPEG on Vitro (it never played over WebRTC)")
+        import notes as N
+        self.assertEqual(N._camera_options(run), [(10.0, "has a camera that fell back to MJPEG")])
+
+    def test_a_fallback_that_stopped_before_the_windows_end_is_still_said(self):
+        line = vitro_camera_line("typical", shown="mjpeg")
+        line["streams"][0].update(transport=None, others=[{"path": "mjpeg", "first_frame_ms": 400.0, "connected": False}])
+        run = R.camera_run(line, "typical")
+        self.assertEqual(run["fell_back"], ["mjpeg"])
+        self.assertEqual(R.camera_transports({"tiers": {"typical": {"camera_runs": [run]}}}), [
+            "typical cameras on Vitro: over WebRTC, 0 of 1 camera in 1 run; **fell back to MJPEG, 1 of 1 camera in 1 run**, "
+            "graded on WebRTC as on the web engine (web_rtc: ice failed)."])
+
+    def test_the_hidden_player_webrtc_replaced_is_no_fallback(self):
+        # The graded S1 Vitro run 2: HA's side-by-side start shows HLS until WebRTC has video, so a camera that played
+        # WebRTC the whole window has an HLS player with a first frame among its others. That isn't a fallback.
+        line = vitro_camera_line("typical")
+        line["streams"][0]["others"] = [{"path": "hls", "first_frame_ms": 2900.0, "connected": False}]
+        run = R.camera_run(line, "typical")
+        self.assertNotIn("fell_back", run)
+        self.assertEqual(run["fallbacks"], [None])
+        self.assertEqual(R.camera_transports({"tiers": {"typical": {"camera_runs": [run] * 3}}}),
+                         ["typical cameras on Vitro: over WebRTC, 1 of 1 camera in each of 3 runs."])
+
+    def test_heavy_reads_camera_by_camera(self):
+        # Run 2's heavy: cam_0 to cam_2 on WebRTC (with HLS beside them while they started), cam_3 on HLS only.
+        line = vitro_camera_line("heavy")
+        for st in line["streams"][:3]:
+            st["others"] = [{"path": "hls", "first_frame_ms": 1500.0, "connected": False}]
+        line["streams"][3].update(first_frame_ms=None, shown_pct=None, max_gap_ms=None, stall_total_ms=None, transport="hls",
+                                  others=[{"path": "hls", "first_frame_ms": 8600.0, "connected": True},
+                                          {"path": "mjpeg", "first_frame_ms": None, "connected": False}],
+                                  errors=["mjpeg: the stream failed or dropped"])
+        run = R.camera_run(line, "heavy")
+        self.assertEqual(run["fallbacks"], [None, None, None, "hls"])
+        self.assertEqual(run["fell_back"], ["hls"])
+        self.assertEqual(R.camera_transports({"tiers": {"heavy": {"camera_runs": [run] * 3}}}), [
+            "heavy cameras on Vitro: over WebRTC, 3 of 4 cameras in each of 3 runs; **fell back to HLS, 1 of 4 cameras in "
+            "each of 3 runs**, graded on WebRTC as on the web engine (mjpeg: the stream failed or dropped)."])
+
+    def test_a_camera_that_played_webrtc_then_fell_back_is_graded_on_its_webrtc_frames(self):
+        # WebRTC from 100 ms, then HLS at the window's end: it fell back, but it played, so it isn't failed outright.
+        line = vitro_camera_line("typical")
+        line["streams"][0].update(first_frame_ms=100.0, shown_pct=60.0, max_gap_ms=12000.0, stall_total_ms=12000.0,
+                                  transport="hls", others=[{"path": "hls", "first_frame_ms": 18100.0, "connected": True}])
+        run = R.camera_run(line, "typical")
+        self.assertEqual(run["fallbacks"], ["hls"])
+        self.assertEqual(run["fell_back"], ["hls"])
+        self.assertEqual(run["first_frame_ms"], 100.0)
+        self.assertEqual(G.camera_level(run), G.camera_level({k: v for k, v in run.items() if k not in ("fallbacks", "fell_back")}))
+        self.assertNotIn("never played", R.task_phrase("camera", {"camera_runs": [run]}))
+        import notes as N
+        self.assertNotIn("fell back", " ".join(w for _, w in N._camera_options(run)))
+
+    def test_a_stored_run_without_fallbacks_reads_as_it_did(self):
+        # regrade.py reads a report.json written before `fallbacks`: they come from its detail by the same rule.
+        line = vitro_camera_line("heavy")
+        line["streams"][3].update(first_frame_ms=None, shown_pct=None, max_gap_ms=None, stall_total_ms=None,
+                                  transport="mjpeg", others=[{"path": "mjpeg", "first_frame_ms": 900.0, "connected": True}])
+        run = R.camera_run(line, "heavy")
+        old = {k: v for k, v in run.items() if k != "fallbacks"}
+        ref = lambda r: {"tiers": {"heavy": {"camera_runs": [r]}}}  # noqa: E731
+        self.assertEqual(R.camera_transports(ref(old)), R.camera_transports(ref(run)))
+        self.assertIn("**fell back to MJPEG, 1 of 4 cameras in 1 run**", R.camera_transports(ref(old))[0])
+
+    def test_a_camera_that_showed_nothing_is_said(self):
+        line = vitro_camera_line("typical", shown="mjpeg")
+        line["streams"][0].update(transport=None, others=[])
+        run = R.camera_run(line, "typical")
+        self.assertNotIn("fell_back", run)
+        self.assertEqual(R.camera_transports({"tiers": {"typical": {"camera_runs": [run]}}}), [
+            "typical cameras on Vitro: over WebRTC, 0 of 1 camera in 1 run; showing nothing at the window's end, 1 of 1 "
+            "camera in 1 run."])
+
+    def test_web_lines_say_nothing_about_transports(self):
+        run = R.camera_run(camera_line("typical"), "typical")
+        self.assertNotIn("transports", run)
+        self.assertEqual(R.camera_transports({"tiers": {"typical": {"camera_runs": [run]}}}), [])
 
 
 def camera_line(tier, first_ms=600.0, shown=100.0, max_gap=70.0, stall=0.0, path="web_rtc"):

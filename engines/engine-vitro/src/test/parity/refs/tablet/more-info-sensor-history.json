@@ -1,0 +1,215 @@
+{
+ "case": "more-info-sensor-history",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 342,
+  "y": 32,
+  "width": 596,
+  "height": 518
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 350,
+   "y": 40,
+   "w": 580,
+   "h": 502,
+   "type": "ha-more-info-dialog",
+   "mode": "dialog"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hallway Display",
+   "x": 60,
+   "y": 22,
+   "w": 140.78,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hallway Display",
+   "x": 72,
+   "y": 92.41,
+   "w": 97.7,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2 hours ago",
+   "x": 72,
+   "y": 112.2,
+   "w": 73.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "64%",
+   "x": 530.02,
+   "y": 103.8,
+   "w": 25.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "History",
+   "x": 24,
+   "y": 152,
+   "w": 64.33,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 485.72,
+   "y": 155.8,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.hallway_display_backlight": {
+   "s": "64",
+   "a": {
+    "unit_of_measurement": "%",
+    "icon": "mdi:brightness-auto",
+    "friendly_name": "Hallway Display"
+   },
+   "lc": 1794492480,
+   "lu": 1794496080
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.hallway_display_backlight",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-1",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Hallway Display"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "history/stream",
+    "entity_ids": [
+     "sensor.hallway_display_backlight"
+    ],
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "minimal_response": true,
+    "significant_changes_only": true,
+    "no_attributes": true
+   },
+   "events": [
+    {
+     "states": {
+      "sensor.hallway_display_backlight": [
+       {
+        "s": "40",
+        "lu": 1794413280
+       },
+       {
+        "s": "55",
+        "lu": 1794427680
+       },
+       {
+        "s": "70",
+        "lu": 1794449280
+       },
+       {
+        "s": "35",
+        "lu": 1794467280
+       },
+       {
+        "s": "80",
+        "lu": 1794481680
+       },
+       {
+        "s": "64",
+        "lu": 1794492480
+       }
+      ]
+     },
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  }
+ ]
+}

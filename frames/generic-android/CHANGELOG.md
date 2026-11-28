@@ -52,6 +52,28 @@ line of each version is what Home Assistant shows on the update card. A change o
 **One volume for everything the panel plays, and a round of fixes for the lululemon Mirror: a real camera picture, Wi-Fi that stays on, and a screen that wakes without lines.**
 
 ### Added
+- **Vitro, an experimental native dashboard renderer, in a new Labs section.** Turn on *Vitro renderer* under
+  *Settings → Labs*, on the panel or the Manage page, and after the app restarts your Home Assistant dashboard is drawn
+  with the device's own views instead of a browser. Vitro draws a card natively only when it can match Home Assistant's
+  look: a custom card it can't draw shows in a small browser view, and a view it can't draw, such as one with a map,
+  opens as Home Assistant draws it. It's off by default, and while it's off the app shows your dashboard in its browser
+  as it always has. If the app keeps crashing or freezing right after it starts with Vitro on, it turns Vitro off by
+  itself, and Labs and the Manage page say why. In both builds; the legacy build (Android 6 and 7, the Mirror
+  included) has seen the least testing so far.
+- **Vitro plays cameras over WebRTC, as Home Assistant does.** With Vitro on, a camera that Home Assistant streams
+  over WebRTC (through go2rtc, Nest and other integrations) plays that way, with low delay and hardware decoding
+  where the device has it. Cameras without WebRTC, or where it doesn't connect, play HLS or MJPEG as before, and a
+  camera goes back to WebRTC once Home Assistant is back after a restart. Nothing changes in Home Assistant.
+- **Vitro dashboards with live cameras scroll more smoothly.** With Vitro on, a live camera that's scrolled out of
+  view stops drawing its video until it's back on screen, so cameras you can't see no longer slow down the rest of the
+  dashboard.
+- **Vitro scrolls long dashboards more smoothly.** With Vitro on, a dashboard with many cards now draws only the
+  cards on screen and near it as you scroll, and a card's value that updates often (a power or temperature sensor)
+  no longer makes the whole dashboard lay out again. Cards look the same as before.
+- **Live cameras on Vitro cost the device less, and HLS cameras start sooner.** With Vitro on, each video frame
+  now redraws only the video, not the whole camera card around it, and the camera's still picture is no longer
+  drawn under the video once it plays, so a dashboard with several live cameras leaves the device more room for
+  everything else. A camera that plays over HLS starts once it has half a second of video instead of two and a half.
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
   with a mute switch. It is Android's media volume, so the device's volume buttons move it too. Home Assistant's
@@ -61,6 +83,12 @@ line of each version is what Home Assistant shows on the update card. A change o
   such as some TV boxes, it still sets everything but the dashboard's own sound.
 - **Critical alerts play at full volume.** A critical notification's alert tone now plays at full volume, even
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
+
+### Changed
+- **Vitro dashboards open faster and stay smoother while values change.** With Vitro on, big dashboards build their
+  cards with less work, history graphs and sensor graphs read their history in the background, and a value that keeps
+  changing, such as a power sensor or a clock with seconds, no longer makes the whole dashboard lay itself out again.
+  Nothing looks different.
 
 ### Fixed
 - **Kiln recovers from a brief USB hiccup during the Mirror's first start.** On Windows and slow first boots,

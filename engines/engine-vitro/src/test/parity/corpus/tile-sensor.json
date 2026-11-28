@@ -1,0 +1,38 @@
+{
+ "title": "Tile: a plain sensor",
+ "card": {
+  "type": "tile",
+  "entity": "sensor.living_room_co2",
+  "name": "CO2"
+ },
+ "fixture": {
+  "states": {
+   "sensor.living_room_co2": {
+    "state": "512",
+    "last_changed": "-92m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "ppm",
+     "device_class": "carbon_dioxide",
+     "friendly_name": "Living Room Sensor CO2"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.living_room_co2",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "dev-living-room-sensor",
+    "en": "CO2",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-sensor",
+    "name": "Living Room Sensor"
+   }
+  ]
+ }
+}

@@ -1,0 +1,82 @@
+{
+ "title": "auto-entities: open covers as an entities card, sorted by name",
+ "card": {
+  "type": "custom:auto-entities",
+  "card": {
+   "type": "entities",
+   "title": "Open blinds"
+  },
+  "filter": {
+   "include": [
+    {
+     "entity_id": "cover.office_blind",
+     "state": "open"
+    },
+    {
+     "entity_id": "cover.patio_blinds",
+     "state": "open"
+    },
+    {
+     "entity_id": "cover.patio",
+     "state": "open"
+    }
+   ]
+  },
+  "sort": {
+   "method": "name"
+  }
+ },
+ "fixture": {
+  "states": {
+   "cover.office_blind": {
+    "state": "open",
+    "last_changed": "-133m",
+    "attributes": {
+     "is_closed": false,
+     "current_position": 100,
+     "assumed_state": true,
+     "friendly_name": "Office Blind",
+     "supported_features": 11
+    }
+   },
+   "cover.patio": {
+    "state": "open",
+    "last_changed": "-24m",
+    "attributes": {
+     "is_closed": false,
+     "current_position": 100,
+     "assumed_state": true,
+     "friendly_name": "Patio",
+     "supported_features": 11
+    }
+   },
+   "cover.patio_blinds": {
+    "state": "open",
+    "last_changed": "-99m",
+    "attributes": {
+     "is_closed": false,
+     "assumed_state": true,
+     "friendly_name": "Patio Blinds",
+     "supported_features": 11
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   },
+   {
+    "ei": "cover.patio",
+    "pl": "template",
+    "en": "Patio"
+   },
+   {
+    "ei": "cover.patio_blinds",
+    "pl": "group",
+    "en": "Patio Blinds"
+   }
+  ]
+ }
+}

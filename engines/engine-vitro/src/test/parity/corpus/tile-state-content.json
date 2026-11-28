@@ -1,0 +1,47 @@
+{
+ "title": "Tile: state_content with the state, an attribute and the last change",
+ "expect": {
+  "light.desk_lamp": "on"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "light.desk_lamp",
+  "state_content": [
+   "state",
+   "brightness",
+   "last-changed"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.desk_lamp": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Desk Lamp",
+     "supported_features": 32
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.desk_lamp",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-desk-lamp",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-desk-lamp",
+    "name": "Desk Lamp"
+   }
+  ]
+ }
+}

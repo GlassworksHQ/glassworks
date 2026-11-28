@@ -1,0 +1,129 @@
+{
+ "case": "m-mushroom-fan-horizontal-fan-off",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 72
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 56,
+   "type": "mushroom-fan-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Bedroom Ceiling Fan",
+   "x": 56,
+   "y": 12,
+   "w": 131.84,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 56,
+   "y": 31,
+   "w": 17.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "fan.fan_off": {
+   "s": "off",
+   "a": {
+    "percentage": 0,
+    "percentage_step": 33.333333333333336,
+    "supported_features": 49,
+    "friendly_name": "Bedroom Ceiling Fan"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "fan.fan_off",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Ceiling Fan",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Bedroom"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "fan"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "fan": {
+     "_": {
+      "default": "mdi:fan",
+      "state": {
+       "off": "mdi:fan-off"
+      },
+      "state_attributes": {
+       "direction": {
+        "default": "mdi:rotate-right",
+        "state": {
+         "reverse": "mdi:rotate-left"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {}
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.fan.entity_component._.state.off": "Off",
+    "component.fan.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

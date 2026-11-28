@@ -1,0 +1,54 @@
+{
+ "title": "mini-graph-card: a day of one temperature sensor",
+ "route": "island",
+ "card": {
+  "type": "custom:mini-graph-card",
+  "entities": [
+   "sensor.living_room_temperature"
+  ],
+  "name": "Living room",
+  "hours_to_show": 24
+ },
+ "fixture": {
+  "states": {
+   "sensor.living_room_temperature": {
+    "state": "19.72",
+    "last_changed": -480,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Sensor Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.living_room_temperature",
+    "pl": "esphome",
+    "di": "dev-living-room-sensor",
+    "en": "Temperature",
+    "dp": 1,
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-sensor",
+    "name": "Living Room Sensor"
+   }
+  ],
+  "history": {
+   "sensor.living_room_temperature": {
+    "wave": {
+     "min": 19.6,
+     "max": 23.4,
+     "period": "24h",
+     "step": "10m",
+     "decimals": 2,
+     "phase": 4.4
+    }
+   }
+  }
+ }
+}

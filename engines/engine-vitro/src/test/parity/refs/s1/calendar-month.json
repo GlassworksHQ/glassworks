@@ -1,0 +1,957 @@
+{
+ "case": "calendar-month",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 392
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 376,
+   "type": "hui-calendar-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "November 2026",
+   "x": 17,
+   "y": 17.08,
+   "w": 170,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Today",
+   "x": 30,
+   "y": 69.95,
+   "w": 37.25,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Sun",
+   "x": 33.95,
+   "y": 108.95,
+   "w": 19.8,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Mon",
+   "x": 101.2,
+   "y": 108.95,
+   "w": 22.73,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Tue",
+   "x": 172.09,
+   "y": 108.95,
+   "w": 18.41,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Wed",
+   "x": 239.58,
+   "y": 108.95,
+   "w": 20.88,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Thu",
+   "x": 308.81,
+   "y": 108.95,
+   "w": 19.84,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Fri",
+   "x": 380.06,
+   "y": 108.95,
+   "w": 14.78,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Sat",
+   "x": 446.92,
+   "y": 108.95,
+   "w": 18.48,
+   "h": 11,
+   "size": 10,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "1",
+   "x": 40.48,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2",
+   "x": 109.2,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "3",
+   "x": 177.92,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "4",
+   "x": 246.64,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "5",
+   "x": 315.36,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "6",
+   "x": 384.08,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "7",
+   "x": 452.8,
+   "y": 128.86,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "8",
+   "x": 40.48,
+   "y": 174.39,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9",
+   "x": 109.2,
+   "y": 174.39,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "10",
+   "x": 174.55,
+   "y": 174.39,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 161.05,
+   "y": 206.39,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "11",
+   "x": 243.27,
+   "y": 174.39,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12",
+   "x": 311.98,
+   "y": 174.8,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(255, 255, 255)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 298.48,
+   "y": 206.39,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "13",
+   "x": 380.7,
+   "y": 174.39,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 367.2,
+   "y": 206.39,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "14",
+   "x": 449.42,
+   "y": 174.39,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "15",
+   "x": 37.11,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 23.61,
+   "y": 246.11,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "16",
+   "x": 105.83,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "17",
+   "x": 174.55,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "18",
+   "x": 243.27,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 229.77,
+   "y": 246.11,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "19",
+   "x": 311.98,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "20",
+   "x": 380.7,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "21",
+   "x": 449.42,
+   "y": 214.92,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "22",
+   "x": 37.11,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "23",
+   "x": 105.83,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 92.33,
+   "y": 286.64,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "24",
+   "x": 174.55,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "25",
+   "x": 243.27,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 229.77,
+   "y": 286.64,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "26",
+   "x": 311.98,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "+2 more",
+   "x": 298.48,
+   "y": 286.64,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "27",
+   "x": 380.7,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "+1 more",
+   "x": 367.2,
+   "y": 286.64,
+   "w": 40.5,
+   "h": 13,
+   "size": 11,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "28",
+   "x": 449.42,
+   "y": 255.45,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "29",
+   "x": 37.11,
+   "y": 295.98,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "30",
+   "x": 105.83,
+   "y": 295.98,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "1",
+   "x": 177.92,
+   "y": 295.98,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2",
+   "x": 246.64,
+   "y": 295.98,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "3",
+   "x": 315.36,
+   "y": 295.98,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "4",
+   "x": 384.08,
+   "y": 295.98,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "5",
+   "x": 452.8,
+   "y": 295.98,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "6",
+   "x": 40.48,
+   "y": 336.52,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "7",
+   "x": 109.2,
+   "y": 336.52,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "8",
+   "x": 177.92,
+   "y": 336.52,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9",
+   "x": 246.64,
+   "y": 336.52,
+   "w": 6.75,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "10",
+   "x": 311.98,
+   "y": 336.52,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "11",
+   "x": 380.7,
+   "y": 336.52,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12",
+   "x": 449.42,
+   "y": 336.52,
+   "w": 13.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(111, 111, 111)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "calendar.family": {
+   "s": "on",
+   "a": {
+    "message": "Recycling pickup",
+    "all_day": true,
+    "start_time": "2026-11-12 00:00:00",
+    "end_time": "2026-11-13 00:00:00",
+    "location": "",
+    "description": "Blue bin out the night before",
+    "friendly_name": "Family"
+   },
+   "lc": 1794488280,
+   "lu": 1794488280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "calendar.family",
+    "pl": "local_calendar",
+    "en": "Family"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "calendar"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "calendar": {
+     "_": {
+      "default": "mdi:calendar",
+      "state": {
+       "off": "mdi:calendar-blank",
+       "on": "mdi:calendar-check"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.calendar.entity_component._.state.off": "Off",
+    "component.calendar.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "calendar/event/subscribe",
+    "entity_id": "calendar.family",
+    "start": "2026-11-01T05:00:00.000Z",
+    "end": "2026-12-13T06:00:00.000Z"
+   },
+   "events": [
+    {
+     "events": [
+      {
+       "description": "Blue bin out the night before",
+       "location": null,
+       "all_day": true,
+       "summary": "Recycling pickup",
+       "start": "2026-11-12",
+       "end": "2026-11-13"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": false,
+       "summary": "Dentist",
+       "start": "2026-11-13T09:30:00-06:00",
+       "end": "2026-11-13T10:15:00-06:00"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": false,
+       "summary": "Book club",
+       "start": "2026-11-15T19:00:00-06:00",
+       "end": "2026-11-15T21:00:00-06:00"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": true,
+       "summary": "Garden waste",
+       "start": "2026-11-18",
+       "end": "2026-11-19"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": false,
+       "summary": "Piano lesson",
+       "start": "2026-11-10T16:00:00-06:00",
+       "end": "2026-11-10T17:00:00-06:00"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": true,
+       "summary": "Boiler service",
+       "start": "2026-11-23",
+       "end": "2026-11-24"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": true,
+       "summary": "School holiday",
+       "start": "2026-11-25",
+       "end": "2026-11-28"
+      },
+      {
+       "description": "Blue bin out the night before",
+       "location": null,
+       "all_day": true,
+       "summary": "Recycling pickup",
+       "start": "2026-11-26",
+       "end": "2026-11-27"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": false,
+       "summary": "Window cleaner",
+       "start": "2026-11-06T11:00:00-06:00",
+       "end": "2026-11-06T12:00:00-06:00"
+      }
+     ]
+    }
+   ],
+   "result": null
+  }
+ ]
+}

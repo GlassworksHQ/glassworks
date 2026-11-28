@@ -1,0 +1,24 @@
+{
+ "title": "Shortcut: an area's default name and icon",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "shortcut",
+  "tap_action": {
+   "action": "navigate",
+   "navigation_path": "/config/areas/area/hallway"
+  }
+ },
+ "fixture": {
+  "states": {},
+  "areas": [
+   {
+    "area_id": "hallway",
+    "name": "Hallway",
+    "icon": "mdi:door"
+   }
+  ]
+ }
+}

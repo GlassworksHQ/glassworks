@@ -1,0 +1,50 @@
+{
+ "title": "thermostat: climate off (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "climate.climate_off": "off"
+ },
+ "card": {
+  "type": "thermostat",
+  "entity": "climate.climate_off"
+ },
+ "fixture": {
+  "states": {
+   "climate.climate_off": {
+    "state": "off",
+    "last_changed": "-6h",
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat"
+     ],
+     "min_temp": 7,
+     "max_temp": 30,
+     "target_temp_step": 0.5,
+     "current_temperature": 17.5,
+     "hvac_action": "off",
+     "supported_features": 385,
+     "friendly_name": "Hallway Thermostat"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "climate.climate_off",
+    "pl": "demo",
+    "di": "dev-hallway",
+    "en": "Thermostat",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway",
+    "name": "Hallway"
+   }
+  ]
+ }
+}

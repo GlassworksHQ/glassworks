@@ -1,0 +1,46 @@
+{
+ "title": "mushroom-number: number unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "number.number_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "custom:mushroom-number-card",
+  "entity": "number.number_unavailable"
+ },
+ "fixture": {
+  "states": {
+   "number.number_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "min": 0,
+     "max": 100,
+     "step": 1,
+     "mode": "slider",
+     "unit_of_measurement": "%",
+     "restored": true,
+     "friendly_name": "Aquarium Light Level"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "number.number_unavailable",
+    "pl": "demo",
+    "di": "dev-aquarium",
+    "en": "Light Level",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-aquarium",
+    "name": "Aquarium"
+   }
+  ]
+ }
+}

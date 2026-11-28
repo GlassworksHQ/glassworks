@@ -1,0 +1,56 @@
+{
+ "title": "Thermostat: the heat pump, off",
+ "card": {
+  "type": "thermostat",
+  "entity": "climate.heat_pump"
+ },
+ "fixture": {
+  "states": {
+   "climate.heat_pump": {
+    "state": "off",
+    "last_changed": "-292m",
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat",
+      "cool",
+      "auto",
+      "dry",
+      "fan_only"
+     ],
+     "min_temp": 16,
+     "max_temp": 31,
+     "target_temp_step": 0.5,
+     "fan_modes": [
+      "low",
+      "medium",
+      "high",
+      "auto"
+     ],
+     "current_temperature": 17.5,
+     "temperature": null,
+     "target_temp_high": null,
+     "target_temp_low": null,
+     "fan_mode": "auto",
+     "hvac_action": "off",
+     "friendly_name": "Heat Pump",
+     "supported_features": 395
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "climate.heat_pump",
+    "pl": "demo",
+    "di": "dev-heat-pump",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-heat-pump",
+    "name": "Heat Pump"
+   }
+  ]
+ }
+}

@@ -1,0 +1,271 @@
+{
+ "case": "button-name-wrap",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 0,
+  "y": 0,
+  "width": 960,
+  "height": 480
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 8,
+   "y": 8,
+   "w": 468,
+   "h": 100.84,
+   "type": "hui-horizontal-stack-card"
+  },
+  {
+   "x": 484,
+   "y": 8,
+   "w": 468,
+   "h": 170,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Kitchen Island Pendant",
+   "x": 5.17,
+   "y": 57.03,
+   "w": 100.64,
+   "h": 38.19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hall",
+   "x": 160.56,
+   "y": 66.63,
+   "w": 27.88,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Porch",
+   "x": 272.7,
+   "y": 59.06,
+   "w": 41.58,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 285.69,
+   "y": 78.25,
+   "w": 15.63,
+   "h": 15,
+   "size": 12.6,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Desk",
+   "x": 394.83,
+   "y": 66.63,
+   "w": 35.33,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 1,
+   "clipped": false,
+   "text": "Kitchen Island Pendant",
+   "x": 73,
+   "y": 28.8,
+   "w": 143.22,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 1,
+   "clipped": false,
+   "text": "Hall",
+   "x": 73,
+   "y": 76.8,
+   "w": 24.39,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 1,
+   "clipped": false,
+   "text": "Porch",
+   "x": 73,
+   "y": 124.8,
+   "w": 36.38,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.desk_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "friendly_name": "Desk Lamp",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "light.hall_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "friendly_name": "Hall",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "light.kitchen_pendant": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": "brightness",
+    "brightness": 200,
+    "friendly_name": "Kitchen Island Pendant",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "light.porch_lamp": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": "brightness",
+    "brightness": 120,
+    "friendly_name": "Porch",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.light.entity_component._.state_attributes.brightness.name": "Brightness",
+    "component.light.entity_component._.state_attributes.color_mode.name": "Color mode",
+    "component.light.entity_component._.state_attributes.color_mode.state.brightness": "Brightness only",
+    "component.light.entity_component._.state_attributes.color_mode.state.color_temp": "Color temperature",
+    "component.light.entity_component._.state_attributes.color_mode.state.hs": "HS",
+    "component.light.entity_component._.state_attributes.color_mode.state.onoff": "On/Off",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgb": "RGB",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgbw": "RGBW",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgbww": "RGBWW",
+    "component.light.entity_component._.state_attributes.color_mode.state.unknown": "Unknown",
+    "component.light.entity_component._.state_attributes.color_mode.state.white": "White",
+    "component.light.entity_component._.state_attributes.color_mode.state.xy": "XY",
+    "component.light.entity_component._.state_attributes.color_temp_kelvin.name": "Color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.effect.name": "Effect",
+    "component.light.entity_component._.state_attributes.effect.state.off": "Off",
+    "component.light.entity_component._.state_attributes.effect_list.name": "Available effects",
+    "component.light.entity_component._.state_attributes.max_color_temp_kelvin.name": "Maximum color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.min_color_temp_kelvin.name": "Minimum color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.supported_color_modes.name": "Available color modes",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.brightness": "Brightness only",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.color_temp": "Color temperature",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.hs": "HS",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.onoff": "On/Off",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgb": "RGB",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgbw": "RGBW",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgbww": "RGBWW",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.unknown": "Unknown",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.white": "White",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.xy": "XY"
+   },
+   "entity": {}
+  }
+ }
+}

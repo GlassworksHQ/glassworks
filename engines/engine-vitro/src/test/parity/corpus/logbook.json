@@ -1,0 +1,100 @@
+{
+ "title": "Logbook: one light over the last 24 hours",
+ "card": {
+  "type": "logbook",
+  "entities": [
+   "light.bedroom_accent"
+  ],
+  "hours_to_show": 24
+ },
+ "fixture": {
+  "states": {
+   "light.bedroom_accent": {
+    "state": "off",
+    "last_changed": "-1h5m",
+    "attributes": {
+     "supported_color_modes": [
+      "xy"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "hs_color": null,
+     "rgb_color": null,
+     "xy_color": null,
+     "off_with_transition": false,
+     "off_brightness": 254,
+     "icon": "mdi:led-strip-variant",
+     "friendly_name": "Bedroom Strip Accent",
+     "supported_features": 40
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "dev-bedroom-strip",
+    "en": "Accent",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-bedroom-strip",
+    "name": "Bedroom Strip"
+   }
+  ],
+  "logbook": [
+   {
+    "state": "on",
+    "entity_id": "light.bedroom_accent",
+    "icon": "mdi:led-strip-variant",
+    "when": "-15h20m",
+    "context_event_type": "automation_triggered",
+    "context_domain": "automation",
+    "context_name": "Evening lights",
+    "context_message": "triggered by state of sun.sun",
+    "context_source": "state of sun.sun",
+    "context_entity_id": "automation.evening_lights"
+   },
+   {
+    "state": "off",
+    "entity_id": "light.bedroom_accent",
+    "icon": "mdi:led-strip-variant",
+    "when": "-10h2m",
+    "context_event_type": "automation_triggered",
+    "context_domain": "automation",
+    "context_name": "Bedtime",
+    "context_message": "triggered by time",
+    "context_source": "time",
+    "context_entity_id": "automation.bedtime"
+   },
+   {
+    "state": "on",
+    "entity_id": "light.bedroom_accent",
+    "icon": "mdi:led-strip-variant",
+    "when": "-2h41m",
+    "context_event_type": "automation_triggered",
+    "context_domain": "automation",
+    "context_name": "Morning wake-up",
+    "context_message": "triggered by time",
+    "context_source": "time",
+    "context_entity_id": "automation.morning_wake_up"
+   },
+   {
+    "state": "off",
+    "entity_id": "light.bedroom_accent",
+    "icon": "mdi:led-strip-variant",
+    "when": "-1h5m",
+    "context_event_type": "automation_triggered",
+    "context_domain": "automation",
+    "context_name": "Leave home",
+    "context_message": "triggered by state of person.sam",
+    "context_source": "state of person.sam",
+    "context_entity_id": "automation.leave_home"
+   }
+  ]
+ }
+}

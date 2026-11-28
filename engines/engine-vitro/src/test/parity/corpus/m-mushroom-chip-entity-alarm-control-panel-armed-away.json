@@ -1,0 +1,48 @@
+{
+ "title": "Mushroom chips: entity-alarm-control-panel-armed-away (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "alarm_control_panel.alarm_control_panel_armed_away": "armed_away"
+ },
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "entity",
+    "entity": "alarm_control_panel.alarm_control_panel_armed_away"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "alarm_control_panel.alarm_control_panel_armed_away": {
+    "state": "armed_away",
+    "last_changed": "-2h",
+    "attributes": {
+     "code_format": "number",
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_armed_away",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-house",
+    "name": "House"
+   }
+  ]
+ }
+}

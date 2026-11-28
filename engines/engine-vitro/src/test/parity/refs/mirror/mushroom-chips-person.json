@@ -1,0 +1,136 @@
+{
+ "case": "mushroom-chips-person",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 54
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 38,
+   "type": "mushroom-chips-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Home",
+   "x": 33.39,
+   "y": 11.59,
+   "w": 28.94,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 113.72,
+   "y": 11.59,
+   "w": 13.52,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.living_room": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": "brightness",
+    "brightness": 166,
+    "friendly_name": "Living room",
+    "supported_features": 0
+   },
+   "lc": 1794497580,
+   "lu": 1794497580
+  },
+  "person.alex": {
+   "s": "home",
+   "a": {
+    "friendly_name": "Alex",
+    "source": "device_tracker.alex_phone",
+    "id": "alex",
+    "user_id": "u-alex"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "light",
+    "person"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "person": {
+     "_": {
+      "default": "mdi:account",
+      "state": {
+       "not_home": "mdi:account-arrow-right"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.person.entity_component._.state.home": "Home",
+    "component.person.entity_component._.state.not_home": "Away"
+   },
+   "entity": {}
+  }
+ }
+}

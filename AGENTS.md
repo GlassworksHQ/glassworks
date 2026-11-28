@@ -21,8 +21,10 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 | `frames/generic-android/android` | Glassworks for generic Android (`:generic-android`, `dev.glassworks.generic_android`): the core as an app for any Android 8+ device, no root | Kotlin, Android |
 | `core/`, `pane-api/` | The Glassworks core (`dev.glassworks.*`) and the pane API every pane builds on | Kotlin, Android |
 | `engines/engine-gecko` | The GeckoView engine and the kiosk's web extension | Kotlin, JavaScript |
+| `engines/engine-vitro` | Vitro, the experimental native Lovelace renderer (Settings → Labs), wrapping GeckoView; its debug test app (`:vitro-test`) in `test-app/`. Its WebRTC cameras are `engines/engine-vitro-webrtc` on `libs/ha-webrtc`. Users' guide: [docs/vitro.md](docs/vitro.md), internals: [its README](engines/engine-vitro/README.md) | Kotlin, JavaScript |
+| `engines/conformance` | The engine contract every engine passes (`:engine-conformance`, emulator tests only): [docs/engine-contract.md](docs/engine-contract.md) | Kotlin |
 | `panes/<id>` | One module per pane (`:pane-<id>`): assist, camera, diagnostics, notifications, sendspin, timers, bluetooth-proxy. A frame's own panes sit in `frames/<id>/panes/` | Kotlin, Android |
-| `libs/*` | Libraries split out of the app: `esphome-api` (JVM), `esphome-api-android`, `improv`, `bluetooth-proxy`, `sendspin`, `voice` | Kotlin |
+| `libs/*` | Libraries split out of the app: `esphome-api` (JVM), `esphome-api-android`, `improv`, `bluetooth-proxy`, `sendspin`, `voice`, `ha-webrtc` | Kotlin |
 | `kiln/` | Kiln, the WebUSB installer (FEL → fastboot → boot patch → adb), served at kiln.glassworks.dev (s1.edm.sh redirects there). The old page in `src/`, protocol modules in `packages/`, the Next.js app in `apps/kiln`. One engine for every frame: a frame is declared in `frames/<id>/`, never coded into Kiln ([kiln/AGENTS.md](kiln/AGENTS.md#one-engine-frames-as-data)) | TypeScript, Vite, Next.js, Rust→WASM |
 | `frames/<id>/` | Everything about one frame: its README, its Kiln recipe (`installer/`), its design data (`design/frame.json`, `recovery.json`) and its research notes (`research/`) | TypeScript, JSON, Markdown |
 | `packages/` | Packages Kiln and glassworks.dev share: `frame-card`, the frame card and 3D device mockup; `frames`, the frames registry Kiln reaches every frame through | TypeScript, React |
@@ -82,7 +84,9 @@ in HA. If a request goes against it, say so and point at the page instead of bui
    hash, never vendored. Licences of new dependencies go in `THIRD-PARTY-NOTICES.md` and `LICENSES/`.
    One exception is decided (maintainer, 2026-11-16): `desugar_jdk_libs` (GPL-2.0 with the Classpath exception)
    in the generic app's legacy APK, for Android 6–7, and in the legacy engine's debug test app
-   (`dev.glassworks.s1.legacy`). Any other GPL code in an APK needs the maintainer's call.
+   (`dev.glassworks.s1.legacy`). The maintainer extended it on 2026-11-25 to Vitro's debug test app
+   (`:vitro-test`, `engines/engine-vitro/test-app`, `dev.glassworks.vitro.test`, never released). Any other GPL
+   code in an APK needs the maintainer's call.
 5. **Changes to the boot patch, the root helper, the radio or anything in `frames/aqara-s1-plus/tools/root` need a real
    panel before merge.** Say so in the PR. Off-device tests alone are not enough there.
 6. **Updates must keep installing in place.** Don't change `applicationId`, the signing setup or

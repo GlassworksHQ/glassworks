@@ -1,0 +1,99 @@
+{
+ "title": "More Info of a phone's tracker: its timeline, then the Activity section (Away, a zone, Home), the zone's dot a graph color of its own as in the timeline",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "markdown",
+  "content": "Robin's Phone"
+ },
+ "more_info": "device_tracker.robin_phone",
+ "expect": {
+  "device_tracker.robin_phone": "home"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "device_tracker.robin_phone": {
+    "state": "home",
+    "last_changed": -3000,
+    "attributes": {
+     "source_type": "gps",
+     "friendly_name": "Robin's Phone"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "device_tracker.robin_phone",
+    "pl": "mobile_app",
+    "di": "dev-phone-robin",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-phone-robin",
+    "name": "Robin's Phone"
+   }
+  ],
+  "history": {
+   "device_tracker.robin_phone": {
+    "steps": [
+     [
+      "-30h",
+      "home"
+     ],
+     [
+      "-9h",
+      "not_home"
+     ],
+     [
+      "-8h30m",
+      "Work"
+     ],
+     [
+      "-1h20m",
+      "not_home"
+     ],
+     [
+      "-50m",
+      "home"
+     ]
+    ]
+   }
+  },
+  "logbook": [
+   {
+    "entity_id": "device_tracker.robin_phone",
+    "state": "not_home",
+    "when": "-9h"
+   },
+   {
+    "entity_id": "device_tracker.robin_phone",
+    "state": "Work",
+    "when": "-8h30m"
+   },
+   {
+    "entity_id": "device_tracker.robin_phone",
+    "state": "not_home",
+    "when": "-1h20m"
+   },
+   {
+    "entity_id": "device_tracker.robin_phone",
+    "state": "home",
+    "when": "-50m"
+   }
+  ]
+ }
+}

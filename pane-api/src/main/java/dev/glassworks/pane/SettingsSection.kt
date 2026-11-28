@@ -189,12 +189,12 @@ const val UNKNOWN = "Unknown"
 const val UNAVAILABLE = "Unavailable"
 
 /** Where a settings section sits. The core's own come first and last; panes go in between. */
-enum class SettingsPlace { DASHBOARD, SCREEN, SOUND, APPEARANCE, DEVICE, NETWORK, PANES, LOG, SECURITY, ABOUT }
+enum class SettingsPlace { DASHBOARD, SCREEN, SOUND, APPEARANCE, DEVICE, NETWORK, PANES, LOG, SECURITY, LABS, ABOUT }
 
 /**
  * The sections in the order every settings surface uses: the core's Dashboard, Screen, Sound and Appearance, the frame's
  * Device page ([dev.glassworks.frame.Frame.deviceSection]) and Network,
- * then [panes] in definition order, then Log, Security and About. Sections without items are left out.
+ * then [panes] in definition order, then Log, Security, Labs and About. Sections without items are left out.
  */
 fun settingsOrder(core: Map<SettingsPlace, SettingsSection>, panes: List<SettingsSection>): List<SettingsSection> {
     val sections = SettingsPlace.entries.flatMap { p -> if (p == SettingsPlace.PANES) panes else listOfNotNull(core[p]) }

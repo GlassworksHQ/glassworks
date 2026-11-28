@@ -72,6 +72,13 @@ kiosk|time_zone_enabled|Boolean|true
 kiosk|time_zone_kept|String|""
 kiosk|update_channel|String|null
 kiosk|url|String|null
+kiosk|vitro_crash_strikes|Int|0
+kiosk|vitro_enabled|Boolean|false
+kiosk|vitro_off_at|Long|0
+kiosk|vitro_off_notice|Boolean|false
+kiosk|vitro_off_reason|String|null
+kiosk|vitro_start|String|null
+kiosk|vitro_starts|Int|0
 kiosk|voice_enabled|Boolean|true
 kiosk|voice_overlay|Boolean|true
 kiosk|volume_raised|Boolean|false

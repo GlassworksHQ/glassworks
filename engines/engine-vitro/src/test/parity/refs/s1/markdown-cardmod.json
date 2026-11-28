@@ -1,0 +1,164 @@
+{
+ "case": "markdown-cardmod",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 12,
+  "y": 12,
+  "width": 936,
+  "height": 156
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 20,
+   "y": 20,
+   "w": 920,
+   "h": 140,
+   "type": "hui-markdown-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Inside",
+   "x": 22,
+   "y": 20,
+   "w": 49.56,
+   "h": 15,
+   "size": 12,
+   "weight": 600,
+   "color": "rgb(99, 99, 107)",
+   "transform": "uppercase"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "21.4°",
+   "x": 22,
+   "y": 35,
+   "w": 110.11,
+   "h": 68,
+   "size": 56,
+   "weight": 300,
+   "color": "rgb(244, 244, 245)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Humidity 47%",
+   "x": 22,
+   "y": 101,
+   "w": 99.91,
+   "h": 19,
+   "size": 15,
+   "weight": 400,
+   "color": "rgb(161, 161, 170)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.living_room_humidity": {
+   "s": "47.3",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "%",
+    "device_class": "humidity",
+    "friendly_name": "Living Room Sensor Humidity"
+   },
+   "lc": 1794490800,
+   "lu": 1794490800
+  },
+  "sensor.living_room_temperature": {
+   "s": "21.42",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Living Room Sensor Temperature"
+   },
+   "lc": 1794491820,
+   "lu": 1794491820
+  }
+ },
+ "templates": {
+  "###### Inside\n# {{ '%.1f' | format(states('sensor.living_room_temperature') | float(0)) }}°\n#### Humidity {{ states('sensor.living_room_humidity') | float(0) | round(0) | int }}%": {
+   "result": "###### Inside\n# 21.4°\n#### Humidity 47%"
+  }
+ },
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.living_room_humidity",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-1",
+    "en": "Humidity",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.living_room_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-1",
+    "en": "Temperature",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Living Room Sensor"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "humidity": {
+      "default": "mdi:water-percent"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state_attributes.last_reset.name": "Last reset",
+    "component.sensor.entity_component._.state_attributes.options.name": "Possible states",
+    "component.sensor.entity_component._.state_attributes.state_class.name": "State class",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement": "Measurement",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement_angle": "Measurement angle",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total": "Total",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total_increasing": "Total increasing"
+   },
+   "entity": {}
+  }
+ }
+}

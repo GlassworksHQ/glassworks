@@ -1,0 +1,47 @@
+{
+ "title": "Mushroom entity card: a light, default horizontal layout",
+ "card": {
+  "type": "custom:mushroom-entity-card",
+  "entity": "light.bedroom_accent"
+ },
+ "fixture": {
+  "states": {
+   "light.bedroom_accent": {
+    "state": "off",
+    "last_changed": "-50m",
+    "attributes": {
+     "supported_color_modes": [
+      "xy"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "hs_color": null,
+     "rgb_color": null,
+     "xy_color": null,
+     "off_with_transition": false,
+     "off_brightness": 254,
+     "icon": "mdi:led-strip-variant",
+     "friendly_name": "Bedroom Strip Accent",
+     "supported_features": 40
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "dev-bedroom-strip",
+    "en": "Accent",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-bedroom-strip",
+    "name": "Bedroom Strip"
+   }
+  ]
+ }
+}

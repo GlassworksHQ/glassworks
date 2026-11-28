@@ -1,0 +1,51 @@
+{
+ "case": "picture",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 516
+ },
+ "docSize": {
+  "width": 960,
+  "height": 548
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 500,
+   "type": "hui-picture-card"
+  }
+ ],
+ "texts": [],
+ "states": {},
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ }
+}

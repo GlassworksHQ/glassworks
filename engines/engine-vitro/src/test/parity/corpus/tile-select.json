@@ -1,0 +1,36 @@
+{
+ "title": "Tile: input_select with select-options",
+ "card": {
+  "type": "tile",
+  "entity": "input_select.blind_position",
+  "features": [
+   {
+    "type": "select-options"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "input_select.blind_position": {
+    "state": "open",
+    "last_changed": "-239m",
+    "attributes": {
+     "options": [
+      "open",
+      "closed"
+     ],
+     "editable": true,
+     "icon": "mdi:blinds",
+     "friendly_name": "Blind Position"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "input_select.blind_position",
+    "pl": "input_select",
+    "en": "Blind Position"
+   }
+  ]
+ }
+}

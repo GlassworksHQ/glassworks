@@ -1,0 +1,362 @@
+{
+ "case": "logbook-user",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 392
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 376,
+   "type": "hui-logbook-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Today · November 12, 2026",
+   "x": 17,
+   "y": 28,
+   "w": 170.61,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Today · November 12, 2026",
+   "x": 17,
+   "y": 36,
+   "w": 170.61,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 53,
+   "y": 66.69,
+   "w": 17.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "A",
+   "x": 358.06,
+   "y": 69.67,
+   "w": 5.88,
+   "h": 10,
+   "size": 9,
+   "weight": 400,
+   "color": "rgb(33, 33, 33)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9:48:00 AM",
+   "x": 390.2,
+   "y": 67.88,
+   "w": 60.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 53,
+   "y": 106.69,
+   "w": 19.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "S",
+   "x": 358.33,
+   "y": 109.67,
+   "w": 5.34,
+   "h": 10,
+   "size": 9,
+   "weight": 400,
+   "color": "rgb(33, 33, 33)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2:03:00 AM",
+   "x": 390.22,
+   "y": 107.88,
+   "w": 60.78,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 53,
+   "y": 147.19,
+   "w": 17.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "A",
+   "x": 358.06,
+   "y": 150.17,
+   "w": 5.88,
+   "h": 10,
+   "size": 9,
+   "weight": 400,
+   "color": "rgb(33, 33, 33)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12:28:00 AM",
+   "x": 383.47,
+   "y": 148.38,
+   "w": 67.53,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.bedroom_accent": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": "brightness",
+    "brightness": 128,
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
+    "supported_features": 32
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "device-1",
+    "en": "Accent"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Bedroom Strip"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "config/auth/list"
+   },
+   "events": [],
+   "result": [
+    {
+     "id": "parity-user",
+     "name": "Sam",
+     "is_owner": true,
+     "is_admin": true,
+     "credentials": [
+      {
+       "auth_provider_type": "homeassistant",
+       "auth_provider_id": null
+      }
+     ],
+     "mfa_modules": [],
+     "system_generated": false,
+     "group_ids": [
+      "system-admin"
+     ],
+     "username": "parity",
+     "is_active": true,
+     "local_only": false
+    },
+    {
+     "is_owner": false,
+     "is_admin": false,
+     "system_generated": false,
+     "group_ids": [
+      "system-users"
+     ],
+     "credentials": [],
+     "username": null,
+     "is_active": true,
+     "local_only": false,
+     "id": "user-alex",
+     "name": "Alex"
+    }
+   ]
+  },
+  {
+   "request": {
+    "type": "logbook/event_stream",
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "end_time": "2027-11-12T16:08:00.000Z",
+    "entity_ids": [
+     "light.bedroom_accent"
+    ]
+   },
+   "events": [
+    {
+     "events": [
+      {
+       "state": "on",
+       "entity_id": "light.bedroom_accent",
+       "icon": "mdi:led-strip-variant",
+       "context_user_id": "user-alex",
+       "context_event_type": "call_service",
+       "context_domain": "light",
+       "context_service": "turn_on",
+       "when": 1794464880
+      },
+      {
+       "state": "off",
+       "entity_id": "light.bedroom_accent",
+       "icon": "mdi:led-strip-variant",
+       "context_user_id": "parity-user",
+       "context_event_type": "call_service",
+       "context_domain": "light",
+       "context_service": "turn_off",
+       "when": 1794470580
+      },
+      {
+       "state": "on",
+       "entity_id": "light.bedroom_accent",
+       "icon": "mdi:led-strip-variant",
+       "context_user_id": "user-alex",
+       "context_event_type": "call_service",
+       "context_domain": "light",
+       "context_service": "turn_on",
+       "when": 1794498480
+      }
+     ],
+     "start_time": 1794413280,
+     "end_time": 1794499680,
+     "partial": true
+    },
+    {
+     "events": [],
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  }
+ ]
+}

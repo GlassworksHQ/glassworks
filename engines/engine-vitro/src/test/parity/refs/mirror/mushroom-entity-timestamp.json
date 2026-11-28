@@ -1,0 +1,101 @@
+{
+ "case": "mushroom-entity-timestamp",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "mushroom-entity-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Next sunrise",
+   "x": 56,
+   "y": 12,
+   "w": 79.88,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "In 3 hours",
+   "x": 56,
+   "y": 31,
+   "w": 56.89,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.next_sunrise": {
+   "s": "2026-11-12T19:08:00+00:00",
+   "a": {
+    "device_class": "timestamp",
+    "friendly_name": "Next sunrise"
+   },
+   "lc": 1794481680,
+   "lu": 1794481680
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "timestamp": {
+      "default": "mdi:clock"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

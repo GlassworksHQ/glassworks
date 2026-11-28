@@ -95,6 +95,9 @@ dependencies {
     implementation(project(":glassworks-pane-api"))
     implementation(project(":glassworks-core"))
     implementation(project(":engine-gecko"))
+    implementation(project(":engine-vitro"))
+    // Vitro's cameras over WebRTC (libs/ha-webrtc on libwebrtc), registered when Vitro is on.
+    implementation(project(":engine-vitro-webrtc"))
     implementation(project(":pane-diagnostics"))
     implementation(project(":pane-bluetooth-proxy"))
     implementation(project(":pane-camera"))

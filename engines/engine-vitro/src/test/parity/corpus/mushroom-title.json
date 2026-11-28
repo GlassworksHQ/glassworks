@@ -1,0 +1,12 @@
+{
+ "title": "Mushroom title card: a title and a subtitle",
+ "card": {
+  "type": "custom:mushroom-title-card",
+  "title": "Living room",
+  "subtitle": "Lights and blinds"
+ },
+ "fixture": {
+  "states": {},
+  "entities": []
+ }
+}

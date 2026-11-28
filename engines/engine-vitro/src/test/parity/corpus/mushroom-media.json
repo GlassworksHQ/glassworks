@@ -1,0 +1,47 @@
+{
+ "title": "Mushroom media player card, idle speaker",
+ "route": "island",
+ "card": {
+  "type": "custom:mushroom-media-player-card",
+  "entity": "media_player.living_room_speaker",
+  "name": "Living Room",
+  "use_media_info": true,
+  "media_controls": [
+   "play_pause_stop",
+   "next"
+  ],
+  "layout": "horizontal"
+ },
+ "fixture": {
+  "states": {
+   "media_player.living_room_speaker": {
+    "state": "idle",
+    "last_changed": "-56m",
+    "attributes": {
+     "volume_level": 0.31,
+     "is_volume_muted": false,
+     "media_content_type": "music",
+     "shuffle": false,
+     "repeat": "off",
+     "device_class": "speaker",
+     "friendly_name": "Living Room Speaker",
+     "supported_features": 8321599
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "media_player.living_room_speaker",
+    "pl": "demo",
+    "di": "dev-living-room-speaker",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-speaker",
+    "name": "Living Room Speaker"
+   }
+  ]
+ }
+}

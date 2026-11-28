@@ -106,6 +106,45 @@ class LockdownPolicyTest {
         assertFalse(policy.allows(Load.DOWNLOAD, "blob:$ha/1f2e"))
     }
 
+    /**
+     * Vitro on the legacy engine: its island server, on this process's loopback port, is the one other origin a page or
+     * frame may come from. Home Assistant's pages still come from Home Assistant (the Mirror, 2026-11-25).
+     */
+    @Test fun `the app's own loopback server is the one other origin, its port only`() {
+        val local = "http://127.0.0.1:39123"
+        val both = LockdownPolicy().also { it.start("$ha/lovelace/0", "$local/") }
+        assertEquals(ha, both.origin)
+        assertEquals(local, both.local)
+        for (ok in listOf("$ha/history", "$ha/profile/general", "$local/__vitro/island/s0123", "$local/")) {
+            assertTrue(ok, both.allows(Load.PAGE, ok))
+            assertTrue(ok, both.allows(Load.FRAME, ok))
+        }
+        for (no in listOf("http://127.0.0.1:39124/", "http://localhost:39123/", "https://127.0.0.1:39123/", "http://127.0.0.2:39123/",
+            "http://[::1]:39123/", "http://127.0.0.1/", "http://127.0.0.1:39123.example.com/", "http://127.0.0.1:39123@example.com/")) {
+            assertFalse(no, both.allows(Load.PAGE, no))
+            assertFalse(no, both.allows(Load.FRAME, no))
+        }
+        assertFalse("a new window goes only to Home Assistant", both.allows(Load.WINDOW, "$local/__vitro/island/s0123"))
+        assertFalse(both.allows(Load.DOWNLOAD, "$local/x"))
+
+        assertFalse("set once, with the dashboard", both.start("$ha/", "http://127.0.0.1:40000"))
+        assertEquals(local, both.local)
+        assertFalse(both.allows(Load.PAGE, "http://127.0.0.1:40000/"))
+    }
+
+    @Test fun `a local origin that isn't 127_0_0_1 with a port opens nothing`() {
+        for (bad in listOf("http://localhost:39123", "https://127.0.0.1:39123", "http://127.0.0.1", "http://127.0.0.1:80",
+            "http://192.0.2.10:8124", "https://www.example.com", "http://[::1]:39123", "about:blank", "", "http://127.0.0.1:39123\\@example.com")) {
+            val p = LockdownPolicy().also { it.start("$ha/", bad) }
+            assertNull(bad, p.local)
+            assertEquals(bad, ha, p.origin)
+            assertFalse(bad, p.allows(Load.PAGE, "http://127.0.0.1:39123/"))
+        }
+        val none = LockdownPolicy().also { it.start("$ha/") }
+        assertNull(none.local)
+        assertFalse(none.allows(Load.PAGE, "http://127.0.0.1:39123/"))
+    }
+
     @Test fun `a new dashboard origin takes a new engine (a process restart)`() {
         val next = LockdownPolicy().also { it.start("https://homeassistant.local/dashboard-wall/0") }
         assertTrue(next.allows(Load.PAGE, "https://homeassistant.local/"))

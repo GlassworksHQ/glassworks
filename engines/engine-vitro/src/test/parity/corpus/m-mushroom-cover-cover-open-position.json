@@ -1,0 +1,45 @@
+{
+ "title": "mushroom-cover: cover open-position (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "cover.cover_open_position": "open"
+ },
+ "card": {
+  "type": "custom:mushroom-cover-card",
+  "entity": "cover.cover_open_position",
+  "show_position_control": true,
+  "show_buttons_control": true
+ },
+ "fixture": {
+  "states": {
+   "cover.cover_open_position": {
+    "state": "open",
+    "last_changed": "-1h",
+    "attributes": {
+     "current_position": 40,
+     "device_class": "blind",
+     "supported_features": 15,
+     "friendly_name": "Office Blind"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.cover_open_position",
+    "pl": "demo",
+    "di": "dev-office",
+    "en": "Blind",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-office",
+    "name": "Office"
+   }
+  ]
+ }
+}

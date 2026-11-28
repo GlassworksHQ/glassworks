@@ -1,0 +1,20 @@
+{
+ "title": "Shortcut: a label, a description and an icon",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "shortcut",
+  "label": "Kitchen",
+  "description": "Lights and blinds",
+  "icon": "mdi:silverware-fork-knife",
+  "tap_action": {
+   "action": "navigate",
+   "navigation_path": "/vitro-harness/kitchen"
+  }
+ },
+ "fixture": {
+  "states": {}
+ }
+}

@@ -1,0 +1,124 @@
+{
+ "case": "button",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-button-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Desk Lamp",
+   "x": 83.19,
+   "y": 86.19,
+   "w": 79.61,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 114.28,
+   "y": 105.38,
+   "w": 17.42,
+   "h": 15,
+   "size": 12.6,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.desk_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "friendly_name": "Desk Lamp",
+    "supported_features": 0
+   },
+   "lc": 1794483360,
+   "lu": 1794483360
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.desk_lamp",
+    "pl": "switch_as_x",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Desk Lamp"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

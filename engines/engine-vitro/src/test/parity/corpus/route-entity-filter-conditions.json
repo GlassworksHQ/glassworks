@@ -1,0 +1,71 @@
+{
+ "title": "Entity filter with HA's `conditions` (the UI's format): HA's frontend draws the view",
+ "route": "frontend",
+ "card": {
+  "type": "entity-filter",
+  "entities": [
+   "light.hallway_ceiling_ring"
+  ],
+  "conditions": [
+   {
+    "condition": "state",
+    "state": "on"
+   }
+  ],
+  "card": {
+   "title": "Lights on"
+  }
+ },
+ "fixture": {
+  "states": {
+   "light.hallway_ceiling_ring": {
+    "state": "on",
+    "last_changed": "-260m",
+    "attributes": {
+     "min_color_temp_kelvin": 2702,
+     "max_color_temp_kelvin": 6535,
+     "supported_color_modes": [
+      "color_temp",
+      "xy"
+     ],
+     "color_mode": "xy",
+     "brightness": 13,
+     "color_temp_kelvin": null,
+     "hs_color": [
+      34.878,
+      96.471
+     ],
+     "rgb_color": [
+      255,
+      152,
+      9
+     ],
+     "xy_color": [
+      0.579995,
+      0.4
+     ],
+     "off_with_transition": false,
+     "off_brightness": null,
+     "friendly_name": "Hallway Ceiling Light Hallway Ceiling Ring",
+     "supported_features": 40
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.hallway_ceiling_ring",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-hallway-ceiling-light",
+    "en": "Hallway Ceiling Ring",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway-ceiling-light",
+    "name": "Hallway Ceiling Light"
+   }
+  ]
+ }
+}

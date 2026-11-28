@@ -93,6 +93,8 @@ dependencies {
     implementation(project(":glassworks-pane-api"))
     implementation(project(":glassworks-core"))
     implementation(project(":engine-gecko-legacy"))
+    implementation(project(":engine-vitro")) // as the S1 app does (minSdk 23, no override needed)
+    implementation(project(":engine-vitro-webrtc")) // as the S1 app does (minSdk 23; libwebrtc's is 21, no override)
     implementation(project(":pane-diagnostics"))
     implementation(project(":pane-bluetooth-proxy"))
     implementation(project(":pane-camera"))

@@ -1,0 +1,236 @@
+{
+ "case": "view-layout-grid",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 0,
+  "y": 0,
+  "width": 960,
+  "height": 480
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 8,
+   "y": 8,
+   "w": 464,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 488,
+   "y": 8,
+   "w": 464,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 8,
+   "y": 84,
+   "w": 944,
+   "h": 170.8,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hall Lamp",
+   "x": 56,
+   "y": 12.61,
+   "w": 64.28,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "71%",
+   "x": 56,
+   "y": 32,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 1,
+   "clipped": false,
+   "text": "Porch Lamp",
+   "x": 56,
+   "y": 12.61,
+   "w": 76.42,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 1,
+   "clipped": false,
+   "text": "Off",
+   "x": 56,
+   "y": 32,
+   "w": 17.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 2,
+   "clipped": false,
+   "text": "Lamps",
+   "x": 17,
+   "y": 21,
+   "w": 71.41,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 2,
+   "clipped": false,
+   "text": "Stair Lamp",
+   "x": 73,
+   "y": 77.59,
+   "w": 67.38,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 2,
+   "clipped": false,
+   "text": "Desk Lamp",
+   "x": 73,
+   "y": 125.59,
+   "w": 69.66,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.desk_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "friendly_name": "Desk Lamp",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "light.hall_lamp": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": "brightness",
+    "brightness": 180,
+    "friendly_name": "Hall Lamp",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "light.porch_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "friendly_name": "Porch Lamp",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "light.stair_lamp": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "color_mode": "brightness",
+    "brightness": 180,
+    "friendly_name": "Stair Lamp",
+    "supported_features": 40
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

@@ -4,6 +4,7 @@
 
 package dev.glassworks.web
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.InetAddress
@@ -38,6 +39,76 @@ class HttpServerTest {
             assertTrue(busy.getInputStream().readBytes().toString(Charsets.UTF_8).startsWith("HTTP/1.1 200"))
             assertTrue(waiting.getInputStream().readBytes().toString(Charsets.UTF_8).startsWith("HTTP/1.1 200"))
             listOf(busy, waiting, third).forEach { it.close() }
+        } finally {
+            release.countDown()
+            server.stop()
+        }
+    }
+
+    private fun statusLine(sock: Socket): String {
+        val sb = StringBuilder()
+        val inp = sock.getInputStream()
+        while (true) {
+            val c = inp.read()
+            if (c < 0 || c == '\n'.code) return sb.toString().trim()
+            sb.append(c.toChar())
+        }
+    }
+
+    private fun upgrade(port: Int): Socket = Socket(loopback, port).apply {
+        soTimeout = 3_000
+        getOutputStream().write(
+            ("GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").toByteArray(),
+        )
+    }
+
+    @Test fun aResponsesOnDoneRunsOnceItIsWritten() {
+        val done = java.util.concurrent.atomic.AtomicInteger(0)
+        val server = HttpServer(0, { HttpResponse(200, mapOf("Content-Type" to "text/plain"), "hello".toByteArray(), onDone = { done.incrementAndGet() }) },
+            bindAddress = loopback, workers = 1)
+        server.start()
+        try {
+            val s = open(server.localPort)
+            assertTrue(s.getInputStream().readBytes().toString(Charsets.UTF_8).endsWith("hello"))
+            s.close()
+            val deadline = System.nanoTime() + 3_000_000_000L
+            while (done.get() == 0 && System.nanoTime() < deadline) Thread.sleep(10)
+            assertEquals(1, done.get())
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test fun upgradedConnectionsRunOffTheWorkersUpToTheirOwnLimit() {
+        val release = CountDownLatch(1)
+        val running = CountDownLatch(1)
+        val server = HttpServer(0, { req ->
+            if (req.path == "/ws") {
+                // Held until the test releases it (the finally does too): a slow runner can't free the slot early.
+                HttpResponse.webSocket(req.headers["sec-websocket-key"]!!, 5_000) { running.countDown(); release.await() }
+            } else {
+                HttpResponse.text(200, "ok")
+            }
+        }, bindAddress = loopback, workers = 1, queued = 1, upgradeThreads = 1)
+        server.start()
+        try {
+            val ws = upgrade(server.localPort)
+            assertTrue(statusLine(ws).startsWith("HTTP/1.1 101"))
+            assertTrue(running.await(3, TimeUnit.SECONDS))
+            // The one worker is free while the socket stays open: a plain request is answered at once.
+            val plain = open(server.localPort)
+            assertTrue(plain.getInputStream().readBytes().toString(Charsets.UTF_8).startsWith("HTTP/1.1 200"))
+            // Past the upgrade limit: refused, not queued behind the open socket.
+            val second = upgrade(server.localPort)
+            assertTrue(statusLine(second).startsWith("HTTP/1.1 503"))
+            release.countDown()
+            // The first socket's thread ends and closes it; its slot is free again.
+            ws.getInputStream().readBytes() // the rest of the 101 headers, then the close
+            Thread.sleep(100)
+            val third = upgrade(server.localPort)
+            assertTrue(statusLine(third).startsWith("HTTP/1.1 101"))
+            listOf(ws, plain, second, third).forEach { it.close() }
         } finally {
             release.countDown()
             server.stop()
@@ -172,6 +243,23 @@ class HttpServerTest {
         } finally {
             release.countDown()
             server.stop()
+        }
+    }
+
+    /**
+     * The port is free once stop() returns, so the same port can be bound again at once (an island server keeps its
+     * port between starts, #881). Linux used to keep the listening socket until the accept thread left accept().
+     */
+    @Test fun stopReleasesThePortBeforeItReturns() {
+        repeat(50) {
+            val s = HttpServer(0, { HttpResponse.text(200, "ok") }, bindAddress = loopback)
+            s.start()
+            val port = s.localPort
+            s.stop()
+            java.net.ServerSocket().use { again ->
+                again.reuseAddress = true
+                again.bind(java.net.InetSocketAddress(loopback, port))
+            }
         }
     }
 }

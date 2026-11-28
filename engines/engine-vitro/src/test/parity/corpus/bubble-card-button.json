@@ -1,0 +1,44 @@
+{
+ "title": "Bubble Card: a light as a slider button",
+ "route": "island",
+ "card": {
+  "type": "custom:bubble-card",
+  "card_type": "button",
+  "button_type": "slider",
+  "entity": "light.living_room_lamp",
+  "name": "Living room lamp",
+  "icon": "mdi:floor-lamp"
+ },
+ "fixture": {
+  "states": {
+   "light.living_room_lamp": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Living Room Lamp",
+     "supported_features": 32
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.living_room_lamp",
+    "pl": "zha",
+    "di": "dev-living-room-lamp",
+    "tk": "light",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-lamp",
+    "name": "Living Room Lamp"
+   }
+  ]
+ }
+}

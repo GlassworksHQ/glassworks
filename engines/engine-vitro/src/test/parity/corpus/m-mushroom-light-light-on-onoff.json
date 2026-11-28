@@ -1,0 +1,47 @@
+{
+ "title": "mushroom-light: light on-onoff (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "light.light_on_onoff": "on"
+ },
+ "card": {
+  "type": "custom:mushroom-light-card",
+  "entity": "light.light_on_onoff",
+  "show_brightness_control": true,
+  "use_light_color": true
+ },
+ "fixture": {
+  "states": {
+   "light.light_on_onoff": {
+    "state": "on",
+    "last_changed": "-285m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": "onoff",
+     "supported_features": 0,
+     "friendly_name": "Kitchen Pendant"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.light_on_onoff",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   }
+  ]
+ }
+}

@@ -1,0 +1,49 @@
+{
+ "_comment": "Made-up battery sensors for island-check.mjs and island-probe.mjs: which of HA's elements battery-state-card draws with (docs/research/vitro-island-better-thermostat.md).",
+ "card": {
+  "type": "custom:battery-state-card",
+  "title": "Batteries",
+  "entities": [
+   "sensor.hallway_motion_battery",
+   "sensor.study_window_battery",
+   "sensor.front_door_lock_battery"
+  ]
+ },
+ "resources": [
+  "/hacsfiles/battery-state-card/battery-state-card.js?hacstag=v4.3.0"
+ ],
+ "fixture": {
+  "states": {
+   "sensor.hallway_motion_battery": {
+    "state": "84",
+    "last_changed": -3600,
+    "attributes": {
+     "friendly_name": "Hallway motion battery",
+     "unit_of_measurement": "%",
+     "device_class": "battery",
+     "state_class": "measurement"
+    }
+   },
+   "sensor.study_window_battery": {
+    "state": "12",
+    "last_changed": -7200,
+    "attributes": {
+     "friendly_name": "Study window battery",
+     "unit_of_measurement": "%",
+     "device_class": "battery",
+     "state_class": "measurement"
+    }
+   },
+   "sensor.front_door_lock_battery": {
+    "state": "47",
+    "last_changed": -1800,
+    "attributes": {
+     "friendly_name": "Front door lock battery",
+     "unit_of_measurement": "%",
+     "device_class": "battery",
+     "state_class": "measurement"
+    }
+   }
+  }
+ }
+}

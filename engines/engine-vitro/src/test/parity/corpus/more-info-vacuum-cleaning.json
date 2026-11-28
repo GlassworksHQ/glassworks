@@ -1,0 +1,62 @@
+{
+ "title": "More Info of a cleaning vacuum that reports a status: the status in the header, pause in place of start, the dust specks still at the centre (HA's reduced motion), no fan speed",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "vacuum.robot"
+ },
+ "more_info": "vacuum.robot",
+ "expect": {
+  "vacuum.robot": "cleaning",
+  "sensor.robot_battery": "87"
+ },
+ "fixture": {
+  "admin": false,
+  "states": {
+   "vacuum.robot": {
+    "state": "cleaning",
+    "last_changed": -2700,
+    "attributes": {
+     "supported_features": 12444,
+     "status": "Cleaning the kitchen",
+     "friendly_name": "Robot"
+    }
+   },
+   "sensor.robot_battery": {
+    "state": "87",
+    "last_changed": -600,
+    "attributes": {
+     "device_class": "battery",
+     "unit_of_measurement": "%",
+     "state_class": "measurement",
+     "friendly_name": "Robot Battery"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "vacuum.robot",
+    "pl": "roborock",
+    "di": "dev-robot",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.robot_battery",
+    "pl": "roborock",
+    "di": "dev-robot",
+    "en": "Battery",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-robot",
+    "name": "Robot"
+   }
+  ]
+ }
+}

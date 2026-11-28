@@ -1,0 +1,392 @@
+{
+ "case": "more-info-activity-device-tracker",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 0,
+  "y": 40,
+  "width": 960,
+  "height": 440
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 0,
+   "y": 48,
+   "w": 960,
+   "h": 432,
+   "type": "ha-more-info-dialog",
+   "mode": "bottom-sheet"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Robin's Phone",
+   "x": 56,
+   "y": 22,
+   "w": 125.5,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Robin's Phone",
+   "x": 72,
+   "y": 92.41,
+   "w": 87.13,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "50 minutes ago",
+   "x": 72,
+   "y": 112.2,
+   "w": 96.44,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Home",
+   "x": 898.34,
+   "y": 103.8,
+   "w": 37.66,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "History",
+   "x": 24,
+   "y": 152,
+   "w": 64.33,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 865.72,
+   "y": 155.8,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Activity",
+   "x": 24,
+   "y": 268,
+   "w": 66.94,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 865.72,
+   "y": 271.8,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Today · November 12, 2026",
+   "x": 24,
+   "y": 323,
+   "w": 170.61,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Home",
+   "x": 60,
+   "y": 353.69,
+   "w": 37.66,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9:18:00 AM",
+   "x": 843.2,
+   "y": 354.88,
+   "w": 60.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Away",
+   "x": 60,
+   "y": 393.69,
+   "w": 33.59,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "8:48:00 AM",
+   "x": 843.2,
+   "y": 394.88,
+   "w": 60.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "device_tracker.robin_phone": {
+   "s": "home",
+   "a": {
+    "source_type": "gps",
+    "friendly_name": "Robin's Phone"
+   },
+   "lc": 1794496680,
+   "lu": 1794496680
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "device_tracker.robin_phone",
+    "pl": "mobile_app",
+    "di": "device-1",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Robin's Phone"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "device_tracker"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "device_tracker": {
+     "_": {
+      "default": "mdi:account",
+      "state": {
+       "not_home": "mdi:account-arrow-right"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.device_tracker.entity_component._.state.home": "Home",
+    "component.device_tracker.entity_component._.state.not_home": "Away",
+    "component.device_tracker.entity_component._.state_attributes.battery.name": "Battery",
+    "component.device_tracker.entity_component._.state_attributes.gps_accuracy.name": "GPS accuracy",
+    "component.device_tracker.entity_component._.state_attributes.latitude.name": "Latitude",
+    "component.device_tracker.entity_component._.state_attributes.longitude.name": "Longitude",
+    "component.device_tracker.entity_component._.state_attributes.source_type.name": "Source",
+    "component.device_tracker.entity_component._.state_attributes.source_type.state.bluetooth": "Bluetooth",
+    "component.device_tracker.entity_component._.state_attributes.source_type.state.bluetooth_le": "Bluetooth LE",
+    "component.device_tracker.entity_component._.state_attributes.source_type.state.gps": "GPS",
+    "component.device_tracker.entity_component._.state_attributes.source_type.state.router": "Router",
+    "component.device_tracker.entity_component._.state_attributes.tracking_type.name": "Tracking type",
+    "component.device_tracker.entity_component._.state_attributes.tracking_type.state.connection": "Connection",
+    "component.device_tracker.entity_component._.state_attributes.tracking_type.state.position": "Position"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "history/stream",
+    "entity_ids": [
+     "device_tracker.robin_phone"
+    ],
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "minimal_response": true,
+    "significant_changes_only": true,
+    "no_attributes": false
+   },
+   "events": [
+    {
+     "states": {
+      "device_tracker.robin_phone": [
+       {
+        "s": "home",
+        "a": {
+         "source_type": "gps",
+         "friendly_name": "Robin's Phone"
+        },
+        "lu": 1794413280
+       },
+       {
+        "s": "not_home",
+        "lu": 1794467280
+       },
+       {
+        "s": "Work",
+        "lu": 1794469080
+       },
+       {
+        "s": "not_home",
+        "lu": 1794494880
+       },
+       {
+        "s": "home",
+        "lu": 1794496680
+       }
+      ]
+     },
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  },
+  {
+   "request": {
+    "type": "config/auth/list"
+   },
+   "events": [],
+   "result": [
+    {
+     "id": "parity-user",
+     "name": "Sam",
+     "is_owner": true,
+     "is_admin": true,
+     "credentials": [
+      {
+       "auth_provider_type": "homeassistant",
+       "auth_provider_id": null
+      }
+     ],
+     "mfa_modules": [],
+     "system_generated": false,
+     "group_ids": [
+      "system-admin"
+     ],
+     "username": "parity",
+     "is_active": true,
+     "local_only": false
+    }
+   ]
+  },
+  {
+   "request": {
+    "type": "logbook/event_stream",
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "end_time": "2027-11-12T16:08:00.000Z",
+    "entity_ids": [
+     "device_tracker.robin_phone"
+    ]
+   },
+   "events": [
+    {
+     "events": [
+      {
+       "entity_id": "device_tracker.robin_phone",
+       "state": "not_home",
+       "when": 1794467280
+      },
+      {
+       "entity_id": "device_tracker.robin_phone",
+       "state": "Work",
+       "when": 1794469080
+      },
+      {
+       "entity_id": "device_tracker.robin_phone",
+       "state": "not_home",
+       "when": 1794494880
+      },
+      {
+       "entity_id": "device_tracker.robin_phone",
+       "state": "home",
+       "when": 1794496680
+      }
+     ],
+     "start_time": 1794413280,
+     "end_time": 1794499680,
+     "partial": true
+    },
+    {
+     "events": [],
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  }
+ ]
+}

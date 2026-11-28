@@ -4,10 +4,25 @@
 
 package dev.glassworks.generic
 
+import android.app.Activity
+import android.app.Application
+import dev.glassworks.KioskPrefs
+import dev.glassworks.engine.Engine
+import dev.glassworks.engine.EngineSettings
+import dev.glassworks.engine.Page
+import dev.glassworks.engine.PageHost
+import dev.glassworks.engine.vitro.VitroEngine
+import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 import java.io.File
 
 /**
@@ -16,6 +31,8 @@ import java.io.File
  * legacy engine, and minSdk 23. Its unit tests are the release build's; this checks what only the build file says,
  * which only a legacy build would otherwise find out.
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class)
 class LegacyBuildTest {
     private val buildFile = RepoFiles.file("frames/generic-android/android/build.gradle.kts").readText()
     private val settings = RepoFiles.file("settings.gradle.kts").readText()
@@ -42,7 +59,7 @@ class LegacyBuildTest {
 
     @Test fun eachBuildHasOneEngine() {
         assertTrue(""""legacyImplementation"(project(":engine-gecko-legacy"))""" in buildFile)
-        assertEquals("GeckoView 159 only in debug and release", setOf(":engine-gecko-legacy"), legacyDependencies().filter { it.startsWith(":engine-") }.toSet())
+        assertEquals("GeckoView 159 only in debug and release", setOf(":engine-gecko-legacy"), legacyDependencies().filter { it.startsWith(":engine-gecko") }.toSet())
         assertTrue("""debugImplementation(project(":engine-gecko"))""" in buildFile)
         assertTrue("""releaseImplementation(project(":engine-gecko"))""" in buildFile)
     }
@@ -67,5 +84,43 @@ class LegacyBuildTest {
             if (minSdk > 23 && namespace !in named) "$p ($namespace, minSdk $minSdk)" else null
         }
         assertEquals("add these to tools:overrideLibrary in src/legacy/AndroidManifest.xml", emptyList<String>(), missing)
+    }
+
+    /** A browser engine that never opens: only [VitroEngine.islandOrigin] is used. */
+    private class NoEngine : Engine {
+        override val started: EngineSettings? = null
+        override fun open(activity: Activity, host: PageHost, background: Int): Page = throw UnsupportedOperationException()
+        override fun isContentProcess(processName: String) = false
+    }
+
+    /**
+     * #198: the legacy GeckoView holds pages to the dashboard's origin. Under Vitro it is told the loopback island
+     * server's too, as its one other origin, and keeps Home Assistant's address: HA's own pages load from HA.
+     */
+    @Test fun theLegacyEngineIsToldTheLoopbackOriginOnlyUnderVitro() {
+        val app = RuntimeEnvironment.getApplication()
+        val build = AppBuild("1.0.0", 10000, debug = false, product = GenericApp.PRODUCT)
+        KioskPrefs(app).urlSetting = "http://192.0.2.10:8123/lovelace/0"
+        val real = GenericApp.engineSettings(app, build, GenericApp.LEGACY_APPLICATION_ID).dashboard
+        assertTrue(real.toString(), real?.startsWith("http://192.0.2.10:8123") == true)
+        val vitro = VitroEngine(fallback = NoEngine(), settings = { EngineSettings(emptyList(), 1f, false) })
+        try {
+            val legacy = GenericApp.geckoSettings(app, build, GenericApp.LEGACY_APPLICATION_ID) { vitro }
+            assertEquals("Home Assistant stays the dashboard", real, legacy.dashboard)
+            assertTrue(legacy.localOrigin.toString(), legacy.localOrigin?.startsWith("http://127.0.0.1:") == true)
+            assertEquals(vitro.islandOrigin(), legacy.localOrigin)
+            assertFalse("the rest is as engineSettings has it", legacy.remoteDebugging)
+
+            assertEquals("the generic app's GeckoView keeps Home Assistant's address", real,
+                GenericApp.geckoSettings(app, build, "dev.glassworks.generic_android") { throw AssertionError("no Vitro needed") }.dashboard)
+
+            assertEquals("no Vitro: the legacy engine keeps the real address", real,
+                GenericApp.geckoSettings(app, build, GenericApp.LEGACY_APPLICATION_ID) { null }.dashboard)
+            assertNull("no Vitro: no loopback origin", GenericApp.geckoSettings(app, build, GenericApp.LEGACY_APPLICATION_ID) { null }.localOrigin)
+            assertNull("the generic app's GeckoView isn't held to origins",
+                GenericApp.geckoSettings(app, build, "dev.glassworks.generic_android") { vitro }.localOrigin)
+        } finally {
+            vitro.islandServer.stop()
+        }
     }
 }

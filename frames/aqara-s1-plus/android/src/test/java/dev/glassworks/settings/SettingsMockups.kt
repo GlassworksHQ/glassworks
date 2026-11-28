@@ -133,6 +133,15 @@ class SettingsMockups {
         shot("settings-20-diagnostics", menu(radioRunning = true), "diagnostics")
         // Notifications at their default, as on a panel that never touched the switch (on since 2026-11-20).
         shot("settings-21-notifications", menu(radioRunning = true), "notifications")
+        // Labs: experimental features, Vitro off (the default), then just turned on: the change waits for a restart.
+        shot("settings-22-labs", menu(radioRunning = true), CoreSettings.LABS)
+        KioskPrefs(RuntimeEnvironment.getApplication()).vitroEnabled = true
+        shot("settings-22b-labs-vitro-restart", menu(radioRunning = true), CoreSettings.LABS) { it.previewRestart() }
+        KioskPrefs(RuntimeEnvironment.getApplication()).vitroEnabled = false
+        // The app turned Vitro off after it crashed twice at start (VitroSentinel): Labs says why.
+        KioskPrefs(RuntimeEnvironment.getApplication()).turnVitroOffAfterCrashes("ClassCastException in WeatherCardView.showMetric", 0L)
+        shot("settings-22c-labs-vitro-turned-off", menu(radioRunning = true), CoreSettings.LABS)
+        KioskPrefs(RuntimeEnvironment.getApplication()).run { vitroEnabled = true; vitroEnabled = false } // its record goes
         shot("settings-16-screen-scrolled", menu(radioRunning = true), "screen") { o ->
             Mockup.layout(o)
             o.previewScrollTo(Mockup.label(o, "Brightness"), alignBottom = true)

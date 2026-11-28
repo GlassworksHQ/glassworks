@@ -6,7 +6,13 @@ is no `nproc`; SurfaceFlinger names the app's layer plain `SurfaceView`; `dumpsy
 kiosk is the generic app, whose activity is dev.glassworks.MainActivity behind a launcher alias. FAKE_SF_WRAPPED:
 SurfaceFlinger lists layers as Android 17 does (`RequestedLayerState{…}`, the view's hash); FAKE_SF_UNNAMED: in a way the
 runner can't read; FAKE_SF_HISTORY: how many frames `--latency` keeps (127, the S1's); FAKE_SF_SLOW_LIST: seconds
-`--list` takes.
+`--list` takes. FAKE_VITRO=true: the kiosk's Vitro setting (Settings → Labs) starts on, as the S1 kiosk with Vitro
+draws: Vitro's start line instead of GeckoView's pages, the native harness's lines (VitroClarity: CLOCK_MONOTONIC page
+clock; no camera line, as a build whose cameras don't report to Clarity), the frames on the app's window layer; `--ez
+vitro` switches it and restarts the app. FAKE_VITRO_CAMERAS: Vitro's cameras report (ClarityCameras), and its camera
+lines say they played over `web_rtc` (HLS on the fallback copies), or fell back to `mjpeg`.
+FAKE_NO_ENGINE_LINE: a kiosk that doesn't say its engine with the test hold. FAKE_VITRO_STUCK: one that saves the
+setting but keeps drawing with GeckoView. FAKE_VITRO_NO_RESTORE: one that won't turn Vitro off again.
 
 State lives in $FAKE_ADB_STATE (a directory): the nonce of the page the runner opened, the taps it
 sent, and the time ranges in which the fake screen paints. logcat, SurfaceFlinger and the fake page
@@ -33,6 +39,9 @@ SF_HISTORY = int(os.environ.get("FAKE_SF_HISTORY") or 127)
 # FAKE_SF_WRAPPED's SurfaceView: the view's hash, and the BLAST layer's whole name, the only one --latency takes.
 SF_HASH, SF_ACT = "f5fea55", f"{PKG}/{PKG}.MainActivity"
 SF_BLAST = f"{SF_HASH} SurfaceView[{SF_ACT}](BLAST)#163"
+# And the window's: its container (the window's hash in front, no buffers) and the ViewRootImpl's BLAST layer, which
+# holds the window's frames, Vitro's (the Pixel Tablet's Android 17, 2026-11-26).
+SF_WIN_HASH, SF_VRI = "ac7b2d9", f"VRI-{SF_ACT}#158"
 # The fake Android 6's wall clock: its monotonic clock plus this (logcat -v usec prints it).
 WALL_SHIFT = 1_795_000_000.0
 PIDS = {PKG: 4242, PKG + ":gpu_disable_art_image_": 4300, PKG + ":sandboxed_tab_disable_art_image_24": 4301, "otbr-agent": 900}
@@ -104,6 +113,11 @@ def wall_minus_mono():
     return WALL_MINUS_MONO[0]
 
 
+def vitro():
+    """The kiosk's Vitro setting, which the running app draws with (`--ez vitro` restarts it): FAKE_VITRO at first."""
+    return state("settings.json", {}).get("vitro", os.environ.get("FAKE_VITRO", "false")) == "true"
+
+
 def held():
     return (state("test_hold.json") or 0) > C.now()
 
@@ -121,6 +135,13 @@ def test_hold(cmd):
         save("awake_at.json", C.now())       # it wakes the screen
         save("asleep.json", False)
         said = f"test hold {'renewed' if was else 'on'} for {s} s"
+        if not os.environ.get("FAKE_NO_ENGINE_LINE"):
+            # MainActivity, right after the hold: the engine that draws and the Vitro setting (Clarity's engine check).
+            # FAKE_VITRO_STUCK: the setting saves, but the app keeps drawing with GeckoView (a switch that fails).
+            name = "Vitro 0.0.1 (experimental)" if vitro() and not os.environ.get("FAKE_VITRO_STUCK") else "GeckoView 159.0"
+            save("hold_log.json", state("hold_log.json", []) + [[now(), said],
+                                                                 [now(), f"test hold engine: {name}; vitro setting {'on' if vitro() else 'off'}"]])
+            return
     elif was:
         save("test_hold.json", None)
         save("awake_at.json", C.now())       # the idle timeout counts from the end
@@ -224,8 +245,12 @@ def shell(cmd):
             save("intents.json", state("intents.json", []) + [dict(ez)])
             if ("restart", "true") in ez and os.environ.get("FAKE_HOLD_DIES"):
                 save("test_hold.json", None)
-            keep = {k: v for k, v in ez if k != "restart" and not (k == "voice_enabled" and os.environ.get("FAKE_VOICE_LOST"))}
+            keep = {k: v for k, v in ez if k != "restart" and not (k == "voice_enabled" and os.environ.get("FAKE_VOICE_LOST"))
+                    and not (k == "vitro" and v == "false" and os.environ.get("FAKE_VITRO_NO_RESTORE"))}
             save("settings.json", dict(state("settings.json", {}), **keep))
+            if any(k == "vitro" for k, _ in ez):
+                # MainActivity restarts the process for it (logged when a logcat follows): the new one draws with it.
+                save("cold.json", True)
         m = re.search(r"--es open '([^']+)'", cmd)
         check = state("sfcheck_paint.json")
         if check and check[1] > now() and not (m and "/sfcheck.html" in m.group(1)):
@@ -309,22 +334,36 @@ def shell(cmd):
                 f"RequestedLayerState{{Background for {SF_HASH} SurfaceView[{SF_ACT}]#164 parentId=162 relativeParentId=158 z=-2147483648}}\n"
                 f"RequestedLayerState{{{SF_BLAST} parentId=162}}\n"
                 f"RequestedLayerState{{ActivityRecord{{104391098 u0 {SF_ACT} t10}}#147 parentId=146}}\n"
-                f"RequestedLayerState{{VRI-{SF_ACT}#158 parentId=155}}\n"
+                f"RequestedLayerState{{{SF_WIN_HASH} {SF_ACT}#155 parentId=147}}\n"
+                f"RequestedLayerState{{{SF_VRI} parentId=155}}\n"
                 f"RequestedLayerState{{{SF_HASH} SurfaceView[{SF_ACT}]#162 parentId=161 relativeParentId=158 z=-2}}\n")
     if cmd.startswith("dumpsys SurfaceFlinger --list") and os.environ.get("FAKE_SF_UNNAMED"):
         # A naming this runner can't read: the app's window is listed, its SurfaceView isn't.
         return f"Display Root#0\nSomeNewLayer<{PKG}/{PKG}.MainActivity>#7\n{PKG}/{PKG}.MainActivity#3\n"
+    if cmd.startswith("dumpsys SurfaceFlinger --list") and vitro():
+        # Vitro draws into the app's own window; the SurfaceView is its GeckoView fallback's (the check page's).
+        return (f"Display Root#0\nSurfaceView - {PKG}/{PKG}.MainActivity#0\n{PKG}/{PKG}.MainActivity#0\n"
+                f"Background for -SurfaceView - {PKG}/{PKG}.MainActivity#0\n")
     if cmd.startswith("dumpsys SurfaceFlinger --list"):
         return f"Display Root#0\nSurfaceView - {PKG}/{PKG}.MainActivity#0\nBackground for -SurfaceView - {PKG}/{PKG}.MainActivity#0\n"
     if cmd.startswith("dumpsys SurfaceFlinger --latency") and os.environ.get("FAKE_SF_WRAPPED"):
         name = re.search(r"--latency '(.*)'", cmd).group(1)
-        if name == f"{SF_HASH} SurfaceView[{SF_ACT}]#162":
-            return f"{PERIOD_NS}\n0\t0\t0\n"          # the parent: no buffers of its own
-        if name != SF_BLAST:
+        if name in (f"{SF_HASH} SurfaceView[{SF_ACT}]#162", f"{SF_WIN_HASH} {SF_ACT}#155"):
+            return f"{PERIOD_NS}\n0\t0\t0\n"          # a parent: no buffers of its own
+        # The SurfaceView's BLAST layer holds GeckoView's frames (the web engine's, and with Vitro on, its fallback's:
+        # sfcheck's page), the VRI layer Vitro's own (Greptile on #949: with Vitro on, the check read nothing).
+        if name not in ((SF_VRI, SF_BLAST) if vitro() else (SF_BLAST,)):
             return f"{PERIOD_NS}\n"                   # any other form of the name: the period alone
     if cmd.startswith("dumpsys SurfaceFlinger --latency"):
         t, frames = int(now() * 1e9), []
-        for a, b in state("paint.json", []) + ([state("sfcheck_paint.json")] if state("sfcheck_paint.json") else []):
+        ranges = state("paint.json", []) + ([state("sfcheck_paint.json")] if state("sfcheck_paint.json") else [])
+        if vitro():
+            # The window has Vitro's frames, the SurfaceView the check page's (GeckoView's fallback): never both.
+            name = re.search(r"--latency '(.*)'", cmd).group(1)
+            surface = re.sub(r"^[0-9a-f]+ (?=SurfaceView)", "", name).startswith("SurfaceView")  # Android 17's hash
+            ranges = ([state("sfcheck_paint.json")] if state("sfcheck_paint.json") else []) if surface \
+                else state("paint.json", [])
+        for a, b in ranges:
             x = int(a * 1e9)
             while x <= min(int(b * 1e9), t):
                 frames.append(x)
@@ -574,8 +613,9 @@ def refdash(nonce, url):
     if foreign == "before":
         line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace?external_auth=1")
     # Protocol 4: the frontend stays loaded; the view opens by navigation, so no page load is logged.
-    origin = C.now() * 1000 - 5000
-    nav = C.now() * 1000 - origin
+    clk, tie = page_clock()
+    origin = clk() - 5000
+    nav = clk() - origin
     a = now()
     paint(a + 0.15, a + 0.5)
     save("asked.json", {})
@@ -593,21 +633,22 @@ def refdash(nonce, url):
     # Clarity v2: the draw on its own line first, then refdash once free. Each view draws at its own
     # time after the navigation, so a draw stored on the wrong view shows (#264's delta verifier).
     drawn_after = DRAWN_AFTER_MS.get(page, 200)
-    gw({"t": "drawn", "tier": tier, "protocol": PROTOCOL, "clarity": CLARITY, "nav_ms": round(nav, 1),
-        "usable": {"rendered_tick_ms": round(nav + drawn_after, 1), "first_screen_cards": 14, "head_cards": 10},
-        "origin_epoch_ms": origin, "epoch_ms": C.now() * 1000})
+    gw(dict({"t": "drawn", "tier": tier, "protocol": PROTOCOL, "clarity": CLARITY, "nav_ms": round(nav, 1),
+             "usable": {"rendered_tick_ms": round(nav + drawn_after, 1), "first_screen_cards": 14, "head_cards": 10}},
+            **tie(origin)))
     if os.environ.get("FAKE_NEVER_FREE") == tier:
         return                 # drawn, but the main thread never free: no refdash
     C.sleep(0.2)
-    gw({"t": "refdash", "tier": tier, "protocol": PROTOCOL, "clarity": CLARITY, "frontend": "20261028.5", "nodes": 1458, "cards": 50,
-        "cards_rendered": 47, "css": [960, 480], "dpr": dpr, "scroll_height": 2635,
-        "fcp_ms": None, "lcp_ms": None, "load_ms": None, "origin_epoch_ms": origin, "epoch_ms": C.now() * 1000,
+    gw(dict({"t": "refdash", "tier": tier, "protocol": PROTOCOL, "clarity": CLARITY, "frontend": None if vitro() else "20261028.5",
+        "nodes": 1458, "cards": 50, "cards_rendered": 47, "css": [960, 480], "dpr": dpr, "scroll_height": 2635,
+        "fcp_ms": None, "lcp_ms": None, "load_ms": None,
         # Protocol 4: navigation at `nav`; the view's first screen rendered DRAWN_AFTER_MS later, the
         # main thread free 20 ms after that.
         "nav_ms": round(nav, 1), "video_caps": {"mse_h264": True, "native_hls": "", "rvfc": True},
         "dialogs_before": None,                    # #410: HA was done with the view before's dialogs at once
         "usable": {"rendered_tick_ms": round(nav + drawn_after, 1), "first_screen_cards": 14, "head_cards": 10,
-                   "interactive_ms": round(nav + drawn_after + 20, 1), "blocking_ms": 0.0, "long_frames": 0, "longest_frame_ms": 16.7}})
+                   "interactive_ms": round(nav + drawn_after + 20, 1), "blocking_ms": 0.0, "long_frames": 0, "longest_frame_ms": 16.7}},
+        **tie(origin)))
     C.sleep(1.0)
     if os.environ.get("FAKE_HANG") == tier:
         return                 # as smoke10's heavy: usable, then nothing more (no done)
@@ -620,7 +661,7 @@ def refdash(nonce, url):
     C.sleep(0.3)
     # The runner's window opens at the measure line's stamp, so the line carries the time the frames
     # start from: stamped when printed, a fake 100 ms late on a busy machine had no frame in the window.
-    m0, t0 = now(), C.now() * 1000 - origin
+    m0, t0 = now(), clk() - origin
     paint(m0, m0 + 0.5)      # each change on screen within a frame or two
     gw({"t": "measure", "stage": "updates", "n": 1, "moving": 12, "offscreen": 0, "targets": 10, "update_every_ms": 200,
         "animations": 0, "animations_expected": 0}, at=m0)
@@ -643,10 +684,27 @@ def refdash(nonce, url):
         end = now() + 10
         while state("taps.json", 0) - before < taps and now() < end:
             C.sleep(0.1)
-        gw({"t": "input", "stage": tier, "method": "event-timing", "taps": state("taps.json", 0) - before,
+        gw({"t": "input", "stage": tier, "method": "vitro-frame" if vitro() else "event-timing", "taps": state("taps.json", 0) - before,
             "values": [16, 48], "inp_ms": 48})
-    n = {"typical": 1, "heavy": 4}.get(page, 0)
-    if n:
+    # Vitro logs no camera line unless its cameras report to Clarity (FAKE_VITRO_CAMERAS).
+    n = 0 if vitro() and not os.environ.get("FAKE_VITRO_CAMERAS") else {"typical": 1, "heavy": 4}.get(page, 0)
+    if n and vitro():
+        # VitroClarity's line (ClarityCameras.window): each camera's pictures, one listener call each, over the window.
+        fb = os.environ["FAKE_VITRO_CAMERAS"] == "mjpeg"
+        played = {"found": True, "first_frame_ms": 640.0, "first_frame_since_start_ms": 520, "frames": 75, "shown_pct": 100.0,
+                  "max_gap_ms": 66.7, "stall_total_ms": 0.0, "stalls_at": [], "freezes": 0 if path == "web_rtc" else None,
+                  "gaps_source": "vitro-frames (freeze rule)" if path == "web_rtc" else "vitro-frames (gaps over 500 ms)",
+                  "source": "vitro-frames", "span_ms": 5000.0, "sessions": 1, "others": [], "transport": path, "errors": []}
+        # Fell back: WebRTC never showed a picture, and the choice played MJPEG instead.
+        fell = {"found": True, "first_frame_ms": None, "shown_pct": None, "max_gap_ms": None, "stall_total_ms": None,
+                "others": [{"path": "mjpeg", "first_frame_ms": 410.0, "connected": True}], "transport": "mjpeg",
+                "errors": ["web_rtc: no answer to the offer"]}
+        gw({"t": "camera", "stage": tier, "path": path, "window_ms": 5000, "t0_ms": 9000.0, "nav_ms": 5000.0, "fps": 15,
+            "expected": n, "found": n, "fetches": None,
+            "streams": [dict({"path": path, "entity": f"camera.clarity_cam_{i}", "w": None, "h": None,
+                              "stall_presented": None, "callbacks": None, "decoded": None, "dropped": None, "waiting": None},
+                             **(fell if fb and path == "web_rtc" else played)) for i in range(n)]})
+    elif n:
         # #174: the view's live cameras, from going live to the first swipe. FAKE_NO_VIDEO: none plays.
         dead = os.environ.get("FAKE_NO_VIDEO") == tier
         # As the S1 logs them (2026-11-13): over HLS, a hardware decoder per stream from the media
@@ -749,6 +807,15 @@ def refdash(nonce, url):
         C.sleep(0.3)
         line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace?external_auth=1")
 
+def page_clock():
+    """The page's clock and the fields that tie it to logcat's. The web harness's: performance.now() after its
+    timeOrigin, tied by Date.now() on the line (origin_epoch_ms, epoch_ms). Vitro's (VitroClarity): CLOCK_MONOTONIC,
+    the fake's now(), after origin_mono_ms (`clock: monotonic`)."""
+    if vitro():
+        return (lambda: now() * 1000), (lambda origin: {"engine": "vitro", "clock": "monotonic", "origin_mono_ms": origin})
+    return (lambda: C.now() * 1000), (lambda origin: {"origin_epoch_ms": origin, "epoch_ms": C.now() * 1000})
+
+
 def child_proc():
     """The browser page's process name: FAKE_CHILD_PROC after the package's colon (`tab` by default; a long one such as
     `sandboxed_tab_disable_art_image_24` keeps no colon in the kernel's last 15 characters)."""
@@ -779,8 +846,10 @@ def page_gone():
 def restart_page(saved, done=True):
     """The kiosk's page on the start view, as after a restart: its load, the harness's usable and done lines (no
     nonce: restart mode). done=False: its done line lost in logcat."""
-    line("GeckoSession", f"handleMessage GeckoView:PageStart uri={saved}")
-    origin = C.now() * 1000 - 200
+    if not vitro():
+        line("GeckoSession", f"handleMessage GeckoView:PageStart uri={saved}")
+    clk, _ = page_clock()
+    origin = clk() - 200
     C.sleep(0.5)
     page_log(restart_refdash(origin), record=False)
     line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
@@ -790,13 +859,15 @@ def restart_page(saved, done=True):
 
 
 def restart_refdash(origin):
-    return {"t": "refdash", "tier": "start", "protocol": PROTOCOL, "clarity": CLARITY, "frontend": "20261028.5", "nodes": 1082, "cards": 22,
+    _, tie = page_clock()
+    return dict({"t": "refdash", "tier": "start", "protocol": PROTOCOL, "clarity": CLARITY,
+                 "frontend": None if vitro() else "20261028.5", "nodes": 1082, "cards": 22,
             "cards_rendered": 20, "css": [960, 480],
             "dpr": float(os.environ.get("FAKE_DPR", "1.5")), "scroll_height": 1936, "fcp_ms": 120, "lcp_ms": 120,
             "load_ms": 100, "nav_ms": 0,
             "usable": {"rendered_tick_ms": 400.0, "first_screen_cards": 13, "head_cards": 10, "interactive_ms": 410.0,
                        "blocking_ms": 0.0, "long_frames": 0, "longest_frame_ms": 16.7},
-            "origin_epoch_ms": origin, "epoch_ms": C.now() * 1000, "run": 1, "nonce": ""}
+            "run": 1, "nonce": ""}, **tie(origin))
 
 
 def dashboard():
@@ -812,8 +883,12 @@ def dashboard():
     # The generic app comes back as the home app through its launcher alias, and is displayed under it.
     line("ActivityTaskManager", f"Displayed {PKG}/{'dev.glassworks.generic.Launcher' if ANDROID6 else '.MainActivity'}: +1s714ms", pid=1918)
     C.sleep(0.6)
-    line("GeckoSession", "handleMessage GeckoView:PageStart uri=about:blank")
-    line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
+    if vitro():
+        # VitroEngine.open: Vitro draws the page; no GeckoView page loads (its fallback starts only for a web page).
+        line("Glassworks.Vitro", "Starting Vitro 0.0.1 (experimental) (native Lovelace renderer; fallback=lazy)")
+    else:
+        line("GeckoSession", "handleMessage GeckoView:PageStart uri=about:blank")
+        line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
     save("session_up.json", True)
     a = now()
     paint(a + 0.2, a + 1.2)  # the screen paints whether or not anyone reads logcat
@@ -829,8 +904,10 @@ def dashboard():
     if saved and "/clarity-" in saved and not os.environ.get("FAKE_RESTART_PAGE_LOST"):
         # Protocol 4: the kiosk was pointed at a reference dashboard; it comes back to it, and the
         # harness (no nonce: restart mode) says when it was usable, then done.
-        line("GeckoSession", f"handleMessage GeckoView:PageStart uri={saved}")
-        origin = C.now() * 1000 - 200
+        if not vitro():
+            line("GeckoSession", f"handleMessage GeckoView:PageStart uri={saved}")
+        clk, _ = page_clock()
+        origin = clk() - 200
         if os.environ.get("FAKE_RESTART_SLOW"):
             # As on the S1: HA's load event (PageStop) comes long before the dashboard is usable.
             line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")

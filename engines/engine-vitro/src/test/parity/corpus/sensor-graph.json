@@ -1,0 +1,52 @@
+{
+ "title": "Sensor: a line graph of a sensor with a state class",
+ "card": {
+  "type": "sensor",
+  "entity": "sensor.living_room_pressure",
+  "name": "Pressure",
+  "graph": "line"
+ },
+ "fixture": {
+  "states": {
+   "sensor.living_room_pressure": {
+    "state": "1017.0",
+    "last_changed": -2280,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "hPa",
+     "device_class": "atmospheric_pressure",
+     "friendly_name": "Living Room Sensor Pressure"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.living_room_pressure",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "dev-living-room-sensor",
+    "en": "Pressure",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-sensor",
+    "name": "Living Room Sensor"
+   }
+  ],
+  "history": {
+   "sensor.living_room_pressure": {
+    "wave": {
+     "min": 1013,
+     "max": 1019,
+     "period": "18h",
+     "step": "10m",
+     "decimals": 1,
+     "quantum": 1,
+     "phase": 0.4
+    }
+   }
+  }
+ }
+}

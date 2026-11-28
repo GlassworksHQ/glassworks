@@ -1,0 +1,114 @@
+{
+ "case": "glance-timestamp",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 151
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 134.78,
+   "type": "hui-glance-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Next sunrise",
+   "x": 94.59,
+   "y": 20,
+   "w": 77.81,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Router uptime",
+   "x": 322.63,
+   "y": 20,
+   "w": 87.75,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.next_sunrise": {
+   "s": "2026-11-12T19:08:00+00:00",
+   "a": {
+    "device_class": "timestamp",
+    "friendly_name": "Next sunrise"
+   },
+   "lc": 1794481680,
+   "lu": 1794481680
+  },
+  "sensor.router_uptime": {
+   "s": "2026-11-09T16:08:00+00:00",
+   "a": {
+    "device_class": "uptime",
+    "friendly_name": "Router uptime"
+   },
+   "lc": 1794240480,
+   "lu": 1794240480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "timestamp": {
+      "default": "mdi:clock"
+     },
+     "uptime": {
+      "default": "mdi:clock-start"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

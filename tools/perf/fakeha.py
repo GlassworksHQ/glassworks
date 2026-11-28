@@ -8,7 +8,9 @@ answers the commands the pinned frontend sends (recorded in test/fakeha-traffic.
 other one so a newer frontend can't pass unnoticed.
 
 Its cameras play over WebRTC (webrtc.py: an aiortc peer behind a TURN relay on --port + 1) when
-aiortc is here (run.sh runs it from webrtcenv.py's venv), and over HLS.
+aiortc is here (run.sh runs it from webrtcenv.py's venv), over HLS, and over MJPEG (HA's
+camera_proxy_stream, which every camera has). /clarity/cameras reports what each transport is
+serving right now, for the camera end-to-end test (tools/vitro-camera-e2e).
 
 Only for the perf test: it listens on 127.0.0.1 (the panel reaches both ports through `adb reverse`),
 and its sign-in accepts anyone, because there is nothing behind it.
@@ -116,6 +118,73 @@ class Hub:
         # The frontend websockets' traffic each second (#202, smoke 5): bytes and messages each way,
         # and the longest a send to the panel blocked (its TCP path through adb backing up).
         self.ws_lock, self.ws_io = threading.Lock(), None
+        # What the cameras serve right now (/clarity/cameras): open MJPEG streams and each HLS
+        # stream's fetches, so a test sees a stream pause (no more frames or fetches) or close.
+        self.cam_lock, self.mjpeg_live, self.mjpeg_n, self.hls_fetches = threading.Lock(), {}, 0, {}
+        # Every MJPEG frame sent and HLS fetch served per camera, ended or expired streams' too: running totals, so a
+        # stream that ends (or whose record expires) between two reads still counts.
+        self.mjpeg_sent, self.hls_fetched = {}, {}
+
+    def mjpeg_open(self, cam):
+        with self.cam_lock:
+            self.mjpeg_n += 1
+            self.mjpeg_live[self.mjpeg_n] = {"camera": cam, "frames": 0, "last": time.monotonic()}
+            n = self.mjpeg_n
+        self.record({"t": time.time(), "mjpeg_open": cam, "stream": n})
+        return n
+
+    def mjpeg_frame(self, n):
+        with self.cam_lock:
+            s = self.mjpeg_live.get(n)
+            if s:
+                s["frames"] += 1
+                s["last"] = time.monotonic()
+                self.mjpeg_sent[s["camera"]] = self.mjpeg_sent.get(s["camera"], 0) + 1
+
+    def mjpeg_close(self, n):
+        with self.cam_lock:
+            s = self.mjpeg_live.pop(n, None)
+        if s:
+            self.record({"t": time.time(), "mjpeg_closed": s["camera"], "stream": n, "frames": s["frames"]})
+
+    def hls_fetch(self, token, cam, name):
+        with self.cam_lock:
+            # A stream nobody fetched for 5 minutes is long over (HA's stream ends after 5 minutes idle, too).
+            now = time.monotonic()
+            for t in [t for t, f in self.hls_fetches.items() if now - f["last"] > 300]:
+                del self.hls_fetches[t]
+            f = self.hls_fetches.setdefault(token, {"camera": cam, "playlists": 0, "segments": 0, "last": 0.0})
+            f["segments" if name.startswith("segment/") else "playlists"] += 1
+            f["last"] = time.monotonic()
+            self.hls_fetched[cam] = self.hls_fetched.get(cam, 0) + 1
+
+    def cameras(self):
+        """What each transport serves now. `idle_s`: since the stream's last frame (MJPEG) or fetch (HLS)."""
+        now = time.monotonic()
+        with self.cam_lock:
+            mjpeg = [{"stream": n, "camera": s["camera"], "frames": s["frames"], "idle_s": round(now - s["last"], 2)}
+                     for n, s in self.mjpeg_live.items()]
+            hls = [{"token": t, "camera": f["camera"], "playlists": f["playlists"], "segments": f["segments"],
+                    "idle_s": round(now - f["last"], 2)} for t, f in self.hls_fetches.items()]
+            sent, fetched = dict(self.mjpeg_sent), dict(self.hls_fetched)
+        w = self.webrtc
+        rtc = [{"session": sid, "camera": s.get("entity_id"), "sent": s.get("sent", 0)}
+               for sid, s in list(w.sessions.items())] if w else []
+        return {"mjpeg": mjpeg, "mjpeg_sent": sent, "hls": hls, "hls_fetched": fetched, "webrtc": rtc,
+                "webrtc_available": w is not None}
+
+    def fire(self, event_type, data):
+        """An HA bus event to every frontend subscribed to its type (subscribe_events)."""
+        with self.lock:
+            conns = list(self.conns)
+        for c in conns:
+            for mid, kind in list(c.event_subs.items()):
+                if kind in (event_type, None):
+                    try:
+                        c.event(mid, {"event_type": event_type, "data": data, "origin": "LOCAL", "time_fired": _iso_now(),
+                                      "context": {"id": D.context(), "parent_id": None, "user_id": None}})
+                    except OSError:
+                        break           # a frontend that went (its run loop drops it): the others still get it
 
     def ws_note(self, down=0, up=0, send_ms=0.0):
         with self.ws_lock:
@@ -250,6 +319,7 @@ class Conn:
     def __init__(self, hub, sock):
         self.hub, self.sock, self.send_lock = hub, sock, threading.Lock()
         self.entity_subs = []
+        self.event_subs = {}        # subscribe_events id -> its event type (None: every event)
         self.webrtc = {}            # camera/webrtc/offer subscription id -> its session
 
     def send(self, msg):
@@ -318,8 +388,15 @@ class Conn:
             self.result(mid, None, success=False, error={"code": "home_assistant_error", "message": repr(e)})
 
 
+def _iso_now():
+    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
 def _sub_events(c, m):
-    c.result(m["id"])           # no events of these kinds happen in the fixed home
+    # The fixed home fires nothing on its own; /clarity/lovelace_updated fires that one (Hub.fire).
+    c.event_subs[m["id"]] = m.get("event_type")
+    c.result(m["id"])
 
 
 def _sub_entities(c, m):
@@ -334,6 +411,7 @@ def _unsub(c, m):
     sub = m.get("subscription")
     if sub in c.entity_subs:
         c.entity_subs.remove(sub)
+    c.event_subs.pop(sub, None)
     sid = c.webrtc.pop(sub, None)
     if sid and c.hub.webrtc:
         c.hub.webrtc.close(sid)             # HA closes the camera's WebRTC session with its subscription
@@ -356,6 +434,25 @@ def _history_stream(c, m):
     ids = m.get("entity_ids") or []
     c.event(m["id"], {"states": D.history(ids, m.get("start_time"), m.get("end_time")),
                       "start_time": m.get("start_time"), "end_time": m.get("end_time")})
+
+
+def _logbook_stream(c, m):
+    """logbook/event_stream (homeassistant/components/logbook/websocket_api.py), as HA's More Info Activity section and
+    logbook card subscribe: the window's history first (`partial`: more may follow), then an empty message that ends the
+    history, after which only live rows would come. The home's own rows (`D.logbook(entity_ids, start, end)`) if it has
+    any; the fixed home has none, so HA's "No activity found"."""
+    c.result(m["id"])
+    rows = getattr(D, "logbook", None)
+    events = rows(m.get("entity_ids") or [], m.get("start_time"), m.get("end_time")) if rows else []
+    c.event(m["id"], {"events": events, "start_time": m.get("start_time"), "end_time": m.get("end_time"), "partial": True})
+    c.event(m["id"], {"events": [], "start_time": m.get("start_time"), "end_time": m.get("end_time")})
+
+
+def _history_during_period(c, m):
+    """history/history_during_period (HA's recorder API, compressed as with minimal_response: {entity: [{s, lu}]}): the
+    same seeded points as history/stream. Vitro's native more-info graph asks this way (VitroClarity, docs/perf.md
+    "Vitro"); HA's frontend streams."""
+    c.result(m["id"], D.history(m.get("entity_ids") or [], m.get("start_time"), m.get("end_time")))
 
 
 def _camera_stream(c, m):
@@ -487,6 +584,9 @@ HANDLERS = {
     "config/label_registry/list": _const([]),
     "call_service": _call_service,
     "history/stream": _history_stream,
+    "history/history_during_period": _history_during_period,
+    "logbook/event_stream": _logbook_stream,
+    "recorder/get_statistics_metadata": lambda c, m: c.result(m["id"], D.statistics_metadata(m.get("statistic_ids"))),
     "recorder/statistics_during_period": lambda c, m: c.result(m["id"], D.statistics(
         m.get("statistic_ids"), m.get("start_time"), m.get("end_time"), m.get("period"))),
     "ping": lambda c, m: c.send({"id": m["id"], "type": "pong"}),
@@ -545,6 +645,11 @@ class Handler(BaseHTTPRequestHandler):
         path = url.path
         if path == "/api/websocket":
             return self.websocket()
+        # A home may serve routes of its own (the parity harness's fixtures and cards: tools/vitro-parity/fakehome.py).
+        own = getattr(D, "http_get", None)
+        hit = own and own(path, urllib.parse.parse_qs(url.query, keep_blank_values=True))
+        if hit:
+            return self.send_bytes(*hit)
         if path == "/auth/authorize":
             # HA's sign-in, without its login page: straight back to the frontend with a code, and
             # storeToken=true as a ticked "keep me signed in" sends.
@@ -589,6 +694,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_bytes(204, b"", "text/plain")
         if path.startswith("/api/hls/"):
             return self.hls(path)
+        if path.startswith("/api/camera_proxy_stream/"):
+            return self.mjpeg(urllib.parse.unquote(path[len("/api/camera_proxy_stream/"):]))
+        if path == "/clarity/cameras":
+            return self.send_bytes(200, json.dumps(Handler.hub.cameras()).encode(), "application/json")
+        if path == "/clarity/lovelace_updated":
+            # A dashboard's config changed (HA's lovelace_updated): the frontend fetches it again.
+            q = urllib.parse.parse_qs(url.query)
+            Handler.hub.fire("lovelace_updated", {"url_path": q.get("url_path", [None])[0], "mode": "storage"})
+            return self.send_bytes(204, b"", "text/plain")
         if path.startswith("/api/camera_proxy/"):
             # The camera's still (the card's poster): the home's own if it has one, else a generated picture.
             still = D.asset(f"still-{path[len('/api/camera_proxy/'):]}.png") or D.asset("picture-0.png")
@@ -633,6 +747,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_bytes(200, body[1], body[0], cache=cache)
         if path.startswith(("/frontend_latest/", "/frontend_es5/", "/static/")) or path in ("/service_worker.js", "/sw-modern.js", "/sw-legacy.js"):
             return self.static(path)
+        if path.startswith(("/local/", "/hacsfiles/")):
+            # HA serves /local/ from its config's www folder and HACS /hacsfiles/ from its own: a file the home
+            # doesn't serve (its http_get above) is a 404 there, never the app shell. A 200 page for a missing file
+            # made Vitro take Bubble Card's absent modules file as present (tablet Vitro run 3, 2026-11-26).
+            return self.send_bytes(404, b"", "text/plain")
         # Every other path is a frontend route (a dashboard, a view): the app shell, as HA serves it.
         return self.send_bytes(200, Handler.index, "text/html; charset=utf-8")
 
@@ -646,6 +765,7 @@ class Handler(BaseHTTPRequestHandler):
         cfg, prof = D.TIERS["CAMERA"], camera.PROFILES[st["profile"]]
         loop = camera.segments(st["profile"])
         name = m.group(2)
+        Handler.hub.hls_fetch(m.group(1), st["camera"], name)
         if name == "master_playlist.m3u8":
             # As HA's HlsMasterPlaylistView: only once the stream has made two segments (it waits).
             due = st["t0"] + cfg.get("masterAfterSegments", 0) * cfg["segmentS"]
@@ -677,6 +797,41 @@ class Handler(BaseHTTPRequestHandler):
         with open(os.path.join(d, f), "rb") as fh:
             return self.send_bytes(200, fh.read(), "video/mp4" if f.endswith(".mp4") else "video/iso.segment")
 
+    def mjpeg(self, cam):
+        """HA's camera_proxy_stream: the camera as multipart JPEG pictures at its frame rate, for as long
+        as the client reads (camera.mjpeg_frames, decoded from the same segments). The fake checks no
+        token, as its sign-in accepts anyone."""
+        prof = getattr(D, "CAMERA_PROFILES", {}).get(cam)
+        if not prof:
+            return self.send_bytes(404, b"", "text/plain")
+        try:
+            frames = camera.mjpeg_frames(prof)
+        except camera.Unavailable as e:
+            Handler.hub.record({"t": time.time(), "camera_error": str(e)})
+            return self.send_bytes(500, str(e).encode(), "text/plain")
+        self.send_response(200)
+        self.send_header("Content-Type", "multipart/x-mixed-replace;boundary=frame")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        if self.command == "HEAD":
+            return
+        n = Handler.hub.mjpeg_open(cam)
+        try:
+            t0, k = time.monotonic(), 0
+            while True:
+                part = frames[k % len(frames)]
+                self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n" % len(part) + part + b"\r\n")
+                self.wfile.flush()
+                k += 1
+                Handler.hub.mjpeg_frame(n)
+                time.sleep(max(0.0, t0 + k / camera.FPS - time.monotonic()))
+        except OSError:
+            pass                        # the client went (BrokenPipe, reset): the stream ends with it
+        finally:
+            Handler.hub.mjpeg_close(n)
+
     def static(self, path):
         full = os.path.normpath(os.path.join(Handler.front, path.lstrip("/")))
         if not full.startswith(Handler.front) or not os.path.isfile(full):
@@ -694,7 +849,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urllib.parse.urlsplit(self.path)
         n = int(self.headers.get("Content-Length") or 0)
-        body = urllib.parse.parse_qs(self.rfile.read(n).decode()) if n else {}
+        raw = self.rfile.read(n) if n else b""
+        own = getattr(D, "http_post", None)
+        hit = own and own(url.path, raw)
+        if hit:
+            return self.send_bytes(*hit)
+        body = urllib.parse.parse_qs(raw.decode()) if raw else {}
         if url.path == "/auth/token":
             tok = {"access_token": "clarity-access", "token_type": "Bearer", "expires_in": 86400 * 365}
             if (body.get("grant_type") or [""])[0] == "authorization_code":
@@ -708,6 +868,10 @@ class Handler(BaseHTTPRequestHandler):
         key = self.headers.get("Sec-WebSocket-Key")
         if not key:
             return self.send_bytes(400, b"", "text/plain")
+        # A home may hold websockets off for a while: HA restarting (tools/vitro-camera-e2e/home.py's drop).
+        refused = getattr(D, "ws_refused", None)
+        if refused and refused():
+            return self.send_bytes(503, b"", "text/plain")
         self.send_response(101)
         self.send_header("Upgrade", "websocket")
         self.send_header("Connection", "Upgrade")
@@ -757,7 +921,8 @@ def serve(port, log_path=None, harness=True, turn_port=None, transport="adb", ho
     Handler.index = render_index(front, Handler.harness if harness else None)
     Handler.hub = hub = Hub(open(log_path, "a") if log_path else None)
     threading.Thread(target=hub.ws_seconds, daemon=True).start()
-    if webrtc.available() and D is CLARITY:
+    # A home with Clarity's cameras (its CAMERA_PROFILES; WEBRTC_CAMERAS = True) gets the peer too.
+    if webrtc.available() and (D is CLARITY or getattr(D, "WEBRTC_CAMERAS", False)):
         hub.webrtc = webrtc.WebRTC((port + 1 if port else 0) if turn_port is None else turn_port, camera.annexb,
                                    camera.FPS, record=hub.record, transport=transport)
         hub.turn_port = hub.webrtc.turn_port

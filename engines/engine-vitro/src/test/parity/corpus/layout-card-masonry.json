@@ -1,0 +1,179 @@
+{
+ "title": "layout-card: masonry columns of entities cards (layout width 200, two columns)",
+ "route": "frontend",
+ "span": 2,
+ "card": {
+  "type": "custom:layout-card",
+  "layout_type": "custom:masonry-layout",
+  "layout": {
+   "width": 200
+  },
+  "cards": [
+   {
+    "type": "entities",
+    "title": "Lights",
+    "entities": [
+     "light.bedroom_accent",
+     "light.reading_lamp",
+     "light.porch_ceiling_light"
+    ]
+   },
+   {
+    "type": "entities",
+    "title": "Covers",
+    "entities": [
+     "cover.office_blind"
+    ]
+   },
+   {
+    "type": "entities",
+    "title": "Air",
+    "entities": [
+     "fan.ceiling_fan",
+     "light.bedroom_accent"
+    ]
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "cover.office_blind": {
+    "state": "open",
+    "last_changed": "-133m",
+    "attributes": {
+     "is_closed": false,
+     "current_position": 100,
+     "assumed_state": true,
+     "friendly_name": "Office Blind",
+     "supported_features": 11
+    }
+   },
+   "fan.ceiling_fan": {
+    "state": "on",
+    "last_changed": "-261m",
+    "attributes": {
+     "preset_modes": [
+      "auto"
+     ],
+     "percentage": 20,
+     "percentage_step": 10,
+     "preset_mode": null,
+     "friendly_name": "Ceiling Fan",
+     "supported_features": 57
+    }
+   },
+   "light.bedroom_accent": {
+    "state": "off",
+    "last_changed": "-50m",
+    "attributes": {
+     "supported_color_modes": [
+      "xy"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "hs_color": null,
+     "rgb_color": null,
+     "xy_color": null,
+     "off_with_transition": false,
+     "off_brightness": 254,
+     "icon": "mdi:led-strip-variant",
+     "friendly_name": "Bedroom Strip Accent",
+     "supported_features": 40
+    }
+   },
+   "light.porch_ceiling_light": {
+    "state": "off",
+    "last_changed": "-147m",
+    "attributes": {
+     "min_color_temp_kelvin": 2702,
+     "max_color_temp_kelvin": 6535,
+     "supported_color_modes": [
+      "color_temp"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "color_temp_kelvin": null,
+     "hs_color": null,
+     "rgb_color": null,
+     "xy_color": null,
+     "off_with_transition": true,
+     "off_brightness": 153,
+     "friendly_name": "Porch Ceiling Light",
+     "supported_features": 40
+    }
+   },
+   "light.reading_lamp": {
+    "state": "off",
+    "last_changed": "-192m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": null,
+     "off_with_transition": false,
+     "off_brightness": null,
+     "icon": "mdi:floor-lamp",
+     "friendly_name": "Reading Lamp Reading",
+     "supported_features": 8
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   },
+   {
+    "ei": "fan.ceiling_fan",
+    "pl": "zha",
+    "tk": "fan",
+    "di": "dev-ceiling-fan",
+    "np": "device"
+   },
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "dev-bedroom-strip",
+    "en": "Accent",
+    "np": "device"
+   },
+   {
+    "ei": "light.porch_ceiling_light",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-porch-ceiling-light",
+    "np": "device"
+   },
+   {
+    "ei": "light.reading_lamp",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:floor-lamp",
+    "di": "dev-reading-lamp",
+    "en": "Reading",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-ceiling-fan",
+    "name": "Ceiling Fan"
+   },
+   {
+    "id": "dev-bedroom-strip",
+    "name": "Bedroom Strip"
+   },
+   {
+    "id": "dev-porch-ceiling-light",
+    "name": "Porch Ceiling Light"
+   },
+   {
+    "id": "dev-reading-lamp",
+    "name": "Reading Lamp"
+   }
+  ]
+ }
+}

@@ -1,0 +1,55 @@
+{
+ "title": "More Info of an input_number in box mode, now Vitro's: the state row with its field and unit, the history, then \"No activity found\"",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "input_number.guest_room_target"
+ },
+ "more_info": "input_number.guest_room_target",
+ "expect": {
+  "input_number.guest_room_target": "21.5"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "input_number.guest_room_target": {
+    "state": "21.5",
+    "last_changed": -108000,
+    "attributes": {
+     "min": 5,
+     "max": 30,
+     "step": 0.5,
+     "mode": "box",
+     "unit_of_measurement": "°C",
+     "friendly_name": "Guest Room Target",
+     "icon": "mdi:thermometer"
+    }
+   }
+  },
+  "entities": [],
+  "devices": [],
+  "history": {
+   "input_number.guest_room_target": {
+    "steps": [
+     [
+      "-30h",
+      "21.5"
+     ]
+    ]
+   }
+  },
+  "logbook": []
+ }
+}

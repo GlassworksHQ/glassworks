@@ -1,0 +1,19 @@
+{
+ "title": "Mushroom entity card: a timestamp sensor (Mushroom writes HA's formatEntityState: the date and time)",
+ "card": {
+  "type": "custom:mushroom-entity-card",
+  "entity": "sensor.next_sunrise"
+ },
+ "fixture": {
+  "states": {
+   "sensor.next_sunrise": {
+    "state": "@+3h",
+    "last_changed": "-5h",
+    "attributes": {
+     "device_class": "timestamp",
+     "friendly_name": "Next sunrise"
+    }
+   }
+  }
+ }
+}

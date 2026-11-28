@@ -722,7 +722,7 @@ pairing key, options). See [install.md](../frames/aqara-s1-plus/docs/install.md#
 ## Libraries
 
 The libraries in `libs/` go to Maven Central as `dev.glassworks:<name>` (#153): `esphome-api` (a jar),
-`esphome-api-android`, `improv`, `sendspin` and `voice` (AARs). Each has its own semver version, in `version=` in
+`esphome-api-android`, `improv`, `sendspin`, `voice` and `ha-webrtc` (AARs). Each has its own semver version, in `version=` in
 `libs/<name>/gradle.properties`, and its own `libs/<name>/CHANGELOG.md`, apart from the app's. Each
 release ships the jar or AAR, a sources jar, a KDoc jar (Dokka), the POM (MIT, the GlassworksHQ org as
 developer) and a `.asc` signature for each. The licence is in the jar as `META-INF/LICENSE`. Their

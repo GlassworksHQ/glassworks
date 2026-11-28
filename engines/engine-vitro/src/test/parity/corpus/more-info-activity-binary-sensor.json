@@ -1,0 +1,118 @@
+{
+ "title": "More Info of a door sensor: its history, then HA's Activity section (the logbook's last 24 hours, newest first under Today and Yesterday, each row's state dot on the rail, Open or Closed, the time and a chevron)",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "binary_sensor.front_door_contact"
+ },
+ "more_info": "binary_sensor.front_door_contact",
+ "expect": {
+  "binary_sensor.front_door_contact": "off"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "binary_sensor.front_door_contact": {
+    "state": "off",
+    "last_changed": -2280,
+    "attributes": {
+     "device_class": "door",
+     "friendly_name": "Front Door Contact"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "binary_sensor.front_door_contact",
+    "pl": "zha",
+    "di": "dev-front-door",
+    "en": "Contact",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-front-door",
+    "name": "Front Door"
+   }
+  ],
+  "history": {
+   "binary_sensor.front_door_contact": {
+    "steps": [
+     [
+      "-30h",
+      "off"
+     ],
+     [
+      "-13h",
+      "on"
+     ],
+     [
+      "-12h50m",
+      "off"
+     ],
+     [
+      "-3h",
+      "on"
+     ],
+     [
+      "-2h55m",
+      "off"
+     ],
+     [
+      "-40m",
+      "on"
+     ],
+     [
+      "-38m",
+      "off"
+     ]
+    ]
+   }
+  },
+  "logbook": [
+   {
+    "entity_id": "binary_sensor.front_door_contact",
+    "state": "on",
+    "when": "-13h"
+   },
+   {
+    "entity_id": "binary_sensor.front_door_contact",
+    "state": "off",
+    "when": "-12h50m"
+   },
+   {
+    "entity_id": "binary_sensor.front_door_contact",
+    "state": "on",
+    "when": "-3h"
+   },
+   {
+    "entity_id": "binary_sensor.front_door_contact",
+    "state": "off",
+    "when": "-2h55m"
+   },
+   {
+    "entity_id": "binary_sensor.front_door_contact",
+    "state": "on",
+    "when": "-40m"
+   },
+   {
+    "entity_id": "binary_sensor.front_door_contact",
+    "state": "off",
+    "when": "-38m"
+   }
+  ]
+ }
+}

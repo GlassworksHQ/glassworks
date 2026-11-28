@@ -1,0 +1,302 @@
+{
+ "case": "todo-list",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 482
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 465.44,
+   "type": "hui-todo-list-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Active",
+   "x": 17,
+   "y": 30.61,
+   "w": 40.02,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Replace the hallway bulb",
+   "x": 49,
+   "y": 71.22,
+   "w": 156.52,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "In 2 days",
+   "x": 67,
+   "y": 93.22,
+   "w": 48.83,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Descale the kettle",
+   "x": 49,
+   "y": 129.22,
+   "w": 112.92,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Today",
+   "x": 67,
+   "y": 151.22,
+   "w": 32.97,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Test the smoke alarms",
+   "x": 49,
+   "y": 187.22,
+   "w": 144.45,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "In 2 weeks",
+   "x": 67,
+   "y": 209.22,
+   "w": 57.89,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Completed",
+   "x": 17,
+   "y": 269.83,
+   "w": 69.52,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Clean the dryer filter",
+   "x": 49,
+   "y": 310.44,
+   "w": 128.09,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "3 days ago",
+   "x": 67,
+   "y": 332.44,
+   "w": 59.17,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Water the plants",
+   "x": 49,
+   "y": 368.44,
+   "w": 103.66,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "10 hours ago",
+   "x": 67,
+   "y": 390.44,
+   "w": 71.42,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Wipe the oven door",
+   "x": 49,
+   "y": 427.94,
+   "w": 121.88,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "todo.chores": {
+   "s": "3",
+   "a": {
+    "friendly_name": "Chores",
+    "supported_features": 4
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "todo.chores",
+    "pl": "local_todo",
+    "en": "Chores"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "todo"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "todo": {
+     "_": {
+      "default": "mdi:clipboard-list"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "todo/item/subscribe",
+    "entity_id": "todo.chores"
+   },
+   "events": [
+    {
+     "items": [
+      {
+       "summary": "Replace the hallway bulb",
+       "uid": "item-1",
+       "status": "needs_action",
+       "due": "2026-11-14",
+       "description": null
+      },
+      {
+       "summary": "Descale the kettle",
+       "uid": "item-2",
+       "status": "needs_action",
+       "due": "2026-11-12",
+       "description": null
+      },
+      {
+       "summary": "Clean the dryer filter",
+       "uid": "item-3",
+       "status": "completed",
+       "due": "2026-11-09",
+       "description": null
+      },
+      {
+       "summary": "Water the plants",
+       "uid": "item-4",
+       "status": "completed",
+       "due": "2026-11-11",
+       "description": null
+      },
+      {
+       "summary": "Test the smoke alarms",
+       "uid": "item-5",
+       "status": "needs_action",
+       "due": "2026-11-24",
+       "description": null
+      },
+      {
+       "summary": "Wipe the oven door",
+       "uid": "item-6",
+       "status": "completed",
+       "due": null,
+       "description": null
+      }
+     ]
+    }
+   ],
+   "result": null
+  }
+ ]
+}

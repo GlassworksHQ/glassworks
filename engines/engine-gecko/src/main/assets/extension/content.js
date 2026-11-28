@@ -18,7 +18,7 @@
   const params = new URLSearchParams(location.search);
   const disabledByUrl = params.get("kiosk") === "0" || params.has("edit");
 
-  let cfg = { hideHeader: true, hideSidebar: true };
+  let cfg = { hideHeader: true, hideSidebar: true, pageStorage: false };
 
   // ---- Home Assistant's launch screen, at night (#63 round 5) ----------------------------------------
   // HA's index.html starts with its own launch screen on #fafafa: the logo (.ha-lockup), an info box
@@ -227,13 +227,14 @@
       cfg = Object.assign(cfg, r.config);
       hideSidebar();
       apply();
+      watchStorageIfWanted();
     }
   });
 
   // Live pushes from the app (presence, lux, screen state; config changes) on the same port.
   portListeners.push((m) => {
     if (m && m.type === "state") publishState(m.state);
-    if (m && m.type === "config") { cfg = Object.assign(cfg, m.config); apply(); }
+    if (m && m.type === "config") { cfg = Object.assign(cfg, m.config); apply(); watchStorageIfWanted(); }
     if (m && m.type === "revealLaunch") dropLaunchStyle();
   });
 
@@ -348,6 +349,56 @@
     setTimeout(reportTheme, THEME_CHECK_MS);
   }
   setTimeout(reportTheme, THEME_CHECK_MS);
+
+  // ---- Home Assistant's localStorage, for cards drawn outside it (#881) ----------------------------
+  // Cards keep UI state in localStorage (a snoozed row, a collapsed section, the selected tab). Vitro's web
+  // islands run a card on the app's own loopback origin, so the app keeps a copy of this origin's storage and
+  // starts the islands from it. Read every 5 s and when the page goes away, sent only when it changed. Keys
+  // that may hold a credential (HA's own `hassTokens` among them) never leave the page; the app checks the
+  // sender as with the theme, and leaves out the same keys again. Only while the app asks for it (its config's
+  // `pageStorage`, which it sets only when Vitro draws the dashboard): with Vitro off, nothing is read or sent.
+  const STORAGE_CHECK_MS = 5000;
+  const STORAGE_SECRET = /token|passw|secret|auth|credential|session|cookie/i;
+  let sentStorage = "";
+
+  function storageCopy() {
+    const items = {};
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (typeof k === "string" && !STORAGE_SECRET.test(k)) keys.push(k);
+    }
+    keys.sort();
+    for (const k of keys) {
+      const v = localStorage.getItem(k);
+      if (typeof v === "string") items[k] = v;
+    }
+    return JSON.stringify(items);
+  }
+
+  function reportStorage() {
+    if (!port || !cfg.pageStorage || window !== window.top || !document.querySelector("home-assistant")) return;
+    let json;
+    try { json = storageCopy(); } catch (e) { return; /* storage unavailable */ }
+    if (json === sentStorage) return;
+    try { port.postMessage({ type: "pageStorage", json }); sentStorage = json; } catch (e) { /* port gone */ }
+  }
+
+  function watchStorage() {
+    reportStorage();
+    // Not a Home Assistant page (its index.html has <home-assistant> from the start): stop.
+    if (!document.querySelector("home-assistant") && document.readyState === "complete") return;
+    setTimeout(watchStorage, STORAGE_CHECK_MS);
+  }
+  let storageWatched = false;
+  /** Starts the copy once the app's config asks for it (Vitro on); called on every config the app sends. */
+  function watchStorageIfWanted() {
+    if (storageWatched || !cfg.pageStorage || window !== window.top) return;
+    storageWatched = true;
+    setTimeout(watchStorage, STORAGE_CHECK_MS);
+    window.addEventListener("pagehide", reportStorage);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) reportStorage(); });
+  }
 
   // ---- ready: the page is drawn (#63 round 2) ----------------------------------------------------
   // Home Assistant's index.html starts with its own launch screen (#ha-launch-screen: the logo, an info

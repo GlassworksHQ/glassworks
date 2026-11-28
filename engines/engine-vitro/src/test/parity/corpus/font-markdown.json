@@ -1,0 +1,22 @@
+{
+ "title": "Fonts: a Markdown font-family, a web font a type: css resource @imports",
+ "resources": [
+  {
+   "type": "css",
+   "url": "/local/vitro-harness-fixtures/fonts/markdown.css"
+  }
+ ],
+ "card": {
+  "type": "markdown",
+  "content": "### Evening\nThe lights dim at **sunset** and the blinds close at ten.",
+  "card_mod": {
+   "style": {
+    "ha-markdown$": "ha-markdown-element h3, ha-markdown-element p { font-family: \"Comic Neue\", sans-serif; }"
+   }
+  }
+ },
+ "fixture": {
+  "states": {},
+  "entities": []
+ }
+}

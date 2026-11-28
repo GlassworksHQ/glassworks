@@ -1,0 +1,32 @@
+{
+ "title": "Tile: a closing cover shows its state and position (state-display, in any state)",
+ "expect": {
+  "cover.office_blind": "closing"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "cover.office_blind"
+ },
+ "fixture": {
+  "states": {
+   "cover.office_blind": {
+    "state": "closing",
+    "last_changed": "-133m",
+    "attributes": {
+     "is_closed": false,
+     "current_position": 30,
+     "assumed_state": true,
+     "friendly_name": "Office Blind",
+     "supported_features": 11
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   }
+  ]
+ }
+}

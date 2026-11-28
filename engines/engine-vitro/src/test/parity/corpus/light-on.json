@@ -1,0 +1,42 @@
+{
+ "title": "Light: a light that is on",
+ "expect": {
+  "light.kitchen_pendant": "on"
+ },
+ "card": {
+  "type": "light",
+  "entity": "light.kitchen_pendant",
+  "name": "Pendant"
+ },
+ "fixture": {
+  "states": {
+   "light.kitchen_pendant": {
+    "state": "on",
+    "last_changed": "-285m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": "onoff",
+     "friendly_name": "Kitchen Pendant",
+     "supported_features": 0
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.kitchen_pendant",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   }
+  ]
+ }
+}

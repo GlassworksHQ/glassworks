@@ -1,0 +1,104 @@
+{
+ "case": "mushroom-template-vertical-grid",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 143
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 126.78,
+   "type": "hui-grid-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Living",
+   "x": 104,
+   "y": 71,
+   "w": 37.98,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Lights off · 21°",
+   "x": 80.8,
+   "y": 90.39,
+   "w": 84.41,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Bedroom",
+   "x": 348.13,
+   "y": 71,
+   "w": 57.75,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "1 of 2 on",
+   "x": 351.77,
+   "y": 90.39,
+   "w": 50.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {},
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ }
+}

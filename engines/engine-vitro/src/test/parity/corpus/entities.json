@@ -1,0 +1,130 @@
+{
+ "title": "Entities: title, sensors, a toggle row, a divider",
+ "card": {
+  "type": "entities",
+  "title": "Kitchen",
+  "entities": [
+   "sensor.fridge_temperature",
+   "sensor.fridge_power",
+   "binary_sensor.fridge_door",
+   {
+    "type": "divider"
+   },
+   "input_boolean.vacation_mode",
+   {
+    "entity": "light.bedroom_accent",
+    "name": "Accent"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "binary_sensor.fridge_door": {
+    "state": "off",
+    "last_changed": "-277m",
+    "attributes": {
+     "device_class": "door",
+     "friendly_name": "Fridge Door"
+    }
+   },
+   "input_boolean.vacation_mode": {
+    "state": "off",
+    "last_changed": "-172m",
+    "attributes": {
+     "editable": true,
+     "icon": "mdi:account-multiple",
+     "friendly_name": "Vacation mode"
+    }
+   },
+   "light.bedroom_accent": {
+    "state": "off",
+    "last_changed": "-50m",
+    "attributes": {
+     "supported_color_modes": [
+      "xy"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "hs_color": null,
+     "rgb_color": null,
+     "xy_color": null,
+     "off_with_transition": false,
+     "off_brightness": 254,
+     "icon": "mdi:led-strip-variant",
+     "friendly_name": "Bedroom Strip Accent",
+     "supported_features": 40
+    }
+   },
+   "sensor.fridge_power": {
+    "state": "48.6",
+    "last_changed": "-199m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "W",
+     "device_class": "power",
+     "friendly_name": "Fridge Power"
+    }
+   },
+   "sensor.fridge_temperature": {
+    "state": "3.4",
+    "last_changed": "-93m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "icon": "mdi:thermometer",
+     "friendly_name": "Fridge Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "binary_sensor.fridge_door",
+    "pl": "demo",
+    "di": "dev-fridge",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "input_boolean.vacation_mode",
+    "pl": "input_boolean",
+    "en": "Vacation mode"
+   },
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "dev-bedroom-strip",
+    "en": "Accent",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.fridge_power",
+    "pl": "demo",
+    "dp": 0,
+    "di": "dev-fridge",
+    "en": "Power",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.fridge_temperature",
+    "pl": "demo",
+    "dp": 1,
+    "di": "dev-fridge",
+    "en": "Temperature",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-fridge",
+    "name": "Fridge"
+   },
+   {
+    "id": "dev-bedroom-strip",
+    "name": "Bedroom Strip"
+   }
+  ]
+ }
+}

@@ -1,0 +1,145 @@
+{
+ "case": "tile-water-heater",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Boiler",
+   "x": 56,
+   "y": 17.61,
+   "w": 37,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Eco",
+   "x": 56,
+   "y": 37,
+   "w": 21.05,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "water_heater.boiler": {
+   "s": "eco",
+   "a": {
+    "min_temp": 43.3,
+    "max_temp": 60,
+    "operation_list": [
+     "eco",
+     "electric",
+     "performance",
+     "off"
+    ],
+    "current_temperature": 48,
+    "temperature": 50,
+    "target_temp_high": null,
+    "target_temp_low": null,
+    "operation_mode": "eco",
+    "away_mode": "off",
+    "friendly_name": "Boiler",
+    "supported_features": 15
+   },
+   "lc": 1794496980,
+   "lu": 1794496980
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "water_heater.boiler",
+    "pl": "demo",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Boiler"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "water_heater"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "water_heater": {
+     "_": {
+      "default": "mdi:water-boiler",
+      "state": {
+       "off": "mdi:water-boiler-off"
+      },
+      "state_attributes": {
+       "operation_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "eco": "mdi:leaf",
+         "electric": "mdi:lightning-bolt",
+         "gas": "mdi:fire-circle",
+         "heat_pump": "mdi:heat-wave",
+         "high_demand": "mdi:finance",
+         "off": "mdi:power",
+         "performance": "mdi:rocket-launch"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.water_heater.entity_component._.state.eco": "Eco",
+    "component.water_heater.entity_component._.state.electric": "Electric",
+    "component.water_heater.entity_component._.state.gas": "Gas",
+    "component.water_heater.entity_component._.state.heat_pump": "Heat pump",
+    "component.water_heater.entity_component._.state.high_demand": "High demand",
+    "component.water_heater.entity_component._.state.off": "Off",
+    "component.water_heater.entity_component._.state.performance": "Performance"
+   },
+   "entity": {}
+  }
+ }
+}

@@ -1,0 +1,46 @@
+{
+ "title": "Tile: a climate entity heating, with its action badge",
+ "expect": {
+  "climate.living_room": "heat"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "climate.living_room"
+ },
+ "fixture": {
+  "states": {
+   "climate.living_room": {
+    "state": "heat",
+    "last_changed": "-74m",
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat"
+     ],
+     "min_temp": 7,
+     "max_temp": 35,
+     "target_temp_step": 0.5,
+     "current_temperature": 20.5,
+     "temperature": 21.5,
+     "hvac_action": "heating",
+     "friendly_name": "Thermostat",
+     "supported_features": 385
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "climate.living_room",
+    "pl": "zha",
+    "di": "dev-living-room-thermostat",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-thermostat",
+    "name": "Thermostat"
+   }
+  ]
+ }
+}

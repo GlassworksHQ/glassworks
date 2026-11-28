@@ -1,0 +1,53 @@
+{
+ "title": "Statistic: the mean temperature over a rolling day",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "statistic",
+  "entity": "sensor.living_room_temperature",
+  "name": "Average today",
+  "stat_type": "mean",
+  "period": {
+   "rolling_window": {
+    "duration": {
+     "hours": 24
+    }
+   }
+  }
+ },
+ "fixture": {
+  "states": {
+   "sensor.living_room_temperature": {
+    "state": "19.72",
+    "last_changed": -480,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.living_room_temperature",
+    "pl": "esphome",
+    "dp": 1
+   }
+  ],
+  "history": {
+   "sensor.living_room_temperature": {
+    "wave": {
+     "min": 19.6,
+     "max": 23.4,
+     "period": "24h",
+     "step": "10m",
+     "decimals": 2,
+     "phase": 4.4
+    }
+   }
+  }
+ }
+}

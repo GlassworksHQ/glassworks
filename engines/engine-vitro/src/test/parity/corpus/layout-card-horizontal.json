@@ -1,0 +1,138 @@
+{
+ "title": "layout-card: horizontal layout dealing four tiles into two columns (layout width 200)",
+ "span": 2,
+ "card": {
+  "type": "custom:layout-card",
+  "layout_type": "custom:horizontal-layout",
+  "layout": {
+   "width": 200
+  },
+  "cards": [
+   {
+    "type": "tile",
+    "entity": "light.bedroom_accent"
+   },
+   {
+    "type": "tile",
+    "entity": "light.reading_lamp"
+   },
+   {
+    "type": "tile",
+    "entity": "cover.office_blind"
+   },
+   {
+    "type": "tile",
+    "entity": "fan.ceiling_fan"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "cover.office_blind": {
+    "state": "open",
+    "last_changed": "-133m",
+    "attributes": {
+     "is_closed": false,
+     "current_position": 100,
+     "assumed_state": true,
+     "friendly_name": "Office Blind",
+     "supported_features": 11
+    }
+   },
+   "fan.ceiling_fan": {
+    "state": "on",
+    "last_changed": "-261m",
+    "attributes": {
+     "preset_modes": [
+      "auto"
+     ],
+     "percentage": 20,
+     "percentage_step": 10,
+     "preset_mode": null,
+     "friendly_name": "Ceiling Fan",
+     "supported_features": 57
+    }
+   },
+   "light.bedroom_accent": {
+    "state": "off",
+    "last_changed": "-50m",
+    "attributes": {
+     "supported_color_modes": [
+      "xy"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "hs_color": null,
+     "rgb_color": null,
+     "xy_color": null,
+     "off_with_transition": false,
+     "off_brightness": 254,
+     "icon": "mdi:led-strip-variant",
+     "friendly_name": "Bedroom Strip Accent",
+     "supported_features": 40
+    }
+   },
+   "light.reading_lamp": {
+    "state": "off",
+    "last_changed": "-192m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": null,
+     "off_with_transition": false,
+     "off_brightness": null,
+     "icon": "mdi:floor-lamp",
+     "friendly_name": "Reading Lamp Reading",
+     "supported_features": 8
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   },
+   {
+    "ei": "fan.ceiling_fan",
+    "pl": "zha",
+    "tk": "fan",
+    "di": "dev-ceiling-fan",
+    "np": "device"
+   },
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "dev-bedroom-strip",
+    "en": "Accent",
+    "np": "device"
+   },
+   {
+    "ei": "light.reading_lamp",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:floor-lamp",
+    "di": "dev-reading-lamp",
+    "en": "Reading",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-ceiling-fan",
+    "name": "Ceiling Fan"
+   },
+   {
+    "id": "dev-bedroom-strip",
+    "name": "Bedroom Strip"
+   },
+   {
+    "id": "dev-reading-lamp",
+    "name": "Reading Lamp"
+   }
+  ]
+ }
+}

@@ -1,0 +1,399 @@
+{
+ "case": "more-info-update-notes",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 0,
+  "y": 40,
+  "width": 720,
+  "height": 1240
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 0,
+   "y": 48,
+   "w": 720,
+   "h": 1232,
+   "type": "ha-more-info-dialog",
+   "mode": "bottom-sheet"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hallway Display",
+   "x": 60,
+   "y": 18,
+   "w": 98.55,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Firmware",
+   "x": 60,
+   "y": 34,
+   "w": 83.8,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Firmware",
+   "x": 72,
+   "y": 92.41,
+   "w": 58.31,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2 hours ago",
+   "x": 72,
+   "y": 112.2,
+   "w": 73.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Update available",
+   "x": 593.2,
+   "y": 103.8,
+   "w": 102.8,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hallway Display",
+   "x": 24,
+   "y": 164.38,
+   "w": 115.84,
+   "h": 19,
+   "size": 16.38,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Installed version",
+   "x": 24,
+   "y": 199.75,
+   "w": 101.69,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2026.10.1",
+   "x": 633.59,
+   "y": 199.75,
+   "w": 62.41,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Latest version",
+   "x": 24,
+   "y": 215.75,
+   "w": 87.58,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2026.11.0",
+   "x": 633.59,
+   "y": 215.75,
+   "w": 62.41,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Read release announcement",
+   "x": 24,
+   "y": 231.75,
+   "w": 176.8,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "What's new",
+   "x": 24,
+   "y": 280.75,
+   "w": 100.47,
+   "h": 24,
+   "size": 20,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "The display now wakes faster and dims at night.",
+   "x": 24,
+   "y": 321.34,
+   "w": 298.66,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Faster",
+   "x": 64,
+   "y": 351.34,
+   "w": 39.55,
+   "h": 16,
+   "size": 14,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "start",
+   "x": 107,
+   "y": 351.34,
+   "w": 29.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Fixed the",
+   "x": 64,
+   "y": 367.34,
+   "w": 56.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "backlight",
+   "x": 123.89,
+   "y": 367.34,
+   "w": 56.83,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "flicker",
+   "x": 184.17,
+   "y": 367.34,
+   "w": 37.81,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Thanks",
+   "x": 24,
+   "y": 399.72,
+   "w": 54.41,
+   "h": 19,
+   "size": 16.38,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "To everyone who tested it.",
+   "x": 24,
+   "y": 435.09,
+   "w": 162.44,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Skip",
+   "x": 573.13,
+   "y": 1188,
+   "w": 27.22,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Update",
+   "x": 642.34,
+   "y": 1188,
+   "w": 44.66,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(255, 255, 255)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "update.hallway_display_firmware": {
+   "s": "on",
+   "a": {
+    "friendly_name": "Hallway Display Firmware",
+    "title": "Hallway Display",
+    "auto_update": false,
+    "display_precision": 0,
+    "in_progress": false,
+    "update_percentage": null,
+    "skipped_version": null,
+    "release_summary": null,
+    "release_url": "https://homeassistant.local/releases/2026.11.0",
+    "entity_picture": null,
+    "supported_features": 21,
+    "installed_version": "2026.10.1",
+    "latest_version": "2026.11.0"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "update.hallway_display_firmware",
+    "pl": "esphome",
+    "di": "device-1",
+    "en": "Firmware",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Hallway Display"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "update"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "update": {
+     "_": {
+      "default": "mdi:package-up",
+      "state": {
+       "off": "mdi:package"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.update.entity_component._.state.off": "Up-to-date",
+    "component.update.entity_component._.state.on": "Update available"
+   },
+   "entity": {}
+  }
+ },
+ "user": {
+  "is_admin": false
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "update/release_notes",
+    "entity_id": "update.hallway_display_firmware"
+   },
+   "events": [],
+   "result": "## What's new\n\nThe display now wakes faster\nand dims at night.\n\n- **Faster** start\n- Fixed the [backlight](https://homeassistant.local/notes) flicker\n\n### Thanks\n\nTo everyone who tested it."
+  }
+ ]
+}

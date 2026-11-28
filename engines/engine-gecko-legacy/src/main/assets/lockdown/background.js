@@ -3,11 +3,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 // The lockdown's background script (#198). It blocks every request a page makes outside the panel's Home
-// Assistant (policy.js), hears the allowed origin and the app's own refusals from the app (Lockdown.kt), and
+// Assistant (policy.js) or, for the app's own loopback pages, outside that server, hears the allowed origin and the app's own refusals from the app (Lockdown.kt), and
 // passes each refusal to the page's note (note.js). A blocked frame shows blocked.html in its place.
 "use strict";
 
 let haOrigin = null;
+/** The app's own loopback server (Vitro's islands), named with haOrigin; its pages are held to it. */
+let localOrigin = null;
 const notes = new Set();
 let app = null;
 /** The current page's refusals, for a note that connects after them (note.js runs at document_idle). */
@@ -30,7 +32,10 @@ function connectApp() {
   }
   app.onMessage.addListener((m) => {
     if (!m || typeof m !== "object") return;
-    if (m.type === "origin" && typeof m.origin === "string") haOrigin = m.origin;
+    if (m.type === "origin" && typeof m.origin === "string") {
+      haOrigin = m.origin;
+      localOrigin = typeof m.local === "string" ? m.local : null;
+    }
     else if (m.type === "blocked") note(String(m.kind || ""), String(m.host || ""));
   });
   app.onDisconnect.addListener(() => {
@@ -48,7 +53,7 @@ browser.runtime.onConnect.addListener((p) => {
 browser.webRequest.onBeforeRequest.addListener(
   (details) => {
     if (details.type === "main_frame") recent = []; // a new page: the last one's refusals aren't its own
-    const v = LockdownPolicy.decide(details, haOrigin);
+    const v = LockdownPolicy.decide(details, haOrigin, localOrigin);
     if (v.allow) return {};
     console.warn(`lockdown: blocked ${details.type} from ${v.host}`);
     note(details.type, v.host);

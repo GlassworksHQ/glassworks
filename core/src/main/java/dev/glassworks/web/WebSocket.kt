@@ -67,6 +67,15 @@ class WebSocketStreams(private val raw: InputStream, private val rawOut: OutputS
     }
 
     /**
+     * Sends a ping. The browser answers it with a pong on its own network thread, without waking the page's script,
+     * and the pong is a read: a server whose reads have a deadline keeps a quiet client's connection open with it.
+     */
+    fun ping() {
+        if (closed) return
+        send(OP_PING, ByteArray(0))
+    }
+
+    /**
      * Drops the connection from another thread, with no close frame: a read or a write blocked on the socket ends at
      * once. It never takes the write lock, which a write to a browser that stopped reading can hold.
      */

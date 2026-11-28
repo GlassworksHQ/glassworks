@@ -1,0 +1,43 @@
+{
+ "title": "tile: alarm_control_panel triggered (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "alarm_control_panel.alarm_control_panel_triggered": "triggered"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "alarm_control_panel.alarm_control_panel_triggered"
+ },
+ "fixture": {
+  "states": {
+   "alarm_control_panel.alarm_control_panel_triggered": {
+    "state": "triggered",
+    "last_changed": "-1m",
+    "attributes": {
+     "code_format": "number",
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_triggered",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-house",
+    "name": "House"
+   }
+  ]
+ }
+}

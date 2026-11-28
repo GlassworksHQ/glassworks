@@ -1,0 +1,42 @@
+{
+ "title": "mushroom-fan: fan on-no-speed (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "fan.fan_on_no_speed": "on"
+ },
+ "card": {
+  "type": "custom:mushroom-fan-card",
+  "entity": "fan.fan_on_no_speed",
+  "show_percentage_control": true
+ },
+ "fixture": {
+  "states": {
+   "fan.fan_on_no_speed": {
+    "state": "on",
+    "last_changed": "-25m",
+    "attributes": {
+     "supported_features": 48,
+     "friendly_name": "Bedroom Ceiling Fan"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "fan.fan_on_no_speed",
+    "pl": "demo",
+    "di": "dev-bedroom",
+    "en": "Ceiling Fan",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-bedroom",
+    "name": "Bedroom"
+   }
+  ]
+ }
+}

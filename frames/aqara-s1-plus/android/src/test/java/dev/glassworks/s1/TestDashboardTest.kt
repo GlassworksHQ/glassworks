@@ -57,6 +57,20 @@ class TestDashboardTest {
         assertFalse(HaAuth.movedAway)
     }
 
+    /**
+     * Clarity reads which engine draws the page from the kiosk's answer to the hold (perfrun.py ENGINE_RE), and the
+     * Vitro setting it puts back after a Vitro run. The hold takes its extra off the intent, so the answer is decided
+     * before that (CodeRabbit on #835).
+     */
+    @Test fun theHoldsAnswerSaysTheEngineAndTheVitroSetting() = GeckoPinHarness(prefs = { it.urlSetting = DASHBOARD }).use { h ->
+        org.robolectric.shadows.ShadowLog.clear()
+        h.newIntent(Intent().putExtra("test_hold", true).putExtra("test_hold_s", 60))
+        val said = org.robolectric.shadows.ShadowLog.getLogs().map { it.msg }.filter { it.startsWith("test hold engine: ") }
+        assertEquals(said.toString(), 1, said.size)
+        assertTrue(said[0], Regex("^test hold engine: .+; vitro setting off$").matches(said[0]))
+        h.newIntent(Intent().putExtra("test_hold", false))
+    }
+
     private companion object {
         const val HA = "http://192.0.2.10:8123"
         const val DASHBOARD = "http://192.0.2.10:8123/lovelace/0"

@@ -189,9 +189,45 @@ jobs:
           key: robolectric-${{ steps.robolectric.outputs.version }}-${{ github.run_id }}
           restore-keys: robolectric-${{ steps.robolectric.outputs.version }}-
 
+      # The island end to end (IslandEndToEndTest): community cards drawn in island pages by headless Chromium, from
+      # Vitro's own store and bridge. Playwright's headless shell (by the parity tools' pinned playwright-core) and the
+      # parity harness's pinned cards (checked by SHA-256), both cached.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: vitro-islands
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/.cache/glassworks-perf/cards
+          key: vitro-islands-${{ hashFiles('tools/vitro-parity/package-lock.json', 'tools/vitro-parity/cards.json') }}
+      # The headless shell's one library the runner image lacks (Playwright's --with-deps also pulled fonts and Mesa
+      # through a fresh apt-get, about 97 s a run; the cards draw Latin text in the runner's own fonts).
+      - name: libgbm1
+        uses: ./.github/actions/apt-install
+        with:
+          packages: libgbm1
+      - name: The island end to end's browser and cards
+        run: |
+          npm ci --prefix tools/vitro-parity
+          node tools/vitro-parity/node_modules/playwright-core/cli.js install --only-shell chromium
+          python3 tools/vitro-parity/cards.py fetch
+
       # --parallel: the modules' test tasks side by side on the runner's 4 cores (no test shares a port or a file).
       - name: Unit tests
+        env:
+          GW_VITRO_ISLAND_E2E: '1'
         run: ./gradlew --no-daemon --parallel test
+
+      # When the Vitro parity harness fails, its report says which card drifted and how (HA, Vitro and the diff side
+      # by side), and the test's XML lists every failing case: the log only shows the assertion's line.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: vitro-parity-report
+          path: |
+            engines/engine-vitro/build/reports/vitro-parity/
+            engines/engine-vitro/build/test-results/testDebugUnitTest/TEST-dev.glassworks.engine.vitro.parity.*.xml
+          retention-days: 7
+          if-no-files-found: ignore
 
       # Saved only when the tests fetched a jar the restored copy didn't have, and never by a PR.
       - name: Robolectric's jars, what changed
@@ -210,6 +246,13 @@ jobs:
         with:
           path: ~/.m2/repository/org/robolectric
           key: ${{ steps.robolectric-new.outputs.key }}
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: steps.vitro-islands.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/.cache/glassworks-perf/cards
+          key: vitro-islands-${{ hashFiles('tools/vitro-parity/package-lock.json', 'tools/vitro-parity/cards.json') }}
 
       - name: Release build (unsigned)
         if: needs.changes.result != 'success' || needs.changes.outputs.app_apk != 'false'
@@ -281,7 +324,7 @@ jobs:
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
       - name: Lint (NewApi at minSdk 23)
-        run: ./gradlew --no-daemon :esphome-api-android:lintDebug :improv:lintDebug :bluetooth-proxy:lintDebug :sendspin:lintDebug :voice:lintDebug
+        run: ./gradlew --no-daemon :esphome-api-android:lintDebug :improv:lintDebug :bluetooth-proxy:lintDebug :sendspin:lintDebug :voice:lintDebug :ha-webrtc:lintDebug
 
       # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
       - name: Forget Gradle's dependency metadata after a failure
@@ -545,6 +588,10 @@ jobs:
       - name: Perf test runner and fakes, end to end (slow set)
         if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         run: python3 tools/perf/test/parallel.py --set slow
+      # Its device side runs in core-emulators.yml (vitro-camera): here its fake HA's home and its checks, off-device.
+      - name: Vitro camera end-to-end test's home and checks
+        if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
+        run: python3 -m unittest discover -s tools/vitro-camera-e2e/test -v
       - name: APK size tool
         run: python3 -m unittest discover -s tools/size/test -v
       - name: Release scripts and the publish steps' beta path (#605)
@@ -555,6 +602,14 @@ jobs:
         run: python3 -m unittest discover -s branding/boot/test -v
       - name: The S1's stock fastboot tools (fastboot-usb.py, wrap-ram-boot.py)
         run: python3 -m unittest discover -s frames/aqara-s1-plus/tools/fel/test -v
+      # The parity harness's capture tools and its fake HA's home (#793): the corpus's fixtures resolve, and each
+      # committed reference still holds what its fixture serves (tools/vitro-parity/test/test_fakehome.py).
+      - name: Vitro parity capture tools and fixtures
+        run: |
+          python3 -m venv "$RUNNER_TEMP/vitro-parity-venv"
+          "$RUNNER_TEMP/vitro-parity-venv/bin/pip" install --quiet --require-hashes -r tools/vitro-parity/requirements.txt
+          "$RUNNER_TEMP/vitro-parity-venv/bin/python" -m unittest discover -s tools/vitro-parity/test -v
+          node --test tools/vitro-parity/test/*.test.mjs
       - name: Docs links
         run: python3 tools/check-doc-links.py
       - name: Status labels agree with frame.json and pane.json

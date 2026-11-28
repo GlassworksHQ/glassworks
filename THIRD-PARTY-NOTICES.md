@@ -75,8 +75,10 @@ build if one is missing here.
   Copyright: Oracle and/or its affiliates, and Google LLC. Upstream and source: https://github.com/google/desugar_jdk_libs
   (release 2.1.5). Allowed by the maintainer on 2026-11-16 as the one exception to the repo's no-GPL rule
   (`AGENTS.md`, rule 4), in two apps: this legacy APK, and the legacy engine's debug test app
-  (`dev.glassworks.s1.legacy`, never released; test builds on branches named `legacy` upload it). Only those two
-  ship its classes. The current generic builds (minSdk 26) set desugaring up too, because AGP turns it on per
+  (`dev.glassworks.s1.legacy`, never released; test builds on branches named `legacy` upload it). Extended by the
+  maintainer on 2026-11-25 to a third: Vitro's debug test app (`dev.glassworks.vitro.test`,
+  `engines/engine-vitro/test-app`, minSdk 23, debug only and never released; CI builds it for the emulator jobs).
+  Only those three ship its classes. The current generic builds (minSdk 26) set desugaring up too, because AGP turns it on per
   module, but none of its classes go into their APKs. The S1 app doesn't use it.
 - **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current
   build's (all Apache-2.0; copyright, upstream and source as for the current versions under Kotlin and AndroidX):
@@ -96,6 +98,51 @@ build if one is missing here.
   - `org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.8.1`
   - `org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.1`
   - `org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1`
+
+### libwebrtc (Vitro's WebRTC camera streams)
+
+With Vitro on, the S1 app and Glassworks for generic Android play Home Assistant cameras over WebRTC with the
+[`ha-webrtc`](libs/ha-webrtc/README.md) library, which runs on libwebrtc. Both APKs carry it.
+
+- **WebRTC Android SDK** 150.7871.04, prefixed: `io.github.webrtc-sdk:android-prefixed:150.7871.04`, the
+  webrtc-sdk project's build of Chromium's WebRTC M150 (branch-heads/7871) with its Java package renamed to
+  `livekit.org.webrtc`. Its Java classes and native library (`liblkjingle_peerconnection_so.so`, one per ABI).
+  Licence: BSD-3-Clause, Copyright (c) 2011, The WebRTC project authors, with WebRTC's additional IP rights grant
+  (`PATENTS`, in `LICENSES/LicenseRef-libwebrtc-notices.txt`).
+  Upstream: https://github.com/webrtc-sdk/android and https://webrtc.googlesource.com/src (branch-heads/7871).
+- **Third-party code inside the native library.** The libraries WebRTC's own licence generator
+  (`tools_webrtc/libs/generate_licenses.py`) lists for its Android build, at the revisions branch-heads/7871's
+  `DEPS` pins:
+  - **BoringSSL** (`f91f1447397c6719f9774dfb8e67329378e1f3d3`): Apache-2.0, The BoringSSL Authors; its fiat-crypto
+    code Apache-2.0 (or MIT), Copyright 2015-2020 the fiat-crypto authors. https://boringssl.googlesource.com/boringssl
+  - **libvpx** (`31af37b1bd2774d11a932c1cd9a3849328375f64`, v1.16.0): BSD-3-Clause, Copyright (c) 2010, The WebM
+    Project authors. https://chromium.googlesource.com/webm/libvpx
+  - **libaom** (`c213343c8d32bcae729fe09fcba16e1f371cb23b`): BSD-2-Clause, Copyright (c) 2016, Alliance for Open
+    Media, with the Alliance for Open Media Patent License 1.0. https://aomedia.googlesource.com/aom
+  - **dav1d** (`1718ff9aded99f0a89f5c7940d6afb8948301e33`): BSD-2-Clause, Copyright © 2018-2025, VideoLAN and dav1d
+    authors. https://code.videolan.org/videolan/dav1d
+  - **libyuv** (`de63bd90f4396313f864ad58b65279e7894451a9`): BSD-3-Clause, Copyright 2011 The LibYuv Project
+    Authors. https://chromium.googlesource.com/libyuv/libyuv
+  - **Opus** (Chromium's `third_party/opus`, `55513e81`): BSD-3-Clause, Copyright 2001-2023 Xiph.Org, Skype Limited,
+    Octasic, Jean-Marc Valin, Timothy B. Terriberry, CSIRO, Gregory Maxwell, Mark Borgerding, Erik de Castro Lopo,
+    Mozilla, Amazon. https://opus-codec.org
+  - **libsrtp** (`cd5d177bf1fde755ddb4c7f0d9ff7693f8b49e5e`): BSD-3-Clause, Copyright (c) 2001-2017 Cisco Systems,
+    Inc. https://chromium.googlesource.com/chromium/deps/libsrtp
+  - **crc32c** (`d3d60ac6e0f16780bcfcc825385e1d338801a558`): BSD-3-Clause, Copyright 2017, The CRC32C Authors.
+    https://github.com/google/crc32c
+  - **Abseil**, **jni_zero**, **rnnoise**, **pffft**, **zlib** and **protobuf** (Chromium's `third_party` at
+    `7c92732938de0ef7e28f5da231994723f938f407`): Abseil Apache-2.0 (The Abseil Authors); jni_zero BSD-3-Clause
+    (Copyright 2023 The Chromium Authors); rnnoise BSD-3-Clause (Copyright (c) 2017, Mozilla; 2007-2017, Jean-Marc
+    Valin; 2005-2017, Xiph.Org Foundation); pffft under its FFTPACK licence (Copyright (c) 2013 Julien Pommier;
+    2004 UCAR), text in `LICENSES/LicenseRef-libwebrtc-notices.txt`; zlib Zlib (Jean-loup Gailly and Mark Adler);
+    protobuf BSD-3-Clause (Copyright 2008 Google Inc.). https://chromium.googlesource.com/chromium/src/third_party
+  - **libc++, libc++abi and libunwind** (LLVM; `5abc7f839700f0f17338434e1c1c6a8c87c00c11`,
+    `8f11bb1d4438d0239d0dfc1bd9456a9f31629dda`, `d6c7a21e978f0adaa43accaad53bc64f0b64f6ec`):
+    Apache-2.0 WITH LLVM-exception (`LICENSES/LLVM-exception.txt`), the LLVM Project contributors.
+    https://github.com/llvm/llvm-project
+  - **WebRTC's own bundled code**: G.711 and G.722 (SpanDSP, Steve Underwood, public domain), fft (Copyright 1995,97
+    Mark Olesen), Ooura FFT (Copyright Takuya Ooura, 1996-2001), spl_sqrt_floor (Wilco Dijkstra, public domain).
+    Their notices, verbatim, are in `LICENSES/LicenseRef-libwebrtc-notices.txt`.
 
 ### Libraries the app uses directly
 
@@ -141,6 +188,20 @@ build if one is missing here.
   what changed. `OnvifServer.kt` also includes upstream `ca0085d12591465db309f571ac12f48d8a9f47dc` (a HEAD answer's
   Content-Length) and `c58342b20009b4d0900cad082c35efb2eae26dff` (WS-BaseNotification push subscriptions), synced
   2026-11-20.
+- **button-card** (the card's config merging, its `state:` matching, its color rules and its stylesheet's grid
+  layouts, for Vitro's native `custom:button-card`). MIT, Copyright (c) 2018, Alexandre Garcia. Ported from
+  https://github.com/custom-cards/button-card at tag `v7.0.1` (`src/button-card.ts`, `src/helpers.ts`,
+  `src/styles.ts`, `src/common/state_color.ts`) to Kotlin in
+  `engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/cards/ButtonCardModel.kt`, `ButtonCardView.kt`
+  and `ButtonCardGrid.kt`, and to TypeScript in `site/src/lib/vitroButtonCard.ts`. Those files stay under MIT.
+- **weather-card** (its layout, units and icon names, for Vitro's native `custom:weather-card`). MIT, Copyright (c)
+  2019 Bram Kragten. Ported from https://github.com/bramkragten/weather-card at tag `v1.5.0` in
+  `engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/cards/HacsFastPathCards.kt`. The card's icons are
+  not in the app: Vitro loads them from the address the card names, as the browser does.
+- **swipe-card** and the **Swiper** pagination it shows (the pager's sizing and its bullets, for Vitro's native
+  `custom:swipe-card`). swipe-card: MIT (its `package.json`), Bram Kragten, https://github.com/bramkragten/swipe-card at
+  tag `v5.0.0`. Swiper 6: MIT, Copyright (c) Vladimir Kharlampidi, https://github.com/nolimits4web/swiper. Ported in
+  the same file, which stays under MIT.
 
 ### Kotlin and AndroidX
 
@@ -228,6 +289,24 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
     with the `@radix-ui/*` packages they use (a subset of those listed under Kiln in section 4): MIT,
     "Copyright (c) 2022 WorkOS". https://github.com/radix-ui/primitives
   - The licence text: `LICENSES/MIT.txt`.
+- `assets/vitro-mdi.tsv.gz` (in APKs that carry the Vitro engine, `engines/engine-vitro`): **Material Design
+  Icons**, `@mdi/svg` 7.4.47, all 7,447 icons. Only the `d` path data of each SVG, unmodified, stored as a
+  gzipped `name<TAB>pathData` table that `tools/vitro/update_mdi_icons.py` regenerates from the npm tarball.
+  - Licence: Apache-2.0 (`LICENSES/Apache-2.0.txt`)
+  - Copyright: Pictogrammers (Austin Andrews and contributors)
+  - Upstream: https://pictogrammers.com/library/mdi/
+  - Source: https://github.com/Templarian/MaterialDesign-SVG (npm `@mdi/svg` 7.4.47)
+  - Used by Vitro to draw the same icons Home Assistant shows.
+- `dev/glassworks/engine/vitro/locale/*.json` (Java resources, in APKs that carry the Vitro engine): Vitro's
+  **locale tables**, the number marks, plural rules, relative-time patterns, month, weekday and day-period names and
+  week data it formats numbers, dates and times with. They are **Unicode CLDR** data, captured by
+  `tools/vitro-parity/locale-data.mjs` from the `Intl` of Chromium 141.0.7390.37, as `languages.json` records (ICU 74
+  data with CLDR 44.1, read from that build's `icudtl.dat`), and, for the 16 languages whose tables say
+  `"source":"node"`, from Node.js's ICU, whose version `languages.json` records from the next regeneration on.
+  - Licence: Unicode-3.0 (`LICENSES/Unicode-3.0.txt`)
+  - Copyright: © 1991-2025 Unicode, Inc.
+  - Upstream: https://cldr.unicode.org
+  - Source: https://github.com/unicode-org/cldr (through ICU, https://github.com/unicode-org/icu)
 - `dev.glassworks.platform.HttpsTrust` (in the code, as text): **ISRG Root X1**, Let's Encrypt's root CA
   certificate, unmodified, from https://letsencrypt.org/certs/isrgrootx1.pem (SHA-256
   `96bcec06264976f37460779acf28c5a7cfe8a3c0aae11a8ffcee05c0bddf08c6`, the same file as AOSP's
@@ -250,6 +329,22 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
   synthesised with Piper's `en_US-kristin-medium` voice (https://huggingface.co/rhasspy/piper-voices,
   MIT; trained from scratch on public-domain LibriVox recordings) by `tools/voice/mww_reference.py`.
   No recording of a person.
+- `engines/engine-vitro/src/test/ha-frontend/hass-types.ts` (Vitro's island contract test, not in the APK): the
+  `HomeAssistant` interfaces of home-assistant/frontend's `src/types.ts` (commit
+  `421f8b19861cacc162da79a0459f522db2c1ec30`) and the public members of home-assistant-js-websocket's `Connection`
+  (commit `afcb55a4f76fa9855de52ea8fdb9717c314da267`), trimmed. Apache-2.0 (`LICENSES/Apache-2.0.txt`), Copyright
+  Home Assistant contributors and Paulus Schoutsen and contributors.
+- `engines/engine-vitro/src/test/parity/fixtures/fonts/` (Vitro's web-font tests and parity cases, not in the APK):
+  three fonts from google/fonts at commit `83c62e30d87daa70216dab6b984d00d20d96d585`, subset to Latin with
+  fontTools `pyftsubset` and saved as TTF, WOFF and WOFF2. None has a Reserved Font Name. Licence: OFL-1.1
+  (`LICENSES/OFL-1.1.txt`; each font's own `OFL.txt` sits next to it).
+  - **Bitter** (`ofl/bitter/Bitter[wght].ttf`, SHA-256 `ef2b9a711fb02f1e5823b34da1b7450e0fc76793b7d733a8b41006e24916d4a7`):
+    Copyright 2011 The Bitter Project Authors.
+  - **Pacifico** (`ofl/pacifico/Pacifico-Regular.ttf`, SHA-256 `5b6c0d5334a7bf77dea52b975c5a0c408878c0f7115ed5b6fb151f634b7bf701`):
+    Copyright 2018 The Pacifico Project Authors.
+  - **Comic Neue** (`ofl/comicneue/ComicNeue-Regular.ttf` and `-Bold.ttf`, SHA-256
+    `a0ee5a37c8b27c4db0700137d928598b1e23b0089e1546a8961909176b779360` and
+    `3e7e5fccfd7e0788f317b43312151c1bd5cf058c9697a8d83eac3939050bd61e`): Copyright 2014 The Comic Neue Project Authors.
 
 ---
 
@@ -579,6 +674,48 @@ renders above:
   filled in with the test's harness script added first (`tools/perf/fakeha.py`). The project neither
   ships nor hosts it. `tools/showcase/render.mjs` serves the same build the same way to a headless
   Chrome on that computer, to make the device renders (section 4); only those screenshots are kept.
+- **Vitro's parity references** (`engines/engine-vitro/src/test/parity/refs/*/*.png`, test data in the repo,
+  #793): screenshots of the Home Assistant frontend (the build HA 2026.11 serves, Apache-2.0, as above)
+  drawing single cards, made by `tools/vitro-parity/capture.mjs` in a headless Chromium, with the Material
+  Design Icons and Roboto it serves. One frontend file is kept as it is, for a card that shows it:
+  `engines/engine-vitro/src/test/parity/assets/static/icons/favicon-192x192.png`, the frontend's app icon
+  (Apache-2.0, Copyright Home Assistant contributors, [`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt)).
+  Unlike the rest of this section, both **are distributed, in the source tree**, under Apache-2.0 with this
+  notice. Neither is in an APK, the bundle or a web page.
+  Since the references come from the parity harness's fake Home Assistant (`tools/vitro-parity/fakehome.py`),
+  they draw made-up fixtures: the album art and person picture they show
+  (`engines/engine-vitro/src/test/parity/fixtures/images/`) are drawn by `tools/vitro-parity/fixture_images.py`
+  (this project's, MIT).
+- **Home Assistant core's English entity texts and icons** (`tools/vitro-parity/hacore-2026.11.0.json`, test
+  data in the repo): the `entity_component`, `entity` and `title` parts of each integration's
+  `translations/en.json` and the `entity_component`/`entity` parts of its `icons.json`, unmodified, cut from the
+  `homeassistant` 2026.11.0 wheel on PyPI (SHA-256 `7ca5fbde…391b00f7`) by `tools/vitro-parity/hacore.py`.
+  Apache-2.0 ([`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt)), Copyright Home Assistant contributors,
+  https://github.com/home-assistant/core (tag `2026.11.0`). **Distributed in the source tree** under Apache-2.0
+  with this notice; not in an APK, the bundle or a web page. The parity harness's fake HA answers the frontend's
+  `frontend/get_translations` and `frontend/get_icons` with it.
+- **Home Assistant frontend's English, German and French UI strings**
+  (`engines/engine-vitro/src/test/resources/dev/glassworks/engine/vitro/locale/strings-{en,de,fr}.json`, test data
+  in the repo): the values, unmodified, of the frontend keys Vitro's code names, copied from the pinned frontend
+  20261028.5's `static/translations` by `tools/vitro-parity/locale-data.mjs`. Apache-2.0
+  ([`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt)), Copyright Home Assistant contributors,
+  https://github.com/home-assistant/frontend (tag `20261028.5`). **Distributed in the source tree** under
+  Apache-2.0 with this notice; not in an APK, the bundle or a web page. Vitro's tests read them; on a panel, Vitro
+  reads HA's strings from the signed-in Home Assistant.
+- **Community Lovelace cards** (host only, test inputs of the parity harness): `tools/vitro-parity/cards.py`
+  downloads each from its GitHub release (or its repo at the tag, as HACS does), pinned by release and by the
+  SHA-256 of every file in `tools/vitro-parity/cards.json`, into a cache on the computer that captures the
+  references, and the fake Home Assistant serves them to a headless Chromium there. None is in the repo, an APK
+  or a web page; only the screenshots of what they draw are kept (with the references). Licences, read from each
+  repository on 2026-11-24: Mushroom v5.3.0 (Apache-2.0, Paul Bottein), card-mod v4.2.1,
+  layout-card v2.4.7 and auto-entities v1.16.1 (MIT, Copyright Thomas Lovén), stack-in-card 0.2.0 and
+  bar-card 3.2.0 (MIT, Copyright Custom cards for Home Assistant), mini-graph-card v0.13.0 and mini-media-player v1.16.12 (MIT, Copyright
+  Karl Kihlström), Bubble Card v3.4.3 (MIT, Copyright Cloos), vertical-stack-in-card v1.1.4 (MIT, Copyright
+  Ofek Ashery), clock-weather-card v3.1.0 (MIT, Copyright Patrick Kissling; its weather icons are Meteocons,
+  MIT, Copyright Bas Milius) modern-circular-gauge v0.15.0 (MIT, Copyright Stanisław Krzeptowski), and, for the island checks only, battery-state-card v4.3.0
+  (MIT, Copyright Max Chodorowski), scheduler-card v4.0.20 (Apache-2.0, Niels Faber) and calendar-card-pro v6.0.0 (MIT, Copyright Alex Pfau), read 2026-11-25.
+- **Jinja2** (BSD-3-Clause, Copyright Pallets, host only): the parity harness's fake HA renders templates with
+  the jinja2 already installed on the computer that captures the references. Nothing of it is in the repo.
 - **Home Assistant core's icon data** (the `icons.json` of the integrations Clarity's fake Home
   Assistant loads, from `home-assistant/core` 2026.11.0, commit `74cf5a49…`): Apache-2.0
   ([`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt)), Copyright Home Assistant contributors,
@@ -622,7 +759,7 @@ renders above:
 | BusyBox 1.36.1, inside the Magisk APK | GPL-2.0-only | installer, panel boot image | https://github.com/topjohnwu/ndk-busybox/tree/android-ndk-1.36.1 (built by Magisk's build as `busybox-1.36.1.1.zip`) |
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
 | GeckoView 144 | MPL-2.0 (some parts LGPL-2.1-or-later) | the generic app's legacy APK (#198) | https://hg.mozilla.org/releases/mozilla-release/rev/5f480a9ab713ba79e5a14face39aacb038c36f30 |
-| desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198), the legacy engine's debug test APK | https://github.com/google/desugar_jdk_libs (release 2.1.5) |
+| desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198), the legacy engine's debug test APK, Vitro's debug test APK | https://github.com/google/desugar_jdk_libs (release 2.1.5) |
 | `selinux_permissive.ko` (the Mirror's backup module) | GPL-2.0-only | fetched by `tools/mirror --backup` (section 3), not in this repository | https://github.com/GlassworksHQ/glassworks-device-bins (`frames/lululemon-mirror/selinux-permissive`) |
 | GNU C Library, static in `otbr-agent`/`ot-ctl` | LGPL-2.1-or-later | installer, radio bundle | Ubuntu 22.04 source package `cross-toolchain-base` 59ubuntu3, which built `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 from Ubuntu's `glibc` 2.35 source: https://launchpad.net/ubuntu/+source/cross-toolchain-base/59ubuntu3. To relink `otbr-agent`/`ot-ctl` with a modified C library, rebuild them from source with [`frames/aqara-s1-plus/tools/radio/build-otbr.sh`](frames/aqara-s1-plus/tools/radio/build-otbr.sh). |
 | GNU C Library, `sisdk/lib/` | LGPL-2.1-or-later | radio bundle | The Ubuntu source packages named in `sisdk/NOTICE.txt` (Ubuntu snapshot `20261101T000000Z`, see `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`). The libraries can be replaced: the bundle loads them from that directory. |

@@ -1,0 +1,127 @@
+{
+ "case": "entity",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-entity-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Black ink",
+   "x": 17,
+   "y": 19,
+   "w": 64.89,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "74",
+   "x": 17,
+   "y": 57.2,
+   "w": 31.45,
+   "h": 33,
+   "size": 28,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "%",
+   "x": 52.45,
+   "y": 68.2,
+   "w": 11.72,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.printer_black_ink": {
+   "s": "74",
+   "a": {
+    "state_class": "measurement",
+    "marker_high_level": 100,
+    "marker_low_level": 15,
+    "marker_type": "ink",
+    "unit_of_measurement": "%",
+    "friendly_name": "Office Printer Black ink"
+   },
+   "lc": 1794495540,
+   "lu": 1794495540
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.printer_black_ink",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Black ink"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Office Printer"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

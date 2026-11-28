@@ -1,0 +1,56 @@
+{
+ "title": "More Info of an input_button never pressed (unknown): its state row with the Press button, the timeline, and the Activity section's \"No activity found\"",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "button",
+  "entity": "input_button.ring_doorbell"
+ },
+ "more_info": "input_button.ring_doorbell",
+ "expect": {
+  "input_button.ring_doorbell": "unknown"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "input_button.ring_doorbell": {
+    "state": "unknown",
+    "last_changed": -108000,
+    "attributes": {
+     "editable": true,
+     "icon": "mdi:doorbell",
+     "friendly_name": "Ring doorbell"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "input_button.ring_doorbell",
+    "pl": "input_button",
+    "en": "Ring doorbell"
+   }
+  ],
+  "history": {
+   "input_button.ring_doorbell": {
+    "steps": [
+     [
+      "-30h",
+      "unknown"
+     ]
+    ]
+   }
+  },
+  "logbook": []
+ }
+}

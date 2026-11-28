@@ -1,0 +1,187 @@
+{
+ "title": "Entities in French with a space as thousands separator: HA's words, numbers, units and relative times",
+ "card": {
+  "type": "entities",
+  "title": "Cuisine",
+  "entities": [
+   "sensor.fridge_temperature",
+   "sensor.fridge_power",
+   {
+    "entity": "sensor.kitchen_humidity",
+    "secondary_info": "last-changed"
+   },
+   "sensor.outdoor_pressure",
+   "binary_sensor.fridge_door",
+   {
+    "type": "divider"
+   },
+   "input_boolean.vacation_mode",
+   {
+    "entity": "light.bedroom_accent",
+    "name": "Accent"
+   },
+   "sensor.offline_meter"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "binary_sensor.fridge_door": {
+    "state": "off",
+    "last_changed": "-277m",
+    "attributes": {
+     "device_class": "door",
+     "friendly_name": "Fridge Door"
+    }
+   },
+   "input_boolean.vacation_mode": {
+    "state": "off",
+    "last_changed": "-172m",
+    "attributes": {
+     "editable": true,
+     "icon": "mdi:account-multiple",
+     "friendly_name": "Vacation mode"
+    }
+   },
+   "light.bedroom_accent": {
+    "state": "off",
+    "last_changed": "-50m",
+    "attributes": {
+     "supported_color_modes": [
+      "xy"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "hs_color": null,
+     "rgb_color": null,
+     "xy_color": null,
+     "off_with_transition": false,
+     "off_brightness": 254,
+     "icon": "mdi:led-strip-variant",
+     "friendly_name": "Bedroom Strip Accent",
+     "supported_features": 40
+    }
+   },
+   "sensor.fridge_power": {
+    "state": "1248.6",
+    "last_changed": "-199m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "W",
+     "device_class": "power",
+     "friendly_name": "Fridge Power"
+    }
+   },
+   "sensor.fridge_temperature": {
+    "state": "3.4",
+    "last_changed": "-93m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "icon": "mdi:thermometer",
+     "friendly_name": "Fridge Temperature"
+    }
+   },
+   "sensor.kitchen_humidity": {
+    "state": "45",
+    "last_changed": "-277m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "%",
+     "device_class": "humidity",
+     "friendly_name": "Kitchen Humidity"
+    }
+   },
+   "sensor.outdoor_pressure": {
+    "state": "1019.3",
+    "last_changed": "-35m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "hPa",
+     "device_class": "pressure",
+     "friendly_name": "Outdoor Pressure"
+    }
+   },
+   "sensor.offline_meter": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "friendly_name": "Offline Meter"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "binary_sensor.fridge_door",
+    "pl": "demo",
+    "di": "dev-fridge",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "input_boolean.vacation_mode",
+    "pl": "input_boolean",
+    "en": "Vacation mode"
+   },
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "dev-bedroom-strip",
+    "en": "Accent",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.fridge_power",
+    "pl": "demo",
+    "dp": 0,
+    "di": "dev-fridge",
+    "en": "Power",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.fridge_temperature",
+    "pl": "demo",
+    "dp": 1,
+    "di": "dev-fridge",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.kitchen_humidity",
+    "pl": "demo"
+   },
+   {
+    "ei": "sensor.outdoor_pressure",
+    "pl": "demo",
+    "dp": 1
+   },
+   {
+    "ei": "sensor.offline_meter",
+    "pl": "demo"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-fridge",
+    "name": "Fridge"
+   },
+   {
+    "id": "dev-bedroom-strip",
+    "name": "Bedroom Strip"
+   }
+  ],
+  "user_data": {
+   "language": {
+    "language": "fr",
+    "number_format": "space_comma",
+    "time_format": "24"
+   }
+  }
+ },
+ "frames": [
+  "s1",
+  "tablet"
+ ]
+}

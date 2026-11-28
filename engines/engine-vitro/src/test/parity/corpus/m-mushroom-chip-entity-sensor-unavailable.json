@@ -1,0 +1,50 @@
+{
+ "title": "Mushroom chips: entity-sensor-unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "sensor.sensor_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "entity",
+    "entity": "sensor.sensor_unavailable"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "sensor.sensor_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "restored": true,
+     "friendly_name": "Living Room Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.sensor_unavailable",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device",
+    "dp": 1
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room",
+    "name": "Living Room"
+   }
+  ]
+ }
+}

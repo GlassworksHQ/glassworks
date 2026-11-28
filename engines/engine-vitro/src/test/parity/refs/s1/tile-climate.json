@@ -1,0 +1,264 @@
+{
+ "case": "tile-climate",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Thermostat",
+   "x": 56,
+   "y": 12.61,
+   "w": 73.97,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Heat",
+   "x": 56,
+   "y": 32,
+   "w": 26.97,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "·",
+   "x": 86.33,
+   "y": 32,
+   "w": 3.55,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "20.5 °C",
+   "x": 93.25,
+   "y": 32,
+   "w": 41.44,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "climate.living_room": {
+   "s": "heat",
+   "a": {
+    "hvac_modes": [
+     "off",
+     "heat"
+    ],
+    "min_temp": 7,
+    "max_temp": 35,
+    "target_temp_step": 0.5,
+    "current_temperature": 20.5,
+    "temperature": 21.5,
+    "hvac_action": "heating",
+    "friendly_name": "Thermostat",
+    "supported_features": 385
+   },
+   "lc": 1794495240,
+   "lu": 1794495240
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "climate.living_room",
+    "pl": "zha",
+    "di": "device-1",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Thermostat"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "climate"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "climate": {
+     "_": {
+      "default": "mdi:thermostat",
+      "state_attributes": {
+       "fan_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "auto": "mdi:fan-auto",
+         "diffuse": "mdi:weather-windy",
+         "focus": "mdi:target",
+         "high": "mdi:speedometer",
+         "low": "mdi:speedometer-slow",
+         "medium": "mdi:speedometer-medium",
+         "middle": "mdi:speedometer-medium",
+         "off": "mdi:fan-off",
+         "on": "mdi:fan"
+        }
+       },
+       "hvac_action": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "cooling": "mdi:snowflake",
+         "defrosting": "mdi:snowflake-melt",
+         "drying": "mdi:water-percent",
+         "fan": "mdi:fan",
+         "heating": "mdi:fire",
+         "idle": "mdi:clock-outline",
+         "off": "mdi:power",
+         "preheating": "mdi:heat-wave"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "activity": "mdi:motion-sensor",
+         "away": "mdi:account-arrow-right",
+         "boost": "mdi:rocket-launch",
+         "comfort": "mdi:sofa",
+         "eco": "mdi:leaf",
+         "home": "mdi:home",
+         "sleep": "mdi:bed"
+        }
+       },
+       "swing_horizontal_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:arrow-oscillating-off",
+         "on": "mdi:arrow-expand-horizontal"
+        }
+       },
+       "swing_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "both": "mdi:arrow-all",
+         "horizontal": "mdi:arrow-left-right",
+         "off": "mdi:arrow-oscillating-off",
+         "on": "mdi:arrow-oscillating",
+         "vertical": "mdi:arrow-up-down"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.climate.entity_component._.state.auto": "Auto",
+    "component.climate.entity_component._.state.cool": "Cool",
+    "component.climate.entity_component._.state.dry": "Dry",
+    "component.climate.entity_component._.state.fan_only": "Fan only",
+    "component.climate.entity_component._.state.heat": "Heat",
+    "component.climate.entity_component._.state.heat_cool": "Heat/Cool",
+    "component.climate.entity_component._.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.current_humidity.name": "Current humidity",
+    "component.climate.entity_component._.state_attributes.current_temperature.name": "Current temperature",
+    "component.climate.entity_component._.state_attributes.fan_mode.name": "Fan mode",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.auto": "Auto",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.diffuse": "Diffuse",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.focus": "Focus",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.high": "High",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.low": "Low",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.medium": "Medium",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.middle": "Middle",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.on": "On",
+    "component.climate.entity_component._.state_attributes.fan_mode.state.top": "Top",
+    "component.climate.entity_component._.state_attributes.fan_modes.name": "Fan modes",
+    "component.climate.entity_component._.state_attributes.humidity.name": "Target humidity",
+    "component.climate.entity_component._.state_attributes.hvac_action.name": "Current action",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.cooling": "Cooling",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.defrosting": "Defrosting",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.drying": "Drying",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.fan": "Fan",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.heating": "Heating",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.idle": "Idle",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.hvac_action.state.preheating": "Preheating",
+    "component.climate.entity_component._.state_attributes.hvac_modes.name": "HVAC modes",
+    "component.climate.entity_component._.state_attributes.max_humidity.name": "Max target humidity",
+    "component.climate.entity_component._.state_attributes.max_temp.name": "Max target temperature",
+    "component.climate.entity_component._.state_attributes.min_humidity.name": "Min target humidity",
+    "component.climate.entity_component._.state_attributes.min_temp.name": "Min target temperature",
+    "component.climate.entity_component._.state_attributes.preset_mode.name": "Preset",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.activity": "Activity",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.away": "Away",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.boost": "Boost",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.comfort": "Comfort",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.eco": "Eco",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.home": "Home",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.none": "None",
+    "component.climate.entity_component._.state_attributes.preset_mode.state.sleep": "Sleep",
+    "component.climate.entity_component._.state_attributes.preset_modes.name": "Presets",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_mode.name": "Horizontal swing mode",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_mode.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_mode.state.on": "On",
+    "component.climate.entity_component._.state_attributes.swing_horizontal_modes.name": "Horizontal swing modes",
+    "component.climate.entity_component._.state_attributes.swing_mode.name": "Swing mode",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.both": "Both",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.horizontal": "Horizontal",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.off": "Off",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.on": "On",
+    "component.climate.entity_component._.state_attributes.swing_mode.state.vertical": "Vertical",
+    "component.climate.entity_component._.state_attributes.swing_modes.name": "Swing modes",
+    "component.climate.entity_component._.state_attributes.target_temp_high.name": "Upper target temperature",
+    "component.climate.entity_component._.state_attributes.target_temp_low.name": "Lower target temperature",
+    "component.climate.entity_component._.state_attributes.target_temp_step.name": "Target temperature step",
+    "component.climate.entity_component._.state_attributes.temperature.name": "Target temperature"
+   },
+   "entity": {}
+  }
+ }
+}

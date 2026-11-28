@@ -1,0 +1,142 @@
+{
+ "title": "Weather forecast in German: the condition, the forecast's weekday names and HA's numbers in decimal comma",
+ "card": {
+  "type": "weather-forecast",
+  "entity": "weather.forecast_home",
+  "forecast_type": "daily"
+ },
+ "fixture": {
+  "states": {
+   "weather.forecast_home": {
+    "state": "cloudy",
+    "last_changed": "-159m",
+    "attributes": {
+     "temperature": 16.7,
+     "dew_point": 9.9,
+     "temperature_unit": "°C",
+     "humidity": 64,
+     "cloud_coverage": 99.2,
+     "uv_index": 0.6,
+     "pressure": 1019.3,
+     "pressure_unit": "hPa",
+     "wind_bearing": 154.2,
+     "wind_speed": 16.9,
+     "wind_speed_unit": "km/h",
+     "visibility_unit": "km",
+     "precipitation_unit": "mm",
+     "friendly_name": "Home",
+     "supported_features": 3,
+     "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute."
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "weather.forecast_home",
+    "pl": "met",
+    "di": "dev-forecast-home",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-forecast-home",
+    "name": "Home"
+   }
+  ],
+  "forecast": {
+   "weather.forecast_home": {
+    "daily": [
+     {
+      "condition": "partlycloudy",
+      "datetime": "@D+0 12:00",
+      "wind_bearing": 154.2,
+      "uv_index": 0.6,
+      "temperature": 14.7,
+      "templow": 9.1,
+      "wind_speed": 19.1,
+      "precipitation": 0.4,
+      "humidity": 64
+     },
+     {
+      "condition": "rainy",
+      "datetime": "@D+1 12:00",
+      "wind_bearing": 210.0,
+      "uv_index": 0.9,
+      "temperature": 12.5,
+      "templow": 8.7,
+      "wind_speed": 25.4,
+      "precipitation": 6.1,
+      "humidity": 82
+     },
+     {
+      "condition": "cloudy",
+      "datetime": "@D+2 12:00",
+      "wind_bearing": 280.5,
+      "uv_index": 1.1,
+      "temperature": 11.2,
+      "templow": 6.4,
+      "wind_speed": 14.0,
+      "precipitation": 0.8,
+      "humidity": 71
+     },
+     {
+      "condition": "sunny",
+      "datetime": "@D+3 12:00",
+      "wind_bearing": 12.0,
+      "uv_index": 2.3,
+      "temperature": 13.9,
+      "templow": 4.2,
+      "wind_speed": 8.6,
+      "precipitation": 0,
+      "humidity": 55
+     },
+     {
+      "condition": "partlycloudy",
+      "datetime": "@D+4 12:00",
+      "wind_bearing": 95.8,
+      "uv_index": 1.7,
+      "temperature": 15.3,
+      "templow": 7.0,
+      "wind_speed": 11.3,
+      "precipitation": 0.1,
+      "humidity": 60
+     },
+     {
+      "condition": "fog",
+      "datetime": "@D+5 12:00",
+      "wind_bearing": 180.0,
+      "uv_index": 0.4,
+      "temperature": 10.8,
+      "templow": 7.9,
+      "wind_speed": 5.2,
+      "precipitation": 0.2,
+      "humidity": 93
+     },
+     {
+      "condition": "lightning-rainy",
+      "datetime": "@D+6 12:00",
+      "wind_bearing": 240.0,
+      "uv_index": 0.5,
+      "temperature": 12.0,
+      "templow": 9.3,
+      "wind_speed": 30.7,
+      "precipitation": 11.5,
+      "humidity": 88
+     }
+    ]
+   }
+  },
+  "user_data": {
+   "language": {
+    "language": "de",
+    "number_format": "decimal_comma",
+    "time_format": "24"
+   }
+  }
+ },
+ "frames": [
+  "s1",
+  "tablet"
+ ]
+}

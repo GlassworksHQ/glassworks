@@ -1,0 +1,614 @@
+{
+ "case": "m-weather-forecast-weather-clear-night",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 264
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 248,
+   "type": "hui-weather-forecast-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Clear, night",
+   "x": 97,
+   "y": 33.59,
+   "w": 137.83,
+   "h": 33,
+   "size": 28,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Home",
+   "x": 97,
+   "y": 67.19,
+   "w": 37.66,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "3.4",
+   "x": 413.23,
+   "y": 33.59,
+   "w": 38.83,
+   "h": 33,
+   "size": 28,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "°C",
+   "x": 459,
+   "y": 34.59,
+   "w": 24.59,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "14.7 °C",
+   "x": 387.98,
+   "y": 67.19,
+   "w": 45.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "/",
+   "x": 436.53,
+   "y": 67.19,
+   "w": 5.78,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9.1 °C",
+   "x": 445.78,
+   "y": 67.19,
+   "w": 37.22,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Thu",
+   "x": 53.39,
+   "y": 105.8,
+   "w": 20.39,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "14.7",
+   "x": 45.02,
+   "y": 176.8,
+   "w": 31.17,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 76.19,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9.1",
+   "x": 51.27,
+   "y": 201.8,
+   "w": 19.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 70.69,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Fri",
+   "x": 150.05,
+   "y": 105.8,
+   "w": 13.45,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12.5",
+   "x": 138.2,
+   "y": 176.8,
+   "w": 31.17,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 169.38,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "8.7",
+   "x": 144.45,
+   "y": 201.8,
+   "w": 19.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 163.88,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Sat",
+   "x": 241.17,
+   "y": 105.8,
+   "w": 17.58,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "11.2",
+   "x": 231.39,
+   "y": 176.8,
+   "w": 31.17,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 262.56,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "6.4",
+   "x": 237.64,
+   "y": 201.8,
+   "w": 19.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 257.06,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Sun",
+   "x": 332.97,
+   "y": 105.8,
+   "w": 20.36,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "13.9",
+   "x": 324.58,
+   "y": 176.8,
+   "w": 31.17,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 355.75,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "4.2",
+   "x": 330.83,
+   "y": 201.8,
+   "w": 19.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 350.25,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Mon",
+   "x": 424.36,
+   "y": 105.8,
+   "w": 23.95,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "15.3",
+   "x": 417.77,
+   "y": 176.8,
+   "w": 31.17,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 448.94,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "7",
+   "x": 429.78,
+   "y": 201.8,
+   "w": 7.88,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 437.66,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "weather.clear_night": {
+   "s": "clear-night",
+   "a": {
+    "dew_point": 7.8,
+    "temperature_unit": "°C",
+    "humidity": 82,
+    "cloud_coverage": 40,
+    "uv_index": 1.2,
+    "pressure": 1018.2,
+    "pressure_unit": "hPa",
+    "wind_bearing": 210,
+    "wind_speed": 12.4,
+    "wind_speed_unit": "km/h",
+    "visibility_unit": "km",
+    "precipitation_unit": "mm",
+    "supported_features": 1,
+    "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute.",
+    "temperature": 3.4,
+    "friendly_name": "Home"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "weather.clear_night",
+    "pl": "met"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "weather"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "weather": {
+     "_": {
+      "default": "mdi:weather-partly-cloudy",
+      "state": {
+       "clear-night": "mdi:weather-night",
+       "cloudy": "mdi:weather-cloudy",
+       "exceptional": "mdi:alert-circle-outline",
+       "fog": "mdi:weather-fog",
+       "hail": "mdi:weather-hail",
+       "lightning": "mdi:weather-lightning",
+       "lightning-rainy": "mdi:weather-lightning-rainy",
+       "pouring": "mdi:weather-pouring",
+       "rainy": "mdi:weather-rainy",
+       "snowy": "mdi:weather-snowy",
+       "snowy-rainy": "mdi:weather-snowy-rainy",
+       "sunny": "mdi:weather-sunny",
+       "windy": "mdi:weather-windy",
+       "windy-variant": "mdi:weather-windy-variant"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.weather.entity_component._.state.clear-night": "Clear, night",
+    "component.weather.entity_component._.state.cloudy": "Cloudy",
+    "component.weather.entity_component._.state.exceptional": "Exceptional",
+    "component.weather.entity_component._.state.fog": "Fog",
+    "component.weather.entity_component._.state.hail": "Hail",
+    "component.weather.entity_component._.state.lightning": "Lightning",
+    "component.weather.entity_component._.state.lightning-rainy": "Lightning, rainy",
+    "component.weather.entity_component._.state.partlycloudy": "Partly cloudy",
+    "component.weather.entity_component._.state.pouring": "Pouring",
+    "component.weather.entity_component._.state.rainy": "Rainy",
+    "component.weather.entity_component._.state.snowy": "Snowy",
+    "component.weather.entity_component._.state.snowy-rainy": "Snowy, rainy",
+    "component.weather.entity_component._.state.sunny": "Sunny",
+    "component.weather.entity_component._.state.windy": "Windy",
+    "component.weather.entity_component._.state.windy-variant": "Windy, cloudy"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "weather/subscribe_forecast",
+    "forecast_type": "daily",
+    "entity_id": "weather.clear_night"
+   },
+   "events": [
+    {
+     "type": "daily",
+     "forecast": [
+      {
+       "condition": "partlycloudy",
+       "datetime": "2026-11-12T12:00:00-06:00",
+       "temperature": 14.7,
+       "templow": 9.1,
+       "precipitation": 0.4,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      },
+      {
+       "condition": "rainy",
+       "datetime": "2026-11-13T12:00:00-06:00",
+       "temperature": 12.5,
+       "templow": 8.7,
+       "precipitation": 6.1,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      },
+      {
+       "condition": "cloudy",
+       "datetime": "2026-11-14T12:00:00-06:00",
+       "temperature": 11.2,
+       "templow": 6.4,
+       "precipitation": 0.8,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      },
+      {
+       "condition": "sunny",
+       "datetime": "2026-11-15T12:00:00-06:00",
+       "temperature": 13.9,
+       "templow": 4.2,
+       "precipitation": 0,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      },
+      {
+       "condition": "partlycloudy",
+       "datetime": "2026-11-16T12:00:00-06:00",
+       "temperature": 15.3,
+       "templow": 7,
+       "precipitation": 0.1,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      },
+      {
+       "condition": "fog",
+       "datetime": "2026-11-17T12:00:00-06:00",
+       "temperature": 10.8,
+       "templow": 7.9,
+       "precipitation": 0.2,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      }
+     ]
+    }
+   ],
+   "result": null
+  }
+ ]
+}

@@ -1,0 +1,123 @@
+{
+ "case": "m-tile-switch-outlet-on",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Patio Heater",
+   "x": 56,
+   "y": 12.61,
+   "w": 79.47,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 56,
+   "y": 32,
+   "w": 15.67,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "switch.switch_outlet_on": {
+   "s": "on",
+   "a": {
+    "device_class": "outlet",
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "switch.switch_outlet_on",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Heater",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Patio"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "switch"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "switch": {
+     "_": {
+      "default": "mdi:toggle-switch-variant",
+      "state": {
+       "off": "mdi:toggle-switch-variant-off"
+      }
+     },
+     "outlet": {
+      "default": "mdi:power-plug",
+      "state": {
+       "off": "mdi:power-plug-off"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.switch.entity_component._.state.off": "Off",
+    "component.switch.entity_component._.state.on": "On",
+    "component.switch.entity_component.outlet.state.off": "Off",
+    "component.switch.entity_component.outlet.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

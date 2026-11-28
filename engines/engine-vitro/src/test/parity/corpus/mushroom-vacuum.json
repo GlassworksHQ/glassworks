@@ -1,0 +1,49 @@
+{
+ "title": "Mushroom vacuum card: docked, with start and return buttons",
+ "expect": {
+  "vacuum.rover": "docked"
+ },
+ "card": {
+  "type": "custom:mushroom-vacuum-card",
+  "entity": "vacuum.rover",
+  "commands": [
+   "start_pause",
+   "return_home"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "vacuum.rover": {
+    "state": "docked",
+    "last_changed": "-238m",
+    "attributes": {
+     "fan_speed_list": [
+      "silent",
+      "standard",
+      "strong",
+      "turbo"
+     ],
+     "fan_speed": "strong",
+     "status": "Charging",
+     "friendly_name": "Rover",
+     "supported_features": 31676,
+     "battery_level": 100
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "vacuum.rover",
+    "pl": "demo",
+    "di": "dev-rover",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-rover",
+    "name": "Rover"
+   }
+  ]
+ }
+}

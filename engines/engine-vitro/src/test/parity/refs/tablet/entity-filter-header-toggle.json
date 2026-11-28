@@ -1,0 +1,140 @@
+{
+ "case": "entity-filter-header-toggle",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 139
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 122.8,
+   "type": "hui-entity-filter-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Lights on",
+   "x": 17,
+   "y": 21,
+   "w": 95.92,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Porch",
+   "x": 73,
+   "y": 77.59,
+   "w": 36.38,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.garage": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "friendly_name": "Garage",
+    "supported_features": 0
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "light.garden": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "friendly_name": "Garden",
+    "supported_features": 0
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "light.porch": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": "onoff",
+    "friendly_name": "Porch",
+    "supported_features": 0
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

@@ -9,19 +9,29 @@
 #            hidden, secrets survive in Android's Keystore, the screen follows the frame's sensors, and the ESPHome
 #            device serves Home Assistant with the frame's panes. API 23 is the legacy build's floor (#198): that
 #            job builds the test APK at minSdk 23 with core library desugaring, as the legacy build runs the core
-#            (tools/legacy/api23-emulator.gradle, a Gradle init script)
+#            (tools/legacy/api23-emulator.gradle, a Gradle init script). On API 23 and 34 the same emulator then runs
+#            the engine contract (engines/conformance, docs/engine-contract.md): every engine the core runs on, against
+#            a fake Home Assistant on the device. API 34 tests GeckoView 159 and Vitro over it, API 23 the legacy
+#            GeckoView 144 and Vitro over it on Android 6's runtime. GeckoView's x86_64 build stands in for the frames'
+#            arm builds there (same version, same engine code)
 #   libs-api23  the libraries' androidTest checks on an API 23 emulator: esphome-api-android and improv run on
 #            Android 6 (#151). Their lint (NewApi at minSdk 23) stays on every PR, in pr.yml's libs-api23
 #   legacy-verify  the generic app's legacy APK (the Mirror's, R8 and all) installed on an API 23 emulator: it fails
 #            when Android 6's verifier rejects a Glassworks class (tools/legacy/verify-api23.sh). The conformance
 #            test's APK can't show this: R8 shapes the release's dex, and on the Mirror a class it built crashed the app
 #            at every start (#435). Before a Mirror flash, run the script on the build you flash
+#   vitro-camera  Vitro's camera end-to-end test on API 23 and 29 emulators (tools/vitro-camera-e2e): a live camera card
+#            over WebRTC, HLS and MJPEG against Clarity's fake Home Assistant, on Android's real media stack, which
+#            Robolectric can't run. The first frame within a budget, real frames on screen, a pause when hidden, and
+#            nothing left after the card goes. The fake runs on the runner, and the emulator reaches it through
+#            adb reverse (the WebRTC media through its TURN relay over TCP)
 #   report   opens, updates or closes the issue for a red main
 #
-# Cost: six jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a minute
-# of tests). On main only when Android code or this file changes; the nightly run and a manual run always. No
-# secrets; GeckoView isn't in it (the runners' emulators are x86_64, and no frame builds an x86 GeckoView), so
-# the engine is a fake.
+# Cost: eight jobs in parallel (conformance on four APIs, libs-api23, legacy-verify and the two Vitro camera jobs),
+# each about 10 minutes (the androidTest APK build, an emulator boot, under a minute of tests); the engine contract
+# adds about 4 minutes to the API 23 and 34 jobs (its APK build, GeckoView, a minute of tests). On main only when
+# Android code or this file changes; the nightly run and a manual run always. No secrets. The core's conformance test
+# uses a fake engine; the engine contract downloads GeckoView's x86_64 build for the runners' x86_64 emulators.
 name: Emulator tests
 
 on:
@@ -42,6 +52,19 @@ on:
       - 'gradle.properties'
       - 'tools/legacy/api23-emulator.gradle'
       - 'tools/legacy/verify-api23.sh'
+      # vitro-camera's fake Home Assistant: the server, its home, its streams, its WebRTC peer and the venv and
+      # frontend it runs with.
+      - 'tools/vitro-camera-e2e/**'
+      - 'tools/perf/fakeha.py'
+      - 'tools/perf/dashboards.py'
+      - 'tools/perf/camera.py'
+      - 'tools/perf/webrtc.py'
+      - 'tools/perf/webrtcenv.py'
+      - 'tools/perf/webrtc-requirements.txt'
+      - 'tools/perf/hafrontend.py'
+      - 'tools/perf/haicons.py'
+      - 'tools/perf/haicons.json'
+      - 'tools/perf/page/tiers.json'
       - '.github/workflows/core-emulators.yml'
   # pr.yml's nightly time: the same net under the paths above.
   schedule:
@@ -63,7 +86,7 @@ env:
 jobs:
   conformance:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
@@ -71,6 +94,11 @@ jobs:
           - api: 23
             target: default
             init: --init-script tools/legacy/api23-emulator.gradle
+            # The engine contract's Gecko engine (engines/conformance): the legacy one runs from Android 6.
+            gecko: legacy
+            # Its test APK (about 195 MB, GeckoView's native libraries) doesn't fit this image's default data
+            # partition: INSTALL_FAILED_INSUFFICIENT_STORAGE (run 45547890720).
+            disk: 4096M
           - api: 26
             target: default
           - api: 29
@@ -80,6 +108,7 @@ jobs:
             # swiftshader_indirect crashes this image's emulator (qemu SIGSEGV) when an app window draws.
             # Probe on 2026-11-17: 11 of 12 copies passed with it, 7 of 7 with swangle_indirect.
             gpu: swangle_indirect
+            gecko: current
     name: conformance (API ${{ matrix.api }})
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -100,7 +129,9 @@ jobs:
         run: sdkmanager --install "platforms;android-37.2"
 
       - name: Build the conformance test APK
-        run: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:assembleDebugAndroidTest
+        run: >-
+          ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:assembleDebugAndroidTest
+          ${{ matrix.gecko && format(':engine-conformance:assembleDebugAndroidTest -PengineConformanceGecko={0}', matrix.gecko) || '' }}
 
       - name: Enable KVM
         run: |
@@ -115,15 +146,20 @@ jobs:
           arch: x86_64
           target: ${{ matrix.target }}
           disable-animations: true
+          disk-size: ${{ matrix.disk || '' }}
           emulator-options: -no-window -gpu ${{ matrix.gpu || 'swiftshader_indirect' }} -no-snapshot -noaudio -no-boot-anim
-          script: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:connectedDebugAndroidTest
+          # One line: the action runs each line of a script on its own.
+          script: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:connectedDebugAndroidTest ${{ matrix.gecko && format(':engine-conformance:connectedDebugAndroidTest -PengineConformanceGecko={0}', matrix.gecko) || '' }}
 
       - name: Test report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: core-conformance-api${{ matrix.api }}
-          path: core/build/reports/androidTests/connected/
+          path: |
+            core/build/reports/androidTests/connected/
+            engines/conformance/build/reports/androidTests/connected/
+            engines/conformance/build/outputs/androidTest-results/connected/
           retention-days: 7
           if-no-files-found: ignore
 
@@ -225,8 +261,92 @@ jobs:
         if: failure()
         run: rm -rf ~/.gradle/caches/modules-2/metadata-*
 
+  vitro-camera:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Android 6, the Mirror's: every transport. libwebrtc offers H.264 there (OMX.google.h264.decoder).
+          - api: 23
+            transports: webrtc,hls,mjpeg
+          # libwebrtc offers no H.264 on this image (the SDP has only VP8, VP9 and AV1), so a camera's WebRTC offer
+          # fails as go2rtc's would and Vitro plays HLS: WebRTC joins here once ha-webrtc decodes H.264 on it.
+          - api: 29
+            transports: hls,mjpeg
+    name: Vitro cameras on API ${{ matrix.api }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
+
+      - name: Android SDK platform
+        run: sdkmanager --install "platforms;android-37.2"
+
+      - name: Vitro's test APK
+        run: ./gradlew --no-daemon :vitro-test:assembleDebug
+
+      # The fake's venv (aiortc), its camera streams and HA's frontend, made before the emulator boots. The
+      # streams are ffmpeg's (bitexact, so the same bytes every run); the cache only saves making them again.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/glassworks-perf
+          key: vitro-camera-${{ hashFiles('tools/perf/webrtc-requirements.txt', 'tools/perf/camera.py', 'tools/perf/hafrontend.py') }}
+      - name: The fake Home Assistant's camera streams
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python3 tools/perf/webrtcenv.py
+          python3 tools/perf/camera.py
+          python3 -c 'import sys; sys.path.insert(0, "tools/perf"); import hafrontend; print(hafrontend.root())'
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Camera cards over each transport
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: default
+          disable-animations: true
+          # A panel's landscape screen, as on METIS: the runner's default (320x640) leaves the card a sliver.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -skin 1280x720
+          # One line: the action runs each line of a script on its own. WebRTC always needs the seam's first frame;
+          # HLS and MJPEG run on screen checks (--seam optional) until Vitro's built-in players go through
+          # CameraStreamFactories (#889).
+          script: tools/vitro-camera-e2e/run.sh --out build/vitro-camera-e2e -- --transports ${{ matrix.transports }} --seam optional
+
+      - name: Results and screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vitro-camera-e2e-api${{ matrix.api }}
+          path: build/vitro-camera-e2e/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
   report:
-    needs: [conformance, libs-api23, legacy-verify]
+    needs: [conformance, libs-api23, legacy-verify, vitro-camera]
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -237,7 +357,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RESULTS: ${{ needs.conformance.result }} ${{ needs.libs-api23.result }} ${{ needs.legacy-verify.result }}
+          RESULTS: ${{ needs.conformance.result }} ${{ needs.libs-api23.result }} ${{ needs.legacy-verify.result }} ${{ needs.vitro-camera.result }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EVENT: ${{ github.event_name }}
           SHA: ${{ github.sha }}
@@ -274,7 +394,7 @@ jobs:
               if [ "$(gh issue view "$keep" --json state --jq .state)" != OPEN ]; then
                 gh issue reopen "$keep" --comment "Reopened: $RUN failed after this issue closed."
               fi ;;
-            ' success success success ')
+            ' success success success success ')
               issues=$(open_issues)
               [ -n "$issues" ] || echo 'Green, and no open issue.'
               for n in $issues; do

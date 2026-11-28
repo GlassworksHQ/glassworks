@@ -1,0 +1,72 @@
+{
+ "title": "To-do list: a household chores list with open and completed items",
+ "card": {
+  "type": "todo-list",
+  "entity": "todo.chores"
+ },
+ "fixture": {
+  "states": {
+   "todo.chores": {
+    "state": "3",
+    "last_changed": "-20m",
+    "attributes": {
+     "friendly_name": "Chores",
+     "supported_features": 4
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "todo.chores",
+    "pl": "local_todo",
+    "en": "Chores"
+   }
+  ],
+  "todo": {
+   "todo.chores": [
+    {
+     "summary": "Replace the hallway bulb",
+     "uid": "item-1",
+     "status": "needs_action",
+     "due": "@D+2",
+     "description": null
+    },
+    {
+     "summary": "Descale the kettle",
+     "uid": "item-2",
+     "status": "needs_action",
+     "due": "@D+0",
+     "description": null
+    },
+    {
+     "summary": "Clean the dryer filter",
+     "uid": "item-3",
+     "status": "completed",
+     "due": "@D-3",
+     "description": null
+    },
+    {
+     "summary": "Water the plants",
+     "uid": "item-4",
+     "status": "completed",
+     "due": "@D-1",
+     "description": null
+    },
+    {
+     "summary": "Test the smoke alarms",
+     "uid": "item-5",
+     "status": "needs_action",
+     "due": "@D+12",
+     "description": null
+    },
+    {
+     "summary": "Wipe the oven door",
+     "uid": "item-6",
+     "status": "completed",
+     "due": null,
+     "description": null
+    }
+   ]
+  }
+ }
+}

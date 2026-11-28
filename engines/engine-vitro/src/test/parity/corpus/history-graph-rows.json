@@ -1,0 +1,97 @@
+{
+ "title": "History graph in a fixed 5-row slot: the chart shrinks so chart and legend fill it",
+ "card": {
+  "type": "history-graph",
+  "title": "Pressure",
+  "grid_options": {
+   "columns": 12,
+   "rows": 5
+  },
+  "entities": [
+   {
+    "entity": "sensor.living_room_pressure",
+    "name": "Living room"
+   },
+   {
+    "entity": "sensor.bedroom_pressure",
+    "name": "Bedroom"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "sensor.bedroom_pressure": {
+    "state": "1017.0",
+    "last_changed": -3480,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "hPa",
+     "device_class": "atmospheric_pressure",
+     "friendly_name": "Bedroom Sensor Pressure"
+    }
+   },
+   "sensor.living_room_pressure": {
+    "state": "1017.0",
+    "last_changed": -2280,
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "hPa",
+     "device_class": "atmospheric_pressure",
+     "friendly_name": "Living Room Sensor Pressure"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.bedroom_pressure",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "dev-bedroom-sensor",
+    "en": "Pressure",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.living_room_pressure",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "dev-living-room-sensor",
+    "en": "Pressure",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-bedroom-sensor",
+    "name": "Bedroom Sensor"
+   },
+   {
+    "id": "dev-living-room-sensor",
+    "name": "Living Room Sensor"
+   }
+  ],
+  "history": {
+   "sensor.bedroom_pressure": {
+    "wave": {
+     "min": 1013,
+     "max": 1018,
+     "period": "18h",
+     "step": "10m",
+     "decimals": 1,
+     "quantum": 1,
+     "phase": 0.9
+    }
+   },
+   "sensor.living_room_pressure": {
+    "wave": {
+     "min": 1013,
+     "max": 1019,
+     "period": "18h",
+     "step": "10m",
+     "decimals": 1,
+     "quantum": 1,
+     "phase": 0.4
+    }
+   }
+  }
+ }
+}

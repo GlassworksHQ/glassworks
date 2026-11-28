@@ -1,0 +1,115 @@
+{
+ "case": "mushroom-cover",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "mushroom-cover-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Office Blind",
+   "x": 56,
+   "y": 17,
+   "w": 74.38,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Open ⸱ 100%",
+   "x": 56,
+   "y": 36,
+   "w": 70.59,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "cover.office_blind": {
+   "s": "open",
+   "a": {
+    "is_closed": false,
+    "current_position": 100,
+    "assumed_state": true,
+    "friendly_name": "Office Blind",
+    "supported_features": 11
+   },
+   "lc": 1794491700,
+   "lu": 1794491700
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "cover"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "cover": {
+     "_": {
+      "default": "mdi:window-open",
+      "state": {
+       "closed": "mdi:window-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.cover.entity_component._.state.closed": "Closed",
+    "component.cover.entity_component._.state.closing": "Closing",
+    "component.cover.entity_component._.state.open": "Open",
+    "component.cover.entity_component._.state.opening": "Opening",
+    "component.cover.entity_component._.state.stopped": "Stopped"
+   },
+   "entity": {}
+  }
+ }
+}

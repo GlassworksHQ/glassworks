@@ -316,7 +316,8 @@ public class VoiceEngine internal constructor(
 
     private fun startMic() {
         if (!running || muted || mic != null) return
-        val m = Microphone(gain = gain, allowed = ::micAllowed, onError = ::error, onFrame = ::onMicFrame, onOpenFailed = ::micOpenFailed, onReadFailed = ::micReadFailed)
+        // onMicFrame copies what it keeps (toBytes for HA, the detectors' own buffers) before it returns: one frame array.
+        val m = Microphone(gain = gain, allowed = ::micAllowed, onError = ::error, onFrame = ::onMicFrame, onOpenFailed = ::micOpenFailed, onReadFailed = ::micReadFailed, reuseFrame = true)
         mic = m
         m.start()
     }

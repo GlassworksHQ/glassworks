@@ -69,7 +69,7 @@ class GeckoEngine(
         val app = context.applicationContext
         val s = settings(app)
         started = s
-        guard?.start(s.dashboard)
+        guard?.start(s.dashboard, s.localOrigin)
         val config = writeConfig(app, s)
         val rs = GeckoRuntimeSettings.Builder()
             .configFilePath(config.absolutePath)
@@ -179,7 +179,8 @@ class GeckoEngine(
         override val view = GeckoView(activity)
         private val main = Handler(Looper.getMainLooper())
         private var session: GeckoSession? = null
-        private var canGoBack = false
+        override var canGoBack = false
+            private set
         private val ports = mutableSetOf<Port>()
 
         fun start() {
@@ -212,20 +213,6 @@ class GeckoEngine(
             session = s
         }
 
-        /** Set by [close]: a restart or load that comes after (a posted callback) opens no new session. */
-        private var closed = false
-
-        override fun close() {
-            if (closed) return
-            closed = true
-            session?.let {
-                view.releaseSession()
-                it.close()
-            }
-            session = null
-            ports.clear()
-        }
-
         override fun restart() {
             if (closed) return
             session?.let {
@@ -234,10 +221,12 @@ class GeckoEngine(
             }
             session = null
             shown = null // the new session is empty until it reports a location
+            canGoBack = false // and has no history
             start()
         }
 
         override fun load(url: String) {
+            if (closed) return
             val g = guard ?: return run { session?.loadUri(url) }
             // The app's own load is a page like any other: off the dashboard's origin, it's refused (and noted). With
             // nothing on screen yet, the note has no page to show in, so the guard's words go over the page instead.
@@ -248,7 +237,7 @@ class GeckoEngine(
                 }
                 return
             }
-            g.whenReady({ showStuck(null); session?.loadUri(url) }, ::showStuck)
+            g.whenReady({ if (!closed) { showStuck(null); session?.loadUri(url) } }, { if (!closed) showStuck(it) })
         }
 
         /** Where the page is (onLocationChange), for a guard's refusal of the app's own load. */
@@ -291,6 +280,24 @@ class GeckoEngine(
 
         override fun post(message: JSONObject) {
             ports.toList().forEach { runCatching { it.post(message) } }
+        }
+
+        /** True once [close] ran: the page has no session, and nothing makes one again. */
+        private var closed = false
+
+        override fun setActive(active: Boolean) { session?.setActive(active) }
+
+        override fun close() {
+            if (closed) return
+            closed = true
+            showStuck(null)
+            ports.clear()
+            session?.let {
+                view.releaseSession()
+                it.close()
+            }
+            session = null
+            shown = null
         }
 
         override fun capture(done: (android.graphics.Bitmap?) -> Unit) {
@@ -377,6 +384,7 @@ class GeckoEngine(
             // target=_blank / window.open: keep it in the single kiosk session.
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
                 if (guard?.allows(PageGuard.Load.WINDOW, uri) == false) return null
+                if (!host.allowsLoad(uri)) return null
                 session.loadUri(uri)
                 return null
             }
@@ -400,6 +408,8 @@ class GeckoEngine(
                 if (guard?.allows(if (current) PageGuard.Load.PAGE else PageGuard.Load.WINDOW, request.uri) == false) {
                     return GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
+                // The host's own policy, for this window and a new one (a new one opens in this session).
+                if (!host.allowsLoad(request.uri)) return GeckoResult.fromValue(AllowOrDeny.DENY)
                 if (!current) return null
                 val target = host.redirect(request.uri) ?: return null
                 // Like the activity's handler before: a redirect still queued when the activity is destroyed is dropped.

@@ -76,16 +76,22 @@ var LockdownPolicy = (function () {
    * once the app has said which that is; before that, the app's navigation delegate holds it alone. Anything else
    * must be Home Assistant's too: without [haOrigin], the top-level document's origin stands in. A network URL that
    * doesn't parse is refused (fails closed); only data:, moz-extension: and about: pass without an origin.
+   *
+   * [localOrigin] is the app's own loopback server (Vitro's islands, http://127.0.0.1:<port>), which the app names
+   * with Home Assistant's. A top-level load may go there too, and a page there fetches only from there: Home
+   * Assistant's page never reaches the loopback server, and the loopback page never reaches Home Assistant.
    */
-  function decide(details, haOrigin) {
+  function decide(details, haOrigin, localOrigin) {
     const target = origin(details.url);
     const frame = details.type === "sub_frame";
     if (target === null) return LOCAL.test(String(details.url).trim()) ? { allow: true } : { allow: false, host: "", frame };
+    const local = haOrigin && localOrigin && localOrigin !== haOrigin ? localOrigin : null;
     if (details.type === "main_frame") {
-      if (haOrigin === null || haOrigin === undefined || target === haOrigin) return { allow: true };
+      if (haOrigin === null || haOrigin === undefined || target === haOrigin || target === local) return { allow: true };
       return { allow: false, host: label(target, haOrigin), frame: false };
     }
-    const allowed = haOrigin || topOrigin(details);
+    const top = topOrigin(details);
+    const allowed = local !== null && top === local ? local : haOrigin || top;
     if (allowed !== null && target === allowed) return { allow: true };
     return { allow: false, host: label(target, allowed), frame };
   }

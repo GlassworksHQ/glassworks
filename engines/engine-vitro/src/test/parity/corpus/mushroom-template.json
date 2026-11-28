@@ -1,0 +1,41 @@
+{
+ "title": "Mushroom template card with templated text and icon color",
+ "card": {
+  "type": "custom:mushroom-template-card",
+  "entity": "sensor.living_room_co2",
+  "primary": "Air quality",
+  "secondary": "{{ states('sensor.living_room_co2') | int(0) }} ppm",
+  "icon": "mdi:molecule-co2",
+  "icon_color": "{{ 'green' if states('sensor.living_room_co2') | int(0) < 800 else 'orange' }}"
+ },
+ "fixture": {
+  "states": {
+   "sensor.living_room_co2": {
+    "state": "512",
+    "last_changed": "-92m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "ppm",
+     "device_class": "carbon_dioxide",
+     "friendly_name": "Living Room Sensor CO2"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.living_room_co2",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "dev-living-room-sensor",
+    "en": "CO2",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-sensor",
+    "name": "Living Room Sensor"
+   }
+  ]
+ }
+}

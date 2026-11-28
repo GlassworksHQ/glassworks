@@ -1,0 +1,30 @@
+{
+ "_comment": "A made-up calendar for island-check.mjs and island-probe.mjs: which of HA's elements calendar-card-pro draws with.",
+ "card": {
+  "type": "custom:calendar-card-pro",
+  "entities": [
+   "calendar.home"
+  ],
+  "days_to_show": 3
+ },
+ "resources": [
+  "/hacsfiles/calendar-card-pro/calendar-card-pro.js?hacstag=v6.0.0"
+ ],
+ "fixture": {
+  "states": {
+   "calendar.home": {
+    "state": "off",
+    "last_changed": -3600,
+    "attributes": {
+     "friendly_name": "Home",
+     "message": "Bins out",
+     "all_day": true,
+     "start_time": "2026-11-26 00:00:00",
+     "end_time": "2026-11-27 00:00:00",
+     "location": "",
+     "description": ""
+    }
+   }
+  }
+ }
+}

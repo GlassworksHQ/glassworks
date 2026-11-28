@@ -1,0 +1,191 @@
+{
+ "case": "weather-current",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 136
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 120,
+   "type": "hui-weather-forecast-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Partly cloudy",
+   "x": 81,
+   "y": 35.59,
+   "w": 137.94,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Home",
+   "x": 81,
+   "y": 64.39,
+   "w": 37.66,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12.2",
+   "x": 406.3,
+   "y": 35.59,
+   "w": 46.75,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "°C",
+   "x": 459,
+   "y": 36.59,
+   "w": 24.59,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "76%",
+   "x": 457.02,
+   "y": 65.09,
+   "w": 25.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "weather.forecast_home": {
+   "s": "partlycloudy",
+   "a": {
+    "temperature": 12.2,
+    "dew_point": 8.1,
+    "temperature_unit": "°C",
+    "humidity": 76,
+    "cloud_coverage": 99.2,
+    "uv_index": 0.9,
+    "pressure": 1021.5,
+    "pressure_unit": "hPa",
+    "wind_bearing": 126.2,
+    "wind_speed": 15.1,
+    "wind_speed_unit": "km/h",
+    "visibility_unit": "km",
+    "precipitation_unit": "mm",
+    "friendly_name": "Home",
+    "supported_features": 3,
+    "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute."
+   },
+   "lc": 1794490140,
+   "lu": 1794490140
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "weather.forecast_home",
+    "pl": "met",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Home"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "weather"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "weather": {
+     "_": {
+      "default": "mdi:weather-partly-cloudy",
+      "state": {
+       "clear-night": "mdi:weather-night",
+       "cloudy": "mdi:weather-cloudy",
+       "exceptional": "mdi:alert-circle-outline",
+       "fog": "mdi:weather-fog",
+       "hail": "mdi:weather-hail",
+       "lightning": "mdi:weather-lightning",
+       "lightning-rainy": "mdi:weather-lightning-rainy",
+       "pouring": "mdi:weather-pouring",
+       "rainy": "mdi:weather-rainy",
+       "snowy": "mdi:weather-snowy",
+       "snowy-rainy": "mdi:weather-snowy-rainy",
+       "sunny": "mdi:weather-sunny",
+       "windy": "mdi:weather-windy",
+       "windy-variant": "mdi:weather-windy-variant"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.weather.entity_component._.state.clear-night": "Clear, night",
+    "component.weather.entity_component._.state.cloudy": "Cloudy",
+    "component.weather.entity_component._.state.exceptional": "Exceptional",
+    "component.weather.entity_component._.state.fog": "Fog",
+    "component.weather.entity_component._.state.hail": "Hail",
+    "component.weather.entity_component._.state.lightning": "Lightning",
+    "component.weather.entity_component._.state.lightning-rainy": "Lightning, rainy",
+    "component.weather.entity_component._.state.partlycloudy": "Partly cloudy",
+    "component.weather.entity_component._.state.pouring": "Pouring",
+    "component.weather.entity_component._.state.rainy": "Rainy",
+    "component.weather.entity_component._.state.snowy": "Snowy",
+    "component.weather.entity_component._.state.snowy-rainy": "Snowy, rainy",
+    "component.weather.entity_component._.state.sunny": "Sunny",
+    "component.weather.entity_component._.state.windy": "Windy",
+    "component.weather.entity_component._.state.windy-variant": "Windy, cloudy"
+   },
+   "entity": {}
+  }
+ }
+}

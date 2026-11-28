@@ -1,0 +1,116 @@
+{
+ "title": "Entities: Run, Cancel, Activate and Press rows (script, scene, button, input_button)",
+ "card": {
+  "type": "entities",
+  "entities": [
+   "script.goodnight",
+   "script.water_garden",
+   "script.chime",
+   {
+    "entity": "scene.movie_night",
+    "action_name": "Start"
+   },
+   "input_button.ring_doorbell",
+   "button.reboot_hub"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "script.goodnight": {
+    "state": "off",
+    "last_changed": "-600m",
+    "attributes": {
+     "last_triggered": null,
+     "mode": "single",
+     "current": 0,
+     "icon": "mdi:weather-night",
+     "friendly_name": "Goodnight"
+    }
+   },
+   "script.water_garden": {
+    "state": "on",
+    "last_changed": "-2m",
+    "attributes": {
+     "last_triggered": "@-2m",
+     "mode": "single",
+     "current": 1,
+     "icon": "mdi:sprinkler",
+     "friendly_name": "Water garden"
+    }
+   },
+   "script.chime": {
+    "state": "on",
+    "last_changed": "-1m",
+    "attributes": {
+     "last_triggered": "@-1m",
+     "mode": "queued",
+     "current": 2,
+     "max": 10,
+     "icon": "mdi:bell-ring",
+     "friendly_name": "Chime"
+    }
+   },
+   "scene.movie_night": {
+    "state": "unknown",
+    "last_changed": "-700m",
+    "attributes": {
+     "entity_id": [
+      "light.hallway_ceiling_ring"
+     ],
+     "id": "movie_night",
+     "icon": "mdi:movie",
+     "friendly_name": "Movie night"
+    }
+   },
+   "input_button.ring_doorbell": {
+    "state": "unknown",
+    "last_changed": "-900m",
+    "attributes": {
+     "editable": true,
+     "icon": "mdi:doorbell",
+     "friendly_name": "Ring doorbell"
+    }
+   },
+   "button.reboot_hub": {
+    "state": "unavailable",
+    "last_changed": "-15m",
+    "attributes": {
+     "device_class": "restart",
+     "friendly_name": "Hub Restart"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "script.goodnight",
+    "pl": "script",
+    "en": "Goodnight"
+   },
+   {
+    "ei": "script.water_garden",
+    "pl": "script",
+    "en": "Water garden"
+   },
+   {
+    "ei": "script.chime",
+    "pl": "script",
+    "en": "Chime"
+   },
+   {
+    "ei": "scene.movie_night",
+    "pl": "homeassistant",
+    "en": "Movie night"
+   },
+   {
+    "ei": "input_button.ring_doorbell",
+    "pl": "input_button",
+    "en": "Ring doorbell"
+   },
+   {
+    "ei": "button.reboot_hub",
+    "pl": "demo",
+    "en": "Hub Restart"
+   }
+  ]
+ }
+}

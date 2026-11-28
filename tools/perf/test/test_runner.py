@@ -645,6 +645,37 @@ class SurfaceFlingerNames(unittest.TestCase):
             self.assertIsNotNone(r.get("latency"), (t, r.get("updates_error")))
             self.assertIs(r["sf_valid"], True, t)               # scrolling from frames on screen, not rAF only
 
+    def test_vitro_on_android_15_and_later_reads_its_vri_layer(self):
+        # The Pixel Tablet's Android 17 (2026-11-26): Vitro's frames are on `VRI-<pkg>/<activity>#n`, not on the window's
+        # container `<hash> <pkg>/<activity>#n`. The runner took only the container, and the grade came out E (open,
+        # restart and live updates not measured on every page).
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SF_WRAPPED="1", FAKE_VITRO="true", GW_PERF_ENGINE="vitro")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertTrue(c["presents_mono_ms"])
+        with open(os.path.join(tmp, "state", "commands.log")) as f:
+            latency = {c for c in f.read().splitlines() if "--latency" in c}
+        self.assertTrue(any("--latency 'VRI-sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#158'" in c for c in latency), latency)
+        self.assertFalse(any("SurfaceView" in c for c in latency), latency)    # never GeckoView's, on Vitro
+        run = self.build(tmp)["graded"]["reference"]["per_run"][0]
+        self.assertIsNone(run["start_error"])
+        # Every graded view is there (Sourcery on #949: an empty `tiers` would pass the checks below), each measured.
+        with open(os.path.join(os.path.dirname(HERE), "page", "tiers.json")) as f:
+            self.assertEqual(sorted(run["tiers"]), sorted(json.load(f)["ORDER"]))
+        for t, r in run["tiers"].items():
+            self.assertIsNotNone(r.get("load_ms"), (t, r.get("load_error")))
+            self.assertIs(r["sf_valid"], True, t)
+
+    def test_vitro_on_android_15_and_later_checks_its_fallbacks_surfaceview(self):
+        # Greptile on #949: sfcheck's page is a web page, which Vitro shows in its GeckoView fallback, so the check reads
+        # the SurfaceView's BLAST layer (`<hash> SurfaceView[…](BLAST)#n`), not the VRI layer Vitro's own frames are on.
+        # With Vitro on, the Android 17 fake answered only the VRI layer, and the check read no frames.
+        p, out = sfcheck(tempfile.mkdtemp(), FAKE_SF_WRAPPED="1", FAKE_VITRO="true", GW_PERF_ENGINE="vitro")
+        self.assertEqual(p.returncode, 0, p.stderr[-800:])
+        self.assertIsNone(out["why"])
+        self.assertGreater(out["frames"], 0)
+        self.assertGreaterEqual(out["reach_ms"], P.SF_ONE_READ_MS)
+
     def test_a_listing_it_cant_read_is_said_once(self):
         tmp = tempfile.mkdtemp()
         p, c = refstart(tmp, FAKE_SF_UNNAMED="1")
@@ -2270,3 +2301,215 @@ class PaneRamRuns(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+FAKE_PKG = "sh.edm.s1kiosk"     # fake_adb's kiosk
+
+
+def vitro_run(tmp, *extra, **env_extra):
+    """run.sh against the fake panel drawing with Vitro (FAKE_VITRO: the kiosk's setting at the start)."""
+    env, state = fake_env(tmp, FAKE_HA_URL=f"http://127.0.0.1:{port(97)}", GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0",
+                          GW_PERF_BETWEEN_QUIET="0.5", **env_extra)
+    out = os.path.join(tmp, "out")
+    proc = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", out, "--port", port(97), "--taps", "2",
+                           *extra], env=env, capture_output=True, text=True, timeout=300)
+    with open(os.path.join(state, "commands.log")) as f:
+        commands = f.read().splitlines()
+    rep = None
+    if proc.returncode == 0:
+        with open(os.path.join(out, "report.json")) as f:
+            rep = json.load(f)
+    return proc, state, out, commands, rep
+
+
+class Vitro(unittest.TestCase):
+    """docs/perf.md, "Vitro": --engine vitro on a kiosk with Vitro off switches Settings → Labs → Vitro on for the run,
+    grades the native harness's lines (VitroClarity) as it grades the web harness's, reads the frames off the app's
+    window, and puts the setting back on exit. The cameras can't be measured the same way, so they're missing, under
+    the rules for any missing measurement: here (every other task premium) that leaves the letter open, provisional."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+        cls.proc, cls.state, cls.out, cls.commands, cls.rep = vitro_run(cls.tmp, "--engine", "vitro", FAKE_VITRO="false")
+
+    def test_run_succeeds(self):
+        self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
+
+    def test_the_setting_goes_on_for_the_run_and_back_after(self):
+        with open(os.path.join(self.state, "intents.json")) as f:
+            vitro = [i["vitro"] for i in json.load(f) if "vitro" in i]
+        self.assertEqual(vitro, ["true", "false"])
+        with open(os.path.join(self.state, "settings.json")) as f:
+            self.assertEqual(json.load(f)["vitro"], "false")
+        # Back last but for the hold: after the test dashboard ended, before the hold did.
+        i = max(k for k, c in enumerate(self.commands) if "--ez vitro false" in c)
+        self.assertLess(max(k for k, c in enumerate(self.commands) if "test_dashboard ''" in c), i)
+        self.assertLess(i, max(k for k, c in enumerate(self.commands) if "--ez test_hold false" in c))
+
+    def test_it_is_recorded_as_vitro(self):
+        self.assertEqual(self.rep["frame"]["device"]["engine"], "vitro")
+        self.assertEqual(self.rep["graded"]["reference"]["engine_uris"], ["vitro"])
+        with open(os.path.join(self.out, "report.md")) as f:
+            self.assertIn("measured on Vitro", f.read())
+
+    def test_the_frames_are_the_windows(self):
+        reads = [c for c in self.commands if "--latency" in c]
+        self.assertTrue(any(f"'{FAKE_PKG}/{FAKE_PKG}.MainActivity#0'" in c for c in reads))
+        # The SurfaceView only for the check page (GeckoView's fallback, sfcheck).
+        sfcheck_at = max(k for k, c in enumerate(self.commands) if "sfcheck.html" in c)
+        self.assertFalse(any("--latency 'SurfaceView" in c for c in self.commands[sfcheck_at + 30:]))
+
+    def test_every_task_but_the_cameras_is_graded(self):
+        ref = self.rep["graded"]["reference"]
+        self.assertEqual(ref["errors"], [])
+        self.assertGreater(ref["start_ms"]["median"], 0)
+        self.assertEqual(ref["restart_to"], "usable")
+        for t in ("light", "typical-nocam", "typical", "heavy"):
+            s_ = ref["tiers"][t]
+            for k in ("load_ms", "inp_ms", "blocking_ms"):
+                self.assertIsNotNone(s_[k], (t, k))
+            self.assertEqual(s_["updates_level"], "premium", t)
+            self.assertEqual(s_["scroll_sources"], ["surfaceflinger"], t)
+            self.assertEqual(len(s_["dialog_runs"]), 1, t)
+        g = self.rep["grade"]
+        self.assertEqual(sorted(g["missing"]), ["heavy.camera", "typical.camera"])
+        # Every other task premium: the cameras alone decide between A+ and C (typical without a camera is premium).
+        self.assertTrue(g["provisional"])
+        self.assertIn("typical, heavy: cameras not measured on Vitro (this build's cameras don't report to Clarity: it "
+                      "plays them over MJPEG, and the reference views' cameras are WebRTC)", g["provisional_reasons"])
+
+    def test_no_web_page_parts(self):
+        outs = os.listdir(self.out)
+        self.assertFalse([f for f in outs if f.startswith(("synthetic-", "coldstart-"))], outs)
+        self.assertIn("Vitro: skipping the animation test page", self.proc.stderr)
+
+    def test_the_summary_says_vitro_and_is_never_a_frames_published_grade(self):
+        s_ = summary.measurements(self.rep)
+        self.assertEqual(s_["engine"], "vitro")
+        with self.assertRaisesRegex(summary.Refused, "not the web engine's"):
+            summary.check_publishable(s_, os.path.join("frames", "aqara-s1-plus", "clarity", "clarity.json"))
+        summary.check_publishable(s_, os.path.join(self.tmp, "vitro-summary.json"))        # elsewhere: written
+        summary.check_publishable(dict(s_, engine="web"), "clarity.json")
+        summary.check_publishable({k: v for k, v in s_.items() if k != "engine"}, "clarity.json")
+
+
+class VitroCameras(unittest.TestCase):
+    """docs/perf.md, "Vitro": a build whose cameras report to Clarity (ClarityCameras) logs the camera line the web
+    harness logs, from each stream's own pictures, and the camera task is graded as on the web engine: with every task
+    measured the letter is firm, not provisional. Which kind each camera played is recorded and said."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+        cls.proc, cls.state, cls.out, cls.commands, cls.rep = vitro_run(
+            cls.tmp, "--engine", "vitro", "--skip-synthetic", "--skip-real-use", FAKE_VITRO="false",
+            FAKE_VITRO_CAMERAS="web_rtc")
+
+    def test_run_succeeds(self):
+        self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
+
+    def test_the_cameras_are_graded_and_the_grade_is_firm(self):
+        g = self.rep["grade"]
+        self.assertEqual(g["missing"], [])
+        self.assertFalse(g["provisional"], g.get("provisional_reasons"))
+        for t in ("typical", "heavy"):
+            s_ = self.rep["graded"]["reference"]["tiers"][t]
+            self.assertEqual(s_["camera_level"], "good", t)
+            (run,) = s_["camera_runs"]
+            self.assertEqual(run["path"], "web_rtc")
+            self.assertEqual(run["first_frame_ms"], 640.0)
+            self.assertEqual(run["uncovered_ms"], 0.0)
+            self.assertNotIn("stalls_reported", run)
+
+    def test_the_transport_is_recorded_and_said(self):
+        tiers = self.rep["graded"]["reference"]["tiers"]
+        self.assertEqual(tiers["typical"]["camera_runs"][0]["transports"], ["web_rtc"])
+        self.assertEqual(tiers["heavy"]["camera_runs"][0]["transports"], ["web_rtc"] * 4)
+        self.assertEqual(tiers["heavy"]["camera_runs"][0]["detail"][0]["gaps_source"], "vitro-frames (freeze rule)")
+        # The HLS copies play HLS, detail as on the web engine.
+        self.assertEqual(tiers["typical"]["camera_fallback"]["runs"][0]["transports"], ["hls"])
+        with open(os.path.join(self.out, "report.md")) as f:
+            md = f.read()
+        self.assertIn("typical cameras on Vitro: over WebRTC, 1 of 1 camera in 1 run.", md)
+        self.assertIn("heavy cameras on Vitro: over WebRTC, 4 of 4 cameras in 1 run.", md)
+        self.assertNotIn("fell back", md)
+
+
+class VitroCamerasFellBack(unittest.TestCase):
+    """A Vitro run whose cameras fell back to MJPEG (WebRTC never played): measured, as on the web engine a camera that
+    doesn't play over WebRTC is, so the camera task fails, and the report says plainly that they fell back."""
+
+    def test_the_fallback_fails_the_cameras_and_says_so(self):
+        tmp = tempfile.mkdtemp()
+        proc, state, out, commands, rep = vitro_run(tmp, "--engine", "vitro", "--skip-synthetic", "--skip-real-use",
+                                                    FAKE_VITRO="false", FAKE_VITRO_CAMERAS="mjpeg")
+        self.assertEqual(proc.returncode, 0, proc.stderr[-3000:])
+        g = rep["grade"]
+        self.assertEqual(g["missing"], [])
+        self.assertFalse(g["provisional"], g.get("provisional_reasons"))
+        tiers = rep["graded"]["reference"]["tiers"]
+        for t in ("typical", "heavy"):
+            self.assertEqual(tiers[t]["camera_level"], "slow", t)
+            self.assertEqual(tiers[t]["camera_runs"][0]["fell_back"], ["mjpeg"])
+        # Typical without a camera is premium; with one, the fallback holds it at C.
+        self.assertEqual(g["grade"], "C")
+        with open(os.path.join(out, "report.md")) as f:
+            md = f.read()
+        self.assertIn("typical cameras on Vitro: over WebRTC, 0 of 1 camera in 1 run; **fell back to MJPEG, 1 of 1 camera "
+                      "in 1 run**, graded on WebRTC as on the web engine (web_rtc: no answer to the offer).", md)
+        self.assertIn("a camera fell back to MJPEG on Vitro (it never played over WebRTC)", md)
+
+
+class VitroAlreadyOn(unittest.TestCase):
+    """A kiosk already on Vitro, with no --engine: the run grades Vitro (the engine the kiosk said with the hold) and
+    changes no setting."""
+
+    def test_it_grades_vitro_and_switches_nothing(self):
+        tmp = tempfile.mkdtemp()
+        proc, state, out, commands, rep = vitro_run(tmp, "--skip-synthetic", "--skip-real-use", FAKE_VITRO="true")
+        self.assertEqual(proc.returncode, 0, proc.stderr[-3000:])
+        self.assertFalse([c for c in commands if "--ez vitro" in c])
+        self.assertEqual(rep["frame"]["device"]["engine"], "vitro")
+
+
+class VitroSwitchFails(unittest.TestCase):
+    """The kiosk saves vitro=true but never says it runs Vitro (FAKE_VITRO_STUCK): the run stops, and the setting is put
+    back all the same, from what the hold said before anything was sent."""
+
+    def test_the_setting_goes_back_after_a_failed_switch(self):
+        tmp = tempfile.mkdtemp()
+        proc, state, out, commands, rep = vitro_run(tmp, "--engine", "vitro", "--skip-synthetic", "--skip-real-use",
+                                                    FAKE_VITRO="false", FAKE_VITRO_STUCK="1")
+        self.assertEqual(proc.returncode, 2, proc.stderr[-3000:])
+        self.assertIn("didn't switch to vitro", proc.stderr)
+        with open(os.path.join(state, "intents.json")) as f:
+            self.assertEqual([i["vitro"] for i in json.load(f) if "vitro" in i], ["true", "false"])
+        with open(os.path.join(state, "settings.json")) as f:
+            self.assertEqual(json.load(f)["vitro"], "false")
+
+
+class VitroRestoreFails(unittest.TestCase):
+    """The setting can't be put back after the run (FAKE_VITRO_NO_RESTORE): the run says how to, and fails (exit 3), as
+    when the dashboard can't be put back."""
+
+    def test_a_setting_left_changed_fails_the_run(self):
+        tmp = tempfile.mkdtemp()
+        proc, state, out, commands, rep = vitro_run(tmp, "--engine", "vitro", "--skip-synthetic", "--skip-real-use",
+                                                    "--skip-reference", FAKE_VITRO="false", FAKE_VITRO_NO_RESTORE="1")
+        self.assertEqual(proc.returncode, 3, proc.stderr[-3000:])
+        self.assertIn("COULD NOT put Vitro back", proc.stderr)
+        self.assertIn("--ez vitro false", proc.stderr)
+
+
+class EngineNotSaid(unittest.TestCase):
+    """A kiosk that doesn't say its engine: --engine vitro is refused before anything changes; without --engine the run
+    is the web engine's, as before."""
+
+    def test_vitro_is_refused(self):
+        tmp = tempfile.mkdtemp()
+        proc, state, out, commands, rep = vitro_run(tmp, "--engine", "vitro", "--skip-synthetic", "--skip-real-use",
+                                                    FAKE_NO_ENGINE_LINE="1")
+        self.assertEqual(proc.returncode, 2, proc.stderr[-3000:])
+        self.assertIn("didn't switch to vitro", proc.stderr)
+        self.assertFalse([c for c in commands if "--ez vitro" in c])

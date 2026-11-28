@@ -33,8 +33,12 @@ class LicencesTest {
             "LGPL-2.1-or-later" to "LGPL-2.1", "GCC-exception-3.1" to "GCC-exception-3.1",
             "LicenseRef-Silabs-MSLA" to "LicenseRef-Silabs-MSLA",
             "OFL-1.1" to "OFL-1.1",
-            // desugar_jdk_libs, in the generic app's legacy APK (#198).
+            // desugar_jdk_libs, in the generic app's legacy APK (#198) and the legacy and Vitro debug test apps.
             "GPL-2.0-only WITH Classpath-exception-2.0" to "GPL-2.0", "Classpath-exception-2.0" to "Classpath-exception-2.0",
+            // libwebrtc's bundled libc++ and its smaller notices (libs/ha-webrtc, in both apps).
+            "Apache-2.0 WITH LLVM-exception" to "LLVM-exception", "LicenseRef-libwebrtc-notices" to "LicenseRef-libwebrtc-notices",
+            // Vitro's locale tables: Unicode CLDR data, in both APKs.
+            "Unicode-3.0" to "Unicode-3.0",
         )
         for ((id, file) in needed) {
             assertTrue("notices should name $id", id in notices)

@@ -1,0 +1,31 @@
+{
+ "title": "Mushroom select card: an input select",
+ "card": {
+  "type": "custom:mushroom-select-card",
+  "entity": "input_select.blind_position"
+ },
+ "fixture": {
+  "states": {
+   "input_select.blind_position": {
+    "state": "open",
+    "last_changed": "-239m",
+    "attributes": {
+     "options": [
+      "open",
+      "closed"
+     ],
+     "editable": true,
+     "icon": "mdi:blinds",
+     "friendly_name": "Blind Position"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "input_select.blind_position",
+    "pl": "input_select",
+    "en": "Blind Position"
+   }
+  ]
+ }
+}

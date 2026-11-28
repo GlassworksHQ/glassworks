@@ -1,0 +1,47 @@
+{
+ "title": "Thermostat: a water heater, eco",
+ "card": {
+  "type": "thermostat",
+  "entity": "water_heater.boiler"
+ },
+ "fixture": {
+  "states": {
+   "water_heater.boiler": {
+    "state": "eco",
+    "last_changed": "-45m",
+    "attributes": {
+     "min_temp": 43.3,
+     "max_temp": 60,
+     "operation_list": [
+      "eco",
+      "electric",
+      "performance",
+      "off"
+     ],
+     "current_temperature": 48,
+     "temperature": 50,
+     "target_temp_high": null,
+     "target_temp_low": null,
+     "operation_mode": "eco",
+     "away_mode": "off",
+     "friendly_name": "Boiler",
+     "supported_features": 15
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "water_heater.boiler",
+    "pl": "demo",
+    "di": "dev-boiler",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-boiler",
+    "name": "Boiler"
+   }
+  ]
+ }
+}

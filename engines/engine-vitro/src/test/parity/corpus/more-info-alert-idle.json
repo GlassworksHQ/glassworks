@@ -1,0 +1,82 @@
+{
+ "title": "More Info of an idle alert: its state row's state text (Idle), then the timeline and the Activity section of an acknowledged alert",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "alert.garage_open"
+ },
+ "more_info": "alert.garage_open",
+ "expect": {
+  "alert.garage_open": "idle"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "alert.garage_open": {
+    "state": "idle",
+    "last_changed": -10800,
+    "attributes": {
+     "friendly_name": "Garage left open"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alert.garage_open",
+    "pl": "alert",
+    "en": "Garage left open"
+   }
+  ],
+  "history": {
+   "alert.garage_open": {
+    "steps": [
+     [
+      "-30h",
+      "idle"
+     ],
+     [
+      "-5h",
+      "on"
+     ],
+     [
+      "-4h",
+      "off"
+     ],
+     [
+      "-3h",
+      "idle"
+     ]
+    ]
+   }
+  },
+  "logbook": [
+   {
+    "entity_id": "alert.garage_open",
+    "state": "on",
+    "when": "-5h"
+   },
+   {
+    "entity_id": "alert.garage_open",
+    "state": "off",
+    "when": "-4h"
+   },
+   {
+    "entity_id": "alert.garage_open",
+    "state": "idle",
+    "when": "-3h"
+   }
+  ]
+ }
+}

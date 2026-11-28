@@ -1,0 +1,30 @@
+{
+ "title": "Glance: a timestamp sensor and an uptime",
+ "card": {
+  "type": "glance",
+  "entities": [
+   "sensor.next_sunrise",
+   "sensor.router_uptime"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "sensor.next_sunrise": {
+    "state": "@+3h",
+    "last_changed": "-5h",
+    "attributes": {
+     "device_class": "timestamp",
+     "friendly_name": "Next sunrise"
+    }
+   },
+   "sensor.router_uptime": {
+    "state": "@-3d",
+    "last_changed": "-3d",
+    "attributes": {
+     "device_class": "uptime",
+     "friendly_name": "Router uptime"
+    }
+   }
+  }
+ }
+}

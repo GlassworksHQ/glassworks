@@ -1,0 +1,12 @@
+{
+ "title": "Clock: large, 24-hour",
+ "card": {
+  "type": "clock",
+  "clock_size": "large",
+  "time_format": "24"
+ },
+ "fixture": {
+  "states": {},
+  "entities": []
+ }
+}

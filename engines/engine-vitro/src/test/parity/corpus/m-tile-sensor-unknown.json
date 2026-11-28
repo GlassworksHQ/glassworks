@@ -1,0 +1,44 @@
+{
+ "title": "tile: sensor unknown (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "sensor.sensor_unknown": "unknown"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "sensor.sensor_unknown"
+ },
+ "fixture": {
+  "states": {
+   "sensor.sensor_unknown": {
+    "state": "unknown",
+    "last_changed": "-2m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.sensor_unknown",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device",
+    "dp": 1
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room",
+    "name": "Living Room"
+   }
+  ]
+ }
+}

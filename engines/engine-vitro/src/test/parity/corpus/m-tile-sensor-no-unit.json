@@ -1,0 +1,40 @@
+{
+ "title": "tile: sensor no-unit (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "sensor.sensor_no_unit": "Washing"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "sensor.sensor_no_unit"
+ },
+ "fixture": {
+  "states": {
+   "sensor.sensor_no_unit": {
+    "state": "Washing",
+    "last_changed": "-15m",
+    "attributes": {
+     "friendly_name": "Living Room Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.sensor_no_unit",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room",
+    "name": "Living Room"
+   }
+  ]
+ }
+}

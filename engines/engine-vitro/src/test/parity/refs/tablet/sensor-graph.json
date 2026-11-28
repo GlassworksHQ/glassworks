@@ -1,0 +1,347 @@
+{
+ "case": "sensor-graph",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-sensor-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Pressure",
+   "x": 17,
+   "y": 19,
+   "w": 63.77,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "1,017",
+   "x": 17,
+   "y": 45,
+   "w": 68.39,
+   "h": 33,
+   "size": 28,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "hPa",
+   "x": 89.39,
+   "y": 56,
+   "w": 27.53,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.living_room_pressure": {
+   "s": "1017.0",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "hPa",
+    "device_class": "atmospheric_pressure",
+    "friendly_name": "Living Room Sensor Pressure"
+   },
+   "lc": 1794497400,
+   "lu": 1794497400
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.living_room_pressure",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-1",
+    "en": "Pressure"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Living Room Sensor"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "atmospheric_pressure": {
+      "default": "mdi:thermometer-lines"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "history/stream",
+    "entity_ids": [
+     "sensor.living_room_pressure"
+    ],
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "minimal_response": true,
+    "significant_changes_only": true,
+    "no_attributes": true
+   },
+   "events": [
+    {
+     "states": {
+      "sensor.living_room_pressure": [
+       {
+        "s": "1014.0",
+        "lu": 1794413280
+       },
+       {
+        "s": "1013.0",
+        "lu": 1794413400
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794414600
+       },
+       {
+        "s": "1013.0",
+        "lu": 1794415200
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794418200
+       },
+       {
+        "s": "1013.0",
+        "lu": 1794418800
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794420600
+       },
+       {
+        "s": "1015.0",
+        "lu": 1794422400
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794423000
+       },
+       {
+        "s": "1015.0",
+        "lu": 1794424800
+       },
+       {
+        "s": "1016.0",
+        "lu": 1794429600
+       },
+       {
+        "s": "1017.0",
+        "lu": 1794433800
+       },
+       {
+        "s": "1018.0",
+        "lu": 1794436800
+       },
+       {
+        "s": "1019.0",
+        "lu": 1794443400
+       },
+       {
+        "s": "1018.0",
+        "lu": 1794444000
+       },
+       {
+        "s": "1019.0",
+        "lu": 1794444600
+       },
+       {
+        "s": "1018.0",
+        "lu": 1794445200
+       },
+       {
+        "s": "1019.0",
+        "lu": 1794445800
+       },
+       {
+        "s": "1018.0",
+        "lu": 1794446400
+       },
+       {
+        "s": "1019.0",
+        "lu": 1794447000
+       },
+       {
+        "s": "1018.0",
+        "lu": 1794448200
+       },
+       {
+        "s": "1019.0",
+        "lu": 1794448800
+       },
+       {
+        "s": "1018.0",
+        "lu": 1794449400
+       },
+       {
+        "s": "1019.0",
+        "lu": 1794451200
+       },
+       {
+        "s": "1018.0",
+        "lu": 1794451800
+       },
+       {
+        "s": "1017.0",
+        "lu": 1794455400
+       },
+       {
+        "s": "1016.0",
+        "lu": 1794460800
+       },
+       {
+        "s": "1015.0",
+        "lu": 1794465000
+       },
+       {
+        "s": "1016.0",
+        "lu": 1794465600
+       },
+       {
+        "s": "1015.0",
+        "lu": 1794466800
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794469200
+       },
+       {
+        "s": "1015.0",
+        "lu": 1794469800
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794471600
+       },
+       {
+        "s": "1013.0",
+        "lu": 1794474600
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794475800
+       },
+       {
+        "s": "1013.0",
+        "lu": 1794477000
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794477600
+       },
+       {
+        "s": "1013.0",
+        "lu": 1794479400
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794480000
+       },
+       {
+        "s": "1013.0",
+        "lu": 1794480600
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794481200
+       },
+       {
+        "s": "1013.0",
+        "lu": 1794482400
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794483600
+       },
+       {
+        "s": "1015.0",
+        "lu": 1794487800
+       },
+       {
+        "s": "1014.0",
+        "lu": 1794488400
+       },
+       {
+        "s": "1015.0",
+        "lu": 1794489600
+       },
+       {
+        "s": "1016.0",
+        "lu": 1794493800
+       },
+       {
+        "s": "1017.0",
+        "lu": 1794497400
+       }
+      ]
+     },
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  }
+ ]
+}

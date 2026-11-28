@@ -345,10 +345,22 @@ def camera_run(line, tier):
     # graders hold the fluid total bar against stalls + that (grade.camera_level).
     left_out = [max(0.0, window - s["span_ms"]) for s in played if s.get("span_ms") is not None and window]
     whole = len(played) == len(streams) and len(streams) >= (line.get("expected") or 0)
+    path = line.get("path") or "hls"
+    # Vitro (VitroClarity): the kind each camera showed at the window's end (web_rtc, hls or mjpeg; null: nothing). The
+    # web harness's lines don't say: its streams are the view's path's by definition. A camera fell back when another
+    # kind was what it showed while the view's path wasn't: the kind showing at the window's end, or, for a camera that
+    # never played on its path, any other kind that showed a picture (an MJPEG fallback that stopped before the end).
+    # Not the hidden player HA's side-by-side start runs beside it (HLS until WebRTC has video): once the path played,
+    # that one was replaced, not fallen back to. One entry per camera (`fallbacks`, beside `transports`).
+    shown_on = [s.get("transport") for s in streams] if any("transport" in s for s in streams) else None
+    fallbacks = [camera_fallback(s, path) for s in streams] if shown_on is not None else None
+    fell_back = sorted({k for k in fallbacks or [] if k})
     return {
         # The path the frontend played the graded streams on: web_rtc since protocol 6, hls before
         # (protocol 5's lines don't say; HLS was the only path then).
-        "path": line.get("path") or "hls",
+        "path": path,
+        **({"transports": shown_on, "fallbacks": fallbacks} if shown_on is not None else {}),
+        **({"fell_back": fell_back} if fell_back else {}),
         "first_frame_ms": max(s["first_frame_ms"] for s in played) if whole and played else None,
         "shown_pct": min(s["shown_pct"] for s in played) if whole and played else None,
         # A stream whose stalls or gaps are n/a (above) makes the run's n/a too, not 0, and its camera
@@ -361,12 +373,26 @@ def camera_run(line, tier):
         "streams": len(streams), "expected": line.get("expected"), "window_ms": line.get("window_ms"),
         "detail": [{k: s.get(k) for k in ("w", "h", "first_frame_ms", "shown_pct", "max_gap_ms", "stall_total_ms", "stall_presented",
                                             "frames", "decoded", "dropped", "waiting", "source", "webrtc", "others",
-                                            "gaps_source", "callback_gaps", "span_ms", "stalls_at")}
+                                            "gaps_source", "callback_gaps", "span_ms", "stalls_at",
+                                            "transport", "errors", "freezes")}
                    for s in streams],
         # Detail, not graded: the streams' HLS fetches in the window (stats.js hlsFetches), and the
         # decoders the view got (reference_run adds `media`, from logcat).
         "fetches": line.get("fetches"),
     }
+
+
+def camera_fallback(stream, path):
+    """The kind a Vitro camera fell back to (camera_run's `fallbacks`), or None: the kind it showed at the window's end
+    when that isn't its view's path; else, when it never played on its path, the other kind that showed a picture."""
+    showing = stream.get("transport")
+    if showing and showing != path:
+        return showing
+    if stream.get("first_frame_ms") is None:
+        other = sorted(o["path"] for o in stream.get("others") or []
+                       if o.get("path") and o["path"] != path and o.get("first_frame_ms") is not None)
+        return " and ".join(other) or None
+    return None
 
 
 def camera_fallback_runs(c):
@@ -1034,7 +1060,10 @@ def task_phrase(task, s_):
         gone = sum(1 for r in runs if r.get("lost"))
         ff = [r["first_frame_ms"] for r in runs if r.get("first_frame_ms") is not None]
         if not ff:
-            return f"the page was lost in {gone} of {len(runs)} run(s)" if gone == len(runs) else "a camera never showed a frame"
+            if gone == len(runs):
+                return f"the page was lost in {gone} of {len(runs)} run(s)"
+            fb = fell_back_words(runs)
+            return f"a camera fell back to {fb} on Vitro (it never played over {path_word(runs)})" if fb else "a camera never showed a frame"
         shown = statistics.median(r["shown_pct"] for r in runs if r.get("shown_pct") is not None)
         failed = len(runs) - len(ff) - gone
         na = sum(1 for r in runs if r.get("stalls_reported") is False)
@@ -1622,6 +1651,17 @@ def grade_part(device, refs, attempted, fake_log, transport_of, net_of):
     unmeasured = []
     settled = grade["missing"] if "missing_settled_by" in grade else ()
     reasons += coverage_reasons(ref, attempted, touch, settled, unmeasured)
+    if device.get("engine") == "vitro" and ref:
+        # A Vitro build whose cameras don't report to Clarity (before ClarityCameras) logs no camera line: it played a
+        # camera over MJPEG only, and the reference views' cameras are WebRTC, so the task is missing, under the rules for
+        # any missing measurement (docs/perf.md, "Vitro"). Said here, as a reason when it could change the letter, and as
+        # unmeasured when it can't. A build whose cameras report is measured as the web engine is: nothing to say here.
+        cams = [t for t in G.CAMERA_PAGES if f"{t}.camera" in grade["missing"]
+                and not any("path" in r for r in (ref["tiers"].get(t) or {}).get("camera_runs") or [])]
+        if cams:
+            why = (f"{', '.join(cams)}: cameras not measured on Vitro (this build's cameras don't report to Clarity: it "
+                   "plays them over MJPEG, and the reference views' cameras are WebRTC)")
+            (unmeasured if all(f"{t}.camera" in settled for t in cams) else reasons).append(why)
     if unmeasured:
         # Why a measurement is missing that can't change the letter: kept, and said, but not a reason for provisional.
         grade["unmeasured"] = unmeasured
@@ -1901,8 +1941,74 @@ def device_line(dev, app):
     parts = [" ".join(x for x in (dev.get("manufacturer"), dev.get("model")) if x),
              dev.get("android") and f"Android {dev['android']} (API {dev.get('api')})", dev.get("abi"),
              cpu.get("cores") and f"{cpu['cores']} cores", dev.get("mem_total_kb") and f"{round(dev['mem_total_kb'] / 1024)} MB RAM",
-             app.get("version_name") and f"app {app['version_name']}", app.get("geckoview") and f"GeckoView {app['geckoview']}"]
+             app.get("version_name") and f"app {app['version_name']}", app.get("geckoview") and f"GeckoView {app['geckoview']}",
+             dev.get("engine") == "vitro" and "measured on Vitro (Settings → Labs)"]
     return ", ".join(p for p in parts if p) + "."
+
+
+# The camera kinds in report.md's words (the page lines' path names, and Vitro's MJPEG).
+KIND_WORDS = {"web_rtc": "WebRTC", "hls": "HLS", "mjpeg": "MJPEG"}
+
+
+def fell_back_words(runs):
+    """What the cameras of these runs fell back to on Vitro (camera_run `fell_back`), in words ("MJPEG"), or ""."""
+    return " and ".join(KIND_WORDS.get(k, k) for k in sorted({k for r in runs for k in r.get("fell_back") or []}))
+
+
+def path_word(runs):
+    """The path the runs' cameras are graded on, in words."""
+    paths = sorted({r.get("path") for r in runs if r.get("path")})
+    return " and ".join(KIND_WORDS.get(p, p) for p in paths) or "its path"
+
+
+def stored_fallbacks(r):
+    """A Vitro camera run's `fallbacks`, one per camera. A run stored before the field (a report.json regrade.py reads
+    again) gets them from its `detail` by the same rule (camera_fallback reads `transport`, `first_frame_ms` and `others`,
+    which detail keeps), so it reads as it did."""
+    if r.get("fallbacks") is not None:
+        return r["fallbacks"]
+    detail = r.get("detail") or []
+    return [camera_fallback(detail[i], r.get("path")) if i < len(detail) else None for i in range(len(r["transports"]))]
+
+
+def per_camera(counts, totals):
+    """How many cameras of each run, in words: "3 of 4 cameras in each of 3 runs", or run by run when they differ
+    ("3 of 4, 4 of 4 and 3 of 4 cameras in runs 1 to 3")."""
+    n = len(counts)
+    noun = "camera" if max(totals) == 1 else "cameras"
+    if len(set(zip(counts, totals))) == 1:
+        return f"{counts[0]} of {totals[0]} {noun} in {'each of ' if n > 1 else ''}{n} run{'s' if n > 1 else ''}"
+    parts = [f"{c} of {t}" for c, t in zip(counts, totals)]
+    return f"{', '.join(parts[:-1])} and {parts[-1]} {noun} in runs 1 to {n}"
+
+
+def camera_transports(ref):
+    """report.md (Vitro): what each camera page's cameras played over, camera by camera, and plainly when they fell back
+    to another kind (an MJPEG fallback): a camera graded on WebRTC that showed something else instead fails the task, as
+    on the web engine a camera that doesn't play over WebRTC does. Web runs don't say (their streams are the path's):
+    nothing."""
+    out = []
+    for t, s_ in ref["tiers"].items():
+        runs = [r for r in s_.get("camera_runs") or [] if r.get("transports") is not None]
+        if not runs:
+            continue
+        path = path_word(runs)
+        totals = [len(r["transports"]) for r in runs]
+        fbs = [stored_fallbacks(r) for r in runs]
+        on = [sum(1 for x in r["transports"] if x == r.get("path")) for r in runs]
+        fell = [sum(1 for k in f if k) for f in fbs]
+        blank = [sum(1 for x, k in zip(r["transports"], f) if x is None and not k) for r, f in zip(runs, fbs)]
+        errors = sorted({e for r, f in zip(runs, fbs) for s, k in zip(r.get("detail") or [], f) if k
+                         for e in s.get("errors") or []})
+        line = f"{t} cameras on Vitro: over {path}, {per_camera(on, totals)}"
+        if any(fell):
+            kinds = " and ".join(KIND_WORDS.get(k, k) for k in sorted({k for f in fbs for k in f if k}))
+            line += (f"; **fell back to {kinds}, {per_camera(fell, totals)}**, graded on {path} as on the web engine"
+                     + (f" ({'; '.join(errors[:3])})" if errors else ""))
+        if any(blank):
+            line += f"; showing nothing at the window's end, {per_camera(blank, totals)}"
+        out.append(line + ".")
+    return out
 
 
 def camera_detail(ref):
@@ -2214,6 +2320,7 @@ def markdown(rep):
             out.append(f"The fake Home Assistant sent a live change {detail_late:.0f} ms late during a view that isn't "
                        "graded (an HLS copy or a warm-up; detail: this computer was busy then).")
         out += transport_line(rep)
+        out += camera_transports(ref)
         out += network_line(rep)
         out += camera_detail(ref)
         out += dialog_detail(ref)

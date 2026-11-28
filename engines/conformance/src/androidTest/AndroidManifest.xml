@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The engine contract's test app (docs/engine-contract.md): an activity a page opens in, and the network the fake
+     Home Assistant on the device's loopback needs. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <application android:usesCleartextTraffic="true">
+        <activity
+            android:name="dev.glassworks.engine.conformance.HostActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|navigation" />
+    </application>
+</manifest>

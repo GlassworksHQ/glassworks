@@ -29,6 +29,12 @@ internal class Microphone(
     private val onReadFailed: (Int) -> Unit = { onError("Microphone read error $it") },
     /** Makes a recorder for an audio source with this buffer size in bytes. Tests count the calls. */
     private val newRecorder: (source: Int, bufBytes: Int) -> AudioRecord = ::recorder,
+    /**
+     * [onFrame] is done with a frame when it returns (it copies what it keeps): the next read fills the same array
+     * instead of a new one, 12.5 times a second for as long as the microphone is open. False: each frame is new, for
+     * a consumer that keeps it.
+     */
+    private val reuseFrame: Boolean = false,
 ) {
     companion object {
         const val RATE = 16_000
@@ -127,7 +133,8 @@ internal class Microphone(
             } catch (e: Exception) {
                 VoiceLog.w("mic frame handler failed", e)
             }
-            frame = ShortArray(frameSamples) // the consumer may keep the previous one
+            // A consumer that keeps frames gets a new one each time; one that copies (reuseFrame) gets the same array.
+            if (!reuseFrame) frame = ShortArray(frameSamples)
             filled = 0
         }
     }

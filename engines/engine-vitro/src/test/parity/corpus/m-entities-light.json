@@ -1,0 +1,267 @@
+{
+ "title": "entities: every light state (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "light.light_on_dimmed": "on",
+  "light.light_on_low": "on",
+  "light.light_on_full": "on",
+  "light.light_on_color": "on",
+  "light.light_on_ct": "on",
+  "light.light_on_onoff": "on",
+  "light.light_off": "off",
+  "light.light_unavailable": "unavailable",
+  "light.light_long_name": "on"
+ },
+ "card": {
+  "type": "entities",
+  "entities": [
+   "light.light_on_dimmed",
+   "light.light_on_low",
+   "light.light_on_full",
+   "light.light_on_color",
+   "light.light_on_ct",
+   "light.light_on_onoff",
+   "light.light_off",
+   "light.light_unavailable",
+   "light.light_long_name"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.light_on_dimmed": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 40,
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_on_low": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 40,
+     "color_mode": "brightness",
+     "brightness": 13,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_on_full": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 40,
+     "color_mode": "brightness",
+     "brightness": 255,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_on_color": {
+    "state": "on",
+    "last_changed": "-12m",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "color_mode": "hs",
+     "brightness": 204,
+     "hs_color": [
+      24.0,
+      84.0
+     ],
+     "rgb_color": [
+      255,
+      129,
+      40
+     ],
+     "xy_color": [
+      0.594,
+      0.371
+     ],
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_on_ct": {
+    "state": "on",
+    "last_changed": "-50m",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "color_mode": "color_temp",
+     "brightness": 128,
+     "color_temp_kelvin": 2702,
+     "color_temp": 370,
+     "hs_color": [
+      28.874,
+      72.522
+     ],
+     "rgb_color": [
+      255,
+      167,
+      70
+     ],
+     "xy_color": [
+      0.536,
+      0.389
+     ],
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_on_onoff": {
+    "state": "on",
+    "last_changed": "-285m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": "onoff",
+     "supported_features": 0,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_off": {
+    "state": "off",
+    "last_changed": "-3h",
+    "attributes": {
+     "supported_color_modes": [
+      "color_temp",
+      "hs"
+     ],
+     "min_color_temp_kelvin": 2000,
+     "max_color_temp_kelvin": 6535,
+     "min_mireds": 153,
+     "max_mireds": 500,
+     "supported_features": 40,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "restored": true,
+     "supported_features": 40,
+     "friendly_name": "Kitchen Pendant"
+    }
+   },
+   "light.light_long_name": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 40,
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Upstairs Guest Bedroom Reading Nook Ceiling Light Over The Desk"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.light_on_dimmed",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_low",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_full",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_color",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_ct",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_onoff",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_off",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_unavailable",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_long_name",
+    "pl": "demo",
+    "di": "dev-upstairs-guest-bedroom-reading-nook",
+    "en": "Ceiling Light Over The Desk",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   },
+   {
+    "id": "dev-upstairs-guest-bedroom-reading-nook",
+    "name": "Upstairs Guest Bedroom Reading Nook"
+   }
+  ]
+ }
+}

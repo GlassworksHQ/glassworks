@@ -118,8 +118,41 @@ open class PlatformApi(
     /** `Settings.Panel` (the Wi-Fi sheet over the app) exists (Android 10). */
     val hasSettingsPanel: Boolean get() = apiLevel >= 29
 
+    /** A drawable's rounded outline can be read back: `Outline.getRadius` (and `GradientDrawable`'s getters) exist (Android 7). */
+    val hasGradientDrawableGetters: Boolean get() = apiLevel >= 24
+
+    /** `TextView.setFallbackLineSpacing` exists, so text can keep CSS line boxes exact (Android 9). */
+    val hasFallbackLineSpacing: Boolean get() = apiLevel >= 28
+
     /** `Font.Builder` can load a variable font from memory (Android 10). */
     val hasFontBuilder: Boolean get() = apiLevel >= 29
+
+    /**
+     * `Typeface.Builder` can open a font file at a variation (`'wght' 500`) (Android 8). Below it, a variable font
+     * loads at its default instance only, and other weights are the nearest static face or a synthesized bold.
+     */
+    val hasTypefaceBuilder: Boolean get() = apiLevel >= 26
+
+    /**
+     * A clickable view takes keyboard focus by itself (`View.FOCUSABLE_AUTO`, Android 8), and `View.getFocusable`
+     * exists. Below it, a control must be made focusable for keys to reach it.
+     */
+    val hasFocusableAuto: Boolean get() = apiLevel >= 26
+
+    /**
+     * Hardware drawing tells each parent which view below it changed (`ViewParent.onDescendantInvalidated`,
+     * Android 8). Below it, the change climbs through `invalidateChildInParent` instead.
+     */
+    val hasDescendantInvalidated: Boolean get() = apiLevel >= 26
+
+    /** `View.setAccessibilityPaneTitle`, which TalkBack announces a sheet by, exists (Android 9). */
+    val hasAccessibilityPaneTitle: Boolean get() = apiLevel >= 28
+
+    /**
+     * `AccessibilityNodeInfo.setStateDescription` exists (Android 11): a slider can tell TalkBack what its value reads
+     * as (`2,700 K`). Below it, TalkBack reads a slider's value as a percentage of its range.
+     */
+    val hasStateDescription: Boolean get() = apiLevel >= 30
 
     /** `WindowInsetsController` and `setDecorFitsSystemWindows` exist (Android 11). */
     val hasWindowInsetsController: Boolean get() = apiLevel >= 30
@@ -167,6 +200,9 @@ open class PlatformApi(
 
     /** `ActivityManager.getHistoricalProcessExitReasons` exists (Android 11). Below it, the reason a process ended is not kept. */
     val hasApplicationExitInfo: Boolean get() = apiLevel >= 30
+
+    /** `Settings.Global.BOOT_COUNT` exists (Android 7): one boot told from the next. Below it, [bootCount] is null. */
+    val hasBootCount: Boolean get() = apiLevel >= 24
 
     /**
      * How an ordinary app opens a Wi-Fi hotspot for setup (#197). From Android 8, the public
@@ -260,6 +296,34 @@ open class PlatformApi(
         return am.getHistoricalProcessExitReasons(context.packageName, 0, 0)
             .firstOrNull { it.processName == processName }?.reason
     }
+
+    /** How one of this app's processes ended, as Android kept it ([processExit]). */
+    class ProcessExit(
+        /** An `ApplicationExitInfo.REASON_*` value. */
+        val reason: Int,
+        /** Android's own words for it (the signal, the ANR's subject), if any. */
+        val description: String?,
+        /** When it ended, ms since the epoch. */
+        val atWallMs: Long,
+    )
+
+    /**
+     * How this app's process [pid] ended: null when the platform keeps no reasons ([hasApplicationExitInfo]) or has
+     * none for that process. Never throws.
+     */
+    fun processExit(context: Context, pid: Int): ProcessExit? {
+        if (!hasApplicationExitInfo) return null
+        return runCatching {
+            context.getSystemService(ActivityManager::class.java)
+                ?.getHistoricalProcessExitReasons(context.packageName, pid, 1)?.firstOrNull { it.pid == pid }
+                ?.let { ProcessExit(it.reason, it.description, it.timestamp) }
+        }.getOrNull()
+    }
+
+    /** How many times this device has booted ([hasBootCount]); null below Android 7, or where the device doesn't say. */
+    fun bootCount(context: Context): Int? =
+        if (!hasBootCount) null
+        else runCatching { Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT) }.getOrNull()
 
     /**
      * The Wi-Fi link's details: from the network's capabilities from Android 12, where `getConnectionInfo`

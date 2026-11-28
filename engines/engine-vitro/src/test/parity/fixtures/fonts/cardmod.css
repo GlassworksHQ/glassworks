@@ -1,0 +1,9 @@
+/* Vitro parity fixture (#811): Pacifico (SIL OFL 1.1, subset to Latin), one static face, for a card-mod
+   `font-family` on a card. The browser takes the WOFF2, Vitro the TrueType next to it. */
+@font-face {
+  font-family: "Pacifico";
+  src: url("pacifico.woff2") format("woff2"), url("pacifico.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

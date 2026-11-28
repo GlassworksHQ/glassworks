@@ -1,0 +1,128 @@
+{
+ "title": "Entities: number rows, as a slider (input_number, number in auto mode) and as a box",
+ "card": {
+  "type": "entities",
+  "entities": [
+   "input_number.speaker_volume",
+   "number.fan_speed",
+   "input_number.away_target",
+   "number.boiler_offset",
+   "input_number.counter_limit",
+   "number.calibration"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "input_number.speaker_volume": {
+    "state": "35.0",
+    "last_changed": "-20m",
+    "attributes": {
+     "initial": null,
+     "editable": true,
+     "min": 0,
+     "max": 100,
+     "step": 1,
+     "mode": "slider",
+     "icon": "mdi:volume-high",
+     "friendly_name": "Speaker volume"
+    }
+   },
+   "number.fan_speed": {
+    "state": "3",
+    "last_changed": "-50m",
+    "attributes": {
+     "min": 1,
+     "max": 5,
+     "step": 1,
+     "mode": "auto",
+     "friendly_name": "Ceiling fan Speed"
+    }
+   },
+   "input_number.away_target": {
+    "state": "16.5",
+    "last_changed": "-300m",
+    "attributes": {
+     "initial": null,
+     "editable": true,
+     "min": 10,
+     "max": 25,
+     "step": 0.5,
+     "mode": "box",
+     "unit_of_measurement": "°C",
+     "icon": "mdi:thermometer-low",
+     "friendly_name": "Away target"
+    }
+   },
+   "number.boiler_offset": {
+    "state": "15",
+    "last_changed": "-90m",
+    "attributes": {
+     "min": 0,
+     "max": 120,
+     "step": 5,
+     "mode": "box",
+     "unit_of_measurement": "min",
+     "friendly_name": "Boiler Offset"
+    }
+   },
+   "input_number.counter_limit": {
+    "state": "250.0",
+    "last_changed": "-60m",
+    "attributes": {
+     "initial": null,
+     "editable": true,
+     "min": 0,
+     "max": 1000,
+     "step": 1,
+     "mode": "box",
+     "icon": "mdi:counter",
+     "friendly_name": "Counter limit"
+    }
+   },
+   "number.calibration": {
+    "state": "-1.25",
+    "last_changed": "-70m",
+    "attributes": {
+     "min": -10,
+     "max": 10,
+     "step": 0.25,
+     "mode": "box",
+     "unit_of_measurement": "°C",
+     "friendly_name": "Sensor Calibration"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "input_number.speaker_volume",
+    "pl": "input_number",
+    "en": "Speaker volume"
+   },
+   {
+    "ei": "number.fan_speed",
+    "pl": "demo",
+    "en": "Ceiling fan Speed"
+   },
+   {
+    "ei": "input_number.away_target",
+    "pl": "input_number",
+    "en": "Away target"
+   },
+   {
+    "ei": "number.boiler_offset",
+    "pl": "demo",
+    "en": "Boiler Offset"
+   },
+   {
+    "ei": "input_number.counter_limit",
+    "pl": "input_number",
+    "en": "Counter limit"
+   },
+   {
+    "ei": "number.calibration",
+    "pl": "demo",
+    "en": "Sensor Calibration"
+   }
+  ]
+ }
+}

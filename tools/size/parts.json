@@ -8,12 +8,18 @@
              "libplugin-container.so"],
   "assets": ["assets/omni.ja"]
  },
+ "engines": {
+  "_why": "Engines an app ships beside GeckoView, each its own row (Engine (<id>)).",
+  "vitro": {"dex": ["dev.glassworks.engine.vitro.", "dev.glassworks.hawebrtc.", "livekit.org."], "assets": ["assets/vitro-mdi.tsv"],
+            "native": ["liblkjingle_peerconnection_so.so"], "files": ["dev/glassworks/engine/vitro/"],
+            "_why": "Vitro, the native Lovelace renderer, its bundled Material Design icon table (vitro-mdi.tsv.gz, which the build stores decompressed) and its Java resources at its package path (the locale tables, native-options.json); and its WebRTC cameras in the apps that register them (engines/engine-vitro-webrtc), with libs/ha-webrtc and libwebrtc (webrtc-sdk's prefixed build: livekit.org.webrtc, liblkjingle_peerconnection_so.so)"}
+ },
  "core_assets": ["assets/extension/", "assets/dexopt/", "assets/licenses/", "assets/blueprints.json", "assets/setup/", "assets/manage/"],
  "libraries": {
   "bouncycastle": {"dex": ["org.bouncycastle."], "files": ["org/bouncycastle/"], "used_by": ["core", "sendspin"],
                    "_why": "libs/esphome-api (Noise) brings it; Sendspin's encryption uses it too"},
   "media3": {"dex": ["androidx.media3."], "used_by": ["core", "engine"],
-             "_why": "the core's voice and announcement player (ExoAudioPlayer, since R3 #343); GeckoView ships the same version (build.gradle.kts)"},
+             "_why": "the core's voice and announcement player (ExoAudioPlayer, since R3 #343); GeckoView ships the same version (build.gradle.kts); Vitro plays live cameras' HLS on it (media3-exoplayer-hls)"},
   "tensorflow-lite": {"dex": ["org.tensorflow."], "native": ["libtensorflowlite_jni.so"], "used_by": ["assist"],
                       "_why": "wake word inference, only in libs/voice"},
   "xz": {"dex": ["org.tukaani."], "used_by": ["radio"], "_why": "zigbeed's .deb, only in radio/"},

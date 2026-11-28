@@ -1,0 +1,54 @@
+{
+ "title": "Mushroom chips: template-entity (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "light.light_on_dimmed": "on"
+ },
+ "card": {
+  "type": "custom:mushroom-chips-card",
+  "chips": [
+   {
+    "type": "template",
+    "entity": "light.light_on_dimmed",
+    "icon": "mdi:lightbulb",
+    "icon_color": "{{ 'amber' if is_state(entity, 'on') else 'grey' }}",
+    "content": "{{ state_attr(entity, 'brightness') | int(0) * 100 // 255 }}%"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.light_on_dimmed": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "supported_features": 40,
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Kitchen Pendant"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.light_on_dimmed",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   }
+  ]
+ }
+}

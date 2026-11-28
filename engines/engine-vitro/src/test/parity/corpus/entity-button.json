@@ -1,0 +1,28 @@
+{
+ "title": "entity-button: HA's legacy name for the button card",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "entity-button",
+  "entity": "light.hall_lamp"
+ },
+ "fixture": {
+  "states": {
+   "light.hall_lamp": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "friendly_name": "Hall Lamp",
+     "supported_features": 40
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,114 @@
+{
+ "title": "weather-forecast: weather sunny (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "weather.sunny": "sunny"
+ },
+ "card": {
+  "type": "weather-forecast",
+  "entity": "weather.sunny",
+  "show_forecast": true,
+  "forecast_type": "daily"
+ },
+ "fixture": {
+  "states": {
+   "weather.sunny": {
+    "state": "sunny",
+    "last_changed": "-40m",
+    "attributes": {
+     "dew_point": 7.8,
+     "temperature_unit": "°C",
+     "humidity": 82,
+     "cloud_coverage": 40.0,
+     "uv_index": 1.2,
+     "pressure": 1018.2,
+     "pressure_unit": "hPa",
+     "wind_bearing": 210.0,
+     "wind_speed": 12.4,
+     "wind_speed_unit": "km/h",
+     "visibility_unit": "km",
+     "precipitation_unit": "mm",
+     "supported_features": 1,
+     "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute.",
+     "temperature": 14.2,
+     "friendly_name": "Home"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "weather.sunny",
+    "pl": "met"
+   }
+  ],
+  "forecast": {
+   "weather.sunny": {
+    "daily": [
+     {
+      "condition": "partlycloudy",
+      "datetime": "@D+0 12:00",
+      "temperature": 14.7,
+      "templow": 9.1,
+      "precipitation": 0.4,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     },
+     {
+      "condition": "rainy",
+      "datetime": "@D+1 12:00",
+      "temperature": 12.5,
+      "templow": 8.7,
+      "precipitation": 6.1,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     },
+     {
+      "condition": "cloudy",
+      "datetime": "@D+2 12:00",
+      "temperature": 11.2,
+      "templow": 6.4,
+      "precipitation": 0.8,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     },
+     {
+      "condition": "sunny",
+      "datetime": "@D+3 12:00",
+      "temperature": 13.9,
+      "templow": 4.2,
+      "precipitation": 0,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     },
+     {
+      "condition": "partlycloudy",
+      "datetime": "@D+4 12:00",
+      "temperature": 15.3,
+      "templow": 7.0,
+      "precipitation": 0.1,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     },
+     {
+      "condition": "fog",
+      "datetime": "@D+5 12:00",
+      "temperature": 10.8,
+      "templow": 7.9,
+      "precipitation": 0.2,
+      "wind_bearing": 180.0,
+      "wind_speed": 14.0,
+      "humidity": 70
+     }
+    ]
+   }
+  }
+ }
+}

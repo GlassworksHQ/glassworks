@@ -1,0 +1,55 @@
+{
+ "title": "More Info of an update installing with its progress: the progress bar at 40 %, Skip disabled, Update loading",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "markdown",
+  "content": "Hallway Display firmware"
+ },
+ "more_info": "update.hallway_display_firmware",
+ "expect": {
+  "update.hallway_display_firmware": "on"
+ },
+ "fixture": {
+  "admin": false,
+  "states": {
+   "update.hallway_display_firmware": {
+    "state": "on",
+    "last_changed": -7200,
+    "attributes": {
+     "friendly_name": "Hallway Display Firmware",
+     "title": "Hallway Display",
+     "auto_update": false,
+     "display_precision": 0,
+     "in_progress": true,
+     "update_percentage": 40,
+     "skipped_version": null,
+     "release_summary": null,
+     "release_url": null,
+     "entity_picture": null,
+     "supported_features": 5,
+     "installed_version": "2026.10.1",
+     "latest_version": "2026.11.0"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "update.hallway_display_firmware",
+    "pl": "esphome",
+    "di": "dev-hallway-display",
+    "en": "Firmware",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway-display",
+    "name": "Hallway Display"
+   }
+  ]
+ }
+}

@@ -1,0 +1,129 @@
+{
+ "case": "tile-number",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Target temperature",
+   "x": 56,
+   "y": 17.61,
+   "w": 121.89,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "22.0 °C",
+   "x": 56,
+   "y": 37,
+   "w": 41.44,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "22",
+   "x": 106.06,
+   "y": 79,
+   "w": 15.92,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°C",
+   "x": 125.47,
+   "y": 79,
+   "w": 14.47,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "input_number.target_temperature": {
+   "s": "22.0",
+   "a": {
+    "min": 18,
+    "max": 26,
+    "step": 0.5,
+    "mode": "box",
+    "initial": null,
+    "editable": true,
+    "unit_of_measurement": "°C",
+    "icon": "mdi:thermometer",
+    "friendly_name": "Target temperature"
+   },
+   "lc": 1794488280,
+   "lu": 1794488280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "input_number.target_temperature",
+    "pl": "input_number",
+    "en": "Target temperature"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "input_number"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ }
+}

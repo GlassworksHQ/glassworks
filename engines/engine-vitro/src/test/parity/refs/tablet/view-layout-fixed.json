@@ -1,0 +1,238 @@
+{
+ "case": "view-layout-fixed",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 0,
+  "y": 0,
+  "width": 1280,
+  "height": 800
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 394,
+   "y": 8,
+   "w": 492,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 394,
+   "y": 72,
+   "w": 492,
+   "h": 56,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Desk",
+   "x": 56,
+   "y": 12.61,
+   "w": 31.59,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 56,
+   "y": 32,
+   "w": 17.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 1,
+   "clipped": false,
+   "text": "Shelf",
+   "x": 56,
+   "y": 12.61,
+   "w": 32.78,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 1,
+   "clipped": false,
+   "text": "Off",
+   "x": 56,
+   "y": 32,
+   "w": 17.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.bedroom_accent": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
+    "supported_features": 40
+   },
+   "lc": 1794496680,
+   "lu": 1794496680
+  },
+  "light.desk_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "friendly_name": "Desk Lamp",
+    "supported_features": 0
+   },
+   "lc": 1794483360,
+   "lu": 1794483360
+  },
+  "light.shelf_strip": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "friendly_name": "Shelf Strip",
+    "supported_features": 40
+   },
+   "lc": 1794484920,
+   "lu": 1794484920
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "device-1",
+    "en": "Accent",
+    "np": "device"
+   },
+   {
+    "ei": "light.desk_lamp",
+    "pl": "switch_as_x",
+    "di": "device-2",
+    "np": "device"
+   },
+   {
+    "ei": "light.shelf_strip",
+    "pl": "zha",
+    "tk": "light",
+    "di": "device-3",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Bedroom Strip"
+   },
+   {
+    "id": "device-2",
+    "name": "Desk Lamp"
+   },
+   {
+    "id": "device-3",
+    "name": "Shelf Strip"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

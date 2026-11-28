@@ -1,0 +1,246 @@
+{
+ "case": "more-info-update-installing",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 0,
+  "y": 40,
+  "width": 720,
+  "height": 1240
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 0,
+   "y": 48,
+   "w": 720,
+   "h": 1232,
+   "type": "ha-more-info-dialog",
+   "mode": "bottom-sheet"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hallway Display",
+   "x": 60,
+   "y": 18,
+   "w": 98.55,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Firmware",
+   "x": 60,
+   "y": 34,
+   "w": 83.8,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Firmware",
+   "x": 72,
+   "y": 92.41,
+   "w": 58.31,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2 hours ago",
+   "x": 72,
+   "y": 112.2,
+   "w": 73.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Installing (40%)",
+   "x": 600.19,
+   "y": 103.8,
+   "w": 95.81,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hallway Display",
+   "x": 24,
+   "y": 176.38,
+   "w": 115.84,
+   "h": 19,
+   "size": 16.38,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Installed version",
+   "x": 24,
+   "y": 211.75,
+   "w": 101.69,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2026.10.1",
+   "x": 633.59,
+   "y": 211.75,
+   "w": 62.41,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Latest version",
+   "x": 24,
+   "y": 227.75,
+   "w": 87.58,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2026.11.0",
+   "x": 633.59,
+   "y": 227.75,
+   "w": 62.41,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Skip",
+   "x": 573.13,
+   "y": 1188,
+   "w": 27.22,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(94, 94, 94)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "update.hallway_display_firmware": {
+   "s": "on",
+   "a": {
+    "friendly_name": "Hallway Display Firmware",
+    "title": "Hallway Display",
+    "auto_update": false,
+    "display_precision": 0,
+    "in_progress": true,
+    "update_percentage": 40,
+    "skipped_version": null,
+    "release_summary": null,
+    "release_url": null,
+    "entity_picture": null,
+    "supported_features": 5,
+    "installed_version": "2026.10.1",
+    "latest_version": "2026.11.0"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "update.hallway_display_firmware",
+    "pl": "esphome",
+    "di": "device-1",
+    "en": "Firmware",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Hallway Display"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "update"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "update": {
+     "_": {
+      "default": "mdi:package-up",
+      "state": {
+       "off": "mdi:package"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.update.entity_component._.state.off": "Up-to-date",
+    "component.update.entity_component._.state.on": "Update available"
+   },
+   "entity": {}
+  }
+ },
+ "user": {
+  "is_admin": false
+ }
+}

@@ -1,0 +1,37 @@
+{
+ "title": "Mushroom lock card: locked",
+ "route": "island",
+ "expect": {
+  "lock.front_door": "locked"
+ },
+ "card": {
+  "type": "custom:mushroom-lock-card",
+  "entity": "lock.front_door"
+ },
+ "fixture": {
+  "states": {
+   "lock.front_door": {
+    "state": "locked",
+    "last_changed": "-45m",
+    "attributes": {
+     "friendly_name": "Front Door",
+     "supported_features": 1
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "lock.front_door",
+    "pl": "demo",
+    "di": "dev-front-door",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-front-door",
+    "name": "Front Door"
+   }
+  ]
+ }
+}

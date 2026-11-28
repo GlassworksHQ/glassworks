@@ -1,0 +1,207 @@
+{
+ "_comment": "Cases Vitro draws wrong today, each with the PR that owns its fix (#799: filed on the exp/vitro list, no fixer yet) and what's wrong. Not drift: the harness reports them as open and fails once one matches, so the fix drops its entry (ParityOpen in ParityReport.kt).",
+ "mirror/d-masonry-home": {
+  "owner": "#799",
+  "reason": "Masonry dashboard: the 10 cards pair up with HA's (the capture counts a stack as one card), and their places, heights and texts match. The weather card is what's left: its current temperature's unit is drawn at the value's 24 px where HA's is a 16 px superscript (the font check), and its forecast fits five days where HA's clips the fifth, so the day columns sit up to 40 px off (the region check)"
+ },
+ "mirror/d-sections-home": {
+  "owner": "#799",
+  "reason": "Sections dashboard: placement matches; the tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
+ },
+ "mirror/entities-secondary-info": {
+  "owner": "#799",
+  "reason": "Entities rows: an active automation's icon is drawn in Vitro's blue active color where HA's state-badge uses --state-active-color (amber); predates the batch (ThemeResolver.activeColor), found by the region check on #926's new case"
+ },
+ "mirror/more-info-alarm-disarmed": {
+  "owner": "#799",
+  "reason": "Alarm More Info on the Mirror's tall sheet: HA centers the modes select in the sheet's height (`.controls` is flex: 1); Vitro puts it right under the state header, as for the vacuum's (s1 and tablet match)"
+ },
+ "mirror/more-info-vacuum-cleaning": {
+  "owner": "#799",
+  "reason": "Vacuum More Info on the Mirror's tall sheet: HA centers the robot, its buttons and the fan speed in the sheet's height; Vitro puts them right under the header (found by the region check on #930's case)"
+ },
+ "mirror/more-info-vacuum-docked": {
+  "owner": "#799",
+  "reason": "Vacuum More Info on the Mirror's tall sheet: HA centers the robot, its buttons and the fan speed in the sheet's height; Vitro puts them right under the header (found by the region check on #930's case)"
+ },
+ "mirror/mushroom-light-horizontal": {
+  "owner": "#799",
+  "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
+ },
+ "mirror/view-string-badges": {
+  "owner": "#799",
+  "reason": "Sections view: the badge row and the section under it sit about 5 px higher than HA's (hui-view-header's layout, listed in #928, not fixed there); the badges' names, states and icons match"
+ },
+ "s1/d-masonry-home": {
+  "owner": "#799",
+  "reason": "Masonry dashboard: the 10 cards pair up with HA's (the capture counts a stack as one card), and their places, heights and texts match. The weather card is what's left: its current temperature's unit is drawn at the value's 24 px where HA's is a 16 px superscript (the font check), and its forecast fits five days where HA's clips the fifth, so the day columns sit up to 40 px off (the region check)"
+ },
+ "s1/d-sections-home": {
+  "owner": "#799",
+  "reason": "Sections dashboard: placement matches; the tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
+ },
+ "s1/entities-secondary-info": {
+  "owner": "#799",
+  "reason": "Entities rows: an active automation's icon is drawn in Vitro's blue active color where HA's state-badge uses --state-active-color (amber); predates the batch (ThemeResolver.activeColor), found by the region check on #926's new case"
+ },
+ "s1/entities-special-rows": {
+  "owner": "#799",
+  "reason": "Header toggle shown where HA shows none (#928's _showHeaderToggle fix)"
+ },
+ "s1/m-alarm-panel-alarm-control-panel-unavailable": {
+  "owner": "#799",
+  "reason": "Alarm panel, unavailable: Disarm matches HA now; the 'Unavailable' chip is a lighter grey than HA's"
+ },
+ "s1/m-entities-alarm": {
+  "owner": "#799",
+  "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
+ },
+ "s1/m-entities-fan": {
+  "owner": "#799",
+  "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
+ },
+ "s1/m-entities-light": {
+  "owner": "#799",
+  "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
+ },
+ "s1/m-entities-sensor": {
+  "owner": "#799",
+  "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
+ },
+ "s1/m-entities-switch": {
+  "owner": "#799",
+  "reason": "Entities rows: a dimmed light's icon keeps full color where HA dims it (stateColorBrightness), an unavailable row's icon is blue and its toggle enabled where HA's are grey and disabled, and alarm rows are colored as other domains"
+ },
+ "s1/m-entity-binary-sensor-unavailable": {
+  "owner": "#799",
+  "reason": "Entity card: icons of unavailable entities are blue where HA's are grey (the value line and a light's 'On' match HA now)"
+ },
+ "s1/m-entity-light-unavailable": {
+  "owner": "#799",
+  "reason": "Entity card: icons of unavailable entities are blue where HA's are grey (the value line and a light's 'On' match HA now)"
+ },
+ "s1/m-entity-sensor-unavailable": {
+  "owner": "#799",
+  "reason": "Entity card: icons of unavailable entities are blue where HA's are grey (the value line and a light's 'On' match HA now)"
+ },
+ "s1/m-mushroom-alarm-alarm-control-panel-unavailable": {
+  "owner": "#799",
+  "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
+ },
+ "s1/m-mushroom-chip-weather-unavailable": {
+  "owner": "#799",
+  "reason": "Mushroom weather chip, unavailable: HA shows 'Unavailable ⸱ Unknown' with no icon; Vitro shows 'Unavailable' with a cloud icon"
+ },
+ "s1/m-mushroom-climate-climate-unavailable": {
+  "owner": "#799",
+  "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
+ },
+ "s1/m-mushroom-cover-cover-unavailable": {
+  "owner": "#799",
+  "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
+ },
+ "s1/m-mushroom-entity-sensor-temperature": {
+  "owner": "#799",
+  "reason": "Mushroom icon colors and state line: Vitro uses HA's tile colors and extras ('80%') where Mushroom uses its own renderIcon colors (blue while active, orange light, green fan) and the plain state"
+ },
+ "s1/m-mushroom-entity-sensor-unavailable": {
+  "owner": "#799",
+  "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
+ },
+ "s1/m-mushroom-fan-fan-on-no-speed": {
+  "owner": "#799",
+  "reason": "Mushroom fan with show_percentage_control on a fan without speeds: HA keeps the card's two-row height with the info centred; Vitro collapses it to one row"
+ },
+ "s1/m-mushroom-fan-fan-unavailable": {
+  "owner": "#799",
+  "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
+ },
+ "s1/m-mushroom-light-collapsible-light-on-dimmed": {
+  "owner": "#799",
+  "reason": "Mushroom light with collapsible_controls, on: Vitro's info and bar sit ~8 px higher and the card ~10 px shorter than Mushroom's"
+ },
+ "s1/m-mushroom-light-horizontal-light-on-color": {
+  "owner": "#799",
+  "reason": "Mushroom layout: horizontal: the slider is a 36 px square at the card's end where Mushroom fills the free width (fixed in #928's mushroom-light-horizontal)"
+ },
+ "s1/m-mushroom-light-horizontal-light-on-dimmed": {
+  "owner": "#799",
+  "reason": "Mushroom layout: horizontal: the slider is a 36 px square at the card's end where Mushroom fills the free width (fixed in #928's mushroom-light-horizontal)"
+ },
+ "s1/m-mushroom-light-light-unavailable": {
+  "owner": "#799",
+  "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
+ },
+ "s1/m-mushroom-number-number-unavailable": {
+  "owner": "#799",
+  "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
+ },
+ "s1/m-mushroom-select-select-unavailable": {
+  "owner": "#799",
+  "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
+ },
+ "s1/m-tile-sensor-battery-low": {
+  "owner": "#799",
+  "reason": "Tile icon color: HA's stateColorCss (an unlocked or jammed lock red, a triggered alarm and a vacuum in error red, sunny weather yellow, a low battery red, an unknown or unavailable sensor grey); Vitro draws the domain's default color"
+ },
+ "s1/m-tile-sensor-unavailable": {
+  "owner": "#799",
+  "reason": "Tile icon color: HA's stateColorCss (an unlocked or jammed lock red, a triggered alarm and a vacuum in error red, sunny weather yellow, a low battery red, an unknown or unavailable sensor grey); Vitro draws the domain's default color"
+ },
+ "s1/m-tile-sensor-unknown": {
+  "owner": "#799",
+  "reason": "Tile icon color: HA's stateColorCss (an unlocked or jammed lock red, a triggered alarm and a vacuum in error red, sunny weather yellow, a low battery red, an unknown or unavailable sensor grey); Vitro draws the domain's default color"
+ },
+ "s1/m-tile-vertical-cover-open-position": {
+  "owner": "#799",
+  "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
+ },
+ "s1/m-tile-vertical-light-long-name": {
+  "owner": "#799",
+  "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
+ },
+ "s1/m-tile-vertical-light-on-dimmed": {
+  "owner": "#799",
+  "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
+ },
+ "s1/m-tile-vertical-sensor-temperature": {
+  "owner": "#799",
+  "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
+ },
+ "s1/mushroom-light-horizontal": {
+  "owner": "#799",
+  "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
+ },
+ "s1/view-string-badges": {
+  "owner": "#799",
+  "reason": "Sections view: the badge row and the section under it sit about 5 px higher than HA's (hui-view-header's layout, listed in #928, not fixed there); the badges' names, states and icons match"
+ },
+ "tablet/d-masonry-home": {
+  "owner": "#799",
+  "reason": "Masonry dashboard: the 10 cards pair up with HA's (the capture counts a stack as one card), and their places, heights and texts match. The weather card is what's left: its current temperature's unit is drawn at the value's 24 px where HA's is a 16 px superscript (the font check), and its forecast fits five days where HA's clips the fifth, so the day columns sit up to 40 px off (the region check); on the tablet the forecast's fifth high and the glance's 21.4 °C aren't found, and one edge is 2.1 px off"
+ },
+ "tablet/d-mushroom-dense": {
+  "owner": "#799",
+  "reason": "Dense Mushroom dashboard: placement matches; Mushroom icon colors, chip icons, state lines and the fan bar color differ (each listed on its own case)"
+ },
+ "tablet/d-sections-home": {
+  "owner": "#799",
+  "reason": "Sections dashboard: placement matches; the tile icon colors (battery, unavailable), the Plugs header toggle and the media art (see m-media-control-*) differ, each on its own card"
+ },
+ "tablet/entities-secondary-info": {
+  "owner": "#799",
+  "reason": "Entities rows: an active automation's icon is drawn in Vitro's blue active color where HA's state-badge uses --state-active-color (amber); predates the batch (ThemeResolver.activeColor), found by the region check on #926's new case"
+ },
+ "tablet/entities-special-rows": {
+  "owner": "#799",
+  "reason": "Header toggle shown where HA shows none (#928's _showHeaderToggle fix)"
+ },
+ "tablet/mushroom-light-horizontal": {
+  "owner": "#799",
+  "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"
+ },
+ "tablet/view-string-badges": {
+  "owner": "#799",
+  "reason": "Sections view: the badge row and the section under it sit about 5 px higher than HA's (hui-view-header's layout, listed in #928, not fixed there); the badges' names, states and icons match"
+ }
+}

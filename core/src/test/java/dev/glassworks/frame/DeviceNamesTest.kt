@@ -81,6 +81,8 @@ class DeviceNamesTest {
     private val ALLOWED = mapOf(
         "dev/glassworks/frame/DeviceFrame.kt" to setOf("lululemon-mirror", "lululemon", "Studio Mirror"),
         "dev/glassworks/frame/GenericAndroid.kt" to setOf("Pixel Tablet"),
+        // Vitro's bundled Material Design icons, keyed by id without the `mdi:` prefix.
+        "dev/glassworks/engine/vitro/ui/MdiIcons.kt" to setOf("tablet", "tablet-dashboard"),
     )
 
     private val shared: List<File> get() = RepoFiles.modules.filter { m ->

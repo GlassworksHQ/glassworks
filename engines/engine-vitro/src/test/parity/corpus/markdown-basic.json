@@ -1,0 +1,11 @@
+{
+ "title": "Markdown: headings, paragraph, list, link",
+ "card": {
+  "type": "markdown",
+  "content": "# Living room\n## Evening\nThe lights dim at **sunset** and the blinds close at *ten*.\n\n- Lamp on\n- Blinds open\n- Fan low\n\n[Open settings](/config)"
+ },
+ "fixture": {
+  "states": {},
+  "entities": []
+ }
+}

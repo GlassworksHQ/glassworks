@@ -1,0 +1,41 @@
+{
+ "title": "entity: binary_sensor door-open (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "binary_sensor.binary_sensor_door_open": "on"
+ },
+ "card": {
+  "type": "entity",
+  "entity": "binary_sensor.binary_sensor_door_open"
+ },
+ "fixture": {
+  "states": {
+   "binary_sensor.binary_sensor_door_open": {
+    "state": "on",
+    "last_changed": "-4m",
+    "attributes": {
+     "device_class": "door",
+     "friendly_name": "Back Door"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "binary_sensor.binary_sensor_door_open",
+    "pl": "zha",
+    "di": "dev-back",
+    "en": "Door",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-back",
+    "name": "Back"
+   }
+  ]
+ }
+}

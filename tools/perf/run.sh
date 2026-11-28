@@ -27,6 +27,9 @@
 #     exit trap restarts the app.
 #   - On Android 6 only (no `logcat -v monotonic`): five `ClarityClock` lines in the device's log per runner
 #     step, to tie logcat's wall clock to the monotonic one (docs/perf.md, "Other Glassworks apps, and Android 6").
+#   - With --engine vitro|web: Settings → Labs → Vitro set for the run (`--ez vitro true|false`, which restarts the
+#     app), and put back as it was on exit (restarting the app again). Without it, the engine the kiosk says it runs.
+#     On Vitro, the animation test page and your own dashboard's restarts are skipped (they time GeckoView's page).
 #   Read-only otherwise: getprop, /proc, dumpsys meminfo, SurfaceFlinger and activity recents (the app's
 #   activity), logcat.
 #   On this computer: 40 pings to its default gateway and 40 to the panel before the graded part (netcheck.py,
@@ -40,6 +43,7 @@
 #          [--skip-synthetic] [--skip-reference] [--skip-real-use] [--taps 10] [--quick] [--apk FILE]...
 #          [--webrtc-transport auto|adb|lan-turn|lan-udp]   # the camera video's path; auto (default) asks the panel
 #          [--sf-poll auto|0|SECONDS] [--sf-check-only]     # how SurfaceFlinger is read (below)
+#          [--engine web|vitro]                             # the engine to grade (default: the one the kiosk runs)
 #
 # Camera video (protocol 7, #202): with --webrtc-transport auto, lanprobe.py first has the panel send one
 # UDP datagram and open one TCP connection to this computer's LAN address (two `toybox nc` over adb
@@ -57,7 +61,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ADB="${ADB:-adb}"
 FRAME="" NAME="" RUNS=3 OUT="" PORT=8089 TURN_PORT="" WEBRTC_TRANSPORT=auto PACKAGE=sh.edm.s1kiosk ACTIVITY="" TAPS=10 QUICK=0
-SYNTH=1 REF=1 REAL=1 IDLE_ONLY="" MAX_TEMP_C=50 APKS=() PANE_RAM="" SF_POLL=auto SF_CHECK_ONLY=0
+SYNTH=1 REF=1 REAL=1 IDLE_ONLY="" MAX_TEMP_C=50 APKS=() PANE_RAM="" SF_POLL=auto SF_CHECK_ONLY=0 ENGINE=""
 # Waits, in seconds. Only the off-device test (test/test_runner.py) shortens them.
 IDLE_SETTLE="${GW_PERF_IDLE_SETTLE:-30}" IDLE_WINDOW="${GW_PERF_IDLE_WINDOW:-15}"
 COLD_SETTLE="${GW_PERF_COLD_SETTLE:-3}" COLD_TIMEOUT="${GW_PERF_COLD_TIMEOUT:-120}" RUN_GAP="${GW_PERF_RUN_GAP:-10}"
@@ -85,6 +89,7 @@ while [ $# -gt 0 ]; do
     --webrtc-transport) WEBRTC_TRANSPORT="$2"; shift 2 ;;
     --sf-poll) SF_POLL="$2"; shift 2 ;;
     --sf-check-only) SF_CHECK_ONLY=1; shift ;;
+    --engine) ENGINE="$2"; shift 2 ;;
     -h|--help) sed -n '2,/^set -e/p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -95,6 +100,7 @@ done
 [ "$SF_CHECK_ONLY" = 1 ] && { SYNTH=1 REF=0 REAL=0 PANE_RAM=""; }
 [ "$SF_CHECK_ONLY" = 1 ] && [ -n "$IDLE_ONLY" ] && { echo "--sf-check-only and --idle-only can't be combined: one runs the checks, the other one idle sample" >&2; exit 2; }
 [ "$SF_CHECK_ONLY" = 1 ] && [ "$SF_POLL" != auto ] && { echo "--sf-check-only runs the check: leave --sf-poll at auto" >&2; exit 2; }
+[ -z "$ENGINE" ] || [ "$ENGINE" = web ] || [ "$ENGINE" = vitro ] || { echo "--engine is web or vitro" >&2; exit 2; }
 [ "$SF_POLL" = auto ] || [[ "$SF_POLL" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "--sf-poll is auto, 0 or seconds between reads" >&2; exit 2; }
 TURN_PORT=$((PORT + 1))
 OUT="${OUT:-perf-$FRAME-$(date +%Y%m%d-%H%M%S)}"
@@ -144,11 +150,49 @@ fi
 # The kiosk's test hold keeps the screen on for the run (#240). An app without it ignores the extra,
 # and its screen would sleep partway: no fallback.
 release_hold() { run hold --off >/dev/null 2>&1 || true; }
-run hold >/dev/null || {
+HOLD_OUT=$(run hold) || {
   echo "$PACKAGE didn't take Clarity's test hold (--ez test_hold true): install an app built from main after #240" >&2
   exit 2
 }
-trap release_hold EXIT
+# The engine to grade (docs/perf.md, "Vitro"): --engine switches Settings → Labs → Vitro for the run and puts it back on
+# exit; without it, the one the kiosk said it runs (web when it doesn't say). ENGINE_WAS: the setting to put back.
+ENGINE_WAS=""
+restore_engine() {
+  [ -n "$ENGINE_WAS" ] || return 0
+  local want=web
+  [ "$ENGINE_WAS" = true ] && want=vitro
+  log "putting Settings → Labs → Vitro back ($ENGINE_WAS; the app restarts)"
+  if run engine --want "$want" --settle "$SWITCH_SETTLE" >/dev/null; then
+    ENGINE_WAS=""
+  else
+    log "COULD NOT put Vitro back; send it yourself: adb shell am start -n $PACKAGE/$ACTIVITY --ez vitro $ENGINE_WAS"
+  fi
+}
+# A setting that couldn't be put back fails the run (exit 3), as a dashboard that couldn't be does.
+trap 'restore_engine; release_hold; [ -z "$ENGINE_WAS" ] || exit 3' EXIT
+SAID_ENGINE=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("engine") or "")' "$HOLD_OUT")
+if [ -n "$ENGINE" ] && [ "$ENGINE" != "${SAID_ENGINE:-web}" ]; then
+  # The setting as it was, before anything is sent: a switch that fails after the kiosk saved it is put back too.
+  ENGINE_WAS=$(python3 -c 'import json,sys; v = json.loads(sys.argv[1]).get("vitro_setting"); print("" if v is None else str(v).lower())' "$HOLD_OUT")
+  log "switching the kiosk to $ENGINE (Settings → Labs → Vitro; the app restarts)"
+  ENG_OUT=$(run engine --want "$ENGINE" --settle "$SWITCH_SETTLE") || {
+    echo "$PACKAGE didn't switch to $ENGINE: install an app built after Clarity's Vitro check (docs/perf.md, \"Vitro\")" >&2
+    exit 2
+  }
+  # Nothing to put back when the kiosk already had the setting asked for.
+  python3 -c 'import json,sys; sys.exit(0 if json.loads(sys.argv[1])["changed"] else 1)' "$ENG_OUT" || ENGINE_WAS=""
+fi
+ENGINE="${ENGINE:-${SAID_ENGINE:-web}}"
+export GW_PERF_ENGINE="$ENGINE"
+if [ "$ENGINE" = vitro ]; then
+  # Vitro draws no web page: the animation test page and your own dashboard's restart time GeckoView's page loads.
+  if [ "$SF_CHECK_ONLY" != 1 ]; then
+    [ "$SYNTH" = 1 ] && log "Vitro: skipping the animation test page (it times a web page; detail, not graded)"
+    SYNTH=0
+  fi
+  [ "$REAL" = 1 ] && log "Vitro: skipping your dashboard's restarts (they time a web page load; detail, not graded)"
+  REAL=0
+fi
 
 if [ -n "$IDLE_ONLY" ]; then
   # No check for one sample: the --sf-poll given, or one read at a time (#643).
@@ -230,8 +274,10 @@ cleanup() {
   [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true
   "$ADB" reverse --remove "tcp:$PORT" 2>/dev/null || true
   "$ADB" reverse --remove "tcp:$TURN_PORT" 2>/dev/null || true
+  restore_engine
   release_hold
   restored || exit 3
+  [ -z "$ENGINE_WAS" ] || exit 3     # Vitro's setting wasn't put back (restore_engine said how to)
   exit "$status"
 }
 trap cleanup EXIT

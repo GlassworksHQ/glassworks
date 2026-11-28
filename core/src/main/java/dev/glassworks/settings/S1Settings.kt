@@ -95,7 +95,7 @@ object S1Settings {
         return FactoryReset(
             signOut = { done -> HaAuth.init(app); HaAuth.signOut("factory reset", done) },
             // A sign-in started before the reset doesn't finish after it, nor after the restart (they are saved, StateStore).
-            clearSettings = { prefs.resetSettings() && SetupPrefs(app).reset() && HaAuth.forgetPendingSignIns(app) },
+            clearSettings = { clearSettings(prefs, app) },
             signOutBrowsers = { HaAuth.manage?.signOutAll() },
             // As the Overview's Restart app: after the answer has gone out (AppManage.ACTION_DELAY_MS).
             restart = {
@@ -107,7 +107,18 @@ object S1Settings {
             },
             onMain = { main.post(it) },
             log = { Log.i(TAG, it) },
+            inBackground = { Thread(it, "factory-reset").start() },
         )
+    }
+
+    /**
+     * The factory reset's settings step: `kiosk.xml` but what it keeps, setup's answers, sign-ins started before the
+     * reset, and what the app keeps from Home Assistant's pages for Vitro ([HaPageData]), on or off now.
+     */
+    fun clearSettings(prefs: KioskPrefs, context: Context): Boolean {
+        val app = context.applicationContext
+        return prefs.resetSettings() && SetupPrefs(app).reset() && HaAuth.forgetPendingSignIns(app) &&
+            dev.glassworks.web.HaPageData.forget(app)
     }
 
     /** The frame's name in words: "S1 Plus", or the device's ("Google Pixel Tablet"). */

@@ -1,0 +1,44 @@
+{
+ "title": "Mushroom light card: a light that is on, with brightness control",
+ "expect": {
+  "light.kitchen_pendant": "on"
+ },
+ "card": {
+  "type": "custom:mushroom-light-card",
+  "entity": "light.kitchen_pendant",
+  "name": "Pendant",
+  "show_brightness_control": true,
+  "use_light_color": true
+ },
+ "fixture": {
+  "states": {
+   "light.kitchen_pendant": {
+    "state": "on",
+    "last_changed": "-285m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": "onoff",
+     "friendly_name": "Kitchen Pendant",
+     "supported_features": 0
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.kitchen_pendant",
+    "pl": "demo",
+    "di": "dev-kitchen",
+    "en": "Pendant",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen",
+    "name": "Kitchen"
+   }
+  ]
+ }
+}

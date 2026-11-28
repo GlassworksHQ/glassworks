@@ -1,0 +1,391 @@
+{
+ "case": "more-info-event",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 342,
+  "y": 32,
+  "width": 596,
+  "height": 484
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 350,
+   "y": 40,
+   "w": 580,
+   "h": 467.17,
+   "type": "ha-more-info-dialog",
+   "mode": "dialog"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Front Doorbell",
+   "x": 60,
+   "y": 18,
+   "w": 87.88,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Press",
+   "x": 60,
+   "y": 34,
+   "w": 51.02,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Press",
+   "x": 72,
+   "y": 94.8,
+   "w": 35.3,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "25 minutes ago",
+   "x": 72,
+   "y": 114.59,
+   "w": 96.44,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "November 12, 2026 at 9:43 AM",
+   "x": 363.98,
+   "y": 95,
+   "w": 192.02,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "pressed",
+   "x": 506.36,
+   "y": 117.39,
+   "w": 49.64,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "History",
+   "x": 24,
+   "y": 156.78,
+   "w": 64.33,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 485.72,
+   "y": 160.58,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Activity",
+   "x": 24,
+   "y": 272.78,
+   "w": 66.94,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 485.72,
+   "y": 276.58,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Today · November 12, 2026",
+   "x": 24,
+   "y": 327.78,
+   "w": 170.61,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Event detected",
+   "x": 60,
+   "y": 358.47,
+   "w": 92.17,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9:43:00 AM",
+   "x": 463.22,
+   "y": 359.66,
+   "w": 60.78,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Event detected",
+   "x": 60,
+   "y": 398.97,
+   "w": 92.17,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "4:08:00 AM",
+   "x": 463.2,
+   "y": 400.16,
+   "w": 60.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "event.front_doorbell": {
+   "s": "2026-11-12T15:43:00+00:00",
+   "a": {
+    "event_types": [
+     "pressed",
+     "double_pressed"
+    ],
+    "event_type": "pressed",
+    "device_class": "doorbell",
+    "friendly_name": "Front Doorbell Press"
+   },
+   "lc": 1794498180,
+   "lu": 1794498180
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "event.front_doorbell",
+    "pl": "mqtt",
+    "di": "device-1",
+    "en": "Press",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Front Doorbell"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "event"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "event": {
+     "_": {
+      "default": "mdi:eye-check"
+     },
+     "doorbell": {
+      "default": "mdi:doorbell"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.event.entity_component._.state_attributes.event_type.name": "Event type",
+    "component.event.entity_component._.state_attributes.event_types.name": "Event types",
+    "component.event.entity_component.doorbell.state_attributes.event_type.state.ring": "Ring"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "history/stream",
+    "entity_ids": [
+     "event.front_doorbell"
+    ],
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "minimal_response": true,
+    "significant_changes_only": true,
+    "no_attributes": true
+   },
+   "events": [
+    {
+     "states": {
+      "event.front_doorbell": [
+       {
+        "s": "2026-11-11T00:08:00+00:00",
+        "lu": 1794413280
+       },
+       {
+        "s": "2026-11-12T10:08:00+00:00",
+        "lu": 1794478080
+       },
+       {
+        "s": "2026-11-12T15:43:00+00:00",
+        "lu": 1794498180
+       }
+      ]
+     },
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  },
+  {
+   "request": {
+    "type": "config/auth/list"
+   },
+   "events": [],
+   "result": [
+    {
+     "id": "parity-user",
+     "name": "Sam",
+     "is_owner": true,
+     "is_admin": true,
+     "credentials": [
+      {
+       "auth_provider_type": "homeassistant",
+       "auth_provider_id": null
+      }
+     ],
+     "mfa_modules": [],
+     "system_generated": false,
+     "group_ids": [
+      "system-admin"
+     ],
+     "username": "parity",
+     "is_active": true,
+     "local_only": false
+    }
+   ]
+  },
+  {
+   "request": {
+    "type": "logbook/event_stream",
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "end_time": "2027-11-12T16:08:00.000Z",
+    "entity_ids": [
+     "event.front_doorbell"
+    ]
+   },
+   "events": [
+    {
+     "events": [
+      {
+       "entity_id": "event.front_doorbell",
+       "state": "2026-11-12T10:08:00+00:00",
+       "when": 1794478080
+      },
+      {
+       "entity_id": "event.front_doorbell",
+       "state": "2026-11-12T15:43:00+00:00",
+       "when": 1794498180
+      }
+     ],
+     "start_time": 1794413280,
+     "end_time": 1794499680,
+     "partial": true
+    },
+    {
+     "events": [],
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  }
+ ]
+}

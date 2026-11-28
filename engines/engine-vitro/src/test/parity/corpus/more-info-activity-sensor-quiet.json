@@ -1,0 +1,69 @@
+{
+ "title": "More Info of a text sensor that logged nothing: its timeline, then \"No activity found\"",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "sensor.washer_cycle"
+ },
+ "more_info": "sensor.washer_cycle",
+ "expect": {
+  "sensor.washer_cycle": "idle"
+ },
+ "masks": [
+  {
+   "x": -108,
+   "y": 6,
+   "w": 108,
+   "h": 56,
+   "why": "HA's admin-only Settings and menu buttons (the fake's user is an admin): the entity settings and HA's menu, which Vitro's sheet doesn't offer"
+  }
+ ],
+ "fixture": {
+  "states": {
+   "sensor.washer_cycle": {
+    "state": "idle",
+    "last_changed": -108000,
+    "attributes": {
+     "device_class": "enum",
+     "options": [
+      "idle",
+      "washing",
+      "rinsing",
+      "spinning"
+     ],
+     "friendly_name": "Washer Cycle"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.washer_cycle",
+    "pl": "mqtt",
+    "di": "dev-washer",
+    "en": "Cycle",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-washer",
+    "name": "Washer"
+   }
+  ],
+  "history": {
+   "sensor.washer_cycle": {
+    "steps": [
+     [
+      "-30h",
+      "idle"
+     ]
+    ]
+   }
+  },
+  "logbook": []
+ }
+}

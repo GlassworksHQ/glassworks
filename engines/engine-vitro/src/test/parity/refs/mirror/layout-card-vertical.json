@@ -1,0 +1,375 @@
+{
+ "case": "layout-card-vertical",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 220
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 204,
+   "type": "layout-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Bedroom Strip Accent",
+   "x": 64,
+   "y": 20.61,
+   "w": 139.44,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 64,
+   "y": 40,
+   "w": 17.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Reading Lamp Reading",
+   "x": 64,
+   "y": 84.61,
+   "w": 146.23,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 64,
+   "y": 104,
+   "w": 17.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Office Blind",
+   "x": 64,
+   "y": 148.61,
+   "w": 74.38,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Open",
+   "x": 64,
+   "y": 168,
+   "w": 29.56,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "·",
+   "x": 96.92,
+   "y": 168,
+   "w": 3.55,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "100%",
+   "x": 103.84,
+   "y": 168,
+   "w": 30.61,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Ceiling Fan",
+   "x": 310,
+   "y": 20.61,
+   "w": 70.52,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "20%",
+   "x": 310,
+   "y": 40,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "cover.office_blind": {
+   "s": "open",
+   "a": {
+    "is_closed": false,
+    "current_position": 100,
+    "assumed_state": true,
+    "friendly_name": "Office Blind",
+    "supported_features": 11
+   },
+   "lc": 1794491700,
+   "lu": 1794491700
+  },
+  "fan.ceiling_fan": {
+   "s": "on",
+   "a": {
+    "preset_modes": [
+     "auto"
+    ],
+    "percentage": 20,
+    "percentage_step": 10,
+    "preset_mode": null,
+    "friendly_name": "Ceiling Fan",
+    "supported_features": 57
+   },
+   "lc": 1794484020,
+   "lu": 1794484020
+  },
+  "light.bedroom_accent": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": false,
+    "off_brightness": 254,
+    "icon": "mdi:led-strip-variant",
+    "friendly_name": "Bedroom Strip Accent",
+    "supported_features": 40
+   },
+   "lc": 1794496680,
+   "lu": 1794496680
+  },
+  "light.reading_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "off_with_transition": false,
+    "off_brightness": null,
+    "icon": "mdi:floor-lamp",
+    "friendly_name": "Reading Lamp Reading",
+    "supported_features": 8
+   },
+   "lc": 1794488160,
+   "lu": 1794488160
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   },
+   {
+    "ei": "fan.ceiling_fan",
+    "pl": "zha",
+    "tk": "fan",
+    "di": "device-1"
+   },
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "device-2",
+    "en": "Accent"
+   },
+   {
+    "ei": "light.reading_lamp",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:floor-lamp",
+    "di": "device-3",
+    "en": "Reading"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Ceiling Fan"
+   },
+   {
+    "id": "device-2",
+    "name": "Bedroom Strip"
+   },
+   {
+    "id": "device-3",
+    "name": "Reading Lamp"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "cover",
+    "fan",
+    "light"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "cover": {
+     "_": {
+      "default": "mdi:window-open",
+      "state": {
+       "closed": "mdi:window-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     }
+    },
+    "fan": {
+     "_": {
+      "default": "mdi:fan",
+      "state": {
+       "off": "mdi:fan-off"
+      },
+      "state_attributes": {
+       "direction": {
+        "default": "mdi:rotate-right",
+        "state": {
+         "reverse": "mdi:rotate-left"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {}
+       }
+      }
+     }
+    },
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "fan": {
+      "fan": {
+       "state_attributes": {
+        "preset_mode": {
+         "state": {
+          "auto": "mdi:fan-auto",
+          "smart": "mdi:fan-auto"
+         }
+        }
+       }
+      }
+     },
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.cover.entity_component._.state.closed": "Closed",
+    "component.cover.entity_component._.state.closing": "Closing",
+    "component.cover.entity_component._.state.open": "Open",
+    "component.cover.entity_component._.state.opening": "Opening",
+    "component.cover.entity_component._.state.stopped": "Stopped",
+    "component.fan.entity_component._.state.off": "Off",
+    "component.fan.entity_component._.state.on": "On",
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

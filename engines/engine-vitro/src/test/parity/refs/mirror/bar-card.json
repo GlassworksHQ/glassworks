@@ -1,0 +1,302 @@
+{
+ "case": "bar-card",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 283
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1305
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 266.8,
+   "type": "bar-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Printer ink",
+   "x": 17,
+   "y": 21,
+   "w": 105.02,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Black",
+   "x": 74,
+   "y": 77.59,
+   "w": 34.16,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "74",
+   "x": 449.53,
+   "y": 77.59,
+   "w": 15.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "%",
+   "x": 468.73,
+   "y": 77.59,
+   "w": 10.27,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Cyan",
+   "x": 74,
+   "y": 125.59,
+   "w": 30.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "38",
+   "x": 449.53,
+   "y": 125.59,
+   "w": 15.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "%",
+   "x": 468.73,
+   "y": 125.59,
+   "w": 10.27,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Magenta",
+   "x": 74,
+   "y": 173.59,
+   "w": 55.03,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12",
+   "x": 449.53,
+   "y": 173.59,
+   "w": 15.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "%",
+   "x": 468.73,
+   "y": 173.59,
+   "w": 10.27,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Yellow",
+   "x": 74,
+   "y": 221.59,
+   "w": 40.69,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "55",
+   "x": 449.53,
+   "y": 221.59,
+   "w": 15.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "%",
+   "x": 468.73,
+   "y": 221.59,
+   "w": 10.27,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.printer_black_ink": {
+   "s": "74",
+   "a": {
+    "unit_of_measurement": "%",
+    "icon": "mdi:water",
+    "friendly_name": "Office Printer Black ink"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "sensor.printer_cyan_ink": {
+   "s": "38",
+   "a": {
+    "unit_of_measurement": "%",
+    "icon": "mdi:water",
+    "friendly_name": "Office Printer Cyan ink"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "sensor.printer_magenta_ink": {
+   "s": "12",
+   "a": {
+    "unit_of_measurement": "%",
+    "icon": "mdi:water",
+    "friendly_name": "Office Printer Magenta ink"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "sensor.printer_yellow_ink": {
+   "s": "55",
+   "a": {
+    "unit_of_measurement": "%",
+    "icon": "mdi:water",
+    "friendly_name": "Office Printer Yellow ink"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.printer_black_ink",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Black ink"
+   },
+   {
+    "ei": "sensor.printer_cyan_ink",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Cyan ink"
+   },
+   {
+    "ei": "sensor.printer_magenta_ink",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Magenta ink"
+   },
+   {
+    "ei": "sensor.printer_yellow_ink",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Yellow ink"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Office Printer"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

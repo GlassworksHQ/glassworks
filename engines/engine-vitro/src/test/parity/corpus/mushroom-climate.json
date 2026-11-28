@@ -1,0 +1,62 @@
+{
+ "title": "Mushroom climate card: the heat pump with its mode and temperature controls",
+ "card": {
+  "type": "custom:mushroom-climate-card",
+  "entity": "climate.heat_pump",
+  "show_temperature_control": true,
+  "hvac_modes": [
+   "heat",
+   "cool",
+   "off"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "climate.heat_pump": {
+    "state": "heat",
+    "last_changed": "-292m",
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat",
+      "cool",
+      "auto",
+      "dry",
+      "fan_only"
+     ],
+     "min_temp": 4.5,
+     "max_temp": 28,
+     "target_temp_step": 0.5,
+     "fan_modes": [
+      "low",
+      "medium",
+      "high",
+      "auto"
+     ],
+     "current_temperature": 19.5,
+     "temperature": 22,
+     "target_temp_high": null,
+     "target_temp_low": null,
+     "fan_mode": "auto",
+     "hvac_action": "heating",
+     "friendly_name": "Heat Pump",
+     "supported_features": 395
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "climate.heat_pump",
+    "pl": "demo",
+    "di": "dev-heat-pump",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-heat-pump",
+    "name": "Heat Pump"
+   }
+  ]
+ }
+}

@@ -1,0 +1,124 @@
+{
+ "case": "m-mushroom-vacuum-vacuum-error",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "mushroom-vacuum-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Ground Floor Robot",
+   "x": 56,
+   "y": 17,
+   "w": 123.77,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Error",
+   "x": 56,
+   "y": 36,
+   "w": 27.73,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "vacuum.vacuum_error": {
+   "s": "error",
+   "a": {
+    "fan_speed_list": [
+     "silent",
+     "standard"
+    ],
+    "fan_speed": "standard",
+    "battery_level": 51,
+    "supported_features": 14204,
+    "friendly_name": "Ground Floor Robot"
+   },
+   "lc": 1794499320,
+   "lu": 1794499320
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "vacuum.vacuum_error",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Robot",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Ground Floor"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "vacuum"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "vacuum": {
+     "_": {
+      "default": "mdi:robot-vacuum"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.vacuum.entity_component._.state.cleaning": "Cleaning",
+    "component.vacuum.entity_component._.state.docked": "Docked",
+    "component.vacuum.entity_component._.state.error": "Error",
+    "component.vacuum.entity_component._.state.idle": "Idle",
+    "component.vacuum.entity_component._.state.off": "Off",
+    "component.vacuum.entity_component._.state.on": "On",
+    "component.vacuum.entity_component._.state.paused": "Paused",
+    "component.vacuum.entity_component._.state.returning": "Returning to dock"
+   },
+   "entity": {}
+  }
+ }
+}

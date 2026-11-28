@@ -1,0 +1,63 @@
+{
+ "title": "Markdown with card-mod sheets (the real dashboards' greeting style)",
+ "theme": "Vitro Glass",
+ "card": {
+  "type": "markdown",
+  "text_only": true,
+  "content": "###### Inside\n# {{ '%.1f' | format(states('sensor.living_room_temperature') | float(0)) }}°\n#### Humidity {{ states('sensor.living_room_humidity') | float(0) | round(0) | int }}%",
+  "card_mod": {
+   "style": {
+    ".": "ha-card { padding: 18px; } ha-card ha-markdown { padding: 0; }",
+    "ha-markdown$": "ha-markdown-element { color: #f4f4f5; } ha-markdown-element h6 { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #63636b; margin: 0; } ha-markdown-element h1 { font-size: 56px; font-weight: 300; line-height: 1; margin: 6px 0 4px; letter-spacing: -0.02em; } ha-markdown-element h4 { font-size: 15px; font-weight: 400; color: #a1a1aa; margin: 0; }"
+   }
+  }
+ },
+ "fixture": {
+  "states": {
+   "sensor.living_room_humidity": {
+    "state": "47.3",
+    "last_changed": "-148m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "%",
+     "device_class": "humidity",
+     "friendly_name": "Living Room Sensor Humidity"
+    }
+   },
+   "sensor.living_room_temperature": {
+    "state": "21.42",
+    "last_changed": "-131m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Sensor Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.living_room_humidity",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "dev-living-room-sensor",
+    "en": "Humidity",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.living_room_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "dev-living-room-sensor",
+    "en": "Temperature",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-sensor",
+    "name": "Living Room Sensor"
+   }
+  ]
+ }
+}

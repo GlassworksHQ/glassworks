@@ -1,0 +1,209 @@
+{
+ "case": "media-control-playing",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 217
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 200.84,
+   "type": "hui-media-control-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Living Room Speaker",
+   "x": 49,
+   "y": 20.95,
+   "w": 130.8,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(245, 201, 116)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Evening Tide",
+   "x": 17,
+   "y": 56.94,
+   "w": 94.56,
+   "h": 20,
+   "size": 16.8,
+   "weight": 400,
+   "color": "rgb(245, 201, 116)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "The Placeholder Trio",
+   "x": 17,
+   "y": 84.45,
+   "w": 127.84,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(245, 201, 116)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "media_player.living_room_speaker": {
+   "s": "playing",
+   "a": {
+    "volume_level": 0.31,
+    "is_volume_muted": false,
+    "media_content_type": "music",
+    "media_duration": 245,
+    "media_position": 92,
+    "media_position_updated_at": "2026-11-12T16:07:00+00:00",
+    "media_title": "Evening Tide",
+    "media_artist": "The Placeholder Trio",
+    "media_album_name": "Synthetic Seasons",
+    "shuffle": false,
+    "repeat": "off",
+    "entity_picture": "/local/vitro-harness-fixtures/images/album.png",
+    "device_class": "speaker",
+    "friendly_name": "Living Room Speaker",
+    "supported_features": 8321599
+   },
+   "lc": 1794498960,
+   "lu": 1794498960
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "media_player.living_room_speaker",
+    "pl": "demo",
+    "di": "device-1",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Living Room Speaker"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "media_player"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "media_player": {
+     "_": {
+      "default": "mdi:cast",
+      "state": {
+       "off": "mdi:cast-off",
+       "paused": "mdi:cast-connected",
+       "playing": "mdi:cast-connected"
+      }
+     },
+     "speaker": {
+      "default": "mdi:speaker",
+      "state": {
+       "off": "mdi:speaker-off",
+       "paused": "mdi:speaker-pause",
+       "playing": "mdi:speaker-play"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.media_player.entity_component._.state.buffering": "Buffering",
+    "component.media_player.entity_component._.state.idle": "Idle",
+    "component.media_player.entity_component._.state.off": "Off",
+    "component.media_player.entity_component._.state.on": "On",
+    "component.media_player.entity_component._.state.paused": "Paused",
+    "component.media_player.entity_component._.state.playing": "Playing",
+    "component.media_player.entity_component._.state.standby": "Standby",
+    "component.media_player.entity_component._.state_attributes.app_id.name": "App ID",
+    "component.media_player.entity_component._.state_attributes.app_name.name": "App",
+    "component.media_player.entity_component._.state_attributes.entity_picture_local.name": "Local accessible entity picture",
+    "component.media_player.entity_component._.state_attributes.groups_members.name": "Group members",
+    "component.media_player.entity_component._.state_attributes.is_volume_muted.name": "Muted",
+    "component.media_player.entity_component._.state_attributes.is_volume_muted.state.false": "No",
+    "component.media_player.entity_component._.state_attributes.is_volume_muted.state.true": "Yes",
+    "component.media_player.entity_component._.state_attributes.media_album_artist.name": "Album artist",
+    "component.media_player.entity_component._.state_attributes.media_album_name.name": "Album",
+    "component.media_player.entity_component._.state_attributes.media_artist.name": "Artist",
+    "component.media_player.entity_component._.state_attributes.media_channel.name": "Channel",
+    "component.media_player.entity_component._.state_attributes.media_content_id.name": "Content ID",
+    "component.media_player.entity_component._.state_attributes.media_content_type.name": "Content type",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.album": "Album",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.app": "App",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.artist": "Artist",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.channel": "Channel",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.channels": "Channels",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.composer": "Composer",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.contributing_artist": "Contributing artist",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.episode": "Episode",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.game": "Game",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.genre": "Genre",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.image": "Image",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.movie": "Movie",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.music": "Music",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.playlist": "Playlist",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.podcast": "Podcast",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.season": "Season",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.track": "Track",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.tvshow": "TV show",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.url": "URL",
+    "component.media_player.entity_component._.state_attributes.media_content_type.state.video": "Video",
+    "component.media_player.entity_component._.state_attributes.media_duration.name": "Duration",
+    "component.media_player.entity_component._.state_attributes.media_episode.name": "Episode",
+    "component.media_player.entity_component._.state_attributes.media_playlist.name": "Playlist",
+    "component.media_player.entity_component._.state_attributes.media_position.name": "Position",
+    "component.media_player.entity_component._.state_attributes.media_position_updated_at.name": "Position updated",
+    "component.media_player.entity_component._.state_attributes.media_season.name": "Season",
+    "component.media_player.entity_component._.state_attributes.media_series_title.name": "Series",
+    "component.media_player.entity_component._.state_attributes.media_title.name": "Title",
+    "component.media_player.entity_component._.state_attributes.media_track.name": "Track",
+    "component.media_player.entity_component._.state_attributes.repeat.name": "Repeat",
+    "component.media_player.entity_component._.state_attributes.repeat.state.all": "All",
+    "component.media_player.entity_component._.state_attributes.repeat.state.off": "Off",
+    "component.media_player.entity_component._.state_attributes.repeat.state.one": "One",
+    "component.media_player.entity_component._.state_attributes.shuffle.name": "Shuffle",
+    "component.media_player.entity_component._.state_attributes.shuffle.state.false": "Off",
+    "component.media_player.entity_component._.state_attributes.shuffle.state.true": "On",
+    "component.media_player.entity_component._.state_attributes.sound_mode.name": "Sound mode",
+    "component.media_player.entity_component._.state_attributes.sound_mode_list.name": "Available sound modes",
+    "component.media_player.entity_component._.state_attributes.source.name": "Source",
+    "component.media_player.entity_component._.state_attributes.source_list.name": "Available sources",
+    "component.media_player.entity_component._.state_attributes.volume_level.name": "Volume"
+   },
+   "entity": {}
+  }
+ }
+}

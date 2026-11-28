@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vitro's test APK. The core and the pane API declare minSdk 26; this APK runs the parts Vitro uses on API 23-25
+     (the Mirror runs Android 6), so it overrides their floor, as the legacy test APK does. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-sdk tools:overrideLibrary="dev.glassworks.core,dev.glassworks.paneapi" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:label="Vitro test"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name="dev.glassworks.vitro.test.VitroTestActivity"
+            android:label="Vitro test"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|navigation">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

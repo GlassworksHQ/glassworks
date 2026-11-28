@@ -1,0 +1,171 @@
+{
+ "case": "heading",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 42
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 25.59,
+   "type": "hui-heading-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Living room",
+   "x": 30,
+   "y": 3,
+   "w": 84.53,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "21.4 °C",
+   "x": 403.56,
+   "y": 4.8,
+   "w": 45.78,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 476.34,
+   "y": 4.8,
+   "w": 19.66,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.desk_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "friendly_name": "Desk Lamp",
+    "supported_features": 0
+   },
+   "lc": 1794483360,
+   "lu": 1794483360
+  },
+  "sensor.living_room_temperature": {
+   "s": "21.42",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Living Room Sensor Temperature"
+   },
+   "lc": 1794491820,
+   "lu": 1794491820
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.desk_lamp",
+    "pl": "switch_as_x",
+    "di": "device-1"
+   },
+   {
+    "ei": "sensor.living_room_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-2",
+    "en": "Temperature"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Desk Lamp"
+   },
+   {
+    "id": "device-2",
+    "name": "Living Room Sensor"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light",
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

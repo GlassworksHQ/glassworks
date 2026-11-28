@@ -11,7 +11,7 @@ const context = vm.createContext({ URL }); // the background script has URL too
 vm.runInContext(`${readFileSync(process.env.POLICY_JS, "utf8")}\nthis.P = LockdownPolicy;`, context);
 const P = context.P;
 /** A verdict as a plain object of this realm, for deepEqual. */
-const decide = (details, ha) => JSON.parse(JSON.stringify(P.decide(details, ha)));
+const decide = (details, ha, local) => JSON.parse(JSON.stringify(P.decide(details, ha, local)));
 const HA = "http://192.0.2.10:8123";
 
 test("every case reads as Origin.kt reads it (origin-cases.json, run through Kotlin by LockdownPolicyJsTest)", () => {
@@ -145,6 +145,35 @@ test("a top-level load must be Home Assistant's once the app has said which: red
   assert.deepEqual(decide(req("https://example.com/", "main_frame"), HA), { allow: false, host: "example.com", frame: false });
   assert.deepEqual(decide(req(`${HA}/lovelace/0`, "main_frame"), HA), { allow: true });
   assert.deepEqual(decide(req("https://example.com/", "main_frame"), null), { allow: true }, "the app's first load, before it says");
+});
+
+test("the app's loopback server (Vitro's islands): its pages load, each page held to its own origin", () => {
+  const LOCAL = "http://127.0.0.1:39123";
+  const island = (url, type, extra = {}) => ({ url, type, documentUrl: `${LOCAL}/__vitro/island/s0123`, frameAncestors: [], ...extra });
+  // Top-level: Home Assistant's pages and the island page, nothing else on loopback.
+  assert.deepEqual(decide(req(`${LOCAL}/__vitro/island/s0123`, "main_frame"), HA, LOCAL), { allow: true });
+  assert.deepEqual(decide(req(`${HA}/history`, "main_frame"), HA, LOCAL), { allow: true });
+  assert.deepEqual(decide(req("http://127.0.0.1:39124/", "main_frame"), HA, LOCAL), { allow: false, host: "127.0.0.1:39124", frame: false });
+  assert.equal(P.decide(req(`${LOCAL}/`, "main_frame"), HA, null).allow, false, "no local origin: loopback is another origin");
+  // The island page fetches its cards, its bridge and its icons from the server, and nothing from anywhere else.
+  for (const [url, type] of [[`${LOCAL}/local/card.js`, "script"], [`ws://127.0.0.1:39123/__vitro/ws/s0123`, "websocket"],
+    [`${LOCAL}/__vitro/icon/mdi:lamp`, "xmlhttprequest"], [`${LOCAL}/api/camera_proxy/camera.door`, "image"]]) {
+    assert.deepEqual(decide(island(url, type), HA, LOCAL), { allow: true }, url);
+  }
+  assert.deepEqual(decide(island(`${HA}/api/states`, "xmlhttprequest"), HA, LOCAL), { allow: false, host: "192.0.2.10:8123", frame: false },
+    "the island page never reaches Home Assistant past the server");
+  assert.equal(P.decide(island("https://example.com/x.js", "script"), HA, LOCAL).allow, false);
+  // Home Assistant's page never reaches the loopback server, nor frames it.
+  assert.deepEqual(decide(req(`${LOCAL}/api/states`, "xmlhttprequest"), HA, LOCAL), { allow: false, host: "127.0.0.1:39123", frame: false });
+  assert.deepEqual(decide(req(`${LOCAL}/__vitro/island/s0123`, "sub_frame"), HA, LOCAL), { allow: false, host: "127.0.0.1:39123", frame: true });
+  assert.deepEqual(decide(req(`ws://127.0.0.1:39123/__vitro/ws/s0123`, "websocket"), HA, LOCAL), { allow: false, host: "127.0.0.1:39123", frame: false });
+  // HA's own page, its WebSocket included, is as before.
+  assert.deepEqual(decide(req(`${HA}/api/websocket`.replace("http", "ws"), "websocket"), HA, LOCAL), { allow: true });
+  // A frame in the island page, and a request without a document, keep to their own rules.
+  assert.equal(P.decide(island(`${LOCAL}/local/frame.html`, "sub_frame"), HA, LOCAL).allow, true);
+  assert.equal(P.decide({ url: `${LOCAL}/local/x.js`, type: "script" }, HA, LOCAL).allow, false, "no document: Home Assistant's only");
+  // Before the app names Home Assistant, the local origin opens nothing of its own.
+  assert.equal(P.decide({ url: `${LOCAL}/local/x.js`, type: "script", documentUrl: `${HA}/` }, null, LOCAL).allow, false);
 });
 
 test("data:, moz-extension: and about: pass; a network URL that doesn't parse is refused", () => {

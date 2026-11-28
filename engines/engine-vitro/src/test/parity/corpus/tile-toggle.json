@@ -1,0 +1,33 @@
+{
+ "title": "Tile: input_boolean with the toggle feature, vertical",
+ "card": {
+  "type": "tile",
+  "entity": "input_boolean.vacation_mode",
+  "vertical": true,
+  "features": [
+   {
+    "type": "toggle"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "input_boolean.vacation_mode": {
+    "state": "off",
+    "last_changed": "-172m",
+    "attributes": {
+     "editable": true,
+     "icon": "mdi:account-multiple",
+     "friendly_name": "Vacation mode"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "input_boolean.vacation_mode",
+    "pl": "input_boolean",
+    "en": "Vacation mode"
+   }
+  ]
+ }
+}

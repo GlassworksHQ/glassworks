@@ -1,0 +1,140 @@
+{
+ "case": "mushroom-media-playing",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "mushroom-media-player-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Evening Tide",
+   "x": 56,
+   "y": 17,
+   "w": 80.94,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "The Placeholder Trio ⸱ 31%",
+   "x": 56,
+   "y": 36,
+   "w": 151.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "media_player.living_room_speaker": {
+   "s": "playing",
+   "a": {
+    "volume_level": 0.31,
+    "is_volume_muted": false,
+    "media_content_type": "music",
+    "media_duration": 245,
+    "media_position": 92,
+    "media_position_updated_at": "2026-11-12T16:07:00+00:00",
+    "media_title": "Evening Tide",
+    "media_artist": "The Placeholder Trio",
+    "media_album_name": "Synthetic Seasons",
+    "shuffle": false,
+    "repeat": "off",
+    "entity_picture": "/local/vitro-harness-fixtures/images/album.png",
+    "device_class": "speaker",
+    "friendly_name": "Living Room Speaker",
+    "supported_features": 8321599
+   },
+   "lc": 1794498960,
+   "lu": 1794498960
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "media_player.living_room_speaker",
+    "pl": "demo",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Living Room Speaker"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "media_player"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "media_player": {
+     "_": {
+      "default": "mdi:cast",
+      "state": {
+       "off": "mdi:cast-off",
+       "paused": "mdi:cast-connected",
+       "playing": "mdi:cast-connected"
+      }
+     },
+     "speaker": {
+      "default": "mdi:speaker",
+      "state": {
+       "off": "mdi:speaker-off",
+       "paused": "mdi:speaker-pause",
+       "playing": "mdi:speaker-play"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.media_player.entity_component._.state.buffering": "Buffering",
+    "component.media_player.entity_component._.state.idle": "Idle",
+    "component.media_player.entity_component._.state.off": "Off",
+    "component.media_player.entity_component._.state.on": "On",
+    "component.media_player.entity_component._.state.paused": "Paused",
+    "component.media_player.entity_component._.state.playing": "Playing",
+    "component.media_player.entity_component._.state.standby": "Standby"
+   },
+   "entity": {}
+  }
+ }
+}

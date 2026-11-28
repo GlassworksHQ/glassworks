@@ -1,0 +1,117 @@
+{
+ "case": "markdown-cardmod-has",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 159
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 142.19,
+   "type": "hui-markdown-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "A heading",
+   "x": 213.02,
+   "y": 18,
+   "w": 73.95,
+   "h": 19,
+   "size": 16.38,
+   "weight": 700,
+   "color": "rgb(52, 211, 153)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "A paragraph with",
+   "x": 142.73,
+   "y": 58,
+   "w": 135.41,
+   "h": 21,
+   "size": 18,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "bold",
+   "x": 282.61,
+   "y": 58,
+   "w": 35.23,
+   "h": 21,
+   "size": 18,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "text.",
+   "x": 322.3,
+   "y": 58,
+   "w": 34.97,
+   "h": 21,
+   "size": 18,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "A plain paragraph.",
+   "x": 193.59,
+   "y": 104.8,
+   "w": 112.8,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {},
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ }
+}

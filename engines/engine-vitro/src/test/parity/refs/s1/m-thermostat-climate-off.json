@@ -1,0 +1,197 @@
+{
+ "case": "m-thermostat-climate-off",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 328
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 312,
+   "type": "hui-thermostat-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hallway Thermostat",
+   "x": 178.73,
+   "y": 15,
+   "w": 142.52,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 224.97,
+   "y": 157.41,
+   "w": 50.05,
+   "h": 42,
+   "size": 36,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "17.5 °C",
+   "x": 233.56,
+   "y": 219,
+   "w": 52.97,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "climate.climate_off": {
+   "s": "off",
+   "a": {
+    "hvac_modes": [
+     "off",
+     "heat"
+    ],
+    "min_temp": 7,
+    "max_temp": 30,
+    "target_temp_step": 0.5,
+    "current_temperature": 17.5,
+    "hvac_action": "off",
+    "supported_features": 385,
+    "friendly_name": "Hallway Thermostat"
+   },
+   "lc": 1794478080,
+   "lu": 1794478080
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "climate.climate_off",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Thermostat",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Hallway"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "climate"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "climate": {
+     "_": {
+      "default": "mdi:thermostat",
+      "state_attributes": {
+       "fan_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "auto": "mdi:fan-auto",
+         "diffuse": "mdi:weather-windy",
+         "focus": "mdi:target",
+         "high": "mdi:speedometer",
+         "low": "mdi:speedometer-slow",
+         "medium": "mdi:speedometer-medium",
+         "middle": "mdi:speedometer-medium",
+         "off": "mdi:fan-off",
+         "on": "mdi:fan"
+        }
+       },
+       "hvac_action": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "cooling": "mdi:snowflake",
+         "defrosting": "mdi:snowflake-melt",
+         "drying": "mdi:water-percent",
+         "fan": "mdi:fan",
+         "heating": "mdi:fire",
+         "idle": "mdi:clock-outline",
+         "off": "mdi:power",
+         "preheating": "mdi:heat-wave"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "activity": "mdi:motion-sensor",
+         "away": "mdi:account-arrow-right",
+         "boost": "mdi:rocket-launch",
+         "comfort": "mdi:sofa",
+         "eco": "mdi:leaf",
+         "home": "mdi:home",
+         "sleep": "mdi:bed"
+        }
+       },
+       "swing_horizontal_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:arrow-oscillating-off",
+         "on": "mdi:arrow-expand-horizontal"
+        }
+       },
+       "swing_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "both": "mdi:arrow-all",
+         "horizontal": "mdi:arrow-left-right",
+         "off": "mdi:arrow-oscillating-off",
+         "on": "mdi:arrow-oscillating",
+         "vertical": "mdi:arrow-up-down"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.climate.entity_component._.state.auto": "Auto",
+    "component.climate.entity_component._.state.cool": "Cool",
+    "component.climate.entity_component._.state.dry": "Dry",
+    "component.climate.entity_component._.state.fan_only": "Fan only",
+    "component.climate.entity_component._.state.heat": "Heat",
+    "component.climate.entity_component._.state.heat_cool": "Heat/Cool",
+    "component.climate.entity_component._.state.off": "Off"
+   },
+   "entity": {}
+  }
+ }
+}

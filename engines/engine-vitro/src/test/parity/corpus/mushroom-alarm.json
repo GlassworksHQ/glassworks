@@ -1,0 +1,37 @@
+{
+ "title": "Mushroom alarm control panel card: disarmed, with arm buttons",
+ "expect": {
+  "alarm_control_panel.house_alarm": "disarmed"
+ },
+ "card": {
+  "type": "custom:mushroom-alarm-control-panel-card",
+  "entity": "alarm_control_panel.house_alarm",
+  "name": "Alarm",
+  "states": [
+   "armed_home",
+   "armed_away"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "alarm_control_panel.house_alarm": {
+    "state": "disarmed",
+    "last_changed": "-230m",
+    "attributes": {
+     "code_format": "number",
+     "changed_by": null,
+     "code_arm_required": false,
+     "friendly_name": "House Alarm",
+     "supported_features": 6
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alarm_control_panel.house_alarm",
+    "pl": "template",
+    "en": "House Alarm"
+   }
+  ]
+ }
+}

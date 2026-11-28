@@ -1,0 +1,105 @@
+{
+ "title": "stack-in-card: two Mushroom template cards and a markdown",
+ "theme": "Vitro Glass",
+ "card": {
+  "type": "custom:stack-in-card",
+  "cards": [
+   {
+    "type": "markdown",
+    "content": "###### Climate",
+    "text_only": true
+   },
+   {
+    "type": "custom:mushroom-template-card",
+    "entity": "climate.heat_pump",
+    "primary": "Heat pump",
+    "secondary": "{{ states('climate.heat_pump') | title }}",
+    "icon": "mdi:air-conditioner"
+   },
+   {
+    "type": "custom:mushroom-template-card",
+    "entity": "fan.ceiling_fan",
+    "primary": "Ceiling fan",
+    "secondary": "{{ states('fan.ceiling_fan') | title }}",
+    "icon": "mdi:ceiling-fan"
+   }
+  ],
+  "card_mod": {
+   "style": "ha-card { height: 100%; box-sizing: border-box; }"
+  }
+ },
+ "fixture": {
+  "states": {
+   "climate.heat_pump": {
+    "state": "off",
+    "last_changed": "-292m",
+    "attributes": {
+     "hvac_modes": [
+      "off",
+      "heat",
+      "cool",
+      "auto",
+      "dry",
+      "fan_only"
+     ],
+     "min_temp": 16,
+     "max_temp": 31,
+     "target_temp_step": 0.5,
+     "fan_modes": [
+      "low",
+      "medium",
+      "high",
+      "auto"
+     ],
+     "current_temperature": 17.5,
+     "temperature": null,
+     "target_temp_high": null,
+     "target_temp_low": null,
+     "fan_mode": "auto",
+     "hvac_action": "off",
+     "friendly_name": "Heat Pump",
+     "supported_features": 395
+    }
+   },
+   "fan.ceiling_fan": {
+    "state": "on",
+    "last_changed": "-261m",
+    "attributes": {
+     "preset_modes": [
+      "auto"
+     ],
+     "percentage": 20,
+     "percentage_step": 10,
+     "preset_mode": null,
+     "friendly_name": "Ceiling Fan",
+     "supported_features": 57
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "climate.heat_pump",
+    "pl": "demo",
+    "di": "dev-heat-pump",
+    "np": "device"
+   },
+   {
+    "ei": "fan.ceiling_fan",
+    "pl": "zha",
+    "tk": "fan",
+    "di": "dev-ceiling-fan",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-heat-pump",
+    "name": "Heat Pump"
+   },
+   {
+    "id": "dev-ceiling-fan",
+    "name": "Ceiling Fan"
+   }
+  ]
+ }
+}

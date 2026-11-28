@@ -1,0 +1,74 @@
+{
+ "title": "vertical-stack-in-card: a title and two tiles in one card",
+ "route": "frontend",
+ "card": {
+  "type": "custom:vertical-stack-in-card",
+  "title": "Lights",
+  "cards": [
+   {
+    "type": "tile",
+    "entity": "light.living_room_lamp"
+   },
+   {
+    "type": "tile",
+    "entity": "light.hallway_lamp"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.living_room_lamp": {
+    "state": "on",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 166,
+     "friendly_name": "Living Room Lamp",
+     "supported_features": 32
+    }
+   },
+   "light.hallway_lamp": {
+    "state": "off",
+    "last_changed": "-35m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Hallway Lamp",
+     "supported_features": 32
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.living_room_lamp",
+    "pl": "zha",
+    "di": "dev-living-room-lamp",
+    "tk": "light",
+    "np": "device"
+   },
+   {
+    "ei": "light.hallway_lamp",
+    "pl": "zha",
+    "di": "dev-hallway-lamp",
+    "tk": "light",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-lamp",
+    "name": "Living Room Lamp"
+   },
+   {
+    "id": "dev-hallway-lamp",
+    "name": "Hallway Lamp"
+   }
+  ]
+ }
+}

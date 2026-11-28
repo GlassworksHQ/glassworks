@@ -1,0 +1,181 @@
+{
+ "case": "history-graph-timeline",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 102
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 86,
+   "type": "hui-history-graph-card"
+  }
+ ],
+ "texts": [],
+ "states": {
+  "binary_sensor.office_occupancy": {
+   "s": "off",
+   "a": {
+    "friendly_name": "Office Occupancy"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "binary_sensor.office_occupancy",
+    "pl": "group",
+    "en": "Office Occupancy"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "binary_sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "binary_sensor": {
+     "_": {
+      "default": "mdi:radiobox-blank",
+      "state": {
+       "on": "mdi:checkbox-marked-circle"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.binary_sensor.entity_component._.state.off": "Off",
+    "component.binary_sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "history/stream",
+    "entity_ids": [
+     "binary_sensor.office_occupancy"
+    ],
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "minimal_response": true,
+    "significant_changes_only": true,
+    "no_attributes": true
+   },
+   "events": [
+    {
+     "states": {
+      "binary_sensor.office_occupancy": [
+       {
+        "s": "off",
+        "lu": 1794413280
+       },
+       {
+        "s": "on",
+        "lu": 1794416280
+       },
+       {
+        "s": "off",
+        "lu": 1794419280
+       },
+       {
+        "s": "on",
+        "lu": 1794427380
+       },
+       {
+        "s": "off",
+        "lu": 1794428280
+       },
+       {
+        "s": "on",
+        "lu": 1794442080
+       },
+       {
+        "s": "off",
+        "lu": 1794443880
+       },
+       {
+        "s": "on",
+        "lu": 1794464880
+       },
+       {
+        "s": "off",
+        "lu": 1794467580
+       },
+       {
+        "s": "on",
+        "lu": 1794474480
+       },
+       {
+        "s": "off",
+        "lu": 1794478980
+       },
+       {
+        "s": "on",
+        "lu": 1794487680
+       },
+       {
+        "s": "off",
+        "lu": 1794492480
+       },
+       {
+        "s": "on",
+        "lu": 1794495180
+       },
+       {
+        "s": "off",
+        "lu": 1794497280
+       }
+      ]
+     },
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  },
+  {
+   "request": {
+    "type": "recorder/statistics_during_period",
+    "start_time": "2026-11-11T15:08:00.000Z",
+    "end_time": "2026-11-12T16:08:00.000Z",
+    "statistic_ids": [
+     "binary_sensor.office_occupancy"
+    ],
+    "period": "hour",
+    "types": [
+     "mean",
+     "state"
+    ]
+   },
+   "events": [],
+   "result": {}
+  }
+ ]
+}

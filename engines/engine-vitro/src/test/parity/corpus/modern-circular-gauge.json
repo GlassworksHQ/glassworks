@@ -1,0 +1,41 @@
+{
+ "title": "modern-circular-gauge: humidity on a 0-100 ring",
+ "route": "island",
+ "card": {
+  "type": "custom:modern-circular-gauge",
+  "entity": "sensor.living_room_humidity",
+  "min": 0,
+  "max": 100,
+  "name": "Humidity"
+ },
+ "fixture": {
+  "states": {
+   "sensor.living_room_humidity": {
+    "state": "47.3",
+    "last_changed": "-9m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "%",
+     "device_class": "humidity",
+     "friendly_name": "Living Room Sensor Humidity"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.living_room_humidity",
+    "pl": "esphome",
+    "di": "dev-living-room-sensor",
+    "en": "Humidity",
+    "dp": 0,
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room-sensor",
+    "name": "Living Room Sensor"
+   }
+  ]
+ }
+}

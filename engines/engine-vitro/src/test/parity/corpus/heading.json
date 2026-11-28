@@ -1,0 +1,70 @@
+{
+ "title": "Heading with an icon and entity badges",
+ "card": {
+  "type": "heading",
+  "heading": "Living room",
+  "icon": "mdi:sofa",
+  "badges": [
+   {
+    "type": "entity",
+    "entity": "sensor.living_room_temperature"
+   },
+   {
+    "type": "entity",
+    "entity": "light.desk_lamp"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.desk_lamp": {
+    "state": "off",
+    "last_changed": "-272m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": null,
+     "friendly_name": "Desk Lamp",
+     "supported_features": 0
+    }
+   },
+   "sensor.living_room_temperature": {
+    "state": "21.42",
+    "last_changed": "-131m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "°C",
+     "device_class": "temperature",
+     "friendly_name": "Living Room Sensor Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.desk_lamp",
+    "pl": "switch_as_x",
+    "di": "dev-desk-lamp",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.living_room_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "dev-living-room-sensor",
+    "en": "Temperature",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-desk-lamp",
+    "name": "Desk Lamp"
+   },
+   {
+    "id": "dev-living-room-sensor",
+    "name": "Living Room Sensor"
+   }
+  ]
+ }
+}

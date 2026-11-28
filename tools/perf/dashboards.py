@@ -329,6 +329,28 @@ def history(entity_ids, start, end, now=None):
     return out
 
 
+def statistics_metadata(statistic_ids):
+    """recorder/get_statistics_metadata, as HA's recorder answers it (and the parity harness's fake,
+    tools/vitro-parity/fakehome.py): one entry per asked entity of the home with a state class, none
+    for the rest. A measurement has a mean, a total a sum. HA's own dialog doesn't ask (the fake's
+    config doesn't list `recorder`, and ha-more-info-history checks it first); this keeps any client
+    that asks from reading the fake as broken."""
+    st = states()
+    units = {"temperature": "temperature", "power": "power", "energy": "energy"}
+    out = []
+    for sid in statistic_ids or []:
+        a = (st.get(sid) or {}).get("attributes") or {}
+        sc = a.get("state_class")
+        if sc not in ("measurement", "total", "total_increasing"):
+            continue
+        mean = sc == "measurement"
+        unit = a.get("unit_of_measurement")
+        out.append({"statistic_id": sid, "display_unit_of_measurement": unit, "has_mean": mean, "mean_type": 1 if mean else 0,
+                    "has_sum": not mean, "name": None, "source": "recorder", "statistics_unit_of_measurement": unit,
+                    "unit_class": units.get(a.get("device_class"))})
+    return out
+
+
 def statistics(statistic_ids, start_time, end_time, period, now=None):
     """recorder/statistics_during_period (the sensor card's graph for sensors with a state class):
     seeded points ending at the asked window's end, {id: [{start, end, mean, min, max, state}]}, times
@@ -392,12 +414,20 @@ def asset(name):
         def read(n):
             with open(os.path.join(HERE, "page", n), "rb") as f:
                 return f.read()
-        import hafrontend
-        cfg = dict(TIERS, FRONTEND=hafrontend.VERSION, HEAD_ENTITIES=head(), VIEWS=VIEWS, HEAD_CARDS=head_cards(),
-                   CARDS={v: len(view_cards(v)) for v in VIEWS})
-        body = read("stats.js") + b"\nwindow.GW_CLARITY = " + json.dumps(cfg).encode() + b";\n" + read("harness.js")
+        body = read("stats.js") + b"\nwindow.GW_CLARITY = " + json.dumps(page_config()).encode() + b";\n" + read("harness.js")
         return ("application/javascript", body)
+    if name == "config.json":
+        # The same config for Vitro's native harness (VitroClarity), which runs no page to put it in.
+        return ("application/json", json.dumps(page_config()).encode())
     return None
+
+
+def page_config():
+    """What a harness measures with: tiers.json, the frontend's release, the head's entities and cards, the views and
+    their card counts. The web harness gets it in its script (window.GW_CLARITY), Vitro's at /clarity/config.json."""
+    import hafrontend
+    return dict(TIERS, FRONTEND=hafrontend.VERSION, HEAD_ENTITIES=head(), VIEWS=VIEWS, HEAD_CARDS=head_cards(),
+                CARDS={v: len(view_cards(v)) for v in VIEWS})
 
 
 class Stream:

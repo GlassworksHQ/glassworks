@@ -1,0 +1,258 @@
+{
+ "case": "m-glance-binary-sensor",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 151
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 134.78,
+   "type": "hui-glance-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Back Door",
+   "x": 43.19,
+   "y": 20,
+   "w": 64.11,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Open",
+   "x": 58.94,
+   "y": 98.39,
+   "w": 32.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Back Door",
+   "x": 159.69,
+   "y": 20,
+   "w": 64.11,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Closed",
+   "x": 170.23,
+   "y": 98.39,
+   "w": 43.03,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Back Door",
+   "x": 276.19,
+   "y": 20,
+   "w": 64.11,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Detected",
+   "x": 280.34,
+   "y": 98.39,
+   "w": 55.81,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Back Door",
+   "x": 392.69,
+   "y": 20,
+   "w": 64.11,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Unavailable",
+   "x": 388.89,
+   "y": 98.39,
+   "w": 71.7,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "binary_sensor.binary_sensor_door_closed": {
+   "s": "off",
+   "a": {
+    "device_class": "door",
+    "friendly_name": "Back Door"
+   },
+   "lc": 1794496080,
+   "lu": 1794496080
+  },
+  "binary_sensor.binary_sensor_door_open": {
+   "s": "on",
+   "a": {
+    "device_class": "door",
+    "friendly_name": "Back Door"
+   },
+   "lc": 1794499440,
+   "lu": 1794499440
+  },
+  "binary_sensor.binary_sensor_motion": {
+   "s": "on",
+   "a": {
+    "device_class": "motion",
+    "friendly_name": "Back Door"
+   },
+   "lc": 1794499650,
+   "lu": 1794499650
+  },
+  "binary_sensor.binary_sensor_unavailable": {
+   "s": "unavailable",
+   "a": {
+    "device_class": "door",
+    "restored": true,
+    "friendly_name": "Back Door"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "binary_sensor.binary_sensor_door_closed",
+    "pl": "zha",
+    "di": "device-1",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "binary_sensor.binary_sensor_door_open",
+    "pl": "zha",
+    "di": "device-1",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "binary_sensor.binary_sensor_motion",
+    "pl": "zha",
+    "di": "device-1",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "binary_sensor.binary_sensor_unavailable",
+    "pl": "zha",
+    "di": "device-1",
+    "en": "Door",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Back"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "binary_sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "binary_sensor": {
+     "_": {
+      "default": "mdi:radiobox-blank",
+      "state": {
+       "on": "mdi:checkbox-marked-circle"
+      }
+     },
+     "door": {
+      "default": "mdi:door-closed",
+      "state": {
+       "on": "mdi:door-open"
+      }
+     },
+     "motion": {
+      "default": "mdi:motion-sensor-off",
+      "state": {
+       "on": "mdi:motion-sensor"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.binary_sensor.entity_component._.state.off": "Off",
+    "component.binary_sensor.entity_component._.state.on": "On",
+    "component.binary_sensor.entity_component.door.state.off": "Closed",
+    "component.binary_sensor.entity_component.door.state.on": "Open",
+    "component.binary_sensor.entity_component.motion.state.off": "Clear",
+    "component.binary_sensor.entity_component.motion.state.on": "Detected"
+   },
+   "entity": {}
+  }
+ }
+}

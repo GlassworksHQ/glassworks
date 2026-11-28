@@ -1,0 +1,125 @@
+{
+ "case": "mushroom-vacuum",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "mushroom-vacuum-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Rover",
+   "x": 56,
+   "y": 17,
+   "w": 36.38,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Docked",
+   "x": 56,
+   "y": 36,
+   "w": 42.48,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "vacuum.rover": {
+   "s": "docked",
+   "a": {
+    "fan_speed_list": [
+     "silent",
+     "standard",
+     "strong",
+     "turbo"
+    ],
+    "fan_speed": "strong",
+    "status": "Charging",
+    "friendly_name": "Rover",
+    "supported_features": 31676,
+    "battery_level": 100
+   },
+   "lc": 1794485400,
+   "lu": 1794485400
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "vacuum.rover",
+    "pl": "demo",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Rover"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "vacuum"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "vacuum": {
+     "_": {
+      "default": "mdi:robot-vacuum"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.vacuum.entity_component._.state.cleaning": "Cleaning",
+    "component.vacuum.entity_component._.state.docked": "Docked",
+    "component.vacuum.entity_component._.state.error": "Error",
+    "component.vacuum.entity_component._.state.idle": "Idle",
+    "component.vacuum.entity_component._.state.off": "Off",
+    "component.vacuum.entity_component._.state.on": "On",
+    "component.vacuum.entity_component._.state.paused": "Paused",
+    "component.vacuum.entity_component._.state.returning": "Returning to dock"
+   },
+   "entity": {}
+  }
+ }
+}

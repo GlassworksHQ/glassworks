@@ -51,7 +51,7 @@ class AppBuildTest {
     @After fun tearDown() = stops.forEach { runCatching { it() } }
 
     @Test fun theApkHandsInItsBuildConfig() {
-        val kiosk = KioskApp()
+        val kiosk = attachedKioskApp()
         assertEquals(AppBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.DEBUG, BuildConfig.TEST_BUILD,
             notificationIcon = R.drawable.ic_notification), kiosk.build)
         assertSame(kiosk.build, kiosk.glassworks.build)
@@ -141,8 +141,10 @@ class AppBuildTest {
 
     /** What the runtime's engine starts Gecko with. */
     @Suppress("UNCHECKED_CAST")
-    private fun engineSettings(r: GlassworksRuntime): EngineSettings =
-        (GeckoEngine::class.java.getDeclaredField("settings").apply { isAccessible = true }.get(r.engine) as (Context) -> EngineSettings)(app)
+    private fun engineSettings(r: GlassworksRuntime): EngineSettings {
+        val gecko = (r.engine as? dev.glassworks.engine.vitro.VitroEngine)?.fallback ?: r.engine
+        return (GeckoEngine::class.java.getDeclaredField("settings").apply { isAccessible = true }.get(gecko) as (Context) -> EngineSettings)(app)
+    }
 
     /** The state a text sensor sends Home Assistant. */
     @Suppress("UNCHECKED_CAST")

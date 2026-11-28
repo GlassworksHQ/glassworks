@@ -1,0 +1,121 @@
+{
+ "title": "layout-card masonry view: a card-mod fixed card between two tiles leaves no gap",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "view_config": {
+  "type": "custom:masonry-layout",
+  "cards": [
+   {
+    "type": "tile",
+    "entity": "light.desk_lamp",
+    "name": "Desk"
+   },
+   {
+    "type": "tile",
+    "entity": "light.bedroom_accent",
+    "name": "Pinned",
+    "card_mod": {
+     "style": "ha-card { position: fixed; right: 24px; bottom: 24px; width: 160px; }"
+    }
+   },
+   {
+    "type": "tile",
+    "entity": "light.shelf_strip",
+    "name": "Shelf"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.bedroom_accent": {
+    "state": "off",
+    "last_changed": "-50m",
+    "attributes": {
+     "supported_color_modes": [
+      "xy"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "hs_color": null,
+     "rgb_color": null,
+     "xy_color": null,
+     "off_with_transition": false,
+     "off_brightness": 254,
+     "icon": "mdi:led-strip-variant",
+     "friendly_name": "Bedroom Strip Accent",
+     "supported_features": 40
+    }
+   },
+   "light.desk_lamp": {
+    "state": "off",
+    "last_changed": "-272m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": null,
+     "friendly_name": "Desk Lamp",
+     "supported_features": 0
+    }
+   },
+   "light.shelf_strip": {
+    "state": "off",
+    "last_changed": "-246m",
+    "attributes": {
+     "supported_color_modes": [
+      "xy"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "hs_color": null,
+     "rgb_color": null,
+     "xy_color": null,
+     "off_with_transition": false,
+     "off_brightness": 254,
+     "friendly_name": "Shelf Strip",
+     "supported_features": 40
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.bedroom_accent",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:led-strip-variant",
+    "di": "dev-bedroom-strip",
+    "en": "Accent",
+    "np": "device"
+   },
+   {
+    "ei": "light.desk_lamp",
+    "pl": "switch_as_x",
+    "di": "dev-desk-lamp",
+    "np": "device"
+   },
+   {
+    "ei": "light.shelf_strip",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-shelf-strip",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-bedroom-strip",
+    "name": "Bedroom Strip"
+   },
+   {
+    "id": "dev-desk-lamp",
+    "name": "Desk Lamp"
+   },
+   {
+    "id": "dev-shelf-strip",
+    "name": "Shelf Strip"
+   }
+  ]
+ }
+}

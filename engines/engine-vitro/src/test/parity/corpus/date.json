@@ -1,0 +1,13 @@
+{
+ "title": "Date: today, the default format",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "date"
+ },
+ "fixture": {
+  "states": {}
+ }
+}

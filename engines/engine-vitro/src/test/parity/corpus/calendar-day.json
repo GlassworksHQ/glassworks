@@ -1,0 +1,86 @@
+{
+ "title": "Calendar: the day view, an all-day event and a timed one",
+ "route": "frontend",
+ "card": {
+  "type": "calendar",
+  "entities": [
+   "calendar.family"
+  ],
+  "initial_view": "dayGridDay"
+ },
+ "fixture": {
+  "states": {
+   "calendar.family": {
+    "state": "on",
+    "last_changed": "-190m",
+    "attributes": {
+     "message": "Recycling pickup",
+     "all_day": true,
+     "start_time": "2026-11-12 00:00:00",
+     "end_time": "2026-11-13 00:00:00",
+     "location": "",
+     "description": "Blue bin out the night before",
+     "friendly_name": "Family"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "calendar.family",
+    "pl": "local_calendar",
+    "en": "Family"
+   }
+  ],
+  "calendar": {
+   "calendar.family": [
+    {
+     "summary": "Recycling pickup",
+     "start": "@D+0",
+     "end": "@D+1",
+     "description": "Blue bin out the night before"
+    },
+    {
+     "summary": "Dentist",
+     "start": "@D+1 09:30",
+     "end": "@D+1 10:15"
+    },
+    {
+     "summary": "Book club",
+     "start": "@D+3 19:00",
+     "end": "@D+3 21:00"
+    },
+    {
+     "summary": "Garden waste",
+     "start": "@D+6",
+     "end": "@D+7"
+    },
+    {
+     "summary": "Piano lesson",
+     "start": "@D-2 16:00",
+     "end": "@D-2 17:00"
+    },
+    {
+     "summary": "Boiler service",
+     "start": "@D+11",
+     "end": "@D+12"
+    },
+    {
+     "summary": "School holiday",
+     "start": "@D+13",
+     "end": "@D+16"
+    },
+    {
+     "summary": "Recycling pickup",
+     "start": "@D+14",
+     "end": "@D+15",
+     "description": "Blue bin out the night before"
+    },
+    {
+     "summary": "Window cleaner",
+     "start": "@D-6 11:00",
+     "end": "@D-6 12:00"
+    }
+   ]
+  }
+ }
+}

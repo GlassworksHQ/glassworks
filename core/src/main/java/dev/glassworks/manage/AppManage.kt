@@ -337,7 +337,7 @@ open class AppManage(
         return Tile("Wi-Fi", link.ssid ?: "Connected", listOfNotNull(link.rssi?.let { "$it dBm".replace('-', '−') }, link.ipv4).joinToString(" · "), Tile.Tone.OK)
     }
 
-    private fun engineTile(): Tile = engineTile(runtime.engine.name)
+    private fun engineTile(): Tile = engineTile(runtime.engine.name, vitroTurnedOff = prefs.vitroTurnedOff != null)
 
     private fun memoryTile(): Tile {
         val mi = ActivityManager.MemoryInfo()
@@ -435,12 +435,16 @@ open class AppManage(
          * The Engine tile from the engine's name: "GeckoView 159" over "Version 159.0". The legacy engine's name ends in
          * a label ("GeckoView 144.0 (legacy, Home Assistant only)"), which the Legacy chip explains instead (#29).
          */
-        fun engineTile(name: String): Tile {
+        fun engineTile(name: String, vitroTurnedOff: Boolean = false): Tile {
             val m = Regex("""^(.*?) ((\d+)(?:\.\d+)*)""").find(name)
-                ?: return Tile("Engine", name.ifEmpty { "Unknown" }, "", Tile.Tone.OK)
-            val (product, version, major) = m.destructured
-            return Tile("Engine", "$product $major", "Version $version", Tile.Tone.OK)
+            val value = m?.destructured?.let { (product, _, major) -> "$product $major" } ?: name.ifEmpty { "Unknown" }
+            // VitroSentinel turned Vitro off after it crashed the app at start: the tile says so, and opens Labs.
+            if (vitroTurnedOff) return Tile("Engine", value, VITRO_OFF_TILE, Tile.Tone.PROBLEM, href = "/${CoreSettings.LABS}")
+            return Tile("Engine", value, m?.destructured?.component2()?.let { "Version $it" }.orEmpty(), Tile.Tone.OK)
         }
+
+        /** The Engine tile's line while VitroSentinel has Vitro off. */
+        const val VITRO_OFF_TILE = "Vitro turned off after crashes"
 
         /** An Android system property, "" when unset or unreadable. */
         fun prop(key: String): String = runCatching {

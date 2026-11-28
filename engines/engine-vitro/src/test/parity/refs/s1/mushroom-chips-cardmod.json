@@ -1,0 +1,116 @@
+{
+ "case": "mushroom-chips-cardmod",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 12,
+  "y": 12,
+  "width": 936,
+  "height": 54
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 20,
+   "y": 20,
+   "w": 920,
+   "h": 38,
+   "type": "mushroom-chips-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "CO2 512",
+   "x": 37.8,
+   "y": 15.2,
+   "w": 38.98,
+   "h": 11,
+   "size": 9.6,
+   "weight": 700,
+   "color": "rgb(52, 211, 153)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.living_room_co2": {
+   "s": "512",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "ppm",
+    "device_class": "carbon_dioxide",
+    "friendly_name": "Living Room Sensor CO2"
+   },
+   "lc": 1794494160,
+   "lu": 1794494160
+  }
+ },
+ "templates": {
+  "CO2 {{ states('sensor.living_room_co2') | int(0) }}": {
+   "result": "CO2 512"
+  }
+ },
+ "display": {
+  "entities": [
+   {
+    "ei": "sensor.living_room_co2",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-1",
+    "en": "CO2",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Living Room Sensor"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "carbon_dioxide": {
+      "default": "mdi:molecule-co2"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state_attributes.last_reset.name": "Last reset",
+    "component.sensor.entity_component._.state_attributes.options.name": "Possible states",
+    "component.sensor.entity_component._.state_attributes.state_class.name": "State class",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement": "Measurement",
+    "component.sensor.entity_component._.state_attributes.state_class.state.measurement_angle": "Measurement angle",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total": "Total",
+    "component.sensor.entity_component._.state_attributes.state_class.state.total_increasing": "Total increasing"
+   },
+   "entity": {}
+  }
+ }
+}

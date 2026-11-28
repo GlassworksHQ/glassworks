@@ -251,6 +251,11 @@ open class MainActivity : Activity() {
         HaAuth.init(this)
         intent?.let { screenExtras(it, runtime.app::trustsExtras) }
         applyIntent(intent, fromNewIntent = false)
+        // VitroSentinel turned Vitro off after it crashed the app at start: the panel says so once (Labs keeps why).
+        if (prefs.takeVitroOffNotice()) {
+            Log.w(TAG, "Vitro: turned off after the app crashed at start; this start uses the browser engine")
+            Toast.makeText(this, dev.glassworks.settings.CoreSettings.VITRO_OFF_NOTICE, Toast.LENGTH_LONG).show()
+        }
         // The frame's orientation. The S1's manifest already asks for landscape: no change there.
         val orientation = glassworks.frame.orientation
         screenOrientation(orientation).let { if (requestedOrientation != it) requestedOrientation = it }
@@ -541,6 +546,7 @@ open class MainActivity : Activity() {
         // Up again (the screen's own latch takes over) or nothing left: the login page's pause is over.
         if (d.show || d.step == SetupFlow.DONE) setupHidForLogin = false
         if (d.show) {
+            VitroSentinel.setupShown() // no dashboard on this start: its end isn't a Vitro failure
             setupOverlay.render(setupModel(d, d.step, d.done, preview = false))
         } else if (setupOverlay.isShowing && setupOverlay.model?.step != SetupFlow.DONE) {
             Log.i(TAG, "Setup complete; loading the dashboard")
@@ -899,6 +905,8 @@ open class MainActivity : Activity() {
     //   --ef zoom 1.25          CSS px ratio (0 = auto); restarts the process
     //   --es secure_hosts a,b   extra secure-context hosts; restarts the process
     //   --ez remote_debug true  Gecko remote debugging; restarts the process (ignored on the legacy engine, #29)
+    //   --ez vitro true         Vitro, the native dashboard renderer (Settings → Labs); restarts the process, also on a
+    //                           cold start when it changes the setting (the engine is picked when the runtime is made)
     //   --ez reload true        reload the page
     //   --ez restart true       restart the app process
     //   --es api_key <base64>   ESPHome API encryption key (32 bytes); --ez api_encryption true|false
@@ -931,6 +939,15 @@ open class MainActivity : Activity() {
         if (fromNewIntent) applySetupPreview(intent)
         if (intent.hasExtra("zoom")) {
             prefs.zoom = intent.getFloatExtra("zoom", 0f)
+            needsRestart = true
+        }
+        // The app picks its engine when its runtime is made, before this runs even on a cold start: a change to Vitro
+        // restarts then too, so the extra takes effect at once, as it did when Vitro read it at the first page.
+        var engineChoiceChanged = false
+        if (intent.hasExtra("vitro")) {
+            val on = intent.getBooleanExtra("vitro", false)
+            engineChoiceChanged = on != prefs.vitroEnabled
+            prefs.vitroEnabled = on
             needsRestart = true
         }
         intent.getStringExtra("secure_hosts")?.let {
@@ -970,7 +987,13 @@ open class MainActivity : Activity() {
             "off" -> glassworks.screen.sleep("intent")
             "on" -> glassworks.screen.wake("intent")
         }
+        // Read before the hold takes it: applyTestHoldExtra removes the extra from the intent.
+        val holdAsked = intent.getBooleanExtra(dev.glassworks.screen.ScreenPolicy.TEST_HOLD_EXTRA, false)
         glassworks.screen.applyTestHoldExtra(this, intent)
+        if (holdAsked) {
+            // Clarity reads which engine draws the page and the Labs setting it puts back after a Vitro run (perfrun.py).
+            Log.i(TAG, "test hold engine: ${runtime.engine.name.ifEmpty { "unknown" }}; vitro setting ${if (prefs.vitroEnabled) "on" else "off"}")
+        }
         if (intent.getBooleanExtra("remove_admin", false)) glassworks.screen.removeAdmin()
         // The kiosk settings menu: the notification, or `--ez kiosk_settings true` (also from a cold start).
         if (SettingsMenu.requested { k -> if (intent.hasExtra(k)) intent.getBooleanExtra(k, false) else null }) {
@@ -978,7 +1001,7 @@ open class MainActivity : Activity() {
             intent.removeExtra(SettingsMenu.LEGACY_EXTRA) // not again when the activity is recreated
             handler.post { if (::settingsOverlay.isInitialized) showSettings() }
         }
-        if (fromNewIntent && (needsRestart || intent.getBooleanExtra("restart", false))) {
+        if (engineChoiceChanged || (fromNewIntent && (needsRestart || intent.getBooleanExtra("restart", false)))) {
             restartProcess()
             return
         }
@@ -1007,6 +1030,7 @@ open class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        VitroSentinel.checkStable() // a start that slept past Vitro's crash window is a stable one
         hideSystemUi()
         requestRuntimePermissions() // at start, and what was turned on while another screen was in front
         glassworks.updates?.recheckSilent() // back from Android's settings: Home Assistant's Silent updates follows (#666)
@@ -1147,6 +1171,7 @@ open class MainActivity : Activity() {
             return
         }
         restartWaitingSince = 0L
+        VitroSentinel.restarting() // the app's own restart isn't a failed start: a start that stayed up clears its strikes
         val pi = PendingIntent.getActivity(
             this, 0,
             Intent(this, glassworks.components.mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -1351,6 +1376,8 @@ open class MainActivity : Activity() {
     private fun configJson() = JSONObject()
         .put("hideHeader", prefs.hideHeader)
         .put("hideSidebar", prefs.hideSidebar)
+        // content.js reads HA's localStorage only when asked: Vitro's islands need the copy, nothing else does.
+        .put("pageStorage", runtime.engine.keepsPageStorage)
 
     private fun stateJson() = JSONObject()
         .put("presence", glassworks.screen.near)
@@ -1375,6 +1402,7 @@ open class MainActivity : Activity() {
     private fun onPortRequest(m: JSONObject, port: PagePort) {
         if (m.optString("type") == "dashboards") { onDashboards(m, port); return }
         if (m.optString("type") == "haTheme") { onHaTheme(m, port); return }
+        if (m.optString("type") == "pageStorage") { onPageStorage(m, port); return }
         if (m.optString("type") == "ready") { onPageReady(port, m.optString("why")); return }
         if (m.optString("type") == "launch") {
             if (port.topLevel) handler.post { frontendLoading = true; Log.i(TAG, "Home Assistant's launch screen is up: waiting for it to go") }
@@ -1408,6 +1436,8 @@ open class MainActivity : Activity() {
             frontendLoading = false
             handler.removeCallbacks(hideLoading)
             hideConnecting("ready, ${why.ifEmpty { "page" }}")
+            // Vitro's dashboard is drawn, or a page it handed to the web engine: this start got going.
+            VitroSentinel.pageDrawn()
         }
     }
 
@@ -1424,6 +1454,20 @@ open class MainActivity : Activity() {
         val list = DashboardOptions.parse(m.optString("json")) ?: return
         Log.d(TAG, "${list.size} dashboard(s) from the frontend")
         Dashboards.report(list)
+    }
+
+    /**
+     * `{type: "pageStorage", json}` from the HA frontend (content.js: the page's `localStorage`, credentials left out),
+     * kept for cards that run outside Home Assistant's origin, Vitro's web islands (#881, [HaPageStorage]). Only the
+     * top-level page on the Home Assistant the panel uses is believed, as with the dashboards. Kept only while the
+     * engine uses it (Vitro on): with Vitro off, the app keeps no copy of HA's storage.
+     */
+    private fun onPageStorage(m: JSONObject, sender: PagePort) {
+        if (!runtime.engine.keepsPageStorage) return
+        val url = sender.url
+        if (!sender.topLevel || url == null || !FrontendUrls.sameOrigin(url, prefs.haBase)) return
+        val json = m.optString("json").ifEmpty { return }
+        dev.glassworks.web.HaPageStorage.putLater(applicationContext, url, json)
     }
 
     /**

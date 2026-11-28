@@ -1,0 +1,46 @@
+{
+ "title": "A Mushroom template card's primary cut with an ellipsis, beside chips in a horizontal stack-in-card (the S1's alarm row)",
+ "card": {
+  "type": "custom:stack-in-card",
+  "mode": "horizontal",
+  "cards": [
+   {
+    "type": "custom:mushroom-template-card",
+    "primary": "Armed · night, every door and window",
+    "secondary": "Recording",
+    "icon": "mdi:shield-moon",
+    "icon_color": "#fb7185",
+    "tap_action": {
+     "action": "none"
+    },
+    "card_mod": {
+     "style": "ha-card { background: none; border: none; }"
+    }
+   },
+   {
+    "type": "custom:mushroom-chips-card",
+    "alignment": "end",
+    "chips": [
+     {
+      "type": "template",
+      "icon": "mdi:account-multiple",
+      "icon_color": "#a1a1aa",
+      "tap_action": {
+       "action": "none"
+      }
+     }
+    ],
+    "card_mod": {
+     "style": "ha-card { --chip-height: 32px; --chip-border-radius: 11px; --chip-background: rgba(255,255,255,0.08); padding: 12px 12px 0 0; }"
+    }
+   }
+  ],
+  "card_mod": {
+   "style": "ha-card { background: rgba(167,139,250,0.13); border: 1px solid rgba(167,139,250,0.32); }"
+  }
+ },
+ "fixture": {
+  "states": {},
+  "entities": []
+ }
+}

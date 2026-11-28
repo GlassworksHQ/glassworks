@@ -1,0 +1,58 @@
+{
+ "title": "More Info of an update with release notes (update/release_notes, HA's Markdown without breaks: the two-line paragraph is one line), the versions, the release announcement link, Skip and Update",
+ "frames": [
+  "s1",
+  "tablet",
+  "mirror"
+ ],
+ "card": {
+  "type": "markdown",
+  "content": "Hallway Display firmware"
+ },
+ "more_info": "update.hallway_display_firmware",
+ "expect": {
+  "update.hallway_display_firmware": "on"
+ },
+ "fixture": {
+  "admin": false,
+  "states": {
+   "update.hallway_display_firmware": {
+    "state": "on",
+    "last_changed": -7200,
+    "attributes": {
+     "friendly_name": "Hallway Display Firmware",
+     "title": "Hallway Display",
+     "auto_update": false,
+     "display_precision": 0,
+     "in_progress": false,
+     "update_percentage": null,
+     "skipped_version": null,
+     "release_summary": null,
+     "release_url": "https://homeassistant.local/releases/2026.11.0",
+     "entity_picture": null,
+     "supported_features": 21,
+     "installed_version": "2026.10.1",
+     "latest_version": "2026.11.0"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "update.hallway_display_firmware",
+    "pl": "esphome",
+    "di": "dev-hallway-display",
+    "en": "Firmware",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway-display",
+    "name": "Hallway Display"
+   }
+  ],
+  "release_notes": {
+   "update.hallway_display_firmware": "## What's new\n\nThe display now wakes faster\nand dims at night.\n\n- **Faster** start\n- Fixed the [backlight](https://homeassistant.local/notes) flicker\n\n### Thanks\n\nTo everyone who tested it."
+  }
+ }
+}

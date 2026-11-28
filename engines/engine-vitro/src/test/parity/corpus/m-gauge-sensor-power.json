@@ -1,0 +1,44 @@
+{
+ "title": "gauge: sensor power (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "sensor.sensor_power": "1234.5"
+ },
+ "card": {
+  "type": "gauge",
+  "entity": "sensor.sensor_power"
+ },
+ "fixture": {
+  "states": {
+   "sensor.sensor_power": {
+    "state": "1234.5",
+    "last_changed": "-2m",
+    "attributes": {
+     "state_class": "measurement",
+     "unit_of_measurement": "W",
+     "device_class": "power",
+     "friendly_name": "Living Room Temperature"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.sensor_power",
+    "pl": "esphome",
+    "di": "dev-living-room",
+    "en": "Temperature",
+    "np": "device",
+    "dp": 0
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-living-room",
+    "name": "Living Room"
+   }
+  ]
+ }
+}

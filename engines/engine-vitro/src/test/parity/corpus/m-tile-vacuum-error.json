@@ -1,0 +1,47 @@
+{
+ "title": "tile: vacuum error (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "vacuum.vacuum_error": "error"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "vacuum.vacuum_error"
+ },
+ "fixture": {
+  "states": {
+   "vacuum.vacuum_error": {
+    "state": "error",
+    "last_changed": "-6m",
+    "attributes": {
+     "fan_speed_list": [
+      "silent",
+      "standard"
+     ],
+     "fan_speed": "standard",
+     "battery_level": 51,
+     "supported_features": 14204,
+     "friendly_name": "Ground Floor Robot"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "vacuum.vacuum_error",
+    "pl": "demo",
+    "di": "dev-ground-floor",
+    "en": "Robot",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-ground-floor",
+    "name": "Ground Floor"
+   }
+  ]
+ }
+}

@@ -1,0 +1,11 @@
+{
+ "title": "Markdown with an <img> that has no width or height (natural size)",
+ "card": {
+  "type": "markdown",
+  "content": "### Picture\n<img src=\"/static/icons/favicon-192x192.png\">\n\nText under the picture."
+ },
+ "fixture": {
+  "states": {},
+  "entities": []
+ }
+}

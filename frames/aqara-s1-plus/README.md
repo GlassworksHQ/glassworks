@@ -122,6 +122,7 @@ Here is where each feature stands today. ✅ means it has been checked on real p
 | Boot splash and animation | ✅ Works |
 | Web installer (Kiln), CLI installer, and undo | ✅ Works · installs from [kiln.glassworks.dev](https://kiln.glassworks.dev/aqara-s1-plus) on real panels; boot patch tested on two stock firmware versions |
 | Browser Manage page (`:8099`, HA sign-in, logs, diagnostics, multi-panel) | ✅ Works · ongoing polish |
+| Vitro, the native dashboard renderer (*Settings → Labs*, [Try Vitro](../../docs/vitro.md)) | 🧪 Experimental · off by default; turns itself off if the app keeps crashing right after it starts |
 | Network setup page (`:8099/setup`, 6-digit pairing code) | ✅ Works |
 | Phone setup via temporary setup Wi-Fi | ✅ Works |
 | Panel health diagnostics (CPU, temperature, RAM, storage, Wi-Fi, uptime) | ✅ Works |

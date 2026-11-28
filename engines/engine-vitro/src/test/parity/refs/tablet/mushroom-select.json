@@ -1,0 +1,114 @@
+{
+ "case": "mushroom-select",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "mushroom-select-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Blind Position",
+   "x": 56,
+   "y": 17,
+   "w": 88.19,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "open",
+   "x": 56,
+   "y": 36,
+   "w": 28.16,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "open",
+   "x": 32,
+   "y": 79,
+   "w": 31.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "input_select.blind_position": {
+   "s": "open",
+   "a": {
+    "options": [
+     "open",
+     "closed"
+    ],
+    "editable": true,
+    "icon": "mdi:blinds",
+    "friendly_name": "Blind Position"
+   },
+   "lc": 1794485340,
+   "lu": 1794485340
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "input_select.blind_position",
+    "pl": "input_select",
+    "en": "Blind Position"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "input_select"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ }
+}

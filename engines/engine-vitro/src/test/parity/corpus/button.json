@@ -1,0 +1,38 @@
+{
+ "title": "Button: a light, name and state",
+ "card": {
+  "type": "button",
+  "entity": "light.desk_lamp",
+  "show_state": true
+ },
+ "fixture": {
+  "states": {
+   "light.desk_lamp": {
+    "state": "off",
+    "last_changed": "-272m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": null,
+     "friendly_name": "Desk Lamp",
+     "supported_features": 0
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.desk_lamp",
+    "pl": "switch_as_x",
+    "di": "dev-desk-lamp",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-desk-lamp",
+    "name": "Desk Lamp"
+   }
+  ]
+ }
+}

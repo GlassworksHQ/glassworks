@@ -1,0 +1,135 @@
+{
+ "case": "entities-timestamp",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 186
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 170,
+   "type": "hui-entities-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Next sunrise",
+   "x": 73,
+   "y": 28.8,
+   "w": 77.81,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Last boot",
+   "x": 73,
+   "y": 76.8,
+   "w": 58.81,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Router uptime",
+   "x": 73,
+   "y": 124.8,
+   "w": 87.75,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "sensor.last_boot": {
+   "s": "2026-11-10T16:08:00+00:00",
+   "a": {
+    "device_class": "timestamp",
+    "friendly_name": "Last boot"
+   },
+   "lc": 1794326880,
+   "lu": 1794326880
+  },
+  "sensor.next_sunrise": {
+   "s": "2026-11-12T19:08:00+00:00",
+   "a": {
+    "device_class": "timestamp",
+    "friendly_name": "Next sunrise"
+   },
+   "lc": 1794481680,
+   "lu": 1794481680
+  },
+  "sensor.router_uptime": {
+   "s": "2026-11-09T16:08:00+00:00",
+   "a": {
+    "device_class": "uptime",
+    "friendly_name": "Router uptime"
+   },
+   "lc": 1794240480,
+   "lu": 1794240480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "timestamp": {
+      "default": "mdi:clock"
+     },
+     "uptime": {
+      "default": "mdi:clock-start"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

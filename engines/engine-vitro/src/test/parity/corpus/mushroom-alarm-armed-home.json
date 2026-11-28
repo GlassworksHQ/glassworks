@@ -1,0 +1,37 @@
+{
+ "title": "Mushroom alarm control panel card: armed home",
+ "expect": {
+  "alarm_control_panel.house_alarm": "armed_home"
+ },
+ "card": {
+  "type": "custom:mushroom-alarm-control-panel-card",
+  "entity": "alarm_control_panel.house_alarm",
+  "name": "Alarm",
+  "states": [
+   "armed_home",
+   "armed_away"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "alarm_control_panel.house_alarm": {
+    "state": "armed_home",
+    "last_changed": "-25m",
+    "attributes": {
+     "code_format": "number",
+     "changed_by": null,
+     "code_arm_required": false,
+     "friendly_name": "House Alarm",
+     "supported_features": 63
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alarm_control_panel.house_alarm",
+    "pl": "template",
+    "en": "House Alarm"
+   }
+  ]
+ }
+}

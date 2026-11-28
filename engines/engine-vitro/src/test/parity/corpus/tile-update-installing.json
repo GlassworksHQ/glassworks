@@ -1,0 +1,48 @@
+{
+ "title": "Tile: an update installing, with its progress",
+ "expect": {
+  "update.kitchen_speaker_firmware": "on"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "update.kitchen_speaker_firmware"
+ },
+ "fixture": {
+  "states": {
+   "update.kitchen_speaker_firmware": {
+    "state": "on",
+    "last_changed": "-26h",
+    "attributes": {
+     "auto_update": false,
+     "display_precision": 0,
+     "installed_version": "1.4.2",
+     "in_progress": true,
+     "latest_version": "1.5.0",
+     "release_summary": null,
+     "release_url": null,
+     "skipped_version": null,
+     "title": "Speaker firmware",
+     "update_percentage": 40,
+     "device_class": "firmware",
+     "friendly_name": "Speaker Firmware",
+     "supported_features": 23
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "update.kitchen_speaker_firmware",
+    "pl": "zha",
+    "di": "dev-kitchen-speaker",
+    "np": "device",
+    "en": "Firmware"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-kitchen-speaker",
+    "name": "Speaker"
+   }
+  ]
+ }
+}

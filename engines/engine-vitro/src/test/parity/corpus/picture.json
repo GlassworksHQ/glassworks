@@ -1,0 +1,11 @@
+{
+ "title": "Picture: a static image",
+ "card": {
+  "type": "picture",
+  "image": "/static/icons/favicon-192x192.png"
+ },
+ "fixture": {
+  "states": {},
+  "entities": []
+ }
+}

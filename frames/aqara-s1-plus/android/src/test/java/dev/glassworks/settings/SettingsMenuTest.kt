@@ -94,8 +94,8 @@ class SettingsMenuTest {
 
     @Test
     fun theS1sSectionsInOrder() {
-        assertEquals(listOf("dashboard", "screen", "appearance", "voice", "sendspin", "radio", "log", "security", "about"), menu().map { it.id })
-        assertEquals(listOf("Home Assistant & dashboard", "Screen", "Appearance", "Voice", "Music", "Radio", "Log", "Security", "About"), menu().map { it.title })
+        assertEquals(listOf("dashboard", "screen", "appearance", "voice", "sendspin", "radio", "log", "security", "labs", "about"), menu().map { it.id })
+        assertEquals(listOf("Home Assistant & dashboard", "Screen", "Appearance", "Voice", "Music", "Radio", "Log", "Security", "Labs", "About"), menu().map { it.title })
         assertEquals("Zigbee / Thread radio", menu().first { it.id == "radio" }.heading)
     }
 
@@ -138,6 +138,8 @@ class SettingsMenuTest {
             ),
             m["screen"],
         )
+        // Experimental features, off by default: what Labs is, then Vitro.
+        assertEquals(listOf("note", CoreSettings.VITRO_TITLE), m[CoreSettings.LABS])
         assertEquals(listOf("info", CoreSettings.LICENCES_TITLE), m["about"])
         assertEquals(listOf("info"), m["log"]) // the screen and sensor line moved here from About
     }
@@ -313,8 +315,44 @@ class SettingsMenuTest {
     }
 
     @Test
+    fun theLabsSwitchTurnsVitroOnForTheNextStart() {
+        val prefs = KioskPrefs(app)
+        val vitro = menu().first { it.id == CoreSettings.LABS }.items.filterIsInstance<SettingsItem.Switch>().single()
+        assertFalse("off by default", vitro.value())
+        assertTrue("the engine is picked at start", vitro.restartsApp)
+        var why: String? = "not saved"
+        vitro.save(true) { why = it }
+        assertEquals(null, why)
+        assertTrue(prefs.vitroEnabled)
+        assertTrue(vitro.value())
+    }
+
+    @Test
+    fun theLabsPageSaysWhyTheAppTurnedVitroOffUntilItIsOnAgain() {
+        val prefs = KioskPrefs(app)
+        // VitroSentinel turned it off after the app crashed twice at start.
+        prefs.vitroEnabled = true
+        prefs.turnVitroOffAfterCrashes("ClassCastException in WeatherCardView.showMetric", 1_700_000_000_000L)
+        val labs = menu().first { it.id == CoreSettings.LABS }.items
+        assertEquals(listOf("note", "info", CoreSettings.VITRO_TITLE), titles(labs))
+        val why = labs.filterIsInstance<SettingsItem.Info>().single()
+        assertEquals(CoreSettings.VITRO_OFF_TITLE, why.title())
+        assertEquals(CoreSettings.VITRO_OFF_DETAIL, why.detail())
+        assertTrue("amber: something the person can act on", why.fixable())
+        val vitro = labs.filterIsInstance<SettingsItem.Switch>().single()
+        assertFalse(vitro.value())
+        // Turned on by hand: a clean slate, and the note goes.
+        vitro.save(true) { }
+        assertTrue(prefs.vitroEnabled)
+        assertEquals(null, prefs.vitroTurnedOff)
+        assertEquals(listOf("note", CoreSettings.VITRO_TITLE), titles(menu().first { it.id == CoreSettings.LABS }.items))
+        prefs.vitroEnabled = false
+    }
+
+    @Test
     fun onlyWhatGeckoReadsAtStartAsksForARestart() {
-        // The same ones whose adb extras restart the app: the dashboard's address, zoom, secure hosts.
+        // The same ones whose adb extras restart the app: the dashboard's address, zoom, secure hosts, and Vitro (the engine
+        // is picked when the app starts).
         val restarts = menu().flatMap { it.items }.mapNotNull { i ->
             when (i) {
                 is SettingsItem.Text -> i.title.takeIf { i.restartsApp }
@@ -322,7 +360,7 @@ class SettingsMenuTest {
                 else -> null
             }
         }
-        assertEquals(listOf("Home Assistant", "Zoom", "Secure hosts"), restarts)
+        assertEquals(listOf("Home Assistant", "Zoom", "Secure hosts", CoreSettings.VITRO_TITLE), restarts)
     }
 
     @Test

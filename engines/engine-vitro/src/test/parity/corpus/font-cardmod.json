@@ -1,0 +1,63 @@
+{
+ "title": "Fonts: card-mod font-family on a card, a web font from a type: css resource",
+ "resources": [
+  {
+   "type": "css",
+   "url": "/local/vitro-harness-fixtures/fonts/cardmod.css"
+  }
+ ],
+ "card": {
+  "type": "tile",
+  "entity": "light.hallway_ceiling_ring",
+  "features": [
+   {
+    "type": "light-brightness"
+   }
+  ],
+  "card_mod": {
+   "style": "ha-card { font-family: Pacifico, cursive; }"
+  }
+ },
+ "fixture": {
+  "states": {
+   "light.hallway_ceiling_ring": {
+    "state": "off",
+    "last_changed": "-260m",
+    "attributes": {
+     "min_color_temp_kelvin": 2702,
+     "max_color_temp_kelvin": 6535,
+     "supported_color_modes": [
+      "color_temp",
+      "xy"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "color_temp_kelvin": null,
+     "hs_color": null,
+     "rgb_color": null,
+     "xy_color": null,
+     "off_with_transition": true,
+     "off_brightness": 13,
+     "friendly_name": "Hallway Ceiling Light Hallway Ceiling Ring",
+     "supported_features": 40
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.hallway_ceiling_ring",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-hallway-ceiling-light",
+    "en": "Hallway Ceiling Ring",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-hallway-ceiling-light",
+    "name": "Hallway Ceiling Light"
+   }
+  ]
+ }
+}

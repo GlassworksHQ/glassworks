@@ -1,0 +1,60 @@
+{
+ "title": "Mushroom media player card: playing, with its media info and artwork",
+ "route": "island",
+ "expect": {
+  "media_player.living_room_speaker": "playing"
+ },
+ "card": {
+  "type": "custom:mushroom-media-player-card",
+  "entity": "media_player.living_room_speaker",
+  "use_media_info": true,
+  "show_volume_level": true,
+  "media_controls": [
+   "play_pause_stop",
+   "previous",
+   "next"
+  ],
+  "volume_controls": [
+   "volume_set"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "media_player.living_room_speaker": {
+    "state": "playing",
+    "last_changed": "-12m",
+    "attributes": {
+     "volume_level": 0.31,
+     "is_volume_muted": false,
+     "media_content_type": "music",
+     "media_duration": 245,
+     "media_position": 92,
+     "media_position_updated_at": "@-60s",
+     "media_title": "Evening Tide",
+     "media_artist": "The Placeholder Trio",
+     "media_album_name": "Synthetic Seasons",
+     "shuffle": false,
+     "repeat": "off",
+     "entity_picture": "/local/vitro-harness-fixtures/images/album.png",
+     "device_class": "speaker",
+     "friendly_name": "Living Room Speaker",
+     "supported_features": 8321599
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "media_player.living_room_speaker",
+    "pl": "demo",
+    "di": "dev-speaker",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-speaker",
+    "name": "Living Room Speaker"
+   }
+  ]
+ }
+}

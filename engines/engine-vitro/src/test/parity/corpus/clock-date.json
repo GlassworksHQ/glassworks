@@ -1,0 +1,17 @@
+{
+ "title": "Clock card with its date line (date_format)",
+ "card": {
+  "type": "clock",
+  "clock_size": "large",
+  "time_format": "12",
+  "date_format": [
+   "weekday-long",
+   "month-long",
+   "day-numeric"
+  ]
+ },
+ "fixture": {
+  "states": {},
+  "entities": []
+ }
+}

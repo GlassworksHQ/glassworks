@@ -1,0 +1,2459 @@
+{
+ "case": "d-sections-home",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 0,
+  "y": 0,
+  "width": 720,
+  "height": 2511
+ },
+ "docSize": {
+  "width": 720,
+  "height": 2511
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 25.59,
+   "type": "hui-heading-card"
+  },
+  {
+   "x": 110,
+   "y": 57.59,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 364,
+   "y": 57.59,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 110,
+   "y": 121.59,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 364,
+   "y": 121.59,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 110,
+   "y": 185.59,
+   "w": 500,
+   "h": 120,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 110,
+   "y": 313.59,
+   "w": 500,
+   "h": 200.84,
+   "type": "hui-media-control-card"
+  },
+  {
+   "x": 110,
+   "y": 538.44,
+   "w": 500,
+   "h": 25.59,
+   "type": "hui-heading-card"
+  },
+  {
+   "x": 110,
+   "y": 572.03,
+   "w": 500,
+   "h": 312,
+   "type": "hui-thermostat-card"
+  },
+  {
+   "x": 110,
+   "y": 892.03,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 364,
+   "y": 892.03,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 110,
+   "y": 956.03,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 110,
+   "y": 1036.03,
+   "w": 500,
+   "h": 25.59,
+   "type": "hui-heading-card"
+  },
+  {
+   "x": 110,
+   "y": 1069.63,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 364,
+   "y": 1069.63,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 110,
+   "y": 1133.63,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 364,
+   "y": 1133.63,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 110,
+   "y": 1197.63,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 364,
+   "y": 1197.63,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  },
+  {
+   "x": 110,
+   "y": 1261.63,
+   "w": 500,
+   "h": 502,
+   "type": "hui-alarm-panel-card"
+  },
+  {
+   "x": 110,
+   "y": 1787.63,
+   "w": 500,
+   "h": 25.59,
+   "type": "hui-heading-card"
+  },
+  {
+   "x": 110,
+   "y": 1821.22,
+   "w": 500,
+   "h": 248,
+   "type": "hui-weather-forecast-card"
+  },
+  {
+   "x": 110,
+   "y": 2077.22,
+   "w": 500,
+   "h": 266.8,
+   "type": "hui-entities-card"
+  },
+  {
+   "x": 110,
+   "y": 2352.02,
+   "w": 500,
+   "h": 134.78,
+   "type": "hui-glance-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Living room",
+   "x": 4,
+   "y": 3,
+   "w": 84.53,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 1,
+   "clipped": false,
+   "text": "Kitchen Pendant",
+   "x": 56,
+   "y": 12.61,
+   "w": 104.53,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 1,
+   "clipped": false,
+   "text": "65%",
+   "x": 56,
+   "y": 32,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 2,
+   "clipped": false,
+   "text": "Kitchen Pendant",
+   "x": 56,
+   "y": 12.61,
+   "w": 104.53,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 2,
+   "clipped": false,
+   "text": "80%",
+   "x": 56,
+   "y": 32,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 3,
+   "clipped": false,
+   "text": "Kitchen Pendant",
+   "x": 56,
+   "y": 12.61,
+   "w": 104.53,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 3,
+   "clipped": false,
+   "text": "Off",
+   "x": 56,
+   "y": 32,
+   "w": 17.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 4,
+   "clipped": false,
+   "text": "Patio Heater",
+   "x": 56,
+   "y": 12.61,
+   "w": 79.47,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 4,
+   "clipped": false,
+   "text": "On",
+   "x": 56,
+   "y": 32,
+   "w": 15.67,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 5,
+   "clipped": false,
+   "text": "Kitchen Pendant",
+   "x": 56,
+   "y": 17.61,
+   "w": 104.53,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 5,
+   "clipped": false,
+   "text": "50%",
+   "x": 56,
+   "y": 37,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 6,
+   "clipped": false,
+   "text": "Den Speaker",
+   "x": 49,
+   "y": 20.95,
+   "w": 78.09,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(245, 201, 116)",
+   "transform": "none"
+  },
+  {
+   "slot": 6,
+   "clipped": false,
+   "text": "Evening Tide",
+   "x": 17,
+   "y": 56.94,
+   "w": 94.56,
+   "h": 20,
+   "size": 16.8,
+   "weight": 400,
+   "color": "rgb(245, 201, 116)",
+   "transform": "none"
+  },
+  {
+   "slot": 6,
+   "clipped": false,
+   "text": "The Placeholder Trio",
+   "x": 17,
+   "y": 84.45,
+   "w": 127.84,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(245, 201, 116)",
+   "transform": "none"
+  },
+  {
+   "slot": 7,
+   "clipped": false,
+   "text": "Climate",
+   "x": 4,
+   "y": 3,
+   "w": 55.31,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 8,
+   "clipped": false,
+   "text": "Hallway Thermostat",
+   "x": 178.73,
+   "y": 15,
+   "w": 142.52,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 8,
+   "clipped": false,
+   "text": "Heating",
+   "x": 221.66,
+   "y": 117.48,
+   "w": 56.69,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(255, 111, 34)",
+   "transform": "none"
+  },
+  {
+   "slot": 8,
+   "clipped": false,
+   "text": "21",
+   "x": 208.61,
+   "y": 146.08,
+   "w": 63.52,
+   "h": 67,
+   "size": 57,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 8,
+   "clipped": false,
+   "text": ".0",
+   "x": 272.13,
+   "y": 177.08,
+   "w": 19.25,
+   "h": 28,
+   "size": 23.94,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 8,
+   "clipped": false,
+   "text": "°C",
+   "x": 272.13,
+   "y": 153.52,
+   "w": 18.78,
+   "h": 22,
+   "size": 18.81,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 8,
+   "clipped": false,
+   "text": "19.5 °C",
+   "x": 233.56,
+   "y": 222.91,
+   "w": 52.97,
+   "h": 19,
+   "size": 16,
+   "weight": 500,
+   "color": "rgb(255, 111, 34)",
+   "transform": "none"
+  },
+  {
+   "slot": 9,
+   "clipped": false,
+   "text": "Living Room Temperature",
+   "x": 56,
+   "y": 12.61,
+   "w": 163.11,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 9,
+   "clipped": false,
+   "text": "21.4 °C",
+   "x": 56,
+   "y": 32,
+   "w": 41.44,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 10,
+   "clipped": false,
+   "text": "Bedroom Ceiling Fan",
+   "x": 56,
+   "y": 12.61,
+   "w": 131.84,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 10,
+   "clipped": false,
+   "text": "67%",
+   "x": 56,
+   "y": 32,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 11,
+   "clipped": false,
+   "text": "Living Room Temperature",
+   "x": 56,
+   "y": 12.61,
+   "w": 163.11,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 11,
+   "clipped": false,
+   "text": "12%",
+   "x": 56,
+   "y": 32,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 12,
+   "clipped": false,
+   "text": "Security",
+   "x": 4,
+   "y": 3,
+   "w": 58.06,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 13,
+   "clipped": false,
+   "text": "Front Door Lock",
+   "x": 56,
+   "y": 12.61,
+   "w": 101.27,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 13,
+   "clipped": false,
+   "text": "Locked",
+   "x": 56,
+   "y": 32,
+   "w": 41.08,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 14,
+   "clipped": false,
+   "text": "Back Door",
+   "x": 56,
+   "y": 12.61,
+   "w": 65.45,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 14,
+   "clipped": false,
+   "text": "Open",
+   "x": 56,
+   "y": 32,
+   "w": 29.56,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 15,
+   "clipped": false,
+   "text": "Back Door",
+   "x": 56,
+   "y": 12.61,
+   "w": 65.45,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 15,
+   "clipped": false,
+   "text": "Detected",
+   "x": 56,
+   "y": 32,
+   "w": 51.03,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 16,
+   "clipped": false,
+   "text": "Office Blind",
+   "x": 56,
+   "y": 12.61,
+   "w": 74.38,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 16,
+   "clipped": false,
+   "text": "Open",
+   "x": 56,
+   "y": 32,
+   "w": 29.56,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 16,
+   "clipped": false,
+   "text": "·",
+   "x": 88.92,
+   "y": 32,
+   "w": 3.55,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 16,
+   "clipped": false,
+   "text": "40%",
+   "x": 95.84,
+   "y": 32,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 17,
+   "clipped": false,
+   "text": "Office Blind",
+   "x": 56,
+   "y": 12.61,
+   "w": 74.38,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 17,
+   "clipped": false,
+   "text": "Closed",
+   "x": 56,
+   "y": 32,
+   "w": 39.28,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 18,
+   "clipped": false,
+   "text": "Kitchen Pendant",
+   "x": 56,
+   "y": 12.61,
+   "w": 104.53,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 18,
+   "clipped": false,
+   "text": "Unavailable",
+   "x": 56,
+   "y": 32,
+   "w": 65.86,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "House Alarm",
+   "x": 17,
+   "y": 22.59,
+   "w": 135.59,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "Disarmed",
+   "x": 414.72,
+   "y": 29.25,
+   "w": 52.28,
+   "h": 14,
+   "size": 12.25,
+   "weight": 400,
+   "color": "rgb(255, 255, 255)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "Arm home",
+   "x": 169.22,
+   "y": 89,
+   "w": 65.36,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "Arm away",
+   "x": 268.58,
+   "y": 89,
+   "w": 62.19,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "Code",
+   "x": 191,
+   "y": 145,
+   "w": 32.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "1",
+   "x": 171.17,
+   "y": 214.8,
+   "w": 13.64,
+   "h": 28,
+   "size": 24,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "2",
+   "x": 243.17,
+   "y": 214.8,
+   "w": 13.64,
+   "h": 28,
+   "size": 24,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "3",
+   "x": 315.17,
+   "y": 214.8,
+   "w": 13.64,
+   "h": 28,
+   "size": 24,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "4",
+   "x": 171.17,
+   "y": 286.8,
+   "w": 13.64,
+   "h": 28,
+   "size": 24,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "5",
+   "x": 243.17,
+   "y": 286.8,
+   "w": 13.64,
+   "h": 28,
+   "size": 24,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "6",
+   "x": 315.17,
+   "y": 286.8,
+   "w": 13.64,
+   "h": 28,
+   "size": 24,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "7",
+   "x": 171.17,
+   "y": 358.8,
+   "w": 13.64,
+   "h": 28,
+   "size": 24,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "8",
+   "x": 243.17,
+   "y": 358.8,
+   "w": 13.64,
+   "h": 28,
+   "size": 24,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "9",
+   "x": 315.17,
+   "y": 358.8,
+   "w": 13.64,
+   "h": 28,
+   "size": 24,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 19,
+   "clipped": false,
+   "text": "0",
+   "x": 243.17,
+   "y": 430.8,
+   "w": 13.64,
+   "h": 28,
+   "size": 24,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 20,
+   "clipped": false,
+   "text": "Energy",
+   "x": 4,
+   "y": 3,
+   "w": 48.81,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "Sunny",
+   "x": 97,
+   "y": 33.59,
+   "w": 76.2,
+   "h": 33,
+   "size": 28,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "Home",
+   "x": 97,
+   "y": 67.19,
+   "w": 37.66,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "14.2",
+   "x": 397.52,
+   "y": 33.59,
+   "w": 54.55,
+   "h": 33,
+   "size": 28,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": true,
+   "text": "°C",
+   "x": 459,
+   "y": 34.59,
+   "w": 24.59,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "14.7 °C",
+   "x": 387.98,
+   "y": 67.19,
+   "w": 45.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "/",
+   "x": 436.53,
+   "y": 67.19,
+   "w": 5.78,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "9.1 °C",
+   "x": 445.78,
+   "y": 67.19,
+   "w": 37.22,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "Thu",
+   "x": 53.39,
+   "y": 105.8,
+   "w": 20.39,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "14.7",
+   "x": 45.02,
+   "y": 176.8,
+   "w": 31.17,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "°",
+   "x": 76.19,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "9.1",
+   "x": 51.27,
+   "y": 201.8,
+   "w": 19.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "°",
+   "x": 70.69,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "Fri",
+   "x": 150.05,
+   "y": 105.8,
+   "w": 13.45,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "12.5",
+   "x": 138.2,
+   "y": 176.8,
+   "w": 31.17,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "°",
+   "x": 169.38,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "8.7",
+   "x": 144.45,
+   "y": 201.8,
+   "w": 19.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "°",
+   "x": 163.88,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "Sat",
+   "x": 241.17,
+   "y": 105.8,
+   "w": 17.58,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "11.2",
+   "x": 231.39,
+   "y": 176.8,
+   "w": 31.17,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "°",
+   "x": 262.56,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "6.4",
+   "x": 237.64,
+   "y": 201.8,
+   "w": 19.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "°",
+   "x": 257.06,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "Sun",
+   "x": 332.97,
+   "y": 105.8,
+   "w": 20.36,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "13.9",
+   "x": 324.58,
+   "y": 176.8,
+   "w": 31.17,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "°",
+   "x": 355.75,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "4.2",
+   "x": 330.83,
+   "y": 201.8,
+   "w": 19.42,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "°",
+   "x": 350.25,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "Mon",
+   "x": 424.36,
+   "y": 105.8,
+   "w": 23.95,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "15.3",
+   "x": 417.77,
+   "y": 176.8,
+   "w": 31.17,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "°",
+   "x": 448.94,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "7",
+   "x": 429.78,
+   "y": 201.8,
+   "w": 7.88,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 21,
+   "clipped": false,
+   "text": "°",
+   "x": 437.66,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 22,
+   "clipped": false,
+   "text": "Plugs",
+   "x": 17,
+   "y": 21,
+   "w": 58.61,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 22,
+   "clipped": false,
+   "text": "Patio Heater",
+   "x": 73,
+   "y": 77.59,
+   "w": 77.55,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 22,
+   "clipped": false,
+   "text": "Patio Heater",
+   "x": 73,
+   "y": 125.59,
+   "w": 77.55,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 22,
+   "clipped": false,
+   "text": "Living Room Temperature",
+   "x": 73,
+   "y": 173.59,
+   "w": 159.25,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 22,
+   "clipped": false,
+   "text": "1,235 W",
+   "x": 432.91,
+   "y": 173.59,
+   "w": 50.09,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 22,
+   "clipped": false,
+   "text": "Living Room Temperature",
+   "x": 73,
+   "y": 221.59,
+   "w": 159.25,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 22,
+   "clipped": false,
+   "text": "Washing",
+   "x": 429.28,
+   "y": 221.59,
+   "w": 53.72,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 23,
+   "clipped": true,
+   "text": "Living Room Temperature",
+   "x": 21,
+   "y": 20,
+   "w": 159.25,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 23,
+   "clipped": false,
+   "text": "21.4 °C",
+   "x": 72.13,
+   "y": 98.39,
+   "w": 45.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 23,
+   "clipped": false,
+   "text": "Back Door",
+   "x": 217.94,
+   "y": 20,
+   "w": 64.11,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 23,
+   "clipped": false,
+   "text": "Open",
+   "x": 233.67,
+   "y": 98.39,
+   "w": 32.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 23,
+   "clipped": false,
+   "text": "Front Door Lock",
+   "x": 355.72,
+   "y": 20,
+   "w": 99.2,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 23,
+   "clipped": false,
+   "text": "Locked",
+   "x": 382.75,
+   "y": 98.39,
+   "w": 45.13,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "alarm_control_panel.alarm_control_panel_disarmed": {
+   "s": "disarmed",
+   "a": {
+    "code_format": "number",
+    "code_arm_required": false,
+    "supported_features": 63,
+    "friendly_name": "House Alarm"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "binary_sensor.binary_sensor_door_open": {
+   "s": "on",
+   "a": {
+    "device_class": "door",
+    "friendly_name": "Back Door"
+   },
+   "lc": 1794499440,
+   "lu": 1794499440
+  },
+  "binary_sensor.binary_sensor_motion": {
+   "s": "on",
+   "a": {
+    "device_class": "motion",
+    "friendly_name": "Back Door"
+   },
+   "lc": 1794499650,
+   "lu": 1794499650
+  },
+  "climate.climate_heat": {
+   "s": "heat",
+   "a": {
+    "hvac_modes": [
+     "off",
+     "heat"
+    ],
+    "min_temp": 7,
+    "max_temp": 30,
+    "target_temp_step": 0.5,
+    "current_temperature": 19.5,
+    "temperature": 21,
+    "hvac_action": "heating",
+    "supported_features": 385,
+    "friendly_name": "Hallway Thermostat"
+   },
+   "lc": 1794488880,
+   "lu": 1794488880
+  },
+  "cover.cover_closed_position": {
+   "s": "closed",
+   "a": {
+    "current_position": 0,
+    "device_class": "blind",
+    "supported_features": 15,
+    "friendly_name": "Office Blind"
+   },
+   "lc": 1794481680,
+   "lu": 1794481680
+  },
+  "cover.cover_open_position": {
+   "s": "open",
+   "a": {
+    "current_position": 40,
+    "device_class": "blind",
+    "supported_features": 15,
+    "friendly_name": "Office Blind"
+   },
+   "lc": 1794496080,
+   "lu": 1794496080
+  },
+  "fan.fan_on_speed": {
+   "s": "on",
+   "a": {
+    "percentage": 67,
+    "percentage_step": 33.333333333333336,
+    "supported_features": 49,
+    "friendly_name": "Bedroom Ceiling Fan"
+   },
+   "lc": 1794498180,
+   "lu": 1794498180
+  },
+  "light.light_off": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "color_temp",
+     "hs"
+    ],
+    "min_color_temp_kelvin": 2000,
+    "max_color_temp_kelvin": 6535,
+    "min_mireds": 153,
+    "max_mireds": 500,
+    "supported_features": 40,
+    "friendly_name": "Kitchen Pendant"
+   },
+   "lc": 1794488880,
+   "lu": 1794488880
+  },
+  "light.light_on_color": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "color_temp",
+     "hs"
+    ],
+    "min_color_temp_kelvin": 2000,
+    "max_color_temp_kelvin": 6535,
+    "min_mireds": 153,
+    "max_mireds": 500,
+    "supported_features": 40,
+    "color_mode": "hs",
+    "brightness": 204,
+    "hs_color": [
+     24,
+     84
+    ],
+    "rgb_color": [
+     255,
+     129,
+     40
+    ],
+    "xy_color": [
+     0.594,
+     0.371
+    ],
+    "friendly_name": "Kitchen Pendant"
+   },
+   "lc": 1794498960,
+   "lu": 1794498960
+  },
+  "light.light_on_ct": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "color_temp",
+     "hs"
+    ],
+    "min_color_temp_kelvin": 2000,
+    "max_color_temp_kelvin": 6535,
+    "min_mireds": 153,
+    "max_mireds": 500,
+    "supported_features": 40,
+    "color_mode": "color_temp",
+    "brightness": 128,
+    "color_temp_kelvin": 2702,
+    "color_temp": 370,
+    "hs_color": [
+     28.874,
+     72.522
+    ],
+    "rgb_color": [
+     255,
+     167,
+     70
+    ],
+    "xy_color": [
+     0.536,
+     0.389
+    ],
+    "friendly_name": "Kitchen Pendant"
+   },
+   "lc": 1794496680,
+   "lu": 1794496680
+  },
+  "light.light_on_dimmed": {
+   "s": "on",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "supported_features": 40,
+    "color_mode": "brightness",
+    "brightness": 166,
+    "friendly_name": "Kitchen Pendant"
+   },
+   "lc": 1794497580,
+   "lu": 1794497580
+  },
+  "light.light_unavailable": {
+   "s": "unavailable",
+   "a": {
+    "supported_color_modes": [
+     "brightness"
+    ],
+    "restored": true,
+    "supported_features": 40,
+    "friendly_name": "Kitchen Pendant"
+   },
+   "lc": 1794498480,
+   "lu": 1794498480
+  },
+  "lock.lock_locked": {
+   "s": "locked",
+   "a": {
+    "supported_features": 0,
+    "friendly_name": "Front Door Lock"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "media_player.media_player_playing": {
+   "s": "playing",
+   "a": {
+    "volume_level": 0.31,
+    "is_volume_muted": false,
+    "media_content_type": "music",
+    "media_duration": 245,
+    "media_position": 92,
+    "media_position_updated_at": "2026-11-12T16:07:00+00:00",
+    "media_title": "Evening Tide",
+    "media_artist": "The Placeholder Trio",
+    "entity_picture": "/local/vitro-harness-fixtures/images/album.png",
+    "device_class": "speaker",
+    "supported_features": 152511,
+    "friendly_name": "Den Speaker"
+   },
+   "lc": 1794499440,
+   "lu": 1794499440
+  },
+  "sensor.sensor_battery_low": {
+   "s": "12",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "%",
+    "device_class": "battery",
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "sensor.sensor_no_unit": {
+   "s": "Washing",
+   "a": {
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794498780,
+   "lu": 1794498780
+  },
+  "sensor.sensor_power": {
+   "s": "1234.5",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "W",
+    "device_class": "power",
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794499560,
+   "lu": 1794499560
+  },
+  "sensor.sensor_temperature": {
+   "s": "21.42",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Living Room Temperature"
+   },
+   "lc": 1794499560,
+   "lu": 1794499560
+  },
+  "switch.switch_off": {
+   "s": "off",
+   "a": {
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  },
+  "switch.switch_on": {
+   "s": "on",
+   "a": {
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "switch.switch_outlet_on": {
+   "s": "on",
+   "a": {
+    "device_class": "outlet",
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  },
+  "weather.sunny": {
+   "s": "sunny",
+   "a": {
+    "dew_point": 7.8,
+    "temperature_unit": "°C",
+    "humidity": 82,
+    "cloud_coverage": 40,
+    "uv_index": 1.2,
+    "pressure": 1018.2,
+    "pressure_unit": "hPa",
+    "wind_bearing": 210,
+    "wind_speed": 12.4,
+    "wind_speed_unit": "km/h",
+    "visibility_unit": "km",
+    "precipitation_unit": "mm",
+    "supported_features": 1,
+    "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute.",
+    "temperature": 14.2,
+    "friendly_name": "Home"
+   },
+   "lc": 1794497280,
+   "lu": 1794497280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_disarmed",
+    "pl": "manual",
+    "di": "device-1",
+    "en": "Alarm",
+    "np": "device"
+   },
+   {
+    "ei": "binary_sensor.binary_sensor_door_open",
+    "pl": "zha",
+    "di": "device-2",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "binary_sensor.binary_sensor_motion",
+    "pl": "zha",
+    "di": "device-2",
+    "en": "Door",
+    "np": "device"
+   },
+   {
+    "ei": "climate.climate_heat",
+    "pl": "demo",
+    "di": "device-3",
+    "en": "Thermostat",
+    "np": "device"
+   },
+   {
+    "ei": "cover.cover_closed_position",
+    "pl": "demo",
+    "di": "device-4",
+    "en": "Blind",
+    "np": "device"
+   },
+   {
+    "ei": "cover.cover_open_position",
+    "pl": "demo",
+    "di": "device-4",
+    "en": "Blind",
+    "np": "device"
+   },
+   {
+    "ei": "fan.fan_on_speed",
+    "pl": "demo",
+    "di": "device-5",
+    "en": "Ceiling Fan",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_off",
+    "pl": "demo",
+    "di": "device-6",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_color",
+    "pl": "demo",
+    "di": "device-6",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_ct",
+    "pl": "demo",
+    "di": "device-6",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_on_dimmed",
+    "pl": "demo",
+    "di": "device-6",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "light.light_unavailable",
+    "pl": "demo",
+    "di": "device-6",
+    "en": "Pendant",
+    "np": "device"
+   },
+   {
+    "ei": "lock.lock_locked",
+    "pl": "demo",
+    "di": "device-7",
+    "en": "Door Lock",
+    "np": "device"
+   },
+   {
+    "ei": "media_player.media_player_playing",
+    "pl": "demo",
+    "di": "device-8",
+    "en": "Speaker",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_battery_low",
+    "pl": "esphome",
+    "di": "device-9",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_no_unit",
+    "pl": "esphome",
+    "di": "device-9",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_power",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-9",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.sensor_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-9",
+    "en": "Temperature",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_off",
+    "pl": "demo",
+    "di": "device-10",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_on",
+    "pl": "demo",
+    "di": "device-10",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "switch.switch_outlet_on",
+    "pl": "demo",
+    "di": "device-10",
+    "en": "Heater",
+    "np": "device"
+   },
+   {
+    "ei": "weather.sunny",
+    "pl": "met"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "House"
+   },
+   {
+    "id": "device-2",
+    "name": "Back"
+   },
+   {
+    "id": "device-3",
+    "name": "Hallway"
+   },
+   {
+    "id": "device-4",
+    "name": "Office"
+   },
+   {
+    "id": "device-5",
+    "name": "Bedroom"
+   },
+   {
+    "id": "device-6",
+    "name": "Kitchen"
+   },
+   {
+    "id": "device-7",
+    "name": "Front"
+   },
+   {
+    "id": "device-8",
+    "name": "Den"
+   },
+   {
+    "id": "device-9",
+    "name": "Living Room"
+   },
+   {
+    "id": "device-10",
+    "name": "Patio"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "alarm_control_panel",
+    "binary_sensor",
+    "climate",
+    "cover",
+    "fan",
+    "light",
+    "lock",
+    "media_player",
+    "sensor",
+    "switch",
+    "weather"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "alarm_control_panel": {
+     "_": {
+      "default": "mdi:shield",
+      "state": {
+       "armed_away": "mdi:shield-lock",
+       "armed_custom_bypass": "mdi:security",
+       "armed_home": "mdi:shield-home",
+       "armed_night": "mdi:shield-moon",
+       "armed_vacation": "mdi:shield-airplane",
+       "disarmed": "mdi:shield-off",
+       "pending": "mdi:shield-outline",
+       "triggered": "mdi:bell-ring"
+      }
+     }
+    },
+    "binary_sensor": {
+     "_": {
+      "default": "mdi:radiobox-blank",
+      "state": {
+       "on": "mdi:checkbox-marked-circle"
+      }
+     },
+     "door": {
+      "default": "mdi:door-closed",
+      "state": {
+       "on": "mdi:door-open"
+      }
+     },
+     "motion": {
+      "default": "mdi:motion-sensor-off",
+      "state": {
+       "on": "mdi:motion-sensor"
+      }
+     }
+    },
+    "climate": {
+     "_": {
+      "default": "mdi:thermostat",
+      "state_attributes": {
+       "fan_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "auto": "mdi:fan-auto",
+         "diffuse": "mdi:weather-windy",
+         "focus": "mdi:target",
+         "high": "mdi:speedometer",
+         "low": "mdi:speedometer-slow",
+         "medium": "mdi:speedometer-medium",
+         "middle": "mdi:speedometer-medium",
+         "off": "mdi:fan-off",
+         "on": "mdi:fan"
+        }
+       },
+       "hvac_action": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "cooling": "mdi:snowflake",
+         "defrosting": "mdi:snowflake-melt",
+         "drying": "mdi:water-percent",
+         "fan": "mdi:fan",
+         "heating": "mdi:fire",
+         "idle": "mdi:clock-outline",
+         "off": "mdi:power",
+         "preheating": "mdi:heat-wave"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "activity": "mdi:motion-sensor",
+         "away": "mdi:account-arrow-right",
+         "boost": "mdi:rocket-launch",
+         "comfort": "mdi:sofa",
+         "eco": "mdi:leaf",
+         "home": "mdi:home",
+         "sleep": "mdi:bed"
+        }
+       },
+       "swing_horizontal_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:arrow-oscillating-off",
+         "on": "mdi:arrow-expand-horizontal"
+        }
+       },
+       "swing_mode": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "both": "mdi:arrow-all",
+         "horizontal": "mdi:arrow-left-right",
+         "off": "mdi:arrow-oscillating-off",
+         "on": "mdi:arrow-oscillating",
+         "vertical": "mdi:arrow-up-down"
+        }
+       }
+      }
+     }
+    },
+    "cover": {
+     "_": {
+      "default": "mdi:window-open",
+      "state": {
+       "closed": "mdi:window-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     },
+     "blind": {
+      "default": "mdi:blinds-horizontal",
+      "state": {
+       "closed": "mdi:blinds-horizontal-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     }
+    },
+    "fan": {
+     "_": {
+      "default": "mdi:fan",
+      "state": {
+       "off": "mdi:fan-off"
+      },
+      "state_attributes": {
+       "direction": {
+        "default": "mdi:rotate-right",
+        "state": {
+         "reverse": "mdi:rotate-left"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {}
+       }
+      }
+     }
+    },
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "lock": {
+     "_": {
+      "default": "mdi:lock",
+      "state": {
+       "jammed": "mdi:lock-alert",
+       "locking": "mdi:lock-clock",
+       "open": "mdi:lock-open-variant",
+       "opening": "mdi:lock-clock",
+       "unlocked": "mdi:lock-open-variant",
+       "unlocking": "mdi:lock-clock"
+      }
+     }
+    },
+    "media_player": {
+     "_": {
+      "default": "mdi:cast",
+      "state": {
+       "off": "mdi:cast-off",
+       "paused": "mdi:cast-connected",
+       "playing": "mdi:cast-connected"
+      }
+     },
+     "speaker": {
+      "default": "mdi:speaker",
+      "state": {
+       "off": "mdi:speaker-off",
+       "paused": "mdi:speaker-pause",
+       "playing": "mdi:speaker-play"
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "battery": {
+      "default": "mdi:battery-unknown",
+      "range": {
+       "0": "mdi:battery-alert",
+       "10": "mdi:battery-10",
+       "20": "mdi:battery-20",
+       "30": "mdi:battery-30",
+       "40": "mdi:battery-40",
+       "50": "mdi:battery-50",
+       "60": "mdi:battery-60",
+       "70": "mdi:battery-70",
+       "80": "mdi:battery-80",
+       "90": "mdi:battery-90",
+       "100": "mdi:battery"
+      }
+     },
+     "power": {
+      "default": "mdi:flash"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    },
+    "switch": {
+     "_": {
+      "default": "mdi:toggle-switch-variant",
+      "state": {
+       "off": "mdi:toggle-switch-variant-off"
+      }
+     },
+     "outlet": {
+      "default": "mdi:power-plug",
+      "state": {
+       "off": "mdi:power-plug-off"
+      }
+     }
+    },
+    "weather": {
+     "_": {
+      "default": "mdi:weather-partly-cloudy",
+      "state": {
+       "clear-night": "mdi:weather-night",
+       "cloudy": "mdi:weather-cloudy",
+       "exceptional": "mdi:alert-circle-outline",
+       "fog": "mdi:weather-fog",
+       "hail": "mdi:weather-hail",
+       "lightning": "mdi:weather-lightning",
+       "lightning-rainy": "mdi:weather-lightning-rainy",
+       "pouring": "mdi:weather-pouring",
+       "rainy": "mdi:weather-rainy",
+       "snowy": "mdi:weather-snowy",
+       "snowy-rainy": "mdi:weather-snowy-rainy",
+       "sunny": "mdi:weather-sunny",
+       "windy": "mdi:weather-windy",
+       "windy-variant": "mdi:weather-windy-variant"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.alarm_control_panel.entity_component._.state.armed": "Armed",
+    "component.alarm_control_panel.entity_component._.state.armed_away": "Armed away",
+    "component.alarm_control_panel.entity_component._.state.armed_custom_bypass": "Armed custom bypass",
+    "component.alarm_control_panel.entity_component._.state.armed_home": "Armed home",
+    "component.alarm_control_panel.entity_component._.state.armed_night": "Armed night",
+    "component.alarm_control_panel.entity_component._.state.armed_vacation": "Armed vacation",
+    "component.alarm_control_panel.entity_component._.state.arming": "Arming",
+    "component.alarm_control_panel.entity_component._.state.disarmed": "Disarmed",
+    "component.alarm_control_panel.entity_component._.state.disarming": "Disarming",
+    "component.alarm_control_panel.entity_component._.state.pending": "Pending",
+    "component.alarm_control_panel.entity_component._.state.triggered": "Triggered",
+    "component.binary_sensor.entity_component._.state.off": "Off",
+    "component.binary_sensor.entity_component._.state.on": "On",
+    "component.binary_sensor.entity_component.door.state.off": "Closed",
+    "component.binary_sensor.entity_component.door.state.on": "Open",
+    "component.binary_sensor.entity_component.motion.state.off": "Clear",
+    "component.binary_sensor.entity_component.motion.state.on": "Detected",
+    "component.climate.entity_component._.state.auto": "Auto",
+    "component.climate.entity_component._.state.cool": "Cool",
+    "component.climate.entity_component._.state.dry": "Dry",
+    "component.climate.entity_component._.state.fan_only": "Fan only",
+    "component.climate.entity_component._.state.heat": "Heat",
+    "component.climate.entity_component._.state.heat_cool": "Heat/Cool",
+    "component.climate.entity_component._.state.off": "Off",
+    "component.cover.entity_component._.state.closed": "Closed",
+    "component.cover.entity_component._.state.closing": "Closing",
+    "component.cover.entity_component._.state.open": "Open",
+    "component.cover.entity_component._.state.opening": "Opening",
+    "component.cover.entity_component._.state.stopped": "Stopped",
+    "component.fan.entity_component._.state.off": "Off",
+    "component.fan.entity_component._.state.on": "On",
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.lock.entity_component._.state.jammed": "Jammed",
+    "component.lock.entity_component._.state.locked": "Locked",
+    "component.lock.entity_component._.state.locking": "Locking",
+    "component.lock.entity_component._.state.open": "Open",
+    "component.lock.entity_component._.state.opening": "Opening",
+    "component.lock.entity_component._.state.unlocked": "Unlocked",
+    "component.lock.entity_component._.state.unlocking": "Unlocking",
+    "component.media_player.entity_component._.state.buffering": "Buffering",
+    "component.media_player.entity_component._.state.idle": "Idle",
+    "component.media_player.entity_component._.state.off": "Off",
+    "component.media_player.entity_component._.state.on": "On",
+    "component.media_player.entity_component._.state.paused": "Paused",
+    "component.media_player.entity_component._.state.playing": "Playing",
+    "component.media_player.entity_component._.state.standby": "Standby",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On",
+    "component.switch.entity_component._.state.off": "Off",
+    "component.switch.entity_component._.state.on": "On",
+    "component.switch.entity_component.outlet.state.off": "Off",
+    "component.switch.entity_component.outlet.state.on": "On",
+    "component.weather.entity_component._.state.clear-night": "Clear, night",
+    "component.weather.entity_component._.state.cloudy": "Cloudy",
+    "component.weather.entity_component._.state.exceptional": "Exceptional",
+    "component.weather.entity_component._.state.fog": "Fog",
+    "component.weather.entity_component._.state.hail": "Hail",
+    "component.weather.entity_component._.state.lightning": "Lightning",
+    "component.weather.entity_component._.state.lightning-rainy": "Lightning, rainy",
+    "component.weather.entity_component._.state.partlycloudy": "Partly cloudy",
+    "component.weather.entity_component._.state.pouring": "Pouring",
+    "component.weather.entity_component._.state.rainy": "Rainy",
+    "component.weather.entity_component._.state.snowy": "Snowy",
+    "component.weather.entity_component._.state.snowy-rainy": "Snowy, rainy",
+    "component.weather.entity_component._.state.sunny": "Sunny",
+    "component.weather.entity_component._.state.windy": "Windy",
+    "component.weather.entity_component._.state.windy-variant": "Windy, cloudy"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "weather/subscribe_forecast",
+    "forecast_type": "daily",
+    "entity_id": "weather.sunny"
+   },
+   "events": [
+    {
+     "type": "daily",
+     "forecast": [
+      {
+       "condition": "partlycloudy",
+       "datetime": "2026-11-12T12:00:00-06:00",
+       "temperature": 14.7,
+       "templow": 9.1,
+       "precipitation": 0.4,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      },
+      {
+       "condition": "rainy",
+       "datetime": "2026-11-13T12:00:00-06:00",
+       "temperature": 12.5,
+       "templow": 8.7,
+       "precipitation": 6.1,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      },
+      {
+       "condition": "cloudy",
+       "datetime": "2026-11-14T12:00:00-06:00",
+       "temperature": 11.2,
+       "templow": 6.4,
+       "precipitation": 0.8,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      },
+      {
+       "condition": "sunny",
+       "datetime": "2026-11-15T12:00:00-06:00",
+       "temperature": 13.9,
+       "templow": 4.2,
+       "precipitation": 0,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      },
+      {
+       "condition": "partlycloudy",
+       "datetime": "2026-11-16T12:00:00-06:00",
+       "temperature": 15.3,
+       "templow": 7,
+       "precipitation": 0.1,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      },
+      {
+       "condition": "fog",
+       "datetime": "2026-11-17T12:00:00-06:00",
+       "temperature": 10.8,
+       "templow": 7.9,
+       "precipitation": 0.2,
+       "wind_bearing": 180,
+       "wind_speed": 14,
+       "humidity": 70
+      }
+     ]
+    }
+   ],
+   "result": null
+  }
+ ]
+}

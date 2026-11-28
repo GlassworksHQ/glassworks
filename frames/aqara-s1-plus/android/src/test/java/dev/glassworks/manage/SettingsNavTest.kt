@@ -12,7 +12,7 @@ class SettingsNavTest {
     private fun pane(id: String, kind: PaneState.Kind) = PaneRow(id, id.uppercase(), PaneState(kind, ""), id)
 
     private val sections = listOf(section("dashboard", "Home Assistant & dashboard"), section("screen", "Screen"),
-        section("voice", "VOICE"), section("radio", "RADIO"), section("music", "MUSIC"), section("log", "Log"), section("about", "About"))
+        section("voice", "VOICE"), section("radio", "RADIO"), section("music", "MUSIC"), section("log", "Log"), section("labs", "Labs"), section("about", "About"))
     private val panes = listOf(pane("voice", PaneState.Kind.RUNNING), pane("radio", PaneState.Kind.OFF), pane("music", PaneState.Kind.CANT_RUN))
 
     @Test fun thePanelsSidebar() {
@@ -20,12 +20,12 @@ class SettingsNavTest {
         assertEquals(listOf("dashboard", "screen"), n.panel.map { it.id })
         assertEquals("on panes in order, can't run among them", listOf("voice", "music"), n.panes.map { it.id })
         assertEquals("off folds", listOf("radio"), n.off.map { it.id })
-        assertEquals("the panel has no Security page", listOf("log", "about"), n.system.map { it.id })
+        assertEquals("the panel has no Security page", listOf("log", "labs", "about"), n.system.map { it.id })
     }
 
     @Test fun manageAddsItsSecurityPageInItsPlace() {
         val n = settingsNav(sections, panes, ManagePages.OWN_PAGES)
-        assertEquals(listOf("Log", "Security", "About"), n.system.map { it.title })
+        assertEquals(listOf("Log", "Security", "Labs", "About"), n.system.map { it.title })
         assertEquals("the rest is the panel's", settingsNav(sections, panes).panel, n.panel)
     }
 

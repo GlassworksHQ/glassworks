@@ -1,0 +1,32 @@
+{
+ "title": "tile: weather unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "weather.unavailable": "unavailable"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "weather.unavailable"
+ },
+ "fixture": {
+  "states": {
+   "weather.unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "restored": true,
+     "friendly_name": "Home"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "weather.unavailable",
+    "pl": "met"
+   }
+  ]
+ }
+}

@@ -108,6 +108,11 @@ def parse_sf_latency(text):
 REQUESTED_LAYER_RE = re.compile(r"^RequestedLayerState\{(.*?)(?: (?:parentId|relativeParentId|z|layerStack)=-?\d+| !handle)*\}$")
 # The view's hash in front of a SurfaceView's name (Android 17).
 VIEW_HASH_RE = re.compile(r"^[0-9a-f]+ (?=SurfaceView)")
+# What can come before a window layer's `<pkg>/<activity>`: the window's hash (its container), or `VRI-`, the
+# ViewRootImpl's BLAST layer, which holds the window's frames. Verified 2026-11-26 on the Pixel Tablet, Android 17
+# (API 37): `--latency` gave 63 frames on `VRI-<pkg>/<activity>#n` and none on the container; untested on 15 and 16
+# (frames/google-pixel-tablet/research/window-layers.md).
+WINDOW_PREFIX_RE = re.compile(r"^(?:[0-9a-f]+ |VRI-)(?=[\w.]+/)")
 
 
 def sf_layer_name(line):
@@ -132,6 +137,22 @@ def surfaceview_layers(listing, package):
     return names
 
 
+def window_layers(listing, package):
+    """The app's own window layers in `dumpsys SurfaceFlinger --list`: what Vitro draws into (native views, no
+    SurfaceView). `<pkg>/<activity>#0` on Android 10 (the S1, 2026-11-24's probe), `<pkg>/<activity>` on Android 6,
+    `<pkg>/<activity>(BLAST)#n` beside its parent on Android 12 and later (the BLAST one holds the frames; sf() takes
+    the layer with the newest frame), wrapped on 15 and later (sf_layer_name), where the frames are on
+    `VRI-<pkg>/<activity>#n` and its container carries the window's hash in front (`<hash> <pkg>/<activity>#n`).
+    Never a SurfaceView (a web island's GeckoView), nor a `Background for` or splash screen layer."""
+    listed = [sf_layer_name(l) for l in listing.splitlines()]
+    return [l for l in listed if WINDOW_PREFIX_RE.sub("", l).startswith(f"{package}/")]
+
+
+def app_layers(listing, package, engine="web"):
+    """The layers an engine's frames are on: GeckoView's SurfaceView (the web engine), or Vitro's window."""
+    return window_layers(listing, package) if engine == "vitro" else surfaceview_layers(listing, package)
+
+
 def current_size(text):
     """(width, height) from the first display's `cur=WxH` in `dumpsys window displays`, or None."""
     m = re.search(r"\bcur=(\d+)x(\d+)", text)
@@ -153,7 +174,11 @@ def layer_number(name):
 def page_to_mono_ms(page, offset_ms):
     """A time on the page's clock (ms after performance.timeOrigin) -> logcat's monotonic clock, in ms.
     The page's log line carries Date.now() and logcat stamps the same line, which ties the clocks
-    together (to within the few ms the console takes to reach logcat)."""
+    together (to within the few ms the console takes to reach logcat). Vitro's harness (VitroClarity)
+    keeps its clock on CLOCK_MONOTONIC itself (`clock: "monotonic"`, ms after `origin_mono_ms`): the same
+    clock as logcat's and SurfaceFlinger's, so the tie is exact."""
+    if page.get("clock") == "monotonic":
+        return page["origin_mono_ms"] + offset_ms
     return page["mono"] * 1000 - (page["epoch_ms"] - (page["origin_epoch_ms"] + offset_ms))
 
 

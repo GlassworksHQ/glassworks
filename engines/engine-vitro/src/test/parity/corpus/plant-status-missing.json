@@ -1,0 +1,14 @@
+{
+ "title": "Plant status: a plant HA doesn't have, for an administrator (hui-warning titled \"Entity not found\")",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "plant-status",
+  "entity": "plant.missing_basil"
+ },
+ "fixture": {
+  "states": {}
+ }
+}

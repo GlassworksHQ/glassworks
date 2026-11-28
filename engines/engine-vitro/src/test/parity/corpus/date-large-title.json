@@ -1,0 +1,20 @@
+{
+ "title": "Date: large, with a title and its own format",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "date",
+  "date_size": "large",
+  "title": "Today",
+  "date_format": [
+   "weekday-short",
+   "day-numeric",
+   "month-short"
+  ]
+ },
+ "fixture": {
+  "states": {}
+ }
+}

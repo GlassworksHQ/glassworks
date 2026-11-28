@@ -1,0 +1,294 @@
+{
+ "case": "more-info-alert-on",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 0,
+  "y": 40,
+  "width": 720,
+  "height": 1240
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 0,
+   "y": 48,
+   "w": 720,
+   "h": 1232,
+   "type": "ha-more-info-dialog",
+   "mode": "bottom-sheet"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Freezer door open",
+   "x": 60,
+   "y": 22,
+   "w": 162.27,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Freezer door open",
+   "x": 72,
+   "y": 92.41,
+   "w": 112.5,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "15 minutes ago",
+   "x": 72,
+   "y": 112.2,
+   "w": 96.44,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "History",
+   "x": 24,
+   "y": 152,
+   "w": 64.33,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 625.72,
+   "y": 155.8,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Activity",
+   "x": 24,
+   "y": 268,
+   "w": 66.94,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 625.72,
+   "y": 271.8,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Today · November 12, 2026",
+   "x": 24,
+   "y": 323,
+   "w": 170.61,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Active",
+   "x": 60,
+   "y": 354.19,
+   "w": 38.56,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9:53:00 AM",
+   "x": 603.22,
+   "y": 355.38,
+   "w": 60.78,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "alert.freezer_door": {
+   "s": "on",
+   "a": {
+    "friendly_name": "Freezer door open"
+   },
+   "lc": 1794498780,
+   "lu": 1794498780
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "alert.freezer_door",
+    "pl": "alert",
+    "en": "Freezer door open"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "alert"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.alert.entity_component._.state.idle": "Idle",
+    "component.alert.entity_component._.state.off": "Acknowledged",
+    "component.alert.entity_component._.state.on": "Active"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "history/stream",
+    "entity_ids": [
+     "alert.freezer_door"
+    ],
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "minimal_response": true,
+    "significant_changes_only": true,
+    "no_attributes": true
+   },
+   "events": [
+    {
+     "states": {
+      "alert.freezer_door": [
+       {
+        "s": "idle",
+        "lu": 1794413280
+       },
+       {
+        "s": "on",
+        "lu": 1794498780
+       }
+      ]
+     },
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  },
+  {
+   "request": {
+    "type": "config/auth/list"
+   },
+   "events": [],
+   "result": [
+    {
+     "id": "parity-user",
+     "name": "Sam",
+     "is_owner": true,
+     "is_admin": true,
+     "credentials": [
+      {
+       "auth_provider_type": "homeassistant",
+       "auth_provider_id": null
+      }
+     ],
+     "mfa_modules": [],
+     "system_generated": false,
+     "group_ids": [
+      "system-admin"
+     ],
+     "username": "parity",
+     "is_active": true,
+     "local_only": false
+    }
+   ]
+  },
+  {
+   "request": {
+    "type": "logbook/event_stream",
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "end_time": "2027-11-12T16:08:00.000Z",
+    "entity_ids": [
+     "alert.freezer_door"
+    ]
+   },
+   "events": [
+    {
+     "events": [
+      {
+       "entity_id": "alert.freezer_door",
+       "state": "on",
+       "when": 1794498780
+      }
+     ],
+     "start_time": 1794413280,
+     "end_time": 1794499680,
+     "partial": true
+    },
+    {
+     "events": [],
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  }
+ ]
+}

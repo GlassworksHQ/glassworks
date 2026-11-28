@@ -78,7 +78,8 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
   tiles, every pane with its state). The sidebar has Panel (Home Assistant & dashboard: address, the
   dashboard's sign-in, full screen, zoom, secure hosts; Screen: presence, idle time,
   brightness, the Panel night mode blueprint, Aqara's own settings; S1 Plus: Block Aqara cloud, the cloud daemon, Aqara's apps, the
-  radio's mode), each pane under Panes with its status dot, and System (Log, About).
+  radio's mode), each pane under Panes with its status dot, and System (Log, Security, Labs, About). Labs holds
+  experimental features, off by default: today the Vitro renderer.
   Changes apply as you make them; the few that need a restart offer one.
 - **Kiosk mode for HA**: a built-in Gecko web extension (`engines/engine-gecko/src/main/assets/extension/`) hides the HA dashboard
   header and the sidebar. Add `?kiosk=0` to the URL to show them for one page; while you're editing a
@@ -170,6 +171,7 @@ $A --es open http://homeassistant.local:8123/history         # navigate once (no
 $A --ef zoom 1.25          # CSS px ratio; 0 = auto (device density 1.5). Restarts the app.
 $A --es secure_hosts a.lan,b.lan   # extra secure-context hosts. Restarts the app.
 $A --ez remote_debug true  # Gecko remote debugging. Restarts the app.
+$A --ez vitro true         # experimental native dashboard renderer (Vitro); false turns it off. Restarts the app.
 $A --ez reload true
 $A --ez settings true      # open the settings dialog
 $A --ez hide_header false  # show HA header/sidebar

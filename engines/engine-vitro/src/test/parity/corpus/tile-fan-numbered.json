@@ -1,0 +1,48 @@
+{
+ "title": "Tile: a fan with five numbered speeds",
+ "card": {
+  "type": "tile",
+  "entity": "fan.ceiling_fan",
+  "features": [
+   {
+    "type": "fan-speed"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "fan.ceiling_fan": {
+    "state": "on",
+    "last_changed": "-261m",
+    "attributes": {
+     "preset_modes": [
+      "auto"
+     ],
+     "percentage": 50,
+     "percentage_step": 25,
+     "preset_mode": null,
+     "friendly_name": "Ceiling Fan",
+     "supported_features": 57
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "fan.ceiling_fan",
+    "pl": "zha",
+    "tk": "fan",
+    "di": "dev-ceiling-fan",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-ceiling-fan",
+    "name": "Ceiling Fan"
+   }
+  ]
+ },
+ "expect": {
+  "fan.ceiling_fan": "on"
+ }
+}

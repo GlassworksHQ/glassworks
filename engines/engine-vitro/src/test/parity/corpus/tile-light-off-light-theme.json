@@ -1,0 +1,50 @@
+{
+ "title": "Tile: a light that is off, light theme",
+ "dark": false,
+ "card": {
+  "type": "tile",
+  "entity": "light.reading_lamp",
+  "name": "Reading",
+  "features": [
+   {
+    "type": "light-brightness"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.reading_lamp": {
+    "state": "off",
+    "last_changed": "-192m",
+    "attributes": {
+     "supported_color_modes": [
+      "onoff"
+     ],
+     "color_mode": null,
+     "off_with_transition": false,
+     "off_brightness": null,
+     "icon": "mdi:floor-lamp",
+     "friendly_name": "Reading Lamp Reading",
+     "supported_features": 8
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "light.reading_lamp",
+    "pl": "zha",
+    "tk": "light",
+    "ic": "mdi:floor-lamp",
+    "di": "dev-reading-lamp",
+    "en": "Reading",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-reading-lamp",
+    "name": "Reading Lamp"
+   }
+  ]
+ }
+}

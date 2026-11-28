@@ -1,0 +1,11 @@
+# The parity harness's fake HA renders templates with jinja2 (tools/vitro-parity/fakehome.py). Pinned by SHA-256:
+#   python3 -m pip install --require-hashes -r tools/vitro-parity/requirements.txt
+# Jinja2 and MarkupSafe are BSD-3-Clause (Pallets). Host only: nothing of them is in the repo or an APK.
+jinja2==3.1.6 \
+    --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67 \
+    --hash=sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d
+markupsafe==3.0.3 \
+    --hash=sha256:d6dd0be5b5b189d31db7cda48b91d7e0a9795f31430b7f271219ab30f1d3ac9d \
+    --hash=sha256:1cc7ea17a6824959616c525620e387f6dd30fec8cb44f649e31712db02123dad \
+    --hash=sha256:4bd4cd07944443f5a265608cc6aab442e4f74dff8088b0dfc8238647b8f6ae9a \
+    --hash=sha256:722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698

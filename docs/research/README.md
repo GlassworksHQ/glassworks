@@ -221,6 +221,8 @@ This page is the index of every note. Notes about one device live with its frame
 | [bringup.md](bringup.md) | The method: how to break into a device step by step, and what the S1 taught us about FEL, U-Boot, fastboot and Android 10 |
 | [TEMPLATE.md](TEMPLATE.md) | Start a new note from this |
 | [microwakeword.md](microwakeword.md) | Replacing openWakeWord with microWakeWord: the Kotlin port of TFLite Micro's audio frontend, the models, test speech, and what is left for the panel |
+| [vitro-island-census.md](vitro-island-census.md) | Which dashboard cards still need a web island in Vitro: counts from our dashboards and a sample of 60 community ones, the top cards left, and whether to add native paths or spike a JS island engine (#798) |
+| [vitro-island-better-thermostat.md](vitro-island-better-thermostat.md) | Why Better Thermostat's card drew blank islands on the tablet: an old card type HA shows as an error, an island `hass.states` that never changed for cards comparing states, HA's `action-handler` missing, and the climate card's dial that only HA's frontend has (#885) |
 | [android-ca-roots.md](android-ca-roots.md) | Which CA roots Android 6 and 7.0 lack for GitHub's download hosts (ISRG Root X1), checked against AOSP's stores, and the bundled root that fixes the wake word download and updates there (#456) |
 | [gecko-turn.md](gecko-turn.md) | Gecko won't use a TURN server at a loopback IP or a relayed candidate on loopback (Chrome does): why the S1 never connected to Clarity's WebRTC camera, and the fix (#202) |
 | [ha-esphome-actions-events.md](ha-esphome-actions-events.md) | What a notification can carry over ESPHome each way: why `notify` takes one JSON `data` argument, and why a tapped button goes to HA as a bus event, not an event entity (#118) |
@@ -295,6 +297,12 @@ This page is the index of every note. Notes about one device live with its frame
 |---|---|
 | [kiln-install.md](../../frames/generic-android/research/kiln-install.md) | Which adb commands install Glassworks, grant it what it needs and set the home screen on Android 6, 7 and 8+, and what tells Kiln a device's brand before USB debugging is on (read, untested on a device, #403) |
 | [screen-lock.md](../../frames/generic-android/research/screen-lock.md) | Which adb command tells Kiln, without root, that a device has a PIN, pattern or password: `dumpsys lock_settings` (verified on Android 8.0, 11 and 15 emulators, 2026-11-18, #522) |
+
+### Google Pixel Tablet ([`frames/google-pixel-tablet/`](../../frames/google-pixel-tablet/README.md#research-notes))
+
+| Note | Question |
+|---|---|
+| [window-layers.md](../../frames/google-pixel-tablet/research/window-layers.md) | Which SurfaceFlinger layer holds an app window's frames on Android 17: the ViewRootImpl's `VRI-<package>/<activity>#n`, not the window's own layer, and how Clarity reads Vitro's frames there (verified on the Pixel Tablet, 2026-11-26) |
 
 User-facing guides stay one level up, in [docs/](../README.md).
 

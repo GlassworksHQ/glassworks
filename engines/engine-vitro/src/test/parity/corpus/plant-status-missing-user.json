@@ -1,0 +1,15 @@
+{
+ "title": "Plant status: a plant HA doesn't have, for a user who isn't an administrator (hui-warning's icon alone)",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "plant-status",
+  "entity": "plant.missing_basil"
+ },
+ "fixture": {
+  "states": {},
+  "admin": false
+ }
+}

@@ -53,12 +53,18 @@ class HttpResponse(
     val body: ByteArray,
     /** `101 Switching Protocols`: the connection is handed to this once the answer is written ([upgrade]). */
     val upgrade: Upgrade? = null,
+    /**
+     * Runs once the server is done with this answer: written, failed to write, or replaced before writing. What the
+     * body holds on to (a memory budget, say) is released here, not when the handler returns.
+     */
+    val onDone: (() -> Unit)? = null,
 ) {
-    fun with(extra: Map<String, String>) = HttpResponse(status, headers + extra, body, upgrade)
+    fun with(extra: Map<String, String>) = HttpResponse(status, headers + extra, body, upgrade, onDone)
 
     /**
-     * What runs on an upgraded connection, on its worker, until it returns; then the connection closes. No request
-     * deadline any more: a read waits at most [idleMs].
+     * What runs on an upgraded connection until it returns; then the connection closes. It runs on the request's
+     * worker, or on a thread of its own when the server has [HttpServer]'s `upgradeThreads`. No request deadline any
+     * more: a read waits at most [idleMs].
      */
     class Upgrade(val idleMs: Int, val run: (InputStream, OutputStream) -> Unit)
 
@@ -103,7 +109,15 @@ class HttpServer(
      * It counts from when a worker picks the connection up, not from accept: time in the queue comes first.
      */
     private val requestDeadlineMs: Long = 10_000L,
+    /**
+     * Upgraded connections (WebSockets) that may run at once on threads of their own, off the worker pool, so
+     * long-lived ones never keep plain requests waiting. Past it an upgrade is answered 503. Zero (the default) runs
+     * them on the request's worker.
+     */
+    upgradeThreads: Int = 0,
 ) {
+    private val upgradeSlots: java.util.concurrent.Semaphore? =
+        upgradeThreads.takeIf { it > 0 }?.let { java.util.concurrent.Semaphore(it) }
     private var serverSocket: ServerSocket? = null
     @Volatile private var running = false
     private val pool = ThreadPoolExecutor(workers, workers, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(queued)) { r ->
@@ -117,6 +131,9 @@ class HttpServer(
 
     /** Sees every request before [handler]; null passes it on. Set before [start] (the panel's setup over the LAN, #34). */
     @Volatile var front: ((HttpRequest) -> HttpResponse?)? = null
+    /** The thread accepting connections, while the server listens ([stop] waits for it). */
+    @Volatile private var acceptThread: Thread? = null
+
     /** Every connection accepted and not yet closed, also those still waiting for a worker, so [stop] can close them. */
     private val open: MutableSet<Socket> = ConcurrentHashMap.newKeySet()
 
@@ -126,10 +143,16 @@ class HttpServer(
     fun start() {
         val ss = ServerSocket()
         ss.reuseAddress = true
-        ss.bind(InetSocketAddress(bindAddress, port))
+        try {
+            ss.bind(InetSocketAddress(bindAddress, port))
+        } catch (e: IOException) {
+            // A port another socket holds: the caller may try another, so this one isn't left open.
+            try { ss.close() } catch (_: IOException) {}
+            throw e
+        }
         serverSocket = ss
         running = true
-        Thread({
+        acceptThread = Thread({
             while (running) {
                 val s = try { ss.accept() } catch (e: IOException) { if (running) log("accept failed: ${e.message}"); break }
                 open += s
@@ -143,10 +166,20 @@ class HttpServer(
         log("listening on ${ss.localPort}")
     }
 
+    /**
+     * Stops listening and closes every connection. The port is free again when this returns: closing a socket that
+     * a thread is blocked accepting on only releases it once that thread leaves `accept()` (the JDK hands the descriptor
+     * over to it on Linux), so this waits for the accept thread, up to [STOP_WAIT_MS].
+     */
     fun stop() {
         running = false
         try { serverSocket?.close() } catch (_: IOException) {}
         serverSocket = null
+        acceptThread?.takeIf { it !== Thread.currentThread() }?.let { t ->
+            try { t.join(STOP_WAIT_MS) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+            if (t.isAlive) log("the listener didn't stop within $STOP_WAIT_MS ms")
+        }
+        acceptThread = null
         // Tasks still in the queue never run: close their connections here, and the running ones' too.
         pool.shutdownNow()
         refusals.shutdownNow()
@@ -156,33 +189,87 @@ class HttpServer(
 
     private fun serve(s: Socket) {
         val id = ids.incrementAndGet()
-        try { serveOn(s, id) } finally { open -= s }
+        var handedOff = false
+        try {
+            handedOff = serveOn(s, id)
+        } finally {
+            if (!handedOff) {
+                try { s.close() } catch (_: IOException) {}
+                open -= s
+            }
+        }
     }
 
-    private fun serveOn(s: Socket, id: Int) {
-        s.use { sock ->
-            try {
-                val deadline = DeadlineInput(sock, System.nanoTime() + requestDeadlineMs * 1_000_000)
-                val input = BufferedInputStream(deadline)
-                val req = try { read(input, maxBody, sock.inetAddress?.hostAddress) } catch (e: TooLarge) {
-                    write(sock.getOutputStream(), HttpResponse.text(413, "Too large"), head = false); return
-                } catch (e: BadRequest) {
-                    log("[$id] refused: ${e.message}")
-                    write(sock.getOutputStream(), HttpResponse.text(400, "Bad request"), head = false); return
-                } ?: return
-                // A header value with a line break would split the answer (response splitting): checked before it is written.
-                val res = try { (front?.invoke(req) ?: handler(req)).also(::checkHeaders) } catch (t: Throwable) {
-                    log("[$id] ${req.method} ${req.path} failed: $t")
-                    HttpResponse.text(500, "Something went wrong on the panel.")
-                }
-                log("[$id] ${req.method} ${req.path} -> ${res.status}")
-                write(sock.getOutputStream(), res, head = req.method == "HEAD")
-                val up = res.upgrade ?: return
-                deadline.idleMs = up.idleMs
-                try { up.run(input, sock.getOutputStream()) } catch (t: RuntimeException) { log("[$id] ${req.path} upgraded connection failed: $t") }
-            } catch (e: IOException) {
-                log("[$id] ${e.message}")
+    /** Serves one request on [sock]; true when an upgrade thread now owns the connection (and closes it). */
+    private fun serveOn(sock: Socket, id: Int): Boolean {
+        var slot = false
+        try {
+            val deadline = DeadlineInput(sock, System.nanoTime() + requestDeadlineMs * 1_000_000)
+            val input = BufferedInputStream(deadline)
+            val req = try { read(input, maxBody, sock.inetAddress?.hostAddress) } catch (e: TooLarge) {
+                write(sock.getOutputStream(), HttpResponse.text(413, "Too large"), head = false); return false
+            } catch (e: BadRequest) {
+                log("[$id] refused: ${e.message}")
+                write(sock.getOutputStream(), HttpResponse.text(400, "Bad request"), head = false); return false
+            } ?: return false
+            var res = try { front?.invoke(req) ?: handler(req) } catch (t: Throwable) {
+                log("[$id] ${req.method} ${req.path} failed: $t")
+                HttpResponse.text(500, "Something went wrong on the panel.")
             }
+            // A header value with a line break would split the answer (response splitting): checked before it is
+            // written. A refused answer is released (onDone) once, as a written one would be, before the 500 replaces it.
+            try { checkHeaders(res) } catch (t: Throwable) {
+                log("[$id] ${req.method} ${req.path} failed: $t")
+                res.onDone?.invoke()
+                res = HttpResponse.text(500, "Something went wrong on the panel.")
+            }
+            val slots = upgradeSlots
+            if (res.upgrade != null && slots != null) {
+                slot = slots.tryAcquire()
+                if (!slot) {
+                    res.onDone?.invoke()
+                    res = HttpResponse.text(503, "Too many open connections. Try again in a moment.")
+                }
+            }
+            log("[$id] ${req.method} ${req.path} -> ${res.status}")
+            try {
+                write(sock.getOutputStream(), res, head = req.method == "HEAD")
+            } finally {
+                res.onDone?.invoke()
+            }
+            val up = res.upgrade ?: return false
+            deadline.idleMs = up.idleMs
+            if (slots == null) {
+                runUpgrade(up, input, sock, req.path, id)
+                return false
+            }
+            val t = Thread({
+                try {
+                    runUpgrade(up, input, sock, req.path, id)
+                } finally {
+                    slots.release()
+                    try { sock.close() } catch (_: IOException) {}
+                    open -= sock
+                }
+            }, "glassworks-http-upgrade").apply { isDaemon = true }
+            t.start()
+            slot = false // the thread releases it now
+            return true
+        } catch (e: IOException) {
+            log("[$id] ${e.message}")
+            return false
+        } finally {
+            if (slot) upgradeSlots?.release()
+        }
+    }
+
+    private fun runUpgrade(up: HttpResponse.Upgrade, input: InputStream, sock: Socket, path: String, id: Int) {
+        try {
+            up.run(input, sock.getOutputStream())
+        } catch (t: RuntimeException) {
+            log("[$id] $path upgraded connection failed: $t")
+        } catch (e: IOException) {
+            log("[$id] $path upgraded connection ended: ${e.message}")
         }
     }
 
@@ -249,6 +336,9 @@ class HttpServer(
     companion object {
         /** How long the refusal thread reads a refused connection's request, in all. */
         private const val BUSY_DRAIN_MS = 300L
+
+        /** How long [stop] waits for the accept thread to leave `accept()` and release the port. */
+        private const val STOP_WAIT_MS = 2_000L
 
         /** Refused connections that may wait for the refusal thread. Beyond that they close without the drain. */
         private const val BUSY_QUEUED = 8

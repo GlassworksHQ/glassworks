@@ -1,0 +1,41 @@
+{
+ "title": "tile: switch unavailable (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "switch.switch_unavailable": "unavailable"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "switch.switch_unavailable"
+ },
+ "fixture": {
+  "states": {
+   "switch.switch_unavailable": {
+    "state": "unavailable",
+    "last_changed": "-20m",
+    "attributes": {
+     "restored": true,
+     "friendly_name": "Patio Heater"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "switch.switch_unavailable",
+    "pl": "demo",
+    "di": "dev-patio",
+    "en": "Heater",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-patio",
+    "name": "Patio"
+   }
+  ]
+ }
+}

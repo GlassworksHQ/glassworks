@@ -1,0 +1,153 @@
+{
+ "case": "font-cardmod",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "Hallway Ceiling Light Hallway Ceiling Ring",
+   "x": 56,
+   "y": 13.61,
+   "w": 266.44,
+   "h": 24,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 56,
+   "y": 33,
+   "w": 19.66,
+   "h": 21,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.hallway_ceiling_ring": {
+   "s": "off",
+   "a": {
+    "min_color_temp_kelvin": 2702,
+    "max_color_temp_kelvin": 6535,
+    "supported_color_modes": [
+     "color_temp",
+     "xy"
+    ],
+    "color_mode": null,
+    "brightness": null,
+    "color_temp_kelvin": null,
+    "hs_color": null,
+    "rgb_color": null,
+    "xy_color": null,
+    "off_with_transition": true,
+    "off_brightness": 13,
+    "friendly_name": "Hallway Ceiling Light Hallway Ceiling Ring",
+    "supported_features": 40
+   },
+   "lc": 1794484080,
+   "lu": 1794484080
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.hallway_ceiling_ring",
+    "pl": "zha",
+    "tk": "light",
+    "di": "device-1",
+    "en": "Hallway Ceiling Ring"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Hallway Ceiling Light"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "light": {
+      "light": {
+       "state_attributes": {
+        "effect": {
+         "state": {
+          "colorloop": "mdi:looks"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

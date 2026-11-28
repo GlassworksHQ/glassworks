@@ -371,8 +371,12 @@ class KeystoreSecretsTest {
         assertTrue("the scan sees SecretFiles", "SecretFiles.kt" in opens)
         // The others open only files without secrets: PaneFiles opens SecretFiles' files through it, the
         // wall base its energy counter (s1base), the timers their anchor (timers), setup its answers to the device's
-        // own steps (setup, #403).
-        assertEquals(setOf("SecretFiles.kt", "PaneFiles.kt", "WallBase.kt", "TimerOverlay.kt", "SetupPrefs.kt"), opens)
+        // own steps (setup, #403), the copy of Home Assistant's page storage without its credentials
+        // (ha_page_storage) and Vitro's island port (vitro_island, #881), which the factory reset clears (HaPageData).
+        assertEquals(
+            setOf("SecretFiles.kt", "PaneFiles.kt", "WallBase.kt", "TimerOverlay.kt", "SetupPrefs.kt", "HaPageStorage.kt", "VitroEngine.kt", "HaPageData.kt"),
+            opens,
+        )
         for (literal in SecretFiles.SECRETS.keys) {
             val raw = sources.filter { it.name != "SecretFiles.kt" && Regex("""getSharedPreferences\(\s*"$literal"""").containsMatchIn(it.readText()) }
             assertTrue("$literal opened raw in ${raw.map(RepoFiles::rel)}", raw.isEmpty())

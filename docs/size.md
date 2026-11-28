@@ -12,9 +12,8 @@
 Every pull request builds the release APKs, one per ABI, and splits each into its parts: the engine
 (GeckoView), the core, each pane, and the libraries more than one of them use. It shows how each part
 changed against the base branch, and fails when an APK or a pane is over the frame's size budget,
-unless the same pull request raises that budget. This is the size half of
-[#68](https://github.com/GlassworksHQ/glassworks/issues/68); RAM is the other half, measured
-on the device by [Clarity](perf.md#ram).
+unless the same pull request raises that budget. This is the size half of the frame's budgets; RAM
+is the other half, measured on the device by [Clarity](perf.md#ram).
 
 ## What it reports
 
@@ -24,6 +23,7 @@ on the device by [Clarity](perf.md#ram).
 | Part | What is in it |
 |---|---|
 | Engine (GeckoView) | `org.mozilla.*` and `org.webrtc.*` classes, Gecko's native libraries (`libxul.so` and the rest) and `assets/omni.ja` |
+| Engine (Vitro) | The native renderer an app ships beside GeckoView: `dev.glassworks.engine.vitro.*` and its bundled icon table, `assets/vitro-mdi.tsv`, plus its WebRTC cameras: `dev.glassworks.hawebrtc.*` and libwebrtc (`livekit.org.*` and `liblkjingle_peerconnection_so.so`) (`engines` in `parts.json`). Its locale tables (`dev/glassworks/engine/vitro/locale/`, Java resources) still count as Core's |
 | Core | Everything else: the shell, `dev.glassworks.*` outside the panes, the ESPHome and Improv libraries, Kotlin, AndroidX, resources, and the core's assets (`assets/extension/`, `assets/dexopt/`, `assets/licenses/`, `assets/blueprints.json`, every pane's blueprint list that the core's card reads, and `assets/setup/`, the setup page the panel serves at `/setup`) |
 | Pane `<id>` | The pane's own classes (its package, and classes elsewhere that only it uses), the libraries only it uses, and its assets under `assets/panes/<id>/` (or a path `parts.json` names for it: the radio's `assets/radio-bundle/`) |
 | Shared library `<name>` | A library more than one part uses, counted once and in nobody's own total |
@@ -34,7 +34,7 @@ add up to the file. The APKs measured are unsigned (`kiosk-release-unsigned.apk`
 a few kB larger, by its signature block, which isn't any part's. The dex files' bytes are shared out by apkanalyzer's per-class sizes.
 
 **Which classes and libraries are whose** is in `tools/size/parts.json`, read from
-the module build files and the imports in each module's `src/main` (2026-11-13). The
+the module build files and the imports in each module's `src/main`. The
 longest matching prefix wins; a class nothing matches is the core's. On the S1:
 
 | Library | Used by | So |
@@ -73,19 +73,21 @@ The budgets are the frame's own, in `frames/<id>/budgets.json`, next to its RAM 
 
 The check reads the budget in the pull request's own branch, so going over passes only when the same
 pull request raises the budget; the comment then leads with the change. On the S1 the APK budgets
-are the 2026-11-13 release build as it ships plus about 2.5%: 101.17 MB `armeabi-v7a` (with the radio
-bundle, as release.yml adds it), so 103.70 MB, and 100.78 MB `arm64-v8a` (without), so 103.30 MB.
-Each pane's is about twice its own size then, at least 100 kB; the radio's own size includes the
-bundle (3.49 MB, of which the bundle is 3.32 MB), so its budget is 7.00 MB. These are project
-choices, so that growth is a decision, not a drift. (The first budgets, 2026-11-13, measured a build
-without the bundle, 97.84 MB, which is not what ships; v0.4.3's released APK was 101.08 MB.)
+are a release build as it ships plus about 2.5%: 101.17 MB `armeabi-v7a` (with the radio bundle, as
+release.yml adds it), so 103.70 MB, and 100.78 MB `arm64-v8a` (without), so 103.30 MB. Vitro adds
+1.3 MB to both for the engine itself (its code and icon table), and 6 MB (`armeabi-v7a`) and 7 MB
+(`arm64-v8a`) for its WebRTC cameras, of which libwebrtc's native library is 4.17 MB and 5.91 MB.
+That makes 111.00 MB and 111.60 MB. Each pane's budget is about twice its own size in that build,
+at least 100 kB; the radio's own size includes the bundle (3.49 MB, of which the bundle is 3.32 MB),
+so its budget is 7.00 MB. These are project choices, so that growth is a decision, not a drift.
 
-Glassworks for generic Android (#23) has its own budgets, in `frames/generic-android/budgets.json`,
-by the same rules: its 2026-11-15 release build plus about 2.5% (100.82 MB `arm64-v8a`, so 103.40 MB;
-97.88 MB `armeabi-v7a`, so 100.40 MB), and each of its panes about twice its own size, at least 100 kB. CI's
+Glassworks for generic Android has its own budgets, in `frames/generic-android/budgets.json`, by
+the same rules: its measured release build with Vitro and its WebRTC cameras, 110.02 MB
+`arm64-v8a` and 105.34 MB `armeabi-v7a` (Vitro is 8.12 MB and 6.38 MB of that), plus about 2.5%,
+so 112.80 MB and 108.00 MB, and each of its panes about twice its own size, at least 100 kB. CI's
 `size-generic` job checks them on every pull request that changes what goes into that APK. Like the
 `size` job, it builds the base commit's APKs too, for the change column, and its report goes into the
-same PR comment, under the S1's. The legacy build (#198) has no budget yet, so it isn't in the
+same PR comment, under the S1's. The legacy build has no budget yet, so it isn't in the
 comment; the job summary gives its size. The same file has its RAM budgets, which Clarity checks
 on a device ([perf.md](perf.md#not-in-the-grade) says how they were set).
 

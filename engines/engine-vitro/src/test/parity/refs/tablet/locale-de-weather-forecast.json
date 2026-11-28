@@ -1,0 +1,642 @@
+{
+ "case": "locale-de-weather-forecast",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 264
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 248,
+   "type": "hui-weather-forecast-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Bewölkt",
+   "x": 97,
+   "y": 33.59,
+   "w": 99.42,
+   "h": 33,
+   "size": 28,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Home",
+   "x": 97,
+   "y": 67.19,
+   "w": 37.66,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "16,7",
+   "x": 399.39,
+   "y": 33.59,
+   "w": 52.67,
+   "h": 33,
+   "size": 28,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": true,
+   "text": "°C",
+   "x": 459,
+   "y": 34.59,
+   "w": 24.59,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "14,7 °C",
+   "x": 389.86,
+   "y": 67.19,
+   "w": 44.14,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "/",
+   "x": 437.47,
+   "y": 67.19,
+   "w": 5.78,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9,1 °C",
+   "x": 446.72,
+   "y": 67.19,
+   "w": 36.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Do",
+   "x": 56.23,
+   "y": 105.8,
+   "w": 14.72,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "14,7",
+   "x": 45.55,
+   "y": 176.8,
+   "w": 30.09,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 75.64,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9,1",
+   "x": 51.73,
+   "y": 201.8,
+   "w": 18.48,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 70.22,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Fr",
+   "x": 151.5,
+   "y": 105.8,
+   "w": 10.55,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "12,5",
+   "x": 138.73,
+   "y": 176.8,
+   "w": 30.09,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 168.83,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "8,7",
+   "x": 144.92,
+   "y": 201.8,
+   "w": 18.48,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 163.41,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Sa",
+   "x": 243.14,
+   "y": 105.8,
+   "w": 13.66,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "11,2",
+   "x": 231.92,
+   "y": 176.8,
+   "w": 30.09,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 262.02,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "6,4",
+   "x": 238.11,
+   "y": 201.8,
+   "w": 18.48,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 256.59,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "So",
+   "x": 336.17,
+   "y": 105.8,
+   "w": 13.97,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "13,9",
+   "x": 325.11,
+   "y": 176.8,
+   "w": 30.09,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 355.2,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "4,2",
+   "x": 331.3,
+   "y": 201.8,
+   "w": 18.48,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 349.78,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Mo",
+   "x": 427.67,
+   "y": 105.8,
+   "w": 17.33,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "15,3",
+   "x": 418.3,
+   "y": 176.8,
+   "w": 30.09,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 448.39,
+   "y": 176.8,
+   "w": 5.98,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "7",
+   "x": 429.78,
+   "y": 201.8,
+   "w": 7.88,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "°",
+   "x": 437.66,
+   "y": 201.8,
+   "w": 5.23,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "weather.forecast_home": {
+   "s": "cloudy",
+   "a": {
+    "temperature": 16.7,
+    "dew_point": 9.9,
+    "temperature_unit": "°C",
+    "humidity": 64,
+    "cloud_coverage": 99.2,
+    "uv_index": 0.6,
+    "pressure": 1019.3,
+    "pressure_unit": "hPa",
+    "wind_bearing": 154.2,
+    "wind_speed": 16.9,
+    "wind_speed_unit": "km/h",
+    "visibility_unit": "km",
+    "precipitation_unit": "mm",
+    "friendly_name": "Home",
+    "supported_features": 3,
+    "attribution": "Weather forecast from met.no, delivered by the Norwegian Meteorological Institute."
+   },
+   "lc": 1794490140,
+   "lu": 1794490140
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "weather.forecast_home",
+    "pl": "met",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Home"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "weather"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "weather": {
+     "_": {
+      "default": "mdi:weather-partly-cloudy",
+      "state": {
+       "clear-night": "mdi:weather-night",
+       "cloudy": "mdi:weather-cloudy",
+       "exceptional": "mdi:alert-circle-outline",
+       "fog": "mdi:weather-fog",
+       "hail": "mdi:weather-hail",
+       "lightning": "mdi:weather-lightning",
+       "lightning-rainy": "mdi:weather-lightning-rainy",
+       "pouring": "mdi:weather-pouring",
+       "rainy": "mdi:weather-rainy",
+       "snowy": "mdi:weather-snowy",
+       "snowy-rainy": "mdi:weather-snowy-rainy",
+       "sunny": "mdi:weather-sunny",
+       "windy": "mdi:weather-windy",
+       "windy-variant": "mdi:weather-windy-variant"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.weather.entity_component._.state.clear-night": "Klare Nacht",
+    "component.weather.entity_component._.state.cloudy": "Bewölkt",
+    "component.weather.entity_component._.state.exceptional": "Außergewöhnlich",
+    "component.weather.entity_component._.state.fog": "Nebel",
+    "component.weather.entity_component._.state.hail": "Hagel",
+    "component.weather.entity_component._.state.lightning": "Gewitter",
+    "component.weather.entity_component._.state.lightning-rainy": "Gewitter, regnerisch",
+    "component.weather.entity_component._.state.partlycloudy": "Teilweise bewölkt",
+    "component.weather.entity_component._.state.pouring": "Strömender Regen",
+    "component.weather.entity_component._.state.rainy": "Regnerisch",
+    "component.weather.entity_component._.state.snowy": "Schneefall",
+    "component.weather.entity_component._.state.snowy-rainy": "Schneeregen",
+    "component.weather.entity_component._.state.sunny": "Sonnig",
+    "component.weather.entity_component._.state.windy": "Windig",
+    "component.weather.entity_component._.state.windy-variant": "Windig, bewölkt"
+   },
+   "entity": {}
+  }
+ },
+ "locale": {
+  "language": "de",
+  "number_format": "decimal_comma",
+  "time_format": "24"
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "weather/subscribe_forecast",
+    "forecast_type": "daily",
+    "entity_id": "weather.forecast_home"
+   },
+   "events": [
+    {
+     "type": "daily",
+     "forecast": [
+      {
+       "condition": "partlycloudy",
+       "datetime": "2026-11-12T12:00:00-06:00",
+       "wind_bearing": 154.2,
+       "uv_index": 0.6,
+       "temperature": 14.7,
+       "templow": 9.1,
+       "wind_speed": 19.1,
+       "precipitation": 0.4,
+       "humidity": 64
+      },
+      {
+       "condition": "rainy",
+       "datetime": "2026-11-13T12:00:00-06:00",
+       "wind_bearing": 210,
+       "uv_index": 0.9,
+       "temperature": 12.5,
+       "templow": 8.7,
+       "wind_speed": 25.4,
+       "precipitation": 6.1,
+       "humidity": 82
+      },
+      {
+       "condition": "cloudy",
+       "datetime": "2026-11-14T12:00:00-06:00",
+       "wind_bearing": 280.5,
+       "uv_index": 1.1,
+       "temperature": 11.2,
+       "templow": 6.4,
+       "wind_speed": 14,
+       "precipitation": 0.8,
+       "humidity": 71
+      },
+      {
+       "condition": "sunny",
+       "datetime": "2026-11-15T12:00:00-06:00",
+       "wind_bearing": 12,
+       "uv_index": 2.3,
+       "temperature": 13.9,
+       "templow": 4.2,
+       "wind_speed": 8.6,
+       "precipitation": 0,
+       "humidity": 55
+      },
+      {
+       "condition": "partlycloudy",
+       "datetime": "2026-11-16T12:00:00-06:00",
+       "wind_bearing": 95.8,
+       "uv_index": 1.7,
+       "temperature": 15.3,
+       "templow": 7,
+       "wind_speed": 11.3,
+       "precipitation": 0.1,
+       "humidity": 60
+      },
+      {
+       "condition": "fog",
+       "datetime": "2026-11-17T12:00:00-06:00",
+       "wind_bearing": 180,
+       "uv_index": 0.4,
+       "temperature": 10.8,
+       "templow": 7.9,
+       "wind_speed": 5.2,
+       "precipitation": 0.2,
+       "humidity": 93
+      },
+      {
+       "condition": "lightning-rainy",
+       "datetime": "2026-11-18T12:00:00-06:00",
+       "wind_bearing": 240,
+       "uv_index": 0.5,
+       "temperature": 12,
+       "templow": 9.3,
+       "wind_speed": 30.7,
+       "precipitation": 11.5,
+       "humidity": 88
+      }
+     ]
+    }
+   ],
+   "result": null
+  }
+ ]
+}

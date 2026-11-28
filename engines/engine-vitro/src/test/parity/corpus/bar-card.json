@@ -1,0 +1,119 @@
+{
+ "title": "bar-card: four ink levels with severity colors",
+ "route": "island",
+ "card": {
+  "type": "custom:bar-card",
+  "title": "Printer ink",
+  "entities": [
+   {
+    "entity": "sensor.printer_black_ink",
+    "name": "Black"
+   },
+   {
+    "entity": "sensor.printer_cyan_ink",
+    "name": "Cyan"
+   },
+   {
+    "entity": "sensor.printer_magenta_ink",
+    "name": "Magenta"
+   },
+   {
+    "entity": "sensor.printer_yellow_ink",
+    "name": "Yellow"
+   }
+  ],
+  "severity": [
+   {
+    "from": 0,
+    "to": 20,
+    "color": "#ef4444"
+   },
+   {
+    "from": 20,
+    "to": 50,
+    "color": "#f59e0b"
+   },
+   {
+    "from": 50,
+    "to": 100,
+    "color": "#22c55e"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "sensor.printer_black_ink": {
+    "state": "74",
+    "last_changed": "-2h",
+    "attributes": {
+     "unit_of_measurement": "%",
+     "icon": "mdi:water",
+     "friendly_name": "Office Printer Black ink"
+    }
+   },
+   "sensor.printer_cyan_ink": {
+    "state": "38",
+    "last_changed": "-2h",
+    "attributes": {
+     "unit_of_measurement": "%",
+     "icon": "mdi:water",
+     "friendly_name": "Office Printer Cyan ink"
+    }
+   },
+   "sensor.printer_magenta_ink": {
+    "state": "12",
+    "last_changed": "-2h",
+    "attributes": {
+     "unit_of_measurement": "%",
+     "icon": "mdi:water",
+     "friendly_name": "Office Printer Magenta ink"
+    }
+   },
+   "sensor.printer_yellow_ink": {
+    "state": "55",
+    "last_changed": "-2h",
+    "attributes": {
+     "unit_of_measurement": "%",
+     "icon": "mdi:water",
+     "friendly_name": "Office Printer Yellow ink"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "sensor.printer_black_ink",
+    "pl": "demo",
+    "di": "dev-printer",
+    "en": "Black ink",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.printer_cyan_ink",
+    "pl": "demo",
+    "di": "dev-printer",
+    "en": "Cyan ink",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.printer_magenta_ink",
+    "pl": "demo",
+    "di": "dev-printer",
+    "en": "Magenta ink",
+    "np": "device"
+   },
+   {
+    "ei": "sensor.printer_yellow_ink",
+    "pl": "demo",
+    "di": "dev-printer",
+    "en": "Yellow ink",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-printer",
+    "name": "Office Printer"
+   }
+  ]
+ }
+}

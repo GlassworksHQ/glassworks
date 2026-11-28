@@ -1,0 +1,35 @@
+{
+ "title": "Tile: a cover with open/close buttons",
+ 
+ "card": {
+  "type": "tile",
+  "entity": "cover.office_blind",
+  "features": [
+   {
+    "type": "cover-open-close"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "cover.office_blind": {
+    "state": "open",
+    "last_changed": "-133m",
+    "attributes": {
+     "is_closed": false,
+     "current_position": 100,
+     "assumed_state": true,
+     "friendly_name": "Office Blind",
+     "supported_features": 11
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   }
+  ]
+ }
+}

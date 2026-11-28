@@ -1,0 +1,160 @@
+{
+ "case": "m-bubble-state-light-off",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 72
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 56,
+   "type": "bubble-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Kitchen Pendant",
+   "x": 60,
+   "y": 11,
+   "w": 96.28,
+   "h": 15,
+   "size": 13,
+   "weight": 600,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 60,
+   "y": 30,
+   "w": 16.59,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "light.light_off": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "color_temp",
+     "hs"
+    ],
+    "min_color_temp_kelvin": 2000,
+    "max_color_temp_kelvin": 6535,
+    "min_mireds": 153,
+    "max_mireds": 500,
+    "supported_features": 40,
+    "friendly_name": "Kitchen Pendant"
+   },
+   "lc": 1794488880,
+   "lu": 1794488880
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "light.light_off",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Pendant",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Kitchen"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "light"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.light.entity_component._.state_attributes.brightness.name": "Brightness",
+    "component.light.entity_component._.state_attributes.color_mode.name": "Color mode",
+    "component.light.entity_component._.state_attributes.color_mode.state.brightness": "Brightness only",
+    "component.light.entity_component._.state_attributes.color_mode.state.color_temp": "Color temperature",
+    "component.light.entity_component._.state_attributes.color_mode.state.hs": "HS",
+    "component.light.entity_component._.state_attributes.color_mode.state.onoff": "On/Off",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgb": "RGB",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgbw": "RGBW",
+    "component.light.entity_component._.state_attributes.color_mode.state.rgbww": "RGBWW",
+    "component.light.entity_component._.state_attributes.color_mode.state.unknown": "Unknown",
+    "component.light.entity_component._.state_attributes.color_mode.state.white": "White",
+    "component.light.entity_component._.state_attributes.color_mode.state.xy": "XY",
+    "component.light.entity_component._.state_attributes.color_temp_kelvin.name": "Color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.effect.name": "Effect",
+    "component.light.entity_component._.state_attributes.effect.state.off": "Off",
+    "component.light.entity_component._.state_attributes.effect_list.name": "Available effects",
+    "component.light.entity_component._.state_attributes.max_color_temp_kelvin.name": "Maximum color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.min_color_temp_kelvin.name": "Minimum color temperature (Kelvin)",
+    "component.light.entity_component._.state_attributes.supported_color_modes.name": "Available color modes",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.brightness": "Brightness only",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.color_temp": "Color temperature",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.hs": "HS",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.onoff": "On/Off",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgb": "RGB",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgbw": "RGBW",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.rgbww": "RGBWW",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.unknown": "Unknown",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.white": "White",
+    "component.light.entity_component._.state_attributes.supported_color_modes.state.xy": "XY"
+   },
+   "entity": {}
+  }
+ }
+}

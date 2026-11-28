@@ -1,0 +1,44 @@
+{
+ "title": "Mushroom fan card: a running ceiling fan with percentage control",
+ "expect": {
+  "fan.ceiling_fan": "on"
+ },
+ "card": {
+  "type": "custom:mushroom-fan-card",
+  "entity": "fan.ceiling_fan",
+  "show_percentage_control": true
+ },
+ "fixture": {
+  "states": {
+   "fan.ceiling_fan": {
+    "state": "on",
+    "last_changed": "-261m",
+    "attributes": {
+     "preset_modes": [
+      "auto"
+     ],
+     "percentage": 20,
+     "percentage_step": 10,
+     "preset_mode": null,
+     "friendly_name": "Ceiling Fan",
+     "supported_features": 57
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "fan.ceiling_fan",
+    "pl": "zha",
+    "tk": "fan",
+    "di": "dev-ceiling-fan",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-ceiling-fan",
+    "name": "Ceiling Fan"
+   }
+  ]
+ }
+}

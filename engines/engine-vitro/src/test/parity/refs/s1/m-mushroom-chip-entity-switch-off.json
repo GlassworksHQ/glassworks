@@ -1,0 +1,101 @@
+{
+ "case": "m-mushroom-chip-entity-switch-off",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 516,
+  "height": 54
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 500,
+   "h": 38,
+   "type": "mushroom-chips-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 33.39,
+   "y": 11.59,
+   "w": 15.2,
+   "h": 13,
+   "size": 10.8,
+   "weight": 700,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "switch.switch_off": {
+   "s": "off",
+   "a": {
+    "friendly_name": "Patio Heater"
+   },
+   "lc": 1794492480,
+   "lu": 1794492480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "switch.switch_off",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Heater",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Patio"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "switch"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "switch": {
+     "_": {
+      "default": "mdi:toggle-switch-variant",
+      "state": {
+       "off": "mdi:toggle-switch-variant-off"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.switch.entity_component._.state.off": "Off",
+    "component.switch.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

@@ -1,0 +1,18 @@
+{
+ "title": "Area: the kitchen, HA's default area card",
+ "card": {
+  "type": "area",
+  "area": "kitchen"
+ },
+ "fixture": {
+  "states": {},
+  "entities": [],
+  "areas": [
+   {
+    "area_id": "kitchen",
+    "name": "Kitchen",
+    "icon": "mdi:stove"
+   }
+  ]
+ }
+}

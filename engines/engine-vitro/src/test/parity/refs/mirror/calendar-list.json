@@ -1,0 +1,318 @@
+{
+ "case": "calendar-list",
+ "frame": "mirror",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 720,
+  "height": 1280,
+  "density": 1.5
+ },
+ "clip": {
+  "x": 102,
+  "y": 16,
+  "width": 516,
+  "height": 392
+ },
+ "docSize": {
+  "width": 720,
+  "height": 1280
+ },
+ "slots": [
+  {
+   "x": 110,
+   "y": 24,
+   "w": 500,
+   "h": 376,
+   "type": "hui-calendar-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Nov 12 – 18, 2026",
+   "x": 17,
+   "y": 17.08,
+   "w": 192.2,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Today",
+   "x": 30,
+   "y": 69.95,
+   "w": 37.25,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(55, 200, 253)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Thursday",
+   "x": 21,
+   "y": 116.95,
+   "w": 66.03,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "November 12, 2026",
+   "x": 340.59,
+   "y": 116.95,
+   "w": 138.41,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "All-day",
+   "x": 21,
+   "y": 160.8,
+   "w": 41.83,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Recycling pickup",
+   "x": 169.5,
+   "y": 160.8,
+   "w": 104.33,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Friday",
+   "x": 21,
+   "y": 200.8,
+   "w": 43.13,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "November 13, 2026",
+   "x": 340.59,
+   "y": 200.8,
+   "w": 138.41,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "9:30 AM - 10:15 AM",
+   "x": 21,
+   "y": 244.64,
+   "w": 97.44,
+   "h": 36,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Dentist",
+   "x": 169.5,
+   "y": 254.64,
+   "w": 44.09,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Sunday",
+   "x": 21,
+   "y": 304.64,
+   "w": 52.33,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "November 15, 2026",
+   "x": 340.59,
+   "y": 304.64,
+   "w": 138.41,
+   "h": 19,
+   "size": 16,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "7:00 PM - 9:00 PM",
+   "x": 21,
+   "y": 348.48,
+   "w": 113.8,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Book club",
+   "x": 169.5,
+   "y": 348.48,
+   "w": 61.55,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "calendar.family": {
+   "s": "on",
+   "a": {
+    "message": "Recycling pickup",
+    "all_day": true,
+    "start_time": "2026-11-12 00:00:00",
+    "end_time": "2026-11-13 00:00:00",
+    "location": "",
+    "description": "Blue bin out the night before",
+    "friendly_name": "Family"
+   },
+   "lc": 1794488280,
+   "lu": 1794488280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "calendar.family",
+    "pl": "local_calendar",
+    "en": "Family"
+   }
+  ],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "calendar"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "calendar": {
+     "_": {
+      "default": "mdi:calendar",
+      "state": {
+       "off": "mdi:calendar-blank",
+       "on": "mdi:calendar-check"
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.calendar.entity_component._.state.off": "Off",
+    "component.calendar.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "calendar/event/subscribe",
+    "entity_id": "calendar.family",
+    "start": "2026-11-12T06:00:00.000Z",
+    "end": "2026-11-19T06:00:00.000Z"
+   },
+   "events": [
+    {
+     "events": [
+      {
+       "description": "Blue bin out the night before",
+       "location": null,
+       "all_day": true,
+       "summary": "Recycling pickup",
+       "start": "2026-11-12",
+       "end": "2026-11-13"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": false,
+       "summary": "Dentist",
+       "start": "2026-11-13T09:30:00-06:00",
+       "end": "2026-11-13T10:15:00-06:00"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": false,
+       "summary": "Book club",
+       "start": "2026-11-15T19:00:00-06:00",
+       "end": "2026-11-15T21:00:00-06:00"
+      },
+      {
+       "description": null,
+       "location": null,
+       "all_day": true,
+       "summary": "Garden waste",
+       "start": "2026-11-18",
+       "end": "2026-11-19"
+      }
+     ]
+    }
+   ],
+   "result": null
+  }
+ ]
+}

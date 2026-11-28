@@ -1,0 +1,127 @@
+{
+ "case": "m-tile-fan-on-no-speed",
+ "frame": "s1",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 960,
+  "height": 480,
+  "density": 1.5,
+  "touch": true
+ },
+ "clip": {
+  "x": 222,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 960,
+  "height": 480
+ },
+ "slots": [
+  {
+   "x": 230,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Bedroom Ceiling Fan",
+   "x": 56,
+   "y": 12.61,
+   "w": 131.84,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "On",
+   "x": 56,
+   "y": 32,
+   "w": 15.67,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "fan.fan_on_no_speed": {
+   "s": "on",
+   "a": {
+    "supported_features": 48,
+    "friendly_name": "Bedroom Ceiling Fan"
+   },
+   "lc": 1794498180,
+   "lu": 1794498180
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "fan.fan_on_no_speed",
+    "pl": "demo",
+    "di": "device-1",
+    "en": "Ceiling Fan",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Bedroom"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "fan"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "fan": {
+     "_": {
+      "default": "mdi:fan",
+      "state": {
+       "off": "mdi:fan-off"
+      },
+      "state_attributes": {
+       "direction": {
+        "default": "mdi:rotate-right",
+        "state": {
+         "reverse": "mdi:rotate-left"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {}
+       }
+      }
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.fan.entity_component._.state.off": "Off",
+    "component.fan.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}

@@ -1,0 +1,36 @@
+{
+ "title": "Alert: an open door, in its area",
+ "frames": [
+  "s1",
+  "tablet"
+ ],
+ "card": {
+  "type": "alert",
+  "entity": "binary_sensor.back_door"
+ },
+ "fixture": {
+  "states": {
+   "binary_sensor.back_door": {
+    "state": "on",
+    "last_changed": "-5m",
+    "attributes": {
+     "device_class": "door",
+     "friendly_name": "Back Door"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "binary_sensor.back_door",
+    "pl": "zha",
+    "ai": "hallway"
+   }
+  ],
+  "areas": [
+   {
+    "area_id": "hallway",
+    "name": "Hallway"
+   }
+  ]
+ }
+}

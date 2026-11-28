@@ -1,0 +1,42 @@
+{
+ "title": "alarm-panel: alarm_control_panel disarmed-no-code (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "alarm_control_panel.alarm_control_panel_disarmed_no_code": "disarmed"
+ },
+ "card": {
+  "type": "alarm-panel",
+  "entity": "alarm_control_panel.alarm_control_panel_disarmed_no_code"
+ },
+ "fixture": {
+  "states": {
+   "alarm_control_panel.alarm_control_panel_disarmed_no_code": {
+    "state": "disarmed",
+    "last_changed": "-2h",
+    "attributes": {
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_disarmed_no_code",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-house",
+    "name": "House"
+   }
+  ]
+ }
+}

@@ -1,0 +1,12 @@
+/* Vitro parity fixture (#811). The "Vitro Glass" theme's body font is
+   "Google Sans", "Product Sans", Inter, system-ui, sans-serif. Neither Google Sans nor Product Sans is on a panel,
+   so this sheet declares Bitter (SIL OFL 1.1, subset to Latin) under the second name: the theme's body font becomes a
+   web font from a `type: css` resource, and "Google Sans", declared nowhere, is skipped as in the browser.
+   A variable font (wght 100-900); the browser takes the WOFF2, Vitro the WOFF next to it. */
+@font-face {
+  font-family: "Product Sans";
+  src: url("bitter-vf.woff2") format("woff2"), url("bitter-vf.woff") format("woff");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

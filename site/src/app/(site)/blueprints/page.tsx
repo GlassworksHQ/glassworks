@@ -4,6 +4,7 @@ import { paneIcon } from "@/components/DeviceBits";
 import { DeviceGlyph } from "@/components/Glyphs";
 import { ListCard, PageHead, Sq, Tile, Tiles, manage as m } from "@/components/Manage";
 import { RecipeList } from "@/components/Recipes";
+import { VitroAudit } from "@/components/VitroAudit";
 import { blueprints, isCore, releaseName } from "@/lib/blueprints";
 import { RECIPES } from "@/lib/recipes";
 import { pageMetadata } from "@/lib/seo";
@@ -98,6 +99,8 @@ export default async function BlueprintsPage() {
         </div>
         <RecipeList recipes={RECIPES} />
       </section>
+
+      <VitroAudit />
     </>
   );
 }

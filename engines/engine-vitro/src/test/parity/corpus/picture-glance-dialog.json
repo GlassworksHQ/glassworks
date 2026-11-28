@@ -1,0 +1,65 @@
+{
+ "title": "Picture glance: a lock (opens More Info) and a light (toggles), in HA's two icon rows",
+ "card": {
+  "type": "picture-glance",
+  "title": "Front porch",
+  "image": "/static/icons/favicon-192x192.png",
+  "entities": [
+   "lock.front_door",
+   "light.porch_lantern"
+  ]
+ },
+ "fixture": {
+  "states": {
+   "lock.front_door": {
+    "state": "locked",
+    "last_changed": "-90m",
+    "attributes": {
+     "friendly_name": "Front Door",
+     "supported_features": 0
+    }
+   },
+   "light.porch_lantern": {
+    "state": "on",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 180,
+     "off_with_transition": false,
+     "off_brightness": null,
+     "friendly_name": "Porch Lantern",
+     "supported_features": 40
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "lock.front_door",
+    "pl": "zha",
+    "tk": "lock",
+    "di": "dev-front-door",
+    "np": "device"
+   },
+   {
+    "ei": "light.porch_lantern",
+    "pl": "zha",
+    "tk": "light",
+    "di": "dev-porch-lantern",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-front-door",
+    "name": "Front Door"
+   },
+   {
+    "id": "dev-porch-lantern",
+    "name": "Porch Lantern"
+   }
+  ]
+ }
+}

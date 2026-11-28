@@ -1,0 +1,284 @@
+public abstract interface class dev/glassworks/hawebrtc/HaCommandChannel {
+	public abstract fun call (Lorg/json/JSONObject;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)V
+	public abstract fun subscribe (Lorg/json/JSONObject;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)Ldev/glassworks/hawebrtc/HaCommandChannel$Subscription;
+}
+
+public abstract interface class dev/glassworks/hawebrtc/HaCommandChannel$Subscription {
+	public abstract fun unsubscribe ()V
+}
+
+public final class dev/glassworks/hawebrtc/HaError {
+	public static final field BAD_ANSWER Ljava/lang/String;
+	public static final field Companion Ldev/glassworks/hawebrtc/HaError$Companion;
+	public static final field NOT_CONNECTED Ljava/lang/String;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Ldev/glassworks/hawebrtc/HaError;
+	public static synthetic fun copy$default (Ldev/glassworks/hawebrtc/HaError;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/glassworks/hawebrtc/HaError;
+	public fun equals (Ljava/lang/Object;)Z
+	public static final fun fromJson (Lorg/json/JSONObject;Ljava/lang/String;)Ldev/glassworks/hawebrtc/HaError;
+	public final fun getCode ()Ljava/lang/String;
+	public final fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/hawebrtc/HaError$Companion {
+	public final fun fromJson (Lorg/json/JSONObject;Ljava/lang/String;)Ldev/glassworks/hawebrtc/HaError;
+	public static synthetic fun fromJson$default (Ldev/glassworks/hawebrtc/HaError$Companion;Lorg/json/JSONObject;Ljava/lang/String;ILjava/lang/Object;)Ldev/glassworks/hawebrtc/HaError;
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcPlayer {
+	public static final field Companion Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Companion;
+	public fun <init> (Landroid/content/Context;Ldev/glassworks/hawebrtc/HaCommandChannel;Ljava/lang/String;)V
+	public fun <init> (Landroid/content/Context;Ldev/glassworks/hawebrtc/HaCommandChannel;Ljava/lang/String;Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Options;)V
+	public synthetic fun <init> (Landroid/content/Context;Ldev/glassworks/hawebrtc/HaCommandChannel;Ljava/lang/String;Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Options;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun close ()V
+	public final fun connectionRestored ()V
+	public final fun getEntityId ()Ljava/lang/String;
+	public final fun getListener ()Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;
+	public final fun getOnSurface ()Lkotlin/jvm/functions/Function1;
+	public final fun getScaling ()Ldev/glassworks/hawebrtc/VideoScaling;
+	public final fun getSurfaceReady ()Z
+	public final fun getVideoHeight ()I
+	public final fun getVideoWidth ()I
+	public final fun getView ()Landroid/view/View;
+	public static final fun prewarm (Landroid/content/Context;)V
+	public final fun setActive (Z)V
+	public final fun setListener (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;)V
+	public final fun setOnSurface (Lkotlin/jvm/functions/Function1;)V
+	public final fun setRendering (Z)V
+	public final fun setScaling (Ldev/glassworks/hawebrtc/VideoScaling;)V
+	public final fun start ()V
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcPlayer$Companion {
+	public final fun prewarm (Landroid/content/Context;)V
+}
+
+public abstract interface class dev/glassworks/hawebrtc/HaWebRtcPlayer$FrameDemand {
+	public abstract fun getWantsFrames ()Z
+}
+
+public abstract interface class dev/glassworks/hawebrtc/HaWebRtcPlayer$Listener {
+	public abstract fun onError (Ldev/glassworks/hawebrtc/HaError;)V
+	public abstract fun onFirstFrame (JII)V
+	public abstract fun onFrameRendered ()V
+	public abstract fun onReconnecting (ILdev/glassworks/hawebrtc/HaError;)V
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcPlayer$Listener$DefaultImpls {
+	public static fun onFrameRendered (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;)V
+	public static fun onReconnecting (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;ILdev/glassworks/hawebrtc/HaError;)V
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcPlayer$Options {
+	public fun <init> ()V
+	public fun <init> (Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;)V
+	public fun <init> (Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;Ldev/glassworks/hawebrtc/VideoScaling;)V
+	public fun <init> (Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;Ldev/glassworks/hawebrtc/VideoScaling;Ldev/glassworks/hawebrtc/VideoViewKind;)V
+	public synthetic fun <init> (Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;Ldev/glassworks/hawebrtc/VideoScaling;Ldev/glassworks/hawebrtc/VideoViewKind;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getScaling ()Ldev/glassworks/hawebrtc/VideoScaling;
+	public final fun getStream ()Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;
+	public final fun getView ()Ldev/glassworks/hawebrtc/VideoViewKind;
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcSignaling {
+	public static final field Companion Ldev/glassworks/hawebrtc/HaWebRtcSignaling$Companion;
+	public static final field TYPE_CANDIDATE Ljava/lang/String;
+	public static final field TYPE_CLIENT_CONFIG Ljava/lang/String;
+	public static final field TYPE_OFFER Ljava/lang/String;
+	public fun <init> (Ldev/glassworks/hawebrtc/HaCommandChannel;Ljava/lang/String;Ldev/glassworks/hawebrtc/HaWebRtcSignaling$Listener;)V
+	public final fun addLocalCandidate (Ldev/glassworks/hawebrtc/IceCandidateInit;)V
+	public final fun close ()V
+	public final fun fetchClientConfig (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)V
+	public final fun getEntityId ()Ljava/lang/String;
+	public final fun getSessionId ()Ljava/lang/String;
+	public final fun offer (Ljava/lang/String;)V
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcSignaling$Companion {
+}
+
+public abstract interface class dev/glassworks/hawebrtc/HaWebRtcSignaling$Listener {
+	public abstract fun onAnswer (Ljava/lang/String;)V
+	public abstract fun onCandidateError (Ldev/glassworks/hawebrtc/IceCandidateInit;Ldev/glassworks/hawebrtc/HaError;)V
+	public abstract fun onError (Ldev/glassworks/hawebrtc/HaError;)V
+	public abstract fun onRemoteCandidate (Ldev/glassworks/hawebrtc/IceCandidateInit;)V
+	public abstract fun onSession (Ljava/lang/String;)V
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcSignaling$Listener$DefaultImpls {
+	public static fun onCandidateError (Ldev/glassworks/hawebrtc/HaWebRtcSignaling$Listener;Ldev/glassworks/hawebrtc/IceCandidateInit;Ldev/glassworks/hawebrtc/HaError;)V
+	public static fun onSession (Ldev/glassworks/hawebrtc/HaWebRtcSignaling$Listener;Ljava/lang/String;)V
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcStream {
+	public static final field CONNECT_FAILED Ljava/lang/String;
+	public static final field Companion Ldev/glassworks/hawebrtc/HaWebRtcStream$Companion;
+	public static final field ICE_FAILED Ljava/lang/String;
+	public static final field START_FAILED Ljava/lang/String;
+	public static final field TIMEOUT Ljava/lang/String;
+	public fun <init> (Ldev/glassworks/hawebrtc/HaCommandChannel;Ljava/lang/String;Ldev/glassworks/hawebrtc/WebRtcPeer$Factory;Ldev/glassworks/hawebrtc/StreamScheduler;Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;)V
+	public synthetic fun <init> (Ldev/glassworks/hawebrtc/HaCommandChannel;Ljava/lang/String;Ldev/glassworks/hawebrtc/WebRtcPeer$Factory;Ldev/glassworks/hawebrtc/StreamScheduler;Ldev/glassworks/hawebrtc/HaWebRtcStream$Options;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun close ()V
+	public final fun connectionRestored ()V
+	public final fun getEntityId ()Ljava/lang/String;
+	public final fun getListener ()Ldev/glassworks/hawebrtc/HaWebRtcStream$Listener;
+	public final fun setActive (Z)V
+	public final fun setListener (Ldev/glassworks/hawebrtc/HaWebRtcStream$Listener;)V
+	public final fun start ()V
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcStream$Companion {
+}
+
+public abstract interface class dev/glassworks/hawebrtc/HaWebRtcStream$Listener {
+	public abstract fun onError (Ldev/glassworks/hawebrtc/HaError;)V
+	public abstract fun onFirstFrame (JII)V
+	public abstract fun onFrame (II)V
+	public abstract fun onReconnecting (ILdev/glassworks/hawebrtc/HaError;)V
+	public abstract fun onSession (Ljava/lang/String;)V
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcStream$Listener$DefaultImpls {
+	public static fun onFrame (Ldev/glassworks/hawebrtc/HaWebRtcStream$Listener;II)V
+	public static fun onReconnecting (Ldev/glassworks/hawebrtc/HaWebRtcStream$Listener;ILdev/glassworks/hawebrtc/HaError;)V
+	public static fun onSession (Ldev/glassworks/hawebrtc/HaWebRtcStream$Listener;Ljava/lang/String;)V
+}
+
+public final class dev/glassworks/hawebrtc/HaWebRtcStream$Options {
+	public fun <init> ()V
+	public fun <init> (ZJJIJJ)V
+	public synthetic fun <init> (ZJJIJJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAudio ()Z
+	public final fun getConnectTimeoutMs ()J
+	public final fun getDisconnectedGraceMs ()J
+	public final fun getIdleTeardownMs ()J
+	public final fun getMaxReconnects ()I
+	public final fun getReconnectDelayMs ()J
+}
+
+public final class dev/glassworks/hawebrtc/IceCandidateInit {
+	public static final field Companion Ldev/glassworks/hawebrtc/IceCandidateInit$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/Integer;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;)Ldev/glassworks/hawebrtc/IceCandidateInit;
+	public static synthetic fun copy$default (Ldev/glassworks/hawebrtc/IceCandidateInit;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;ILjava/lang/Object;)Ldev/glassworks/hawebrtc/IceCandidateInit;
+	public fun equals (Ljava/lang/Object;)Z
+	public static final fun fromJson (Lorg/json/JSONObject;)Ldev/glassworks/hawebrtc/IceCandidateInit;
+	public final fun getCandidate ()Ljava/lang/String;
+	public final fun getSdpMLineIndex ()Ljava/lang/Integer;
+	public final fun getSdpMid ()Ljava/lang/String;
+	public final fun getUsernameFragment ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun toJson ()Lorg/json/JSONObject;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/hawebrtc/IceCandidateInit$Companion {
+	public final fun fromJson (Lorg/json/JSONObject;)Ldev/glassworks/hawebrtc/IceCandidateInit;
+}
+
+public final class dev/glassworks/hawebrtc/PeerState : java/lang/Enum {
+	public static final field CLOSED Ldev/glassworks/hawebrtc/PeerState;
+	public static final field CONNECTED Ldev/glassworks/hawebrtc/PeerState;
+	public static final field CONNECTING Ldev/glassworks/hawebrtc/PeerState;
+	public static final field DISCONNECTED Ldev/glassworks/hawebrtc/PeerState;
+	public static final field FAILED Ldev/glassworks/hawebrtc/PeerState;
+	public static final field NEW Ldev/glassworks/hawebrtc/PeerState;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/glassworks/hawebrtc/PeerState;
+	public static fun values ()[Ldev/glassworks/hawebrtc/PeerState;
+}
+
+public abstract interface class dev/glassworks/hawebrtc/StreamScheduler {
+	public abstract fun nowMs ()J
+	public abstract fun post (Ljava/lang/Runnable;)V
+	public abstract fun postDelayed (JLjava/lang/Runnable;)Ldev/glassworks/hawebrtc/StreamScheduler$Cancellable;
+}
+
+public abstract interface class dev/glassworks/hawebrtc/StreamScheduler$Cancellable {
+	public abstract fun cancel ()V
+}
+
+public final class dev/glassworks/hawebrtc/VideoScaling : java/lang/Enum {
+	public static final field FILL Ldev/glassworks/hawebrtc/VideoScaling;
+	public static final field FIT Ldev/glassworks/hawebrtc/VideoScaling;
+	public static final field STRETCH Ldev/glassworks/hawebrtc/VideoScaling;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/glassworks/hawebrtc/VideoScaling;
+	public static fun values ()[Ldev/glassworks/hawebrtc/VideoScaling;
+}
+
+public final class dev/glassworks/hawebrtc/VideoViewKind : java/lang/Enum {
+	public static final field AUTO Ldev/glassworks/hawebrtc/VideoViewKind;
+	public static final field SURFACE_VIEW Ldev/glassworks/hawebrtc/VideoViewKind;
+	public static final field TEXTURE_VIEW Ldev/glassworks/hawebrtc/VideoViewKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/glassworks/hawebrtc/VideoViewKind;
+	public static fun values ()[Ldev/glassworks/hawebrtc/VideoViewKind;
+}
+
+public final class dev/glassworks/hawebrtc/WebRtcClientConfig {
+	public static final field Companion Ldev/glassworks/hawebrtc/WebRtcClientConfig$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)Ldev/glassworks/hawebrtc/WebRtcClientConfig;
+	public static synthetic fun copy$default (Ldev/glassworks/hawebrtc/WebRtcClientConfig;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/glassworks/hawebrtc/WebRtcClientConfig;
+	public fun equals (Ljava/lang/Object;)Z
+	public static final fun fromJson (Lorg/json/JSONObject;)Ldev/glassworks/hawebrtc/WebRtcClientConfig;
+	public final fun getDataChannel ()Ljava/lang/String;
+	public final fun getIceServers ()Ljava/util/List;
+	public final fun getIceTransportPolicy ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/hawebrtc/WebRtcClientConfig$Companion {
+	public final fun fromJson (Lorg/json/JSONObject;)Ldev/glassworks/hawebrtc/WebRtcClientConfig;
+}
+
+public final class dev/glassworks/hawebrtc/WebRtcClientConfig$IceServer {
+	public fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)Ldev/glassworks/hawebrtc/WebRtcClientConfig$IceServer;
+	public static synthetic fun copy$default (Ldev/glassworks/hawebrtc/WebRtcClientConfig$IceServer;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/glassworks/hawebrtc/WebRtcClientConfig$IceServer;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCredential ()Ljava/lang/String;
+	public final fun getUrls ()Ljava/util/List;
+	public final fun getUsername ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class dev/glassworks/hawebrtc/WebRtcPeer {
+	public abstract fun addRemoteCandidate (Ldev/glassworks/hawebrtc/IceCandidateInit;)V
+	public abstract fun close ()V
+	public abstract fun createOffer (Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;)V
+	public abstract fun setReceiving (Z)V
+	public abstract fun setRemoteAnswer (Ljava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;)V
+}
+
+public abstract interface class dev/glassworks/hawebrtc/WebRtcPeer$Events {
+	public abstract fun onConnectionState (Ldev/glassworks/hawebrtc/PeerState;)V
+	public abstract fun onFrame (II)V
+	public abstract fun onLocalCandidate (Ldev/glassworks/hawebrtc/IceCandidateInit;)V
+}
+
+public abstract interface class dev/glassworks/hawebrtc/WebRtcPeer$Factory {
+	public abstract fun create (Ldev/glassworks/hawebrtc/WebRtcClientConfig;ZLdev/glassworks/hawebrtc/WebRtcPeer$Events;)Ldev/glassworks/hawebrtc/WebRtcPeer;
+}
+

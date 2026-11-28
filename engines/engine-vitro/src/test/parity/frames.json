@@ -1,0 +1,8 @@
+{
+  "_comment": "The panels the parity harness renders at: CSS size and density, the same for HA (Chromium) and Vitro (Robolectric qualifiers), the RAM each reports (MemTotal, kB), which picks Vitro's card layers as on the panel, and its input: a touch screen (\"touch\": HA's page gets a coarse pointer, Vitro the frame's touch input) or none (the Mirror). Read by tools/vitro-parity/capture.mjs and VitroParityHarnessTest.",
+  "frames": [
+    { "id": "s1", "name": "Aqara S1 Plus", "width": 960, "height": 480, "density": 1.5, "qualifiers": "w960dp-h480dp-land-hdpi", "memTotalKb": 2023196, "input": "touch" },
+    { "id": "tablet", "name": "Pixel Tablet", "width": 1280, "height": 800, "density": 2, "qualifiers": "w1280dp-h800dp-land-xhdpi", "memTotalKb": 7619712, "input": "touch" },
+    { "id": "mirror", "name": "lululemon Studio Mirror", "width": 720, "height": 1280, "density": 1.5, "qualifiers": "w720dp-h1280dp-port-hdpi", "memTotalKb": 952252, "input": "none" }
+  ]
+}

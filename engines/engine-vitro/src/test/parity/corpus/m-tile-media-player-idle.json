@@ -1,0 +1,44 @@
+{
+ "title": "tile: media_player idle (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "media_player.media_player_idle": "idle"
+ },
+ "card": {
+  "type": "tile",
+  "entity": "media_player.media_player_idle"
+ },
+ "fixture": {
+  "states": {
+   "media_player.media_player_idle": {
+    "state": "idle",
+    "last_changed": "-1h",
+    "attributes": {
+     "volume_level": 0.31,
+     "is_volume_muted": false,
+     "device_class": "speaker",
+     "supported_features": 152511,
+     "friendly_name": "Den Speaker"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "media_player.media_player_idle",
+    "pl": "demo",
+    "di": "dev-den",
+    "en": "Speaker",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-den",
+    "name": "Den"
+   }
+  ]
+ }
+}

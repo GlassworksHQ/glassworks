@@ -116,6 +116,9 @@ dependencies {
     debugImplementation(project(":engine-gecko"))
     releaseImplementation(project(":engine-gecko"))
     "legacyImplementation"(project(":engine-gecko-legacy"))
+    implementation(project(":engine-vitro"))
+    // Vitro's cameras over WebRTC (libs/ha-webrtc on libwebrtc), registered when Vitro is on.
+    implementation(project(":engine-vitro-webrtc"))
     implementation(project(":pane-assist"))
     implementation(project(":pane-timers"))
     implementation(project(":pane-sendspin"))

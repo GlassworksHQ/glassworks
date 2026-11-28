@@ -1,0 +1,360 @@
+{
+ "case": "more-info-select",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 342,
+  "y": 32,
+  "width": 596,
+  "height": 525
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 350,
+   "y": 40,
+   "w": 580,
+   "h": 508.78,
+   "type": "ha-more-info-dialog",
+   "mode": "dialog"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Dryer",
+   "x": 60,
+   "y": 18,
+   "w": 32.73,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Program",
+   "x": 60,
+   "y": 34,
+   "w": 77.16,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Cotton",
+   "x": 88.64,
+   "y": 108,
+   "w": 43.33,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "History",
+   "x": 24,
+   "y": 160,
+   "w": 64.33,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 485.72,
+   "y": 163.8,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Activity",
+   "x": 24,
+   "y": 276,
+   "w": 66.94,
+   "h": 24,
+   "size": 20,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Show more",
+   "x": 485.72,
+   "y": 279.8,
+   "w": 70.28,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(0, 154, 199)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Today · November 12, 2026",
+   "x": 24,
+   "y": 331,
+   "w": 170.61,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Cotton",
+   "x": 60,
+   "y": 362.19,
+   "w": 41.83,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "8:38:00 AM",
+   "x": 463.2,
+   "y": 363.38,
+   "w": 60.8,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Yesterday · November 11, 2026",
+   "x": 24,
+   "y": 409.39,
+   "w": 195.34,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Wool",
+   "x": 60,
+   "y": 440.58,
+   "w": 31.59,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "2:08:00 PM",
+   "x": 463.47,
+   "y": 441.77,
+   "w": 60.53,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(155, 155, 155)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "select.dryer_program": {
+   "s": "Cotton",
+   "a": {
+    "options": [
+     "Cotton",
+     "Synthetics",
+     "Wool",
+     "Quick"
+    ],
+    "friendly_name": "Dryer Program"
+   },
+   "lc": 1794494280,
+   "lu": 1794494280
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "select.dryer_program",
+    "pl": "mqtt",
+    "di": "device-1",
+    "en": "Program",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Dryer"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "select"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "select": {
+     "_": {
+      "default": "mdi:format-list-bulleted"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.select.entity_component._.state_attributes.options.name": "Options"
+   },
+   "entity": {}
+  }
+ },
+ "ws": [
+  {
+   "request": {
+    "type": "history/stream",
+    "entity_ids": [
+     "select.dryer_program"
+    ],
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "minimal_response": true,
+    "significant_changes_only": true,
+    "no_attributes": true
+   },
+   "events": [
+    {
+     "states": {
+      "select.dryer_program": [
+       {
+        "s": "Quick",
+        "lu": 1794413280
+       },
+       {
+        "s": "Wool",
+        "lu": 1794427680
+       },
+       {
+        "s": "Cotton",
+        "lu": 1794494280
+       }
+      ]
+     },
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  },
+  {
+   "request": {
+    "type": "config/auth/list"
+   },
+   "events": [],
+   "result": [
+    {
+     "id": "parity-user",
+     "name": "Sam",
+     "is_owner": true,
+     "is_admin": true,
+     "credentials": [
+      {
+       "auth_provider_type": "homeassistant",
+       "auth_provider_id": null
+      }
+     ],
+     "mfa_modules": [],
+     "system_generated": false,
+     "group_ids": [
+      "system-admin"
+     ],
+     "username": "parity",
+     "is_active": true,
+     "local_only": false
+    }
+   ]
+  },
+  {
+   "request": {
+    "type": "logbook/event_stream",
+    "start_time": "2026-11-11T16:08:00.000Z",
+    "end_time": "2027-11-12T16:08:00.000Z",
+    "entity_ids": [
+     "select.dryer_program"
+    ]
+   },
+   "events": [
+    {
+     "events": [
+      {
+       "entity_id": "select.dryer_program",
+       "state": "Wool",
+       "when": 1794427680
+      },
+      {
+       "entity_id": "select.dryer_program",
+       "state": "Cotton",
+       "when": 1794494280
+      }
+     ],
+     "start_time": 1794413280,
+     "end_time": 1794499680,
+     "partial": true
+    },
+    {
+     "events": [],
+     "start_time": 1794413280,
+     "end_time": 1794499680
+    }
+   ],
+   "result": null
+  }
+ ]
+}

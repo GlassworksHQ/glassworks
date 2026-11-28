@@ -1,0 +1,43 @@
+{
+ "title": "alarm-panel: alarm_control_panel arming (state matrix)",
+ "generated": "tools/vitro-parity/matrix.py",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "alarm_control_panel.alarm_control_panel_arming": "arming"
+ },
+ "card": {
+  "type": "alarm-panel",
+  "entity": "alarm_control_panel.alarm_control_panel_arming"
+ },
+ "fixture": {
+  "states": {
+   "alarm_control_panel.alarm_control_panel_arming": {
+    "state": "arming",
+    "last_changed": "-10s",
+    "attributes": {
+     "code_format": "number",
+     "code_arm_required": false,
+     "supported_features": 63,
+     "friendly_name": "House Alarm"
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "alarm_control_panel.alarm_control_panel_arming",
+    "pl": "manual",
+    "di": "dev-house",
+    "en": "Alarm",
+    "np": "device"
+   }
+  ],
+  "devices": [
+   {
+    "id": "dev-house",
+    "name": "House"
+   }
+  ]
+ }
+}

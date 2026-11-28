@@ -1,0 +1,303 @@
+{
+ "case": "glance",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 516,
+  "height": 208
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 500,
+   "h": 191.58,
+   "type": "hui-glance-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Living room",
+   "x": 17,
+   "y": 21,
+   "w": 121.97,
+   "h": 28,
+   "size": 24,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Temp",
+   "x": 57.64,
+   "y": 76.8,
+   "w": 35.22,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "21.4 °C",
+   "x": 52.7,
+   "y": 155.19,
+   "w": 45.08,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Humidity",
+   "x": 163.81,
+   "y": 76.8,
+   "w": 55.86,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "47%",
+   "x": 178.75,
+   "y": 155.19,
+   "w": 25.98,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Desk",
+   "x": 292.78,
+   "y": 76.8,
+   "w": 30.92,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Off",
+   "x": 298.56,
+   "y": 155.19,
+   "w": 19.36,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Blind",
+   "x": 409.17,
+   "y": 76.8,
+   "w": 31.14,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Open",
+   "x": 408.44,
+   "y": 155.19,
+   "w": 32.63,
+   "h": 16,
+   "size": 14,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "cover.office_blind": {
+   "s": "open",
+   "a": {
+    "is_closed": false,
+    "current_position": 100,
+    "assumed_state": true,
+    "friendly_name": "Office Blind",
+    "supported_features": 11
+   },
+   "lc": 1794491700,
+   "lu": 1794491700
+  },
+  "light.desk_lamp": {
+   "s": "off",
+   "a": {
+    "supported_color_modes": [
+     "onoff"
+    ],
+    "color_mode": null,
+    "friendly_name": "Desk Lamp",
+    "supported_features": 0
+   },
+   "lc": 1794483360,
+   "lu": 1794483360
+  },
+  "sensor.living_room_humidity": {
+   "s": "47.3",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "%",
+    "device_class": "humidity",
+    "friendly_name": "Living Room Sensor Humidity"
+   },
+   "lc": 1794490800,
+   "lu": 1794490800
+  },
+  "sensor.living_room_temperature": {
+   "s": "21.42",
+   "a": {
+    "state_class": "measurement",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature",
+    "friendly_name": "Living Room Sensor Temperature"
+   },
+   "lc": 1794491820,
+   "lu": 1794491820
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "cover.office_blind",
+    "pl": "template",
+    "en": "Office Blind"
+   },
+   {
+    "ei": "light.desk_lamp",
+    "pl": "switch_as_x",
+    "di": "device-1"
+   },
+   {
+    "ei": "sensor.living_room_humidity",
+    "pl": "esphome",
+    "dp": 0,
+    "di": "device-2",
+    "en": "Humidity"
+   },
+   {
+    "ei": "sensor.living_room_temperature",
+    "pl": "esphome",
+    "dp": 1,
+    "di": "device-2",
+    "en": "Temperature"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Desk Lamp"
+   },
+   {
+    "id": "device-2",
+    "name": "Living Room Sensor"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "cover",
+    "light",
+    "sensor"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "cover": {
+     "_": {
+      "default": "mdi:window-open",
+      "state": {
+       "closed": "mdi:window-closed",
+       "closing": "mdi:arrow-down-box",
+       "opening": "mdi:arrow-up-box"
+      }
+     }
+    },
+    "light": {
+     "_": {
+      "default": "mdi:lightbulb",
+      "state": {
+       "off": "mdi:lightbulb-off"
+      },
+      "state_attributes": {
+       "effect": {
+        "default": "mdi:circle-medium",
+        "state": {
+         "off": "mdi:star-off"
+        }
+       }
+      }
+     }
+    },
+    "sensor": {
+     "_": {
+      "default": "mdi:eye"
+     },
+     "humidity": {
+      "default": "mdi:water-percent"
+     },
+     "temperature": {
+      "default": "mdi:thermometer"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.cover.entity_component._.state.closed": "Closed",
+    "component.cover.entity_component._.state.closing": "Closing",
+    "component.cover.entity_component._.state.open": "Open",
+    "component.cover.entity_component._.state.opening": "Opening",
+    "component.cover.entity_component._.state.stopped": "Stopped",
+    "component.light.entity_component._.state.off": "Off",
+    "component.light.entity_component._.state.on": "On",
+    "component.sensor.entity_component._.state.off": "Off",
+    "component.sensor.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}
