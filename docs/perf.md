@@ -56,6 +56,8 @@ tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 --out pe
 | `--sf-poll` | `auto` | SurfaceFlinger sampling strategy: `auto` runs the preflight check, `0` reads once per window (S1 default), or pass seconds to poll during windows |
 | `--sf-check-only` | Off | Run preflight SurfaceFlinger (`sfcheck.json`) and network (`netcheck.json`) checks (~40 s) and exit |
 | `--engine` | The engine the app runs | `vitro` or `web`: grade that engine. The run turns **Settings → Labs → Vitro** on or off for itself and puts it back afterward (see [Vitro](#vitro)) |
+| `--ha-transport` | `adb` | How the panel reaches the fake Home Assistant: `adb` through `adb reverse`, `lan` over your network (for a device where `adb reverse` fails), or `auto`, which tries `adb reverse` and falls back to `lan` only on that failure. `--ha-over-lan` is short for `lan`. See [Home Assistant over the LAN](#home-assistant-over-the-lan) |
+| `--webrtc-transport` | `auto` | The camera video's path: `auto` asks the panel, or force `lan-udp`, `lan-turn` or `adb` (see [WebRTC cameras](#webrtc-cameras-202-protocol-6)) |
 
 On its first run, Clarity caches Home Assistant's frontend (~117 MB) in `~/.cache/glassworks-perf` and verifies its SHA-256 hash (`tools/perf/hafrontend.py`). A full 3-run benchmark takes roughly 40 minutes (`--pane-ram` adds ~10 minutes). Each graded run restarts to the start view and then navigates through all four reference views (*light*, *typical without camera*, *typical with camera*, and *heavy*) inside the loaded frontend with 10 taps, 6 swipes, and 3 more-info dialogs per view, followed by an idle sample.
 
@@ -71,13 +73,40 @@ Provisional or non-comparable runs are refused unless `--allow-provisional` is p
 
 Because `fakeha.py` runs on your computer, connect your test machine over wired Ethernet (or a quiet link) whenever graded traffic crosses the LAN—such as wireless adb (`adb reverse`) or LAN camera streaming (`lan-udp` / `lan-turn`). Before graded runs begin, `tools/perf/netcheck.py` pings both the default gateway and the panel (40 pings over 8 seconds, recording timings without addresses in `netcheck.json`). If gateway latency exceeds 20 ms while graded traffic uses that link, the report warns and marks the grade provisional. On macOS Wi-Fi, background AWDL traffic (AirDrop/Sidecar) frequently causes 60–90 ms spikes; use Ethernet or temporarily disable AWDL (`sudo ifconfig awdl0 down`, re-enabling with `up` afterward).
 
+### Home Assistant over the LAN
+
+Clarity normally serves its fake Home Assistant on your computer's `127.0.0.1` and lets the panel reach it with `adb reverse`, so the panel sees it at `http://127.0.0.1:8089`. Some devices can't make an `adb reverse`. The lululemon Mirror's Android 6, reached over network adb (`adb connect <address>:5555`) with no cable, answers every `adb reverse` with `adb: error: more than one device/emulator`, even with `-s` or `-t`. Its adbd from 2015 keeps its USB transport registered next to the network one, so its reverse service can't pick one. Changing the Mirror's USB setting isn't a way out, because on Android 6 that restarts adbd and drops the network link.
+
+For such a device, run with `--ha-transport lan` (or `--ha-over-lan`):
+
+```sh
+adb connect <mirror-address>:5555
+tools/perf/run.sh --frame lululemon-mirror --serial <mirror-address>:5555 --package dev.glassworks.generic_android.legacy \
+  --ha-transport lan --runs 3 --out perf-mirror
+```
+
+`--ha-transport auto` does the same only when `adb reverse` fails with that error, and keeps `adb reverse` everywhere else. The default stays `adb`, so the S1 and Pixel Tablet runs work exactly as before and their grades stay comparable. With the default, a device whose `adb reverse` fails stops the run before anything is graded and suggests `--ha-transport lan`.
+
+| | `adb` (default) | `lan` |
+|---|---|---|
+| Where the fake listens | `127.0.0.1` | Your computer's LAN address (the one the camera video uses, from its default route, or `GW_PERF_WEBRTC_ADDR`), on that address only and only for the run. Never every address |
+| What the panel loads | `http://127.0.0.1:<port>/…` | `http://<LAN address>:<port>/…`: the test dashboard, the animation test page, the SurfaceFlinger check's page and the reference views |
+| `adb reverse` | Two ports, removed on exit | None made, none removed |
+| Camera video | `auto` picks `lan-udp`, `lan-turn` or `adb` | `auto` picks `lan-udp` when the panel's datagram arrives, and otherwise `lan-turn` (the relay over TCP). Android 6 has no `toybox nc` to ask with, so the Mirror gets `lan-turn`. `--webrtc-transport adb` is refused |
+| What your network carries | The cameras, when their video goes over the LAN, and the live updates on wireless adb | The fake's pages and live updates, and the cameras |
+
+**What the report says.** `ha_transport.json` records the choice (`transport`, `chosen_by` and `reason`, never the address). `report.json` gets `ha_transport`, `report.md` gets a **Home Assistant over the LAN** line, and the site summary gets `"ha_transport": "lan"`. The network check records `ha_over_lan` and counts the live updates as carried by your computer's network whatever adb runs over. A grade taken this way is therefore provisional when your computer's own link stalls, as with wireless adb ([The test computer's network](#the-test-computers-network)), and also when the network check couldn't run at all, since nothing then measured the network the fake's traffic crossed. Put the computer on a wired link for a grade you mean to publish.
+
+**What the panel needs.** The test hold takes a test dashboard on a local network IP address as well as on loopback: a private, link-local or unique local address, never a name and never a public address, and only while a test holds the screen. A dotted part with a leading zero (`010.0.0.1`) is refused, because Gecko reads it as octal and so as another, public address. Before the fake starts, the runner checks your computer's LAN address by the same rule. If the default route is a VPN's or a public address, the run stops and asks you to set `GW_PERF_WEBRTC_ADDR` to your computer's address on the panel's network. An older app takes loopback only, and the run stops with that reason before the graded part. While the hold lasts, the test dashboard's exact origin (its scheme, address and port) gets the microphone and camera without a prompt, as Home Assistant's does, but other ports on the same address don't. The legacy engine's lockdown holds pages to the test dashboard's origin, whatever its host, and Vitro follows that origin too. Over the LAN, the fake's address isn't one of Gecko's secure-context hosts (`127.0.0.1` is a secure context of its own). Nothing Clarity measures needs a secure context, and Home Assistant's frontend registers no service worker on either address.
+
 ### What it changes on the device
 
 - **The test dashboard, for the graded part (and `--pane-ram`) only.** The kiosk shows the start
   view of the fake Home Assistant's reference dashboard instead of its own, with the test hold's
   `--es test_dashboard <url>`, so a restart comes back to a reference dashboard as it comes back to
   yours. The kiosk's dashboard setting and its sign-in to Home Assistant don't change. The kiosk
-  takes only a page on this device (`127.0.0.1` or `localhost`), and only while a test hold is on; it
+  takes only a page on this device (`127.0.0.1` or `localhost`) or, for [Home Assistant over the
+  LAN](#home-assistant-over-the-lan), on a local network IP address, and only while a test hold is on; it
   keeps it through restarts with the hold (`no_backup/test_hold`), and says so in its log
   (`test dashboard on: http://127.0.0.1:8089`), which the runner checks. When the graded part ends, and
   on any exit the shell can catch, the runner ends it (`--es test_dashboard ''`, with `am start -W`)
@@ -191,11 +220,12 @@ runner uses. What the runner does instead:
 | `pidof <package>` | Lists every process | Not used: the runner reads `ps` |
 | SurfaceFlinger's layer | Plain `SurfaceView`, without the app (Android 10: `SurfaceView - <pkg>/<activity>`, Android 12+: `SurfaceView[<pkg>/<activity>]`, Android 15+: below) | Takes plain `SurfaceView` while the app has a window listed: a kiosk is the only app on screen |
 | `dumpsys meminfo` | `65128 kB: name` instead of `65,128K: name`; the legacy engine's content process is `:tab32` | Reads both; `:tab<n>` is a tab process |
-| `toybox nc` (camera video over the LAN) | No `nc` in toybox | The camera video goes over adb (`lanprobe.py` already falls back) |
+| `toybox nc` (camera video over the LAN) | No `nc` in toybox | The camera video goes over adb (`lanprobe.py` already falls back); over the LAN (`--ha-transport lan`) it takes the relay over TCP |
+| `adb reverse` over network adb (the Mirror, no cable) | `adb: error: more than one device/emulator`, also with `-s` and `-t` | `--ha-transport lan`: the fake over the LAN, no reverse ([Home Assistant over the LAN](#home-assistant-over-the-lan)) |
 | `cmd` | Not there | Not used |
 
 `screencap`, `wm size`, `input tap`/`swipe` with a duration, `am start -W`, `am force-stop`, `stat -c`,
-`logcat -T`, `adb reverse` and `dumpsys SurfaceFlinger --latency` work as on Android 10.
+`logcat -T`, `adb reverse` over USB and `dumpsys SurfaceFlinger --latency` work as on Android 10.
 
 **Android 15 and later name layers differently** (checked on API 35 and API 37 arm64 emulators,
 2026-11-19). The Pixel Tablet's first graded run on Android 17 had no frames from SurfaceFlinger, so
@@ -2004,6 +2034,7 @@ spread of the `all-on` samples, the report says "within noise". On the S1:
 | `apk` | One entry per APK given with `--apk`: `abis`, `bytes`, `parts_bytes` (dex, native, assets, resources, other) |
 | `notes` | What's good and what holds it back, in words ([The notes](#the-notes-whats-good-what-holds-it-back)): `good` and `limits` (a sentence each, or `null`), `causes` (the likely cause and memory, each a sentence, either may be missing), `text` (the paragraph), `rubric` (the rubric version it judged by) |
 | `thermal` | Each stage's thermal zones from `thermal.tsv`, in order: `phase`, `zones` (°C) |
+| `ha_transport` | Only with `--ha-transport lan` or `auto`: `transport` (`lan` or `adb`), `chosen_by` (`flag`, `auto`), `reason`. With `lan` the fake went over the LAN, not `adb reverse` ([Home Assistant over the LAN](#home-assistant-over-the-lan)). Absent: through `adb reverse`, as before |
 | `webrtc_transport` | Protocol 7: `transport` (`lan-udp`, `lan-turn`, `adb`), `chosen_by` (`auto`, `flag`), `reason` (lanprobe.py's), `limited` (over adb with heavy's cameras measured: why heavy's camera result may be the link's; else `null`). `null` before protocol 7 |
 | `fake_ha` | What the fake Home Assistant's log (`fakeha.jsonl`) says: `commands` (the frontend sent), `unknown` and `failed` (per command; any makes the grade provisional), `stream_sent`, `stream_late_max_ms` (the graded views' streams only; over 200 ms, one update interval, is provisional), `stream_late_detail_max_ms` (the views that aren't graded: the HLS copies and a warm-up; detail, a line in report.md, never provisional: #205, s1rtc8's one 2 s burst on typical-hls). Each change belongs to the view open when it was sent. `null` without the log, which is provisional |
 | `ram` | Not graded. RAM on the reference dashboards (`null` if none was sampled): `reference_idle` (`samples`, `app_pss_kb`, `by_role_pss_kb`, `main_kb`, `device_used_pct`, `cpu_app_pct_of_core`), `graded_peak` (`samples`, `app_pss_kb`, `by_role_pss_kb`, `app_rss_hwm_kb`, `mem_available_min_kb`), `panes` (each: `id`, `method` `on-alone`, `samples_on`, `samples_off`, `pss_kb`, `pss_tolerance_kb` (`null` under two samples a side), `pss_measurable`, `by_role_pss_kb`, `cpu_pct_of_core`, `cpu_tolerance_pct`, `cpu_measurable`, `verified`, `excluded`, `boot_samples_on` and `boot_samples_off` (samples `:boot` ran in, left out of the share), `boot_pss_kb` (its median PSS, or `null`), and `off_by: "mute"` when Assist was off by its mute alone; or `id`, `method` and `error` when no sample ran as asked), `screen_off_samples` (idle samples the screen went off in, left out), `panes_waiting` (`id`, `waiting_on`, `note`; empty since #67, kept because this version only adds fields), `panes_not_switched` (`id`, `why`, `note`: a pane not measured on its own, and why), `budget` (the frame's `ram` checks) and `pane_budget` (per pane: `value_kb`, `budget_kb`, `tolerance_kb`, `measurable` (three samples a side and a tolerance at most a quarter of the budget), `ok` (`null` when not measurable: read it as unknown, not as over)). See [RAM](#ram) |
@@ -2050,6 +2081,7 @@ from real use, and nothing device-unique.
 | `apk` | Not graded; `null` if no APK was given. Per APK: `file`, `abis`, `bytes` |
 | `notes` | The report's `notes` (`good`, `limits`, `causes`, `text`, `rubric`). Show them only when `rubric` is the site's rubric version: they judge tasks by that rubric |
 | `webrtc_transport` | Protocol 7: the camera video's path, `transport` (`lan-udp`, `lan-turn` or `adb`), `chosen_by` (`auto` or `flag`), `reason`, and `possibly_limited` (over adb, heavy's camera result may be the test's link's). Letters over different transports aren't comparable; `gradeSummary` returns `transport` and `transport_caveat` with the letter. `null` before protocol 7 |
+| `ha_transport` | `"lan"` when the fake Home Assistant reached the panel over the LAN, not `adb reverse` ([Home Assistant over the LAN](#home-assistant-over-the-lan)); absent otherwise |
 
 The levels need each run's measurements (each run gets a level, then the median level is taken), which
 is why the summary carries `runs` and not only medians. Medians are kept for display. Fields are only

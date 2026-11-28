@@ -76,7 +76,7 @@ class ScreenPolicy(
         const val TEST_HOLD_MAX_S = 3600
         const val TEST_HOLD_EXTRA = "test_hold"
         const val TEST_HOLD_S_EXTRA = "test_hold_s"
-        /** A loopback dashboard for the test hold ([testDashboard]); "" ends it. */
+        /** A loopback or local network dashboard for the test hold ([testDashboard]); "" ends it. */
         const val TEST_DASHBOARD_EXTRA = "test_dashboard"
         /** The [stayOn] reasons of a voice run: in progress ([voiceRunning]), on screen ([voiceShowing]). */
         const val VOICE_RUN = "voice run"
@@ -389,7 +389,7 @@ class ScreenPolicy(
                 return
             }
             want != null && !TestHoldFile.isTestDashboard(want) -> {
-                Log.w(logTag, "test dashboard refused: only http on 127.0.0.1 or localhost")
+                Log.w(logTag, "test dashboard refused: only http on 127.0.0.1, localhost or a local network address")
                 return
             }
             want != null && !testHeld -> {

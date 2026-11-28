@@ -8,7 +8,8 @@
 #     dashboard setting and its sign-in to Home Assistant don't change.
 #   - Opens the SurfaceFlinger check's page (#643), the test page and the reference dashboards with the kiosk's
 #     one-off `--es open` extra.
-#     The pages are served by the fake Home Assistant on this machine over `adb reverse`.
+#     The pages are served by the fake Home Assistant on this machine over `adb reverse` (with --ha-transport lan:
+#     over the LAN instead, below).
 #   - With --pane-ram only: turns the switchable panes off and on with the kiosk's own extras
 #     (`--ez voice_enabled`, `--ez sendspin_enabled`, `--ez wall_base_enabled`, `--ez time_zone_enabled`,
 #     `--ez diagnostics_enabled`), restarts the app after each change (`--ez restart true`), and puts
@@ -35,7 +36,9 @@
 #   On this computer: 40 pings to its default gateway and 40 to the panel before the graded part (netcheck.py,
 #   #649: a stalling link of this computer's makes the report provisional); a Python venv for the fake's WebRTC peer (aiortc, from webrtc-requirements.txt,
 #   locked with hashes) in ~/.cache/glassworks-perf, and two `adb reverse` ports (--port and the
-#   WebRTC relay's, --port + 1), removed on exit.
+#   WebRTC relay's, --port + 1), removed on exit. With --ha-transport lan, no `adb reverse` at all: the fake listens
+#   on this computer's LAN address (the one the camera video uses, webrtc.media_address), on that address only and
+#   only for the run, and the panel reaches it over the network.
 #
 # Usage: tools/perf/run.sh --frame aqara-s1-plus [--name "Aqara S1 Plus"] [--serial S] [--runs 3] [--out DIR]
 #          [--package sh.edm.s1kiosk] [--activity A]   # the app; its activity is read from the device unless given
@@ -44,7 +47,13 @@
 #          [--webrtc-transport auto|adb|lan-turn|lan-udp]   # the camera video's path; auto (default) asks the panel
 #          [--sf-poll auto|0|SECONDS] [--sf-check-only]     # how SurfaceFlinger is read (below)
 #          [--engine web|vitro]                             # the engine to grade (default: the one the kiosk runs)
+#          [--ha-transport adb|lan|auto] [--ha-over-lan]    # how the panel reaches the fake Home Assistant (below)
 #
+# The fake Home Assistant (docs/perf.md, "Home Assistant over the LAN"): with --ha-transport adb (the default) the panel
+# reaches it through `adb reverse`, on the device's 127.0.0.1. With lan (--ha-over-lan says the same) it reaches it on
+# this computer's LAN address, for a device whose `adb reverse` fails (the lululemon Mirror's Android 6 over network adb:
+# "more than one device/emulator"). auto tries `adb reverse` and takes lan only on that error. Over the LAN the live
+# updates cross this computer's network: netcheck.py's check counts them, and the report says how they went.
 # Camera video (protocol 7, #202): with --webrtc-transport auto, lanprobe.py first has the panel send one
 # UDP datagram and open one TCP connection to this computer's LAN address (two `toybox nc` over adb
 # shell: connections from the panel, nothing written on it), and picks lan-udp, lan-turn or adb.
@@ -62,6 +71,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ADB="${ADB:-adb}"
 FRAME="" NAME="" RUNS=3 OUT="" PORT=8089 TURN_PORT="" WEBRTC_TRANSPORT=auto PACKAGE=sh.edm.s1kiosk ACTIVITY="" TAPS=10 QUICK=0
 SYNTH=1 REF=1 REAL=1 IDLE_ONLY="" MAX_TEMP_C=50 APKS=() PANE_RAM="" SF_POLL=auto SF_CHECK_ONLY=0 ENGINE=""
+# How the panel reaches the fake Home Assistant (adb, lan or auto), and the host its pages are on for the panel.
+HA_TRANSPORT=adb HA_HOST=127.0.0.1 HA_URL="" TESTDASH_LAN_HINT=""
 # Waits, in seconds. Only the off-device test (test/test_runner.py) shortens them.
 IDLE_SETTLE="${GW_PERF_IDLE_SETTLE:-30}" IDLE_WINDOW="${GW_PERF_IDLE_WINDOW:-15}"
 COLD_SETTLE="${GW_PERF_COLD_SETTLE:-3}" COLD_TIMEOUT="${GW_PERF_COLD_TIMEOUT:-120}" RUN_GAP="${GW_PERF_RUN_GAP:-10}"
@@ -90,6 +101,8 @@ while [ $# -gt 0 ]; do
     --sf-poll) SF_POLL="$2"; shift 2 ;;
     --sf-check-only) SF_CHECK_ONLY=1; shift ;;
     --engine) ENGINE="$2"; shift 2 ;;
+    --ha-transport) HA_TRANSPORT="$2"; shift 2 ;;
+    --ha-over-lan) HA_TRANSPORT=lan; shift ;;
     -h|--help) sed -n '2,/^set -e/p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -102,6 +115,9 @@ done
 [ "$SF_CHECK_ONLY" = 1 ] && [ "$SF_POLL" != auto ] && { echo "--sf-check-only runs the check: leave --sf-poll at auto" >&2; exit 2; }
 [ -z "$ENGINE" ] || [ "$ENGINE" = web ] || [ "$ENGINE" = vitro ] || { echo "--engine is web or vitro" >&2; exit 2; }
 [ "$SF_POLL" = auto ] || [[ "$SF_POLL" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "--sf-poll is auto, 0 or seconds between reads" >&2; exit 2; }
+case "$HA_TRANSPORT" in adb|lan|auto) ;; *) echo "--ha-transport is adb, lan or auto" >&2; exit 2 ;; esac
+[ "$HA_TRANSPORT" = lan ] && [ "$WEBRTC_TRANSPORT" = adb ] && {
+  echo "--webrtc-transport adb goes through adb reverse, which --ha-transport lan doesn't use: lan-turn, lan-udp or auto" >&2; exit 2; }
 TURN_PORT=$((PORT + 1))
 OUT="${OUT:-perf-$FRAME-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$OUT"
@@ -272,8 +288,11 @@ cleanup() {
     sh_dev am start -n "$PACKAGE/$ACTIVITY" >/dev/null || true
   fi
   [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true
-  "$ADB" reverse --remove "tcp:$PORT" 2>/dev/null || true
-  "$ADB" reverse --remove "tcp:$TURN_PORT" 2>/dev/null || true
+  # Over the LAN no reverse was made, and none is removed (another tool's on this device stays).
+  if [ "$HA_TRANSPORT" != lan ]; then
+    "$ADB" reverse --remove "tcp:$PORT" 2>/dev/null || true
+    "$ADB" reverse --remove "tcp:$TURN_PORT" 2>/dev/null || true
+  fi
   restore_engine
   release_hold
   restored || exit 3
@@ -345,41 +364,89 @@ if [ "$SYNTH" = 1 ] || [ "$REF" = 1 ] || [ -n "$PANE_RAM" ]; then
     FAKE_PY=$(python3 "$HERE/webrtcenv.py") || { echo "the fake's WebRTC peer needs Python 3.11+ and its venv (webrtcenv.py)" >&2; exit 2; }
   fi
   FAKE_PY="${FAKE_PY:-python3}"
+  # How the panel reaches the fake (--ha-transport): auto asks adb reverse first, and takes the LAN only when it fails
+  # as on the Mirror's Android 6 over network adb, where the device's adbd can't pick a transport for it.
+  HA_CHOSEN_BY=flag HA_REASON="set with --ha-transport lan"
+  if [ "$HA_TRANSPORT" = auto ]; then
+    HA_CHOSEN_BY=auto
+    if reverse_err=$("$ADB" reverse "tcp:$PORT" "tcp:$PORT" 2>&1 >/dev/null); then
+      HA_TRANSPORT=adb
+    elif [[ $reverse_err == *"more than one device"* ]]; then
+      HA_TRANSPORT=lan
+      HA_REASON="adb reverse failed on this device (\"more than one device/emulator\"): the fake over the LAN"
+      log "adb reverse failed on this device (more than one device/emulator); the fake Home Assistant goes over the LAN"
+    else
+      echo "adb reverse failed: ${reverse_err:-no reason given}" >&2
+      exit 2
+    fi
+  fi
+  if [ "$HA_TRANSPORT" = lan ]; then
+    # This computer's LAN address, the one the camera video uses (GW_PERF_WEBRTC_ADDR sets it). The fake listens on
+    # it alone, for this run only.
+    HA_HOST=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import webrtc; print(webrtc.media_address())' "$HERE") \
+      || { echo "--ha-transport lan needs an IPv4 address on this computer that the panel can reach (GW_PERF_WEBRTC_ADDR sets one)" >&2; exit 2; }
+    # The kiosk takes a test dashboard only on a local network address (TestHoldFile.isTestDashboard): checked here by
+    # the same rule, so a VPN or public address on the default route stops the run now, saying so.
+    python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import perflib; sys.exit(0 if perflib.local_address(sys.argv[2]) else 1)' \
+      "$HERE" "$HA_HOST" || {
+      echo "this computer's LAN address (its default route's) isn't on a private network, a VPN's or a public one perhaps, and the panel takes a test dashboard only on a local network address: set GW_PERF_WEBRTC_ADDR to this computer's address on the panel's network" >&2
+      exit 2
+    }
+    [ "$WEBRTC_TRANSPORT" = adb ] && { echo "--webrtc-transport adb needs adb reverse, which the fake over the LAN doesn't use" >&2; exit 2; }
+    # Recorded for the report, without the address: the fake's traffic crossed this computer's network.
+    python3 -c 'import json,sys; json.dump({"transport": "lan", "chosen_by": sys.argv[1], "reason": sys.argv[2]}, open(sys.argv[3], "w"), indent=1)' \
+      "$HA_CHOSEN_BY" "$HA_REASON" "$OUT/ha_transport.json"
+    TESTDASH_LAN_HINT="; over the LAN (--ha-transport lan) it needs an app that takes a test dashboard on a local network address"
+    log "Home Assistant (the fake) over the LAN, on this computer's LAN address only, for this run: no adb reverse; its live updates cross this computer's network"
+  elif [ "$HA_CHOSEN_BY" = auto ]; then
+    python3 -c 'import json,sys; json.dump({"transport": "adb", "chosen_by": "auto", "reason": "adb reverse works on this device"}, open(sys.argv[1], "w"), indent=1)' \
+      "$OUT/ha_transport.json"
+  fi
+  HA_URL="http://$HA_HOST:$PORT"
   # The camera video's path (lanprobe.py: lan-udp, lan-turn or adb), before the fake takes the port;
   # report.py reads transport.json. Without cameras (the animation page alone) it stays adb.
   if [ "$REF" = 1 ] || [ -n "$PANE_RAM" ]; then
-    WEBRTC_TRANSPORT=$("$FAKE_PY" "$HERE/lanprobe.py" --port "$TURN_PORT" --out "$OUT" --transport "$WEBRTC_TRANSPORT") \
+    WEBRTC_TRANSPORT=$("$FAKE_PY" "$HERE/lanprobe.py" --port "$TURN_PORT" --out "$OUT" --transport "$WEBRTC_TRANSPORT" \
+      $([ "$HA_TRANSPORT" = lan ] && echo --ha-over-lan)) \
       || { echo "lanprobe.py failed" >&2; exit 2; }
     log "camera video over $WEBRTC_TRANSPORT ($(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["reason"])' "$OUT/transport.json"))"
   elif [ "$WEBRTC_TRANSPORT" = auto ]; then
+    # No cameras: the relay isn't used. Over the LAN it listens there too, with nothing through adb.
     WEBRTC_TRANSPORT=adb
+    [ "$HA_TRANSPORT" = lan ] && WEBRTC_TRANSPORT=lan-turn
   fi
   if [ "$REF" = 1 ] || [ "$SF_CHECK_ONLY" = 1 ]; then
     # This computer's own network (#649): 40 pings to its gateway and to the panel. A stalling link (macOS Wi-Fi)
     # adds to the live updates and cameras where they cross it; the report is then provisional. Never fails the run.
-    python3 "$HERE/netcheck.py" --out "$OUT" || log "the network check failed (netcheck.py); the report won't have it"
+    python3 "$HERE/netcheck.py" --out "$OUT" $([ "$HA_TRANSPORT" = lan ] && echo --ha-over-lan) || log "the network check failed (netcheck.py); the report won't have it"
   fi
   # Something else on the ports (an earlier run's fake left behind) would answer for ours.
-  if curl -s -o /dev/null --connect-timeout 1 --max-time 3 "http://127.0.0.1:$PORT/manifest.json"; then
+  if curl -s -o /dev/null --connect-timeout 1 --max-time 3 "$HA_URL/manifest.json"; then
     echo "port $PORT is already in use (an earlier run's fake Home Assistant?); stop it or use --port" >&2
     exit 2
   fi
-  if (exec 3<>"/dev/tcp/127.0.0.1/$TURN_PORT") 2>/dev/null; then
+  if (exec 3<>"/dev/tcp/127.0.0.1/$TURN_PORT") 2>/dev/null || { [ "$HA_TRANSPORT" = lan ] && (exec 3<>"/dev/tcp/$HA_HOST/$TURN_PORT") 2>/dev/null; }; then
     echo "port $TURN_PORT (the WebRTC relay's, --port + 1) is already in use (an earlier run's fake?); stop it or use --port" >&2
     exit 2
   fi
   # fakeha.jsonl: every command the frontend sent, and the stream's sends (report.py checks them).
   "$FAKE_PY" "$HERE/fakeha.py" --port "$PORT" --turn-port "$TURN_PORT" --webrtc-transport "$WEBRTC_TRANSPORT" \
-    --log "$OUT/fakeha.jsonl" >"$OUT/server.log" 2>&1 &
+    --bind "$HA_HOST" --log "$OUT/fakeha.jsonl" >"$OUT/server.log" 2>&1 &
   SERVER_PID=$!
-  for _ in $(seq 1 60); do curl -s -o /dev/null --connect-timeout 1 --max-time 3 "http://127.0.0.1:$PORT/manifest.json" && break; sleep 0.5; done
+  for _ in $(seq 1 60); do curl -s -o /dev/null --connect-timeout 1 --max-time 3 "$HA_URL/manifest.json" && break; sleep 0.5; done
   kill -0 "$SERVER_PID" 2>/dev/null || { echo "the fake Home Assistant didn't start; see $OUT/server.log" >&2; exit 2; }
-  "$ADB" reverse "tcp:$PORT" "tcp:$PORT" >/dev/null
-  # The WebRTC relay (TURN over TCP): the panel's only way to this computer's WebRTC peer.
-  "$ADB" reverse "tcp:$TURN_PORT" "tcp:$TURN_PORT" >/dev/null
+  if [ "$HA_TRANSPORT" = adb ]; then
+    reverse_err=$("$ADB" reverse "tcp:$PORT" "tcp:$PORT" 2>&1 >/dev/null) || {
+      echo "adb reverse failed: ${reverse_err:-no reason given}" >&2
+      [[ $reverse_err == *"more than one device"* ]] && echo "this device can't make one (the Mirror's Android 6 over network adb): run with --ha-transport lan (docs/perf.md, \"Home Assistant over the LAN\")" >&2
+      exit 2
+    }
+    # The WebRTC relay (TURN over TCP): the panel's only way to this computer's WebRTC peer over adb.
+    "$ADB" reverse "tcp:$TURN_PORT" "tcp:$TURN_PORT" >/dev/null
+  fi
   if [ "$SF_POLL" = auto ]; then
     log "checking how far back SurfaceFlinger's history reaches (perfrun.py sfcheck)"
-    SF_POLL=$(run sfcheck --url "http://127.0.0.1:$PORT/clarity/page/sfcheck.html") || {
+    SF_POLL=$(run sfcheck --url "$HA_URL/clarity/page/sfcheck.html") || {
       echo "the SurfaceFlinger check failed, before the run: see $OUT/sfcheck.json (run.sh --sf-poll to read a set way)" >&2
       exit 2
     }
@@ -396,7 +463,7 @@ fi
 if [ "$SYNTH" = 1 ]; then
   for k in $(seq 1 "$RUNS"); do
     nonce=$(python3 -c 'import secrets; print(secrets.token_hex(4))')
-    url="http://127.0.0.1:$PORT/clarity/page/index.html?run=$k&seed=1&vsync=$VSYNC&nonce=$nonce&quick=$QUICK"
+    url="$HA_URL/clarity/page/index.html?run=$k&seed=1&vsync=$VSYNC&nonce=$nonce&quick=$QUICK"
     log "synthetic run $k/$RUNS"
     DASHBOARD_OK=0
     thermal "synthetic-$k"
@@ -426,8 +493,8 @@ if [ "$REF" = 1 ]; then
   # views in turn within the loaded frontend (the order turns each run).
   log "showing the reference dashboard for the graded runs (the kiosk's own dashboard and sign-in stay as they are)"
   SWITCHED=1
-  run testdash --url "http://127.0.0.1:$PORT/clarity-ref/start" >/dev/null || {
-    echo "$PACKAGE didn't take Clarity's test dashboard (--es test_dashboard): install an app built from main after it came in (docs/perf.md)" >&2
+  run testdash --url "$HA_URL/clarity-ref/start" >/dev/null || {
+    echo "$PACKAGE didn't take Clarity's test dashboard (--es test_dashboard): install an app built from main after it came in (docs/perf.md)$TESTDASH_LAN_HINT" >&2
     exit 2
   }
   DASHBOARD_OK=0
@@ -436,12 +503,12 @@ if [ "$REF" = 1 ]; then
     log "graded run $k/$RUNS: restart to the reference dashboard, then the four reference dashboards"
     thermal "refstart-$k"
     # Protocol 6: then the camera pages' HLS copies, the fallback (detail, not graded).
-    if run refstart --run "$k" --settle "$COLD_SETTLE" --url "http://127.0.0.1:$PORT" \
+    if run refstart --run "$k" --settle "$COLD_SETTLE" --url "$HA_URL" \
       --vsync "$VSYNC" --taps "$TAPS" --between-quiet "$BETWEEN_QUIET" --fallback "$FALLBACK"; then
       # RAM at idle on the typical reference dashboard, opened with no nonce: nothing is timed and
       # the live updates stay off (docs/perf.md, "RAM").
       log "idle on the typical reference dashboard $k/$RUNS"
-      run idle --label ref-idle --run "$k" --url "http://127.0.0.1:$PORT/clarity-ref/typical" \
+      run idle --label ref-idle --run "$k" --url "$HA_URL/clarity-ref/typical" \
         --settle "$IDLE_SETTLE" --window "$IDLE_WINDOW"
     else
       log "graded run $k failed; see refstart-$k.json"
@@ -460,8 +527,8 @@ if [ -n "$PANE_RAM" ]; then
   SWITCHED=1
   # Checked once in the kiosk's log: am says "Status: ok" to a kiosk that ignores the extra, and the
   # samples would then be of its own dashboard. Each state's intent below sends it again, unchanged.
-  run testdash --url "http://127.0.0.1:$PORT/clarity-ref/typical" >/dev/null || {
-    echo "$PACKAGE didn't take Clarity's test dashboard (--es test_dashboard): install an app built from main after it came in (docs/perf.md)" >&2
+  run testdash --url "$HA_URL/clarity-ref/typical" >/dev/null || {
+    echo "$PACKAGE didn't take Clarity's test dashboard (--es test_dashboard): install an app built from main after it came in (docs/perf.md)$TESTDASH_LAN_HINT" >&2
     exit 2
   }
   DASHBOARD_OK=0
@@ -479,7 +546,7 @@ if [ -n "$PANE_RAM" ]; then
       # process, since the second intent restarts it. The idle sample records what it ran too.
       # A state that didn't take (a pane, or the dashboard intent refused: url_taken false) gets no
       # sample: it wouldn't be this label on the reference dashboard.
-      if ! OUT=$dir run panes --set "$(pane_set "$state")" --url "http://127.0.0.1:$PORT/clarity-ref/typical" \
+      if ! OUT=$dir run panes --set "$(pane_set "$state")" --url "$HA_URL/clarity-ref/typical" \
           --settle "$SWITCH_SETTLE" --tries 3 > "$dir/panes-$label-$k.json"; then
         log "panes: the kiosk didn't run $label (see $dir/panes-$label-$k.json); no sample taken"
         continue

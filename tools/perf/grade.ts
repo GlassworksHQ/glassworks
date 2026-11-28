@@ -75,6 +75,8 @@ export interface Summary {
   /** false for a frame without a touchscreen (rubric 2): its scroll isn't graded. Absent: it has touch. */
   touch?: boolean;
   webrtc_transport?: { transport?: string | null; chosen_by?: string | null; reason?: string | null; possibly_limited?: boolean } | null;
+  /** "lan": the fake Home Assistant reached the panel over the LAN (run.sh --ha-transport lan), not adb reverse. */
+  ha_transport?: "lan";
   pages?: Record<string, PageSummary>;
   restart_ms?: number | null;
   gaps?: string[];

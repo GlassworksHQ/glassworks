@@ -17,7 +17,6 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import android.net.Uri
 import android.widget.Toast
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
@@ -900,7 +899,7 @@ open class MainActivity : Activity() {
     // ---- intents (see app/README.md):
     //   --es url <url>          set + persist the dashboard URL
     //   --es open <url>         navigate once, without persisting
-    //   --ez test_hold true [--ei test_hold_s 1800] [--es test_dashboard http://127.0.0.1:<port>/…]
+    //   --ez test_hold true [--ei test_hold_s 1800] [--es test_dashboard http://127.0.0.1:<port>/… or a LAN IP]
     //                           a test's hold (ScreenPolicy.testHold), and its own dashboard while it lasts
     //   --ef zoom 1.25          CSS px ratio (0 = auto); restarts the process
     //   --es secure_hosts a,b   extra secure-context hosts; restarts the process
@@ -1268,11 +1267,9 @@ open class MainActivity : Activity() {
     // ---- what the page reports (dev.glassworks.engine)
 
     private val pageHost = object : PageHost {
-        // Home Assistant and the secure-context hosts, and a test's own dashboard while it has one (#847).
-        override fun trusts(url: String): Boolean = TrustedPages.trusts(
-            url, HaAuth.signedInBase,
-            prefs.secureHosts() + listOfNotNull(glassworks.screen.testDashboard?.let { Uri.parse(it).host }),
-        )
+        // Home Assistant and the secure-context hosts, and a test's own dashboard's origin while it has one (#847).
+        override fun trusts(url: String): Boolean =
+            TrustedPages.trusts(url, HaAuth.signedInBase, prefs.secureHosts(), glassworks.screen.testDashboard)
 
         override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) {
             val missing = permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }

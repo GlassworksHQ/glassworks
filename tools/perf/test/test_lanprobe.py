@@ -78,6 +78,28 @@ class Choose(unittest.TestCase):
         self.assertEqual((got["transport"], got["chosen_by"]), ("adb", "flag"))
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "state", "lan_checks.json")))
 
+    def test_with_the_fake_over_the_lan_udp_still_wins(self):
+        with mock.patch.dict(os.environ, {"FAKE_LAN": "udp"}):
+            got = lanprobe.choose(self.port(), ha_over_lan=True)
+        self.assertEqual((got["transport"], got["chosen_by"]), ("lan-udp", "auto"))
+
+    def test_with_the_fake_over_the_lan_there_is_no_adb_path(self):
+        """run.sh --ha-transport lan: no adb reverse, so the relay over TCP on the LAN, also when the panel has no nc
+        (Android 6) and neither check arrived."""
+        for lan in ("tcp", ""):
+            with mock.patch.dict(os.environ, {"FAKE_LAN": lan}):
+                got = lanprobe.choose(self.port(), ha_over_lan=True)
+            self.assertEqual((got["transport"], got["chosen_by"]), ("lan-turn", "auto"), lan)
+            self.assertEqual(got["reason"], lanprobe.HA_LAN_TURN)
+
+    def test_the_cli_refuses_adb_with_the_fake_over_the_lan(self):
+        env = dict(os.environ, ADB=lanprobe.ADB, GW_PERF_WEBRTC_ADDR="127.0.0.1")
+        p = subprocess.run([sys.executable, os.path.join(os.path.dirname(HERE), "lanprobe.py"), "--port", str(self.port()),
+                            "--out", tempfile.mkdtemp(), "--transport", "adb", "--ha-over-lan"],
+                           env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("doesn't use", p.stderr)
+
     def test_the_cli_writes_transport_json_without_addresses(self):
         env = dict(os.environ, ADB=lanprobe.ADB, FAKE_LAN="udp", GW_PERF_WEBRTC_ADDR="127.0.0.1")
         out = tempfile.mkdtemp()

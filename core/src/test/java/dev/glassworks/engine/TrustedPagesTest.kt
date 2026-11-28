@@ -21,6 +21,16 @@ class TrustedPagesTest {
         assertTrue(TrustedPages.trusts("http://panel.example:1984/webrtc.html", null, hosts))
     }
 
+    /** Clarity's fake while a test holds the screen: its test dashboard's exact origin, not its host's other ports. */
+    @Test fun theTestDashboardsOriginOnlyIsTrusted() {
+        val test = "http://10.0.0.41:8089/clarity-ref/start"
+        assertTrue(TrustedPages.trusts("http://10.0.0.41:8089/clarity-ref/heavy", null, emptyList(), test))
+        assertFalse(TrustedPages.trusts("http://10.0.0.41:9000/", null, emptyList(), test))
+        assertFalse(TrustedPages.trusts("https://10.0.0.41:8089/", null, emptyList(), test))
+        assertFalse(TrustedPages.trusts("http://10.0.0.42:8089/", null, emptyList(), test))
+        assertFalse(TrustedPages.trusts("http://10.0.0.41:8089/", null, emptyList(), null))
+    }
+
     @Test fun anyOtherPageIsNot() {
         assertFalse(TrustedPages.trusts("http://192.0.2.66/", ha, hosts))
         assertFalse(TrustedPages.trusts("https://evil.example/", ha, hosts))

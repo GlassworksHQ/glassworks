@@ -81,7 +81,7 @@ class Parsing(unittest.TestCase):
 
 
 class Cli(unittest.TestCase):
-    def run_it(self, **extra):
+    def run_it(self, *args, **extra):
         tmp = tempfile.mkdtemp()
         state = os.path.join(tmp, "state")
         os.makedirs(state)
@@ -92,7 +92,7 @@ class Cli(unittest.TestCase):
         env = dict(os.environ, ADB=adb, FAKE_ADB_STATE=state, GW_PERF_PING=os.path.join(HERE, "fake_ping.py"),
                    GW_PERF_GATEWAY="192.0.2.1", **extra)
         env.pop("ANDROID_SERIAL", None)
-        p = subprocess.run([sys.executable, os.path.join(os.path.dirname(HERE), "netcheck.py"), "--out", tmp, "--count", "10"],
+        p = subprocess.run([sys.executable, os.path.join(os.path.dirname(HERE), "netcheck.py"), "--out", tmp, "--count", "10", *args],
                            env=env, capture_output=True, text=True, timeout=60)
         with open(os.path.join(tmp, "netcheck.json")) as f:
             text = f.read()
@@ -107,6 +107,14 @@ class Cli(unittest.TestCase):
         self.assertIs(out["quiet"], True)
         self.assertNotIn("warning", p.stderr)
         self.assertNotIn("192.0.2", text)                         # numbers only, never an address
+
+    def test_the_fake_over_the_lan_is_recorded(self):
+        """run.sh --ha-transport lan: the fake's traffic crossed this computer's network whatever adb goes over."""
+        _, out, _ = self.run_it("--ha-over-lan")
+        self.assertIs(out["ha_over_lan"], True)
+        self.assertIs(out["adb_over_network"], False)
+        _, out, _ = self.run_it()
+        self.assertNotIn("ha_over_lan", out)                     # through adb reverse: the file as before
 
     def test_a_stalling_wifi_with_wireless_adb(self):
         p, out, _ = self.run_it(FAKE_PING_GATEWAY_MS="2.3,3.1,4.0,2.8,68.0,3.3,84.0,2.9,3.6,3.0", FAKE_ADB_WIFI="1")

@@ -392,7 +392,7 @@ def cmd_synthetic(dev, a):
         print(f"synthetic run {a.run}: the app's lockdown refused the test page", file=sys.stderr)
         sys.exit(LOCKDOWN_EXIT)
     if not seen.is_set():
-        status = "the test page sent nothing in 90 s (is the app in front, and adb reverse up?)"
+        status = "the test page sent nothing in 90 s (is the app in front, and the fake Home Assistant reachable: adb reverse up, or the LAN with --ha-transport lan?)"
     if status != "done":
         sys.exit(f"synthetic run {a.run}: {status}")
 
@@ -481,7 +481,7 @@ def cmd_sfcheck(dev, a):
     elif name is None:
         out["why"] = f"SurfaceFlinger lists no SurfaceView of {dev.package} this runner can read (sf_layers.py, the debugging helper, prints its lines)"
     elif not frames:
-        out["why"] = "the check page drew no new frames on the app's layer (is it on screen, and adb reverse up?)"
+        out["why"] = "the check page drew no new frames on the app's layer (is it on screen, and the fake Home Assistant reachable: adb reverse up, or the LAN with --ha-transport lan?)"
     elif full < SFCHECK_FULL_READS and frames * period < P.SF_ONE_READ_MS:
         out["why"] = (f"SurfaceFlinger's history never filled in {a.timeout:.0f} s ({frames} frames): the check page "
                       "didn't draw every frame (is it on screen?)")

@@ -108,6 +108,21 @@ class Runner(unittest.TestCase):
             self.assertNotIn("192.0.2", f.read())
         self.assertIn("this computer's network", self.proc.stderr)
 
+    def test_by_default_the_fake_goes_through_adb_reverse_as_before(self):
+        """--ha-transport adb, the default: the two reverse ports, removed on exit; every page on the device's 127.0.0.1;
+        no ha_transport.json, and nothing in the report or the network check about the LAN."""
+        self.assertEqual([c for c in self.commands if c.startswith("reverse")],
+                         [f"reverse tcp:{port(89)} tcp:{port(89)}", f"reverse tcp:{port(90)} tcp:{port(90)}",
+                          f"reverse --remove tcp:{port(89)}", f"reverse --remove tcp:{port(90)}"])
+        urls = [u for c in self.commands for u in re.findall(r"http://[^/' ]+", c)]
+        self.assertTrue(urls)
+        self.assertEqual(set(urls), {f"http://127.0.0.1:{port(89)}"})
+        self.assertFalse(os.path.exists(os.path.join(self.out, "ha_transport.json")))
+        self.assertNotIn("ha_transport", self.rep)
+        self.assertNotIn("ha_over_lan", self.rep["test_network"])
+        with open(os.path.join(self.out, "report.md")) as f:
+            self.assertNotIn("Home Assistant over the LAN", f.read())
+
     def test_report_has_every_part(self):
         r = self.rep
         self.assertEqual(r["schema"], "glassworks.perf/4")
@@ -1905,6 +1920,137 @@ class SignInStays(unittest.TestCase):
             commands = f.read().splitlines()
         self.assertEqual([c for c in commands if c.startswith(("view ", "shell am force-stop"))], [])
         self.assertEqual([c for c in commands if "--es url" in c], [])
+
+
+def lan_address():
+    """An address of this computer for the fake Home Assistant over the LAN that isn't 127.0.0.1, so a URL left on
+    loopback shows: 127.0.0.2 where loopback takes it (Linux), else this computer's own LAN address (macOS), found
+    at run time and never written down, if the kiosk would take it (perflib.local_address: not a VPN's or a public
+    one). None when neither works here."""
+    for addr in ("127.0.0.2", None):
+        try:
+            if addr is None:
+                import webrtc
+                addr = webrtc.media_address()
+            with socket.socket() as s:
+                s.bind((addr, 0))
+            if P.local_address(addr):
+                return addr
+        except Exception:      # noqa: BLE001 (no such address here, no route, no ifaddr)
+            continue
+    return None
+
+
+class HaOverLan(unittest.TestCase):
+    """run.sh --ha-transport lan (the Mirror's Android 6 over network adb, where `adb reverse` fails): the fake listens on
+    this computer's LAN address only, every page the panel gets is there, no reverse is made or removed, and the
+    report and the network check say the fake's traffic crossed the network."""
+
+    def run_sh(self, n, *extra, **env_extra):
+        self.lan = lan_address()
+        if not self.lan:
+            self.skipTest("no address here for the fake over the LAN")
+        tmp = tempfile.mkdtemp()
+        env, state = fake_env(tmp, **dict(dict(FAKE_HA_URL=f"http://{self.lan}:{port(n)}", GW_PERF_WEBRTC_ADDR=self.lan,
+                                               GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0", GW_PERF_BETWEEN_QUIET="0.3"),
+                                          **env_extra))
+        out = os.path.join(tmp, "out")
+        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", out, "--port", port(n), "--taps", "2",
+                            "--quick", *extra], env=env, capture_output=True, text=True, timeout=300)
+        with open(os.path.join(state, "commands.log")) as f:
+            commands = f.read().splitlines()
+        rep = None
+        if p.returncode == 0:
+            with open(os.path.join(out, "report.json")) as f:
+                rep = json.load(f)
+        return p, out, commands, rep
+
+    def assert_over_the_lan(self, n, out, commands, rep, chosen_by):
+        urls = [u for c in commands for u in re.findall(r"http://[^/' ]+", c)]
+        self.assertTrue(urls)
+        self.assertEqual(set(urls), {f"http://{self.lan}:{port(n)}"})   # the test page, the check, the reference views
+        self.assertTrue(any("--es test_dashboard 'http://" in c for c in commands))
+        self.assertTrue(any("/clarity/page/sfcheck.html" in c for c in commands))
+        self.assertTrue(any("/clarity/page/index.html" in c for c in commands))
+        with open(os.path.join(out, "ha_transport.json")) as f:
+            text = f.read()
+        self.assertNotIn(self.lan, text)                                          # no address recorded
+        self.assertEqual((json.loads(text)["transport"], json.loads(text)["chosen_by"]), ("lan", chosen_by))
+        self.assertEqual(rep["ha_transport"]["transport"], "lan")
+        n_ = rep["test_network"]
+        self.assertIs(n_["ha_over_lan"], True)
+        self.assertIn("live updates", n_["carried"])     # USB adb, but the fake's stream crossed this computer's network
+        # Nothing went through adb: the camera video takes the LAN too (no toybox nc answered: the relay over TCP).
+        self.assertEqual(rep["webrtc_transport"]["transport"], "lan-turn")
+        with open(os.path.join(out, "report.md")) as f:
+            self.assertIn("**Home Assistant over the LAN:**", f.read())
+        with open(os.path.join(out, "server.log")) as f:
+            # Bound there, not every address; a LAN address isn't written in the run's directory (loopback is).
+            self.assertIn(f"on http://{self.lan}:{port(n)}" if self.lan.startswith("127.")
+                          else f"on this computer's LAN address, port {port(n)}", f.read())
+        self.assertEqual(rep["grade"]["grade"], "A+")
+        self.assertFalse(rep["grade"]["provisional"], rep["grade"].get("provisional_reasons"))
+
+    def test_explicit_lan_makes_no_reverse_and_every_url_is_on_the_lan(self):
+        p, out, commands, rep = self.run_sh(85, "--ha-transport", "lan")
+        self.assertEqual(p.returncode, 0, p.stderr[-3000:])
+        self.assertEqual([c for c in commands if c.startswith("reverse")], [])
+        self.assert_over_the_lan(85, out, commands, rep, "flag")
+        self.assertIn("over the LAN, on this computer's LAN address only", p.stderr)
+        self.assertNotIn(self.lan, p.stderr)                                       # the run's log names no address
+
+    def test_auto_takes_the_lan_when_adb_reverse_fails_as_on_the_mirror(self):
+        p, out, commands, rep = self.run_sh(87, "--ha-transport", "auto", FAKE_REVERSE_FAILS="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-3000:])
+        # One try, which failed: nothing made, nothing removed.
+        self.assertEqual([c for c in commands if c.startswith("reverse")], [f"reverse tcp:{port(87)} tcp:{port(87)}"])
+        self.assertIn("more than one device/emulator", p.stderr)
+        self.assert_over_the_lan(87, out, commands, rep, "auto")
+        self.assertIn("more than one device/emulator", rep["ha_transport"]["reason"])
+
+    def test_the_default_fails_where_adb_reverse_does(self):
+        """Off by default: a device whose reverse fails stops the run, as before, rather than going over the LAN."""
+        p, out, commands, _ = self.run_sh(99, "--skip-synthetic", "--skip-real-use", FAKE_REVERSE_FAILS="1")
+        self.assertEqual(p.returncode, 2, p.stderr[-2000:])
+        self.assertIn("run with --ha-transport lan", p.stderr)
+        self.assertFalse(os.path.exists(os.path.join(out, "ha_transport.json")))
+        self.assertEqual([c for c in commands if c.startswith("shell am force-stop")], [])
+
+    def test_auto_where_adb_reverse_works_keeps_it(self):
+        p, out, commands, rep = self.run_sh(91, "--ha-transport", "auto", "--skip-synthetic", "--skip-real-use")
+        self.assertEqual(p.returncode, 0, p.stderr[-3000:])
+        self.assertIn(f"reverse tcp:{port(91)} tcp:{port(91)}", commands)
+        self.assertIn(f"reverse --remove tcp:{port(91)}", commands)
+        urls = {u for c in commands for u in re.findall(r"http://[^/' ]+", c)}
+        self.assertEqual(urls, {f"http://127.0.0.1:{port(91)}"})
+        self.assertEqual(rep["ha_transport"], {"transport": "adb", "chosen_by": "auto", "reason": "adb reverse works on this device"})
+        self.assertNotIn("ha_over_lan", rep["test_network"])
+
+    def test_a_lan_address_the_kiosk_wouldnt_take_stops_the_run_first(self):
+        """A VPN's or a public address on this computer's default route: the kiosk refuses a test dashboard there, so
+        the run stops before the fake starts, saying it's the address (not the app). 192.0.2.10 is TEST-NET-1."""
+        p, out, commands, _ = self.run_sh(77, "--ha-transport", "lan", "--skip-synthetic", "--skip-real-use",
+                                          GW_PERF_WEBRTC_ADDR="192.0.2.10")
+        self.assertEqual(p.returncode, 2, p.stderr[-2000:])
+        self.assertIn("isn't on a private network", p.stderr)
+        self.assertNotIn("192.0.2.10", p.stderr)
+        self.assertFalse(os.path.exists(os.path.join(out, "server.log")))
+        self.assertEqual([c for c in commands if "test_dashboard 'http" in c], [])
+
+    def test_an_app_that_takes_loopback_only_is_refused_with_why(self):
+        p, out, commands, _ = self.run_sh(93, "--ha-over-lan", "--skip-synthetic", "--skip-real-use",
+                                          FAKE_TEST_DASH_LOOPBACK_ONLY="1")
+        self.assertEqual(p.returncode, 2, p.stderr[-2000:])
+        self.assertIn("takes a test dashboard on a local network address", p.stderr)
+
+    def test_lan_refuses_webrtc_over_adb(self):
+        p = subprocess.run([RUN, "--frame", "test-frame", "--ha-transport", "lan", "--webrtc-transport", "adb"],
+                           capture_output=True, text=True, timeout=30)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("doesn't use", p.stderr)
+        p = subprocess.run([RUN, "--frame", "test-frame", "--ha-transport", "usb"], capture_output=True, text=True, timeout=30)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("--ha-transport is adb, lan or auto", p.stderr)
 
 
 class Android6(unittest.TestCase):

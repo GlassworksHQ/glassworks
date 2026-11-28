@@ -73,7 +73,7 @@ def regrade(run_dir):
         # What the stored report took from other raw files must still be there: a rebuild without them would put
         # "not measured" in place of what was (the network's limit, the camera video's path, the runs attempted).
         lost = [f"{name} (report.json has {key})" for key, name in
-                (("test_network", "netcheck.json"), ("webrtc_transport", "transport.json"))
+                (("test_network", "netcheck.json"), ("webrtc_transport", "transport.json"), ("ha_transport", "ha_transport.json"))
                 if (old or {}).get(key) and not os.path.exists(os.path.join(run_dir, name))]
         # Without plan.json the runs attempted are the files there: only fewer than the report counted is a loss.
         if ((old or {}).get("runs_attempted") or 0) > len(refstarts) and not os.path.exists(os.path.join(run_dir, "plan.json")):

@@ -1770,6 +1770,7 @@ def build(run_dir, apks=(), budgets=None):
         "ram": reference_ram(ref_idles, raw_refs, package, budgets, device.get("mem_total_kb")),
         "fake_ha": fake_log,
         "webrtc_transport": transport,
+        **({"ha_transport": ha} if (ha := ha_transport(run_dir)) else {}),
         "test_network": net,
         "grade": grade,
         "graded": graded,
@@ -1849,17 +1850,31 @@ def webrtc_transport(run_dir, ref):
 def test_network(run_dir, ref, transport):
     """The test computer's own network (#649), from netcheck.py's netcheck.json: its pings to its gateway and to
     the panel, its link, and which graded traffic crossed it: the live updates when adb reaches the panel over the
-    network (the fake's stream goes through `adb reverse`), the cameras when their video went over the LAN.
+    network (the fake's stream goes through `adb reverse`) or the fake itself went over the LAN (ha_over_lan, run.sh
+    --ha-transport lan), the cameras when their video went over the LAN.
     `limited` (a reason for "provisional") when its own link wasn't quiet and carried some. None without the file
-    (runs before #649) or without the reference part."""
+    (runs before #649) or without the reference part; but with the fake over the LAN (ha_transport.json) and no file
+    (netcheck.py failed), `measured` false and `limited`: the fake's traffic crossed a network nothing checked."""
     path = os.path.join(run_dir, "netcheck.json")
-    if not ref or not os.path.exists(path):
+    if not ref:
         return None
+    if not os.path.exists(path):
+        if (ha_transport(run_dir) or {}).get("transport") != "lan":
+            return None
+        cams = any((t or {}).get("camera_runs") for t in (ref.get("tiers") or {}).values())
+        carried = ["live updates"] + (["camera video"] if cams and (transport or {}).get("transport") in ("lan-udp", "lan-turn") else [])
+        return {"gateway": None, "panel": None, "link": None, "adb_over_network": None, "quiet": None, "tail_ms": None,
+                "ha_over_lan": True, "measured": False, "carried": carried,
+                "limited": f"the test computer's network: the network check didn't run (netcheck.py failed), and it "
+                           f"carried the {' and the '.join(carried)} (the fake Home Assistant over the LAN); measure again "
+                           "with the check"}
     with open(path) as f:
         n = json.load(f)
     out = {k: n.get(k) for k in ("gateway", "panel", "link", "adb_over_network", "quiet", "tail_ms")}
+    if n.get("ha_over_lan"):
+        out["ha_over_lan"] = True          # run.sh --ha-transport lan: the fake's traffic went over the network
     cams = any((t or {}).get("camera_runs") for t in (ref.get("tiers") or {}).values())
-    out["carried"] = (["live updates"] if n.get("adb_over_network") else []) + (
+    out["carried"] = (["live updates"] if n.get("adb_over_network") or n.get("ha_over_lan") else []) + (
         ["camera video"] if cams and (transport or {}).get("transport") in ("lan-udp", "lan-turn") else [])
     g = n.get("gateway") or {}
     out["limited"] = (f"the test computer's network: its own link to its gateway reached p95 {g.get('p95_ms')} ms, "
@@ -1869,11 +1884,39 @@ def test_network(run_dir, ref, transport):
     return out
 
 
+def ha_transport(run_dir):
+    """How the panel reached the fake Home Assistant: run.sh's ha_transport.json (transport: adb or lan; chosen_by: flag
+    or auto; reason), written with --ha-transport lan or auto. None without it: through adb reverse, as before."""
+    path = os.path.join(run_dir, "ha_transport.json")
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        t = json.load(f)
+    return {k: t.get(k) for k in ("transport", "chosen_by", "reason")}
+
+
+def ha_transport_line(rep):
+    """report.md, beside the camera video's path: the fake Home Assistant over the LAN, said where it was."""
+    t = rep.get("ha_transport")
+    if not t or t.get("transport") != "lan":
+        return []
+    how = "with --ha-transport auto" if t.get("chosen_by") == "auto" else "with --ha-transport lan"
+    n = rep.get("test_network")
+    check = ("the network check below counts them." if n and n.get("measured", True)
+             else "the network check didn't run, so the grade is provisional.")
+    return [f"**Home Assistant over the LAN:** the fake Home Assistant reached the panel over this computer's network, "
+            f"not through adb reverse ({how}: {t.get('reason')}). Its pages and live updates crossed that network, as a "
+            f"real Home Assistant's do; {check}"]
+
+
 def network_line(rep):
     """report.md, beside the camera video's path: the test computer's own network (#649)."""
     n = rep.get("test_network")
     if not n:
         return []
+    if n.get("measured") is False:
+        return [f"The test computer's network wasn't checked (netcheck.py failed), though it carried the "
+                f"{' and the '.join(n['carried'])}. **Limited by the test:** {n['limited']}."]
     fmt = lambda s: f"p95 {s['p95_ms']} ms, max {s['max_ms']} ms" if s else "no answer"  # noqa: E731
     line = (f"The test computer's network ({n['link'] or 'link unknown'}): to its gateway {fmt(n['gateway'])}; "
             f"to the panel {fmt(n['panel'])}. It carried "
@@ -2319,6 +2362,7 @@ def markdown(rep):
             # Not a reason for "provisional": no graded view's stream was late (#205).
             out.append(f"The fake Home Assistant sent a live change {detail_late:.0f} ms late during a view that isn't "
                        "graded (an HLS copy or a warm-up; detail: this computer was busy then).")
+        out += ha_transport_line(rep)
         out += transport_line(rep)
         out += camera_transports(ref)
         out += network_line(rep)
