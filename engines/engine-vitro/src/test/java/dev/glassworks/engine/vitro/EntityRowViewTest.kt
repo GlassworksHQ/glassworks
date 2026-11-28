@@ -99,15 +99,19 @@ class EntityRowViewTest {
         assertEquals("size", old.width to old.height, new.width to new.height)
         val differ = before.indices.filter { before[it] != after[it] }
         if (differ.isNotEmpty()) dump(old.width, old.height, before, after)
+        System.getProperty("vitro.mockupDir")?.takeIf { it.isNotBlank() }?.let { dump(old.width, old.height, before, after, java.io.File(it)) }
         assertTrue(
             "${differ.size} pixels differ, first at ${differ.take(5).map { it % old.width to it / old.width }}",
             differ.isEmpty(),
         )
     }
 
-    /** A failure's two renders, for a look: `build/reports/entity-row-view/<n>-{views,row}.png`. */
-    private fun dump(w: Int, h: Int, before: IntArray, after: IntArray) {
-        val dir = java.io.File("build/reports/entity-row-view").apply { mkdirs() }
+    /**
+     * A failure's two renders, for a look: `build/reports/entity-row-view/<n>-{views,row}.png`; with
+     * `-PvitroMockupDir=<dir>`, every case's, there (a PR's before and after).
+     */
+    private fun dump(w: Int, h: Int, before: IntArray, after: IntArray, dir: java.io.File = java.io.File("build/reports/entity-row-view")) {
+        dir.mkdirs()
         val n = dir.list()?.size ?: 0
         for ((name, px) in listOf("views" to before, "row" to after)) {
             val bmp = Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
