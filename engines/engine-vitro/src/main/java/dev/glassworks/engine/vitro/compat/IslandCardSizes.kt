@@ -26,18 +26,28 @@ import java.util.concurrent.atomic.AtomicInteger
  * So the answers are kept on disk too, for the Home Assistant the panel shows ([useStore]): from the second start on,
  * the view is placed once with the sizes its islands gave last time, and an island that answers the same changes
  * nothing. A card weighs 1 only until its island first says (tablet Vitro run 3: twelve island cards of size 2 filled
- * 4 columns in HA, 3 in Vitro), and a card that answers differently than last time is placed again, as before.
+ * 4 columns in HA, 3 in Vitro), and a card that answers differently than last time is placed again, as before. A card
+ * a view was placed without (its stored size not read yet) stays unknown until its island answers, so that answer
+ * places the view again.
  *
  * On disk: one file in the [HaPageData.CARD_SIZES_CACHE] folder of the app's cache folder (the factory reset deletes
- * it), holding the Home Assistant it's for and each size by a digest of the card's config, never the config itself, at most
- * [MAX_STORED] of them, the oldest going first.
+ * it), holding at most [MAX_STORED] sizes, the oldest going first. The Home Assistant it's for and each card's config
+ * are written as unsalted SHA-256 digests, not as text: that keeps them out of the file in plain form, but it doesn't
+ * hide them from someone who can guess them (an address, an entity ID), so the file is no secret store. It sits in
+ * the app's private cache folder, as the panel's settings do.
  */
 object IslandCardSizes {
     private const val TAG = "Glassworks.Vitro"
     private const val MAX_STORED = 512
 
-    /** This session's answers, by config. */
+    /** This session's answers, by config, and the stored sizes a layout has read: what views were placed with. */
     private val sizes = ConcurrentHashMap<String, Double>()
+
+    /**
+     * Custom cards a layout read as unknown (no answer, nothing stored yet), by config: a stored size that lands later
+     * isn't used for them, so the view they're in is placed again when their island answers.
+     */
+    private val unknown: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     /** What islands of this Home Assistant answered before, by [digest] of the config, oldest first. Guarded by itself. */
     private val stored = LinkedHashMap<String, Double>()
@@ -53,22 +63,29 @@ object IslandCardSizes {
 
     /** What the card with config [raw] answered, this session or an earlier one, or null when no island has said. */
     fun size(raw: JSONObject): Double? {
-        if (sizes.isEmpty() && storedCount == 0) return null
+        // Only a custom card goes to an island: a built-in one is never stored, and costs no digest.
+        if (!isCustom(raw)) return if (sizes.isEmpty()) null else sizes[raw.toString()]
         val key = raw.toString()
         sizes[key]?.let { return it }
-        // Only a custom card goes to an island: a built-in one is never stored, and costs no digest.
-        if (storedCount == 0 || !raw.optString("type").startsWith("custom:")) return null
-        val known = synchronized(stored) { stored[digest(key)] } ?: return null
-        sizes.putIfAbsent(key, known)
-        return known
+        if (key in unknown) return null
+        val known = if (storedCount == 0) null else synchronized(stored) { stored[digest(key)] }
+        if (known == null) {
+            unknown += key
+            return null
+        }
+        return sizes.putIfAbsent(key, known) ?: known
     }
 
-    /** Records [size] for the card with config [raw]. True when it's new or differs from what was known. */
+    /**
+     * Records [size] for the card with config [raw]. True when it differs from what views were placed with: a size a
+     * layout read ([size]), or none.
+     */
     fun record(raw: JSONObject, size: Double): Boolean {
-        val before = size(raw)
-        sizes[raw.toString()] = size
+        val key = raw.toString()
+        unknown -= key
+        val changed = sizes.put(key, size) != size
         val target = store
-        if (target != null) {
+        if (target != null && isCustom(raw)) {
             val d = digest(raw.toString())
             val changed = synchronized(stored) {
                 val old = stored.remove(d)
@@ -79,8 +96,10 @@ object IslandCardSizes {
             }
             if (changed) scheduleWrite()
         }
-        return before != size
+        return changed
     }
+
+    private fun isCustom(raw: JSONObject) = raw.optString("type").startsWith("custom:")
 
     /**
      * Keeps answers for the Home Assistant at [origin] in [cacheDir] (null: on disk for none), and reads what it kept
@@ -117,6 +136,7 @@ object IslandCardSizes {
     fun clear() {
         generation.incrementAndGet()
         sizes.clear()
+        unknown.clear()
         synchronized(stored) {
             stored.clear()
             storedCount = 0
@@ -131,8 +151,15 @@ object IslandCardSizes {
 
     private fun scheduleWrite() {
         if (!writePending.compareAndSet(false, true)) return
+        val gen = generation.get()
         io.execute {
             writePending.set(false)
+            // Queued for an older store (another Home Assistant since, or a clear): its file may not be read yet, and
+            // writing now would replace it. Queued again, the write runs after that read.
+            if (generation.get() != gen) {
+                if (store != null) scheduleWrite()
+                return@execute
+            }
             val target = store ?: return@execute
             val snapshot = synchronized(stored) { LinkedHashMap(stored) }
             writeStore(target.first, target.second, snapshot)

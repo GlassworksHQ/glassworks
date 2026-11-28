@@ -123,12 +123,12 @@ class IslandParityTest {
             IslandCardSizes.awaitIo()
             val file = java.io.File(cache, "vitro-card-sizes/sizes.json")
             val text = file.readText()
-            assertFalse("digests only, never a config", text.contains("sensor.island") || text.contains("vitro-test-plain-card"))
-            assertFalse("nor the Home Assistant's address", text.contains("192.0.2.10"))
+            assertEquals("the twelve island cards only", 12, JSONObject(text).getJSONArray("sizes").length())
+            assertFalse("digests, not the configs in clear", text.contains("sensor.island") || text.contains("vitro-test-plain-card"))
+            assertFalse("nor the Home Assistant's address in clear", text.contains("192.0.2.10"))
 
             // The next start: nothing in memory, the same Home Assistant.
             IslandCardSizes.clear()
-            assertEquals(1.0, HaCardSize.of(islandsView[1]), 0.0)
             IslandCardSizes.useStore(cache, home)
             IslandCardSizes.awaitIo()
             assertEquals(2.0, HaCardSize.of(islandsView[1]), 0.0)
@@ -154,6 +154,86 @@ class IslandParityTest {
             IslandCardSizes.clear()
             cache.deleteRecursively()
         }
+    }
+
+    @Test fun aCardReadAsUnknownStaysUnknownUntilItsIslandAnswersEvenWhenItsStoredSizeLandsMeanwhile() {
+        val cache = java.nio.file.Files.createTempDirectory("vitro-card-sizes").toFile()
+        try {
+            IslandCardSizes.useStore(cache, home)
+            IslandCardSizes.record(islandsView[1].raw, 2.0)
+            IslandCardSizes.awaitIo()
+            IslandCardSizes.clear()
+            // A layout reads the card before the store is read: it was placed at 1.
+            assertEquals(1.0, HaCardSize.of(islandsView[1]), 0.0)
+            IslandCardSizes.useStore(cache, home)
+            IslandCardSizes.awaitIo()
+            assertEquals("what that layout used, until the island says", 1.0, HaCardSize.of(islandsView[1]), 0.0)
+            assertTrue("the island's 2 is a change for that layout", IslandCardSizes.record(islandsView[1].raw, 2.0))
+            assertEquals(2.0, HaCardSize.of(islandsView[1]), 0.0)
+            // A card no layout read yet takes its stored size.
+            IslandCardSizes.record(islandsView[2].raw, 3.0)
+            IslandCardSizes.awaitIo()
+            IslandCardSizes.clear()
+            IslandCardSizes.useStore(cache, home)
+            IslandCardSizes.awaitIo()
+            assertEquals(3.0, HaCardSize.of(islandsView[2]), 0.0)
+            assertFalse("and answering the same changes nothing", IslandCardSizes.record(islandsView[2].raw, 3.0))
+        } finally {
+            IslandCardSizes.clear()
+            cache.deleteRecursively()
+        }
+    }
+
+    @Test @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun aViewBuiltBeforeTheStoredSizesAreReadIsPlacedAgainWhenItsIslandsAnswer() {
+        // Review on #992: a build that lands before the stored sizes are read is placed with 1 for every island; their
+        // answers must still place it again, though the store says the same by then.
+        val cache = java.nio.file.Files.createTempDirectory("vitro-card-sizes").toFile()
+        try {
+            IslandCardSizes.useStore(cache, home)
+            for (c in islandsView.drop(1)) IslandCardSizes.record(c.raw, 2.0)
+            IslandCardSizes.awaitIo()
+            IslandCardSizes.clear()
+
+            val (vv, builds) = islandsViewOnScreen()
+            assertEquals(1, builds())
+            assertEquals("placed with 1 for every island", 3, vv.masonryColumns())
+            // The stored sizes land after the build.
+            IslandCardSizes.useStore(cache, home)
+            IslandCardSizes.awaitIo()
+            for (c in islandsView.drop(1)) vv.islandCardSize(c, 2.0)
+            ShadowLooper.idleMainLooper()
+            assertTrue("placed again", builds() > 1)
+            assertEquals(4, vv.masonryColumns())
+        } finally {
+            IslandCardSizes.clear()
+            cache.deleteRecursively()
+        }
+    }
+
+    /** The twelve-island view on a 1280 dp screen, built; with a count of its builds. */
+    private fun islandsViewOnScreen(): Pair<VitroView, () -> Int> {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val store = EntityStore().apply {
+            for (i in 1..12) putLocal(EntityState("sensor.island_%02d".format(i), "${17 + i * 0.5}", emptyMap()))
+        }
+        val vv = VitroView(activity, store, 0xFF000000.toInt())
+        vv.holdFirstBuildForStatesMs = 0
+        vv.resourcesList = LovelaceResourceList(listOf(LovelaceResource("/local/test-cards.js", "module")), bubbleModules = false)
+        var builds = 0
+        vv.onMetrics = { builds++ }
+        vv.contextFactory = { theme ->
+            VitroCardContext(
+                context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = vv.resourcesList,
+                accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+            )
+        }
+        activity.setContentView(vv)
+        val view = JSONObject().put("cards", org.json.JSONArray(islandsView.map { it.raw }))
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject().put("views", org.json.JSONArray().put(view))), null)
+        ShadowLooper.idleMainLooper()
+        return vv to { builds }
     }
 
     @Test @Config(qualifiers = "w1280dp-h800dp-mdpi")
