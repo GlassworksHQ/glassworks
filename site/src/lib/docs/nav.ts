@@ -91,6 +91,7 @@ export async function docsTracks(): Promise<NavTrack[]> {
         {
           label: "Architecture",
           items: [
+            ...byUrl("/docs/why-glassworks"),
             ...byUrl("/docs/principles"),
             ...byUrl("/docs/what-makes-a-pane"),
             ...byUrl("/docs/frames"),
