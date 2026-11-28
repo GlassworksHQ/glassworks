@@ -88,6 +88,9 @@ internal class EntityRowView(
      */
     private var textCap = Int.MAX_VALUE
 
+    /** The height spec the row was last measured with ([commit] checks a new text against it). */
+    private var lastHeightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+
     init {
         setWillNotDraw(false)
         // Real padding, as the LinearLayout had: its children (the toggle) are clipped to it, and so is the text.
@@ -104,6 +107,12 @@ internal class EntityRowView(
     /** The icon's name as last set (`mdi:` prefix and all), and its color. */
     val icon: String get() = iconName
     val iconColor: Int get() = iconTint
+
+    /** Where the icon is drawn, in the row (tests). */
+    internal fun iconBounds(): android.graphics.Rect {
+        if (placedFor != width) place(width)
+        return android.graphics.Rect(iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize)
+    }
 
     /** Whether the name was squeezed out by the end (tests). */
     internal val nameSqueezed: Boolean get() = squeezed
@@ -158,7 +167,8 @@ internal class EntityRowView(
             invalidate()
             return
         }
-        if (rowHeight() != height) {
+        // Against the size the parent gave it: a row held shorter than its text stays that height, and lays out alone.
+        if (resolveSize(rowHeight(), lastHeightSpec) != height) {
             requestLayout()
         } else {
             placedFor = -1
@@ -200,6 +210,7 @@ internal class EntityRowView(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
+        lastHeightSpec = heightMeasureSpec
         textCap = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) Int.MAX_VALUE else MeasureSpec.getSize(heightMeasureSpec)
         switch?.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
         placedFor = -1
@@ -214,7 +225,8 @@ internal class EntityRowView(
     /**
      * LinearLayout's horizontal pass for these children: the end measured first, as wide as it wants up to the row
      * inside its padding, then the name given what's left (never less than nothing), placed from the start edge in
-     * order (icon, name, end), or from the left in reverse for a right-to-left row. Each child centered vertically.
+     * order (icon, name, end); for a right-to-left row in reverse, against the right edge (START is the right there),
+     * so an end too wide for the row pushes the icon past the left edge, not the right. Each child centered vertically.
      */
     private fun place(w: Int) {
         if (placedFor == w) return
@@ -239,8 +251,9 @@ internal class EntityRowView(
             nameLeft = iconLeft + iconSize + iconMarginEnd
             endLeft = nameLeft + nameWidth + nameMarginEnd
         } else {
-            // In reverse from the left: the end, the name (its end margin on its left), then the icon.
-            endLeft = paddingLeft
+            // In reverse: the end, the name (its end margin on its left), then the icon, the whole run ending at the
+            // right padding (LinearLayout's `childLeft = paddingLeft + width - totalLength` for START in RTL).
+            endLeft = paddingLeft + w - (used + nameWidth)
             nameLeft = endLeft + endWidth + nameMarginEnd
             iconLeft = nameLeft + nameWidth + iconMarginEnd
         }

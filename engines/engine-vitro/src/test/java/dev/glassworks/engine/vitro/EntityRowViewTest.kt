@@ -6,6 +6,7 @@ package dev.glassworks.engine.vitro
 
 import android.app.Activity
 import android.app.Application
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
@@ -53,6 +54,7 @@ class EntityRowViewTest {
 
     @After fun reset() {
         EntityRowView.enabled = true
+        activity.applicationInfo.flags = activity.applicationInfo.flags and ApplicationInfo.FLAG_SUPPORTS_RTL.inv()
     }
 
     private fun ctx() = VitroCardContext(
@@ -76,12 +78,18 @@ class EntityRowViewTest {
 
     /** [json]'s card on screen in a column [widthPx] wide ([rtl]: a right-to-left page), and its pixels. */
     private fun render(json: String, widthPx: Int = 464, rtl: Boolean = false): Pair<EntitiesCardView, IntArray> {
+        // A view resolves right-to-left only in an app that says it supports it (the test app doesn't by itself).
+        if (rtl) activity.applicationInfo.flags = activity.applicationInfo.flags or ApplicationInfo.FLAG_SUPPORTS_RTL
         val root = FrameLayout(activity)
         if (rtl) root.layoutDirection = View.LAYOUT_DIRECTION_RTL
         activity.setContentView(root)
         val card = EntitiesCardView(ctx(), LovelaceParser.parseCard(JSONObject(json)))
         root.addView(card, FrameLayout.LayoutParams(widthPx, ViewGroup.LayoutParams.WRAP_CONTENT))
         repeat(3) { idle() }
+        val rows = all(card).filter { it is EntityRowView || it.javaClass.simpleName == "EntityRowLayout" }
+        assertTrue("the card has rows", rows.isNotEmpty())
+        val want = if (rtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR
+        assertTrue("every row is laid out ${if (rtl) "right to left" else "left to right"}", rows.all { it.layoutDirection == want })
         return card to pixels(card)
     }
 
@@ -255,6 +263,48 @@ class EntityRowViewTest {
         val now = pixels(card)
         val (_, fresh) = render("""{"type": "entities", "entities": ["light.desk", "sensor.temp"]}""")
         assertTrue("updated in place = built fresh", now.contentEquals(fresh))
+    }
+
+    /** A host that counts the layouts asked of it: one from a row's update means the update left the row. */
+    private class Root(context: android.content.Context) : FrameLayout(context) {
+        var requests = 0
+        override fun requestLayout() {
+            requests++
+            super.requestLayout()
+        }
+    }
+
+    @Test
+    fun aRowHeldShorterThanItsTextUpdatesOnItsOwn() {
+        put("sensor.power", "5", "friendly_name" to "Desk power", "unit_of_measurement" to "W")
+        val root = Root(activity)
+        activity.setContentView(root)
+        // A card held 100 px tall: its one row gets less than its 40 dp (60 px here) and is laid out that short.
+        val card = EntitiesCardView(ctx(), LovelaceParser.parseCard(JSONObject("""{"type": "entities", "entities": ["sensor.power"]}""")))
+        root.addView(card, FrameLayout.LayoutParams(464, 100))
+        repeat(3) { idle() }
+        val row = all(card).filterIsInstance<EntityRowView>().single()
+        val held = row.height
+        assertTrue("the row is held shorter than its 60 px ($held)", held in 1 until (40 * activity.resources.displayMetrics.density).toInt())
+        root.requests = 0
+        for ((v, shown) in listOf("12345" to "12,345 W", "7" to "7 W")) {
+            put("sensor.power", v, "friendly_name" to "Desk power", "unit_of_measurement" to "W")
+            idle()
+            assertEquals(shown, row.stateText.toString())
+            assertEquals("no layout asked above the row for $v", 0, root.requests)
+            assertFalse(root.isLayoutRequested)
+            assertEquals(held, row.height)
+        }
+    }
+
+    @Test
+    fun aRightToLeftRowWithAnOverflowingStateKeepsItsIconOnTheRight() {
+        put("sensor.long_state", "a state long enough to push the name all the way out of the row", "friendly_name" to "Squeezed")
+        val (card, _) = render("""{"type": "entities", "entities": ["sensor.long_state"]}""", rtl = true)
+        val row = all(card).filterIsInstance<EntityRowView>().single()
+        val icon = row.iconBounds()
+        val pad = (16 * activity.resources.displayMetrics.density).toInt()
+        assertEquals("the icon 8 dp in from the right padding", row.width - pad - (8 * activity.resources.displayMetrics.density).toInt(), icon.right)
     }
 
     @Test
