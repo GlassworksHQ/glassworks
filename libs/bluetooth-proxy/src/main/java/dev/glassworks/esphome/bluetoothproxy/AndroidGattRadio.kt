@@ -44,6 +44,9 @@ class RecentDevices {
  * A descriptor's id is hidden from apps, so its handle comes from the ATT layout: a characteristic's
  * descriptors are the attributes right after its value handle, in order.
  *
+ * Android 6 (the Mirror) has no handles to give: an instance id there only tells attributes with the
+ * same UUID apart, so it is 0 for nearly all of them. [GattTable] numbers the attributes itself then.
+ *
  * It never pairs. A device that asks for encryption may still make Android start pairing by itself.
  */
 class AndroidGattRadio(context: Context, private val recent: RecentDevices) : GattRadio {
@@ -68,19 +71,36 @@ class AndroidGattRadio(context: Context, private val recent: RecentDevices) : Ga
     }
 }
 
-/** The handles a link's services were given, both ways. */
-internal class GattTable(services: List<BluetoothGattService>) {
+/**
+ * The handles a link's services were given, both ways.
+ *
+ * [numbered]: Android gives no handles (below Android 7, where every instance id would collide and
+ * Home Assistant would see one service with one characteristic). The table then numbers the attributes
+ * from 1 in the order the ATT table lays them out: a service, then for each characteristic its
+ * declaration, its value (the characteristic's handle) and its descriptors. The numbers aren't the
+ * device's real handles, but each is unique and stable for the link, which is all a client needs.
+ */
+internal class GattTable(
+    services: List<BluetoothGattService>,
+    numbered: Boolean = !Compat.gattInstanceIdsAreHandles,
+) {
     val characteristics = HashMap<Int, BluetoothGattCharacteristic>()
+    val characteristicHandles = IdentityHashMap<BluetoothGattCharacteristic, Int>()
     val descriptors = HashMap<Int, BluetoothGattDescriptor>()
     val descriptorHandles = IdentityHashMap<BluetoothGattDescriptor, Int>()
+    private var next = 1
     val services: List<GattService> = services.map { s ->
-        GattService(s.uuid, s.instanceId, s.characteristics.map { c ->
-            characteristics[c.instanceId] = c
-            GattCharacteristic(c.uuid, c.instanceId, c.properties, c.descriptors.mapIndexed { i, d ->
-                val handle = c.instanceId + 1 + i
-                descriptors[handle] = d
-                descriptorHandles[d] = handle
-                GattDescriptor(d.uuid, handle)
+        val serviceHandle = if (numbered) next++ else s.instanceId
+        GattService(s.uuid, serviceHandle, s.characteristics.map { c ->
+            if (numbered) next++ // the characteristic's declaration
+            val handle = if (numbered) next++ else c.instanceId
+            characteristics[handle] = c
+            characteristicHandles[c] = handle
+            GattCharacteristic(c.uuid, handle, c.properties, c.descriptors.mapIndexed { i, d ->
+                val descriptorHandle = if (numbered) next++ else handle + 1 + i
+                descriptors[descriptorHandle] = d
+                descriptorHandles[d] = descriptorHandle
+                GattDescriptor(d.uuid, descriptorHandle)
             })
         })
     }
@@ -91,7 +111,7 @@ internal class GattTable(services: List<BluetoothGattService>) {
 @Suppress("DEPRECATION") // the pre-Android 13 calls; still there on 13+, and the only ones below it
 internal class AndroidGattLink(private val listener: GattLink.Listener) : GattLink {
     @Volatile var gatt: BluetoothGatt? = null
-    @Volatile private var table = GattTable(emptyList())
+    @Volatile internal var table = GattTable(emptyList()) // internal: a test gives it a table without a discovery
 
     val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) =
@@ -104,13 +124,17 @@ internal class AndroidGattLink(private val listener: GattLink.Listener) : GattLi
             listener.onServicesDiscovered(status)
         }
 
-        override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) =
-            listener.onRead(c.instanceId, c.value ?: ByteArray(0), status)
+        override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
+            listener.onRead(table.characteristicHandles[c] ?: return, c.value ?: ByteArray(0), status)
+        }
 
-        override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) = listener.onWritten(c.instanceId, status)
+        override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
+            listener.onWritten(table.characteristicHandles[c] ?: return, status)
+        }
 
-        override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) =
-            listener.onNotification(c.instanceId, c.value ?: ByteArray(0))
+        override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
+            listener.onNotification(table.characteristicHandles[c] ?: return, c.value ?: ByteArray(0))
+        }
 
         override fun onDescriptorRead(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
             listener.onDescriptorRead(table.descriptorHandles[d] ?: return, d.value ?: ByteArray(0), status)

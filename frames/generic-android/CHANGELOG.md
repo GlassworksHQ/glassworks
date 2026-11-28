@@ -14,12 +14,20 @@ line of each version is what Home Assistant shows on the update card. A change o
 ### Added
 - **Pick your Home Assistant dashboard anywhere.** Glassworks now fetches your Lovelace dashboards directly from Home Assistant as soon as the panel signs in. Choose which dashboard the panel shows right after signing in in Kiln or on the `/setup` page, anytime in **Home Assistant & dashboard** on the panel or the Manage page (reloading in place without restarting), or from the **Dashboard** select entity in Home Assistant, which is now enabled by default.
 
+## [0.9.2] - 2026-11-28
+
+**Bluetooth devices Home Assistant connects to now work through the Mirror, with steadier sign-in, simpler addresses and softer chimes.**
+
 ### Changed
 - **Softer voice chimes.** The wake word and finished timers now play a soft, rounded chime that swells in and
   rings out, instead of electronic beeps. The timer chime is the wake chime followed by a higher one, so it still
   stands out as an alert.
 
 ### Fixed
+- **Listen and connect works on Android 6, the Mirror included.** In *Listen and connect*, Home Assistant could
+  connect to a Bluetooth device through the panel but then saw only one of its services, so a lock, a heart-rate
+  strap or anything else it has to connect to never worked. It now sees every service the device has. Legacy
+  build only.
 - **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
   saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing
   the panel to refuse dashboard authentication tokens, dashboard lists, theme updates, and permissions. Default ports
