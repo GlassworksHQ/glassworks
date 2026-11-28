@@ -11,6 +11,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-27
+
+**One volume for everything the panel plays, and a round of fixes for the lululemon Mirror: a real camera picture, Wi-Fi that stays on, and a screen that wakes without lines.**
+
 ### Added
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
@@ -77,7 +81,7 @@ line of each version is what Home Assistant shows on the update card. A change o
   details over Bluetooth, the Mirror joined the network, but the phone or Home Assistant kept saying it was
   connecting because the Mirror dropped the Bluetooth connection before it could report back. It now stays
   connected and reports the join, so the setup finishes. In the legacy build.
-- **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back (physical `screen_brightness=0` verified on stock firmware; live check of the app's window-brightness override pending before release). In the legacy build.
+- **The Mirror's screen wakes without lines across it.** When the Mirror went idle or Home Assistant turned its screen off, it used to come back with lines across the picture until it was unplugged. Now it avoids Android's display-off path and sleeps the way lululemon's own software did — dropping the backlight to zero under a black screen so waking brings the picture straight back. In the legacy build.
 - **A Wi-Fi network you give Glassworks stays saved after a restart on Android 6 and 7.** The legacy build joined
   the network from Kiln or your phone, but Android forgot it at the next restart, so a lululemon Mirror on its stock
   system asked you to send Wi-Fi from a phone every time it started. It now keeps the network, as Android 8 and newer
