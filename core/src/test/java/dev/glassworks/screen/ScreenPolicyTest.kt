@@ -717,12 +717,18 @@ class ScreenPolicyTest {
     @Test fun onlyLoopbackOrLocalNetworkHttpIsATestDashboard() {
         // Loopback (adb reverse), or a local network address (Clarity's --ha-transport lan, where adb reverse fails).
         for (ok in listOf("http://127.0.0.1:8089/clarity-ref/start", "http://localhost:8089/", "https://127.0.0.1:8443/x", "http://[::1]:8089/",
-                          "http://10.0.0.41:8089/clarity-ref/start", "http://[fd00::41]:8089/", "http://169.254.0.41:8089/")) {
+                          "http://10.0.0.41:8089/clarity-ref/start", "http://[fd00::41]:8089/", "http://169.254.0.41:8089/",
+                          "http://[::ffff:10.0.0.41]:8089/", "http://10.0.0.0:8089/", "http://172.16.0.1:8089/")) {
             assertTrue(ok, TestHoldFile.isTestDashboard(ok))
         }
         // 192.0.2.0/24 and 203.0.113.0/24 are documentation ranges, not private: like any public address, refused. So is
-        // any name, which would be resolved.
+        // any name, which would be resolved. A leading zero is octal to Gecko (010.0.0.1 loads 8.0.0.1, 0172.16.0.1
+        // 122.16.0.1) though Java reads it as decimal, so it is refused; so are "any", IPv4-compatible and mapped public.
         for (no in listOf("http://192.0.2.10:8123/", "http://203.0.113.5:8089/", "http://[2001:db8::1]:8089/",
+                          "http://010.0.0.1:8089/", "http://0172.16.0.1:8089/", "http://10.0.0.01:8089/", "http://0.0.0.0:8089/",
+                          "http://[::]:8089/", "http://[::ffff:8.8.8.8]:8089/", "http://[::10.0.0.1]:8089/",
+                          "http://[::ffff:010.0.0.1]:8089/", "http://167772161:8089/", "http://0x0a.0.0.1:8089/", "http://10.1:8089/",
+                          "http://10.0.0.256:8089/",
                           "http://homeassistant.local:8123", "http://10.0.0.41.example/", "file:///sdcard/x.html", "http://127.0.0.1.example/",
                           "ftp://10.0.0.41/", "javascript:alert(1)", "", "http://127.0.0.1:8089/a b")) {
             assertFalse(no, TestHoldFile.isTestDashboard(no))

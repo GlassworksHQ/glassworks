@@ -2584,6 +2584,24 @@ class TestNetwork(unittest.TestCase):
         self.assertIsNone(rep["test_network"]["limited"])
         self.assertEqual(rep["grade"].get("provisional_reasons"), before.get("provisional_reasons"))
 
+    def test_the_fake_over_the_lan_without_a_network_check_is_provisional(self):
+        """netcheck.py failed (the run goes on without it): over the LAN the fake's traffic crossed a network nothing
+        checked, so the grade can't stand as measured, and report.md doesn't claim a check it doesn't have."""
+        self.write("ha_transport.json", {"transport": "lan", "chosen_by": "flag", "reason": "set with --ha-transport lan"})
+        self.write("transport.json", {"transport": "lan-turn", "chosen_by": "auto", "reason": "r", "checks": {}})
+        rep = R.build(self.dir)
+        n = rep["test_network"]
+        self.assertEqual((n["measured"], n["ha_over_lan"], n["carried"][0]), (False, True, "live updates"))
+        self.assertTrue(rep["grade"]["provisional"])
+        self.assertIn("the network check didn't run", rep["grade"]["provisional_reasons"][-1])
+        md = R.markdown(rep)
+        self.assertIn("the network check didn't run, so the grade is provisional.", md)
+        self.assertNotIn("the network check below counts them", md)
+        self.assertIn("The test computer's network wasn't checked (netcheck.py failed)", md)
+        # Through adb reverse, a missing check is as before: nothing.
+        os.remove(os.path.join(self.dir, "ha_transport.json"))
+        self.assertIsNone(R.build(self.dir)["test_network"])
+
     def test_without_the_lan_the_summary_says_nothing_of_it(self):
         self.assertNotIn("ha_transport", self.rep)
         self.assertNotIn("ha_transport", S.measurements(self.rep))

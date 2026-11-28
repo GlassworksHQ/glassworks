@@ -17,7 +17,6 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import android.net.Uri
 import android.widget.Toast
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
@@ -1268,11 +1267,9 @@ open class MainActivity : Activity() {
     // ---- what the page reports (dev.glassworks.engine)
 
     private val pageHost = object : PageHost {
-        // Home Assistant and the secure-context hosts, and a test's own dashboard while it has one (#847).
-        override fun trusts(url: String): Boolean = TrustedPages.trusts(
-            url, HaAuth.signedInBase,
-            prefs.secureHosts() + listOfNotNull(glassworks.screen.testDashboard?.let { Uri.parse(it).host }),
-        )
+        // Home Assistant and the secure-context hosts, and a test's own dashboard's origin while it has one (#847).
+        override fun trusts(url: String): Boolean =
+            TrustedPages.trusts(url, HaAuth.signedInBase, prefs.secureHosts(), glassworks.screen.testDashboard)
 
         override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) {
             val missing = permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }

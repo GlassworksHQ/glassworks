@@ -621,3 +621,36 @@ def content_gone_why(gone):
     if gone.get("low_memory"):
         return "the panel ran out of memory and its browser page was closed (low-memory killer)"
     return "Android closed the panel's browser page"
+
+
+# The kiosk's rule for a test dashboard's address (TestHoldFile.isTestDashboard, HaSignIn.isLocalAddress): an IP
+# literal, its dotted parts without leading zeros (Gecko reads `010` as octal), on loopback or the local network.
+_OCTET = r"(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
+_IPV4 = re.compile(rf"{_OCTET}(\.{_OCTET}){{3}}")
+_IPV6 = re.compile(r"[0-9a-fA-F:.]+")
+
+
+def local_address(host):
+    """Whether `host` (an address literal, IPv6 with or without brackets) is one the kiosk takes a test dashboard on:
+    loopback, private (10/8, 172.16/12, 192.168/16), link-local (169.254/16, fe80::/10), site-local (fec0::/10) or
+    unique local (fc00::/7), as Java's InetAddress reads it (`::ffff:` IPv4-mapped is the IPv4 address). Not a name,
+    not a public or documentation address (192.0.2.x), not "any". run.sh --ha-transport lan checks this computer's
+    LAN address with it; the fake panel (test/fake_adb.py) answers by it."""
+    import ipaddress
+    h = (host or "").strip()
+    if h.startswith("[") and h.endswith("]"):
+        h = h[1:-1]
+    if ":" in h:
+        if not _IPV6.fullmatch(h) or ("." in h and not _IPV4.fullmatch(h.rsplit(":", 1)[1])):
+            return False
+    elif not _IPV4.fullmatch(h):
+        return False
+    try:
+        a = ipaddress.ip_address(h)
+    except ValueError:
+        return False
+    if a.version == 6 and a.ipv4_mapped:
+        a = a.ipv4_mapped
+    nets = (("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16") if a.version == 4
+            else ("::1/128", "fe80::/10", "fec0::/10", "fc00::/7"))
+    return any(a in ipaddress.ip_network(n) for n in nets)

@@ -954,10 +954,12 @@ def main():
         ap.error("--bind takes one address, never every address")
     srv = serve(a.port, a.log, not a.no_harness, a.turn_port, a.webrtc_transport, bind=a.bind)
     w = Handler.hub.webrtc
+    # The run's directory keeps this log: a LAN address isn't written in it (run.sh --ha-transport lan).
+    where = f"http://{a.bind}:{a.port}" if a.bind.startswith("127.") else f"this computer's LAN address, port {a.port}"
     turn = (f"WebRTC over {w.transport}, relay on {w.addr if w.transport == 'lan-turn' else '127.0.0.1'}:{Handler.hub.turn_port}, "
             f"media on {w.addr}" if w
             else "no WebRTC (aiortc isn't here: tools/perf/webrtc-requirements.txt)")
-    print(f"fake Home Assistant {HA_VERSION}, frontend {hafrontend.VERSION}, on http://{a.bind}:{a.port}; {turn}", flush=True)
+    print(f"fake Home Assistant {HA_VERSION}, frontend {hafrontend.VERSION}, on {where}; {turn}", flush=True)
     srv.serve_forever()
 
 

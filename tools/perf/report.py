@@ -1853,10 +1853,21 @@ def test_network(run_dir, ref, transport):
     network (the fake's stream goes through `adb reverse`) or the fake itself went over the LAN (ha_over_lan, run.sh
     --ha-transport lan), the cameras when their video went over the LAN.
     `limited` (a reason for "provisional") when its own link wasn't quiet and carried some. None without the file
-    (runs before #649) or without the reference part."""
+    (runs before #649) or without the reference part; but with the fake over the LAN (ha_transport.json) and no file
+    (netcheck.py failed), `measured` false and `limited`: the fake's traffic crossed a network nothing checked."""
     path = os.path.join(run_dir, "netcheck.json")
-    if not ref or not os.path.exists(path):
+    if not ref:
         return None
+    if not os.path.exists(path):
+        if (ha_transport(run_dir) or {}).get("transport") != "lan":
+            return None
+        cams = any((t or {}).get("camera_runs") for t in (ref.get("tiers") or {}).values())
+        carried = ["live updates"] + (["camera video"] if cams and (transport or {}).get("transport") in ("lan-udp", "lan-turn") else [])
+        return {"gateway": None, "panel": None, "link": None, "adb_over_network": None, "quiet": None, "tail_ms": None,
+                "ha_over_lan": True, "measured": False, "carried": carried,
+                "limited": f"the test computer's network: the network check didn't run (netcheck.py failed), and it "
+                           f"carried the {' and the '.join(carried)} (the fake Home Assistant over the LAN); measure again "
+                           "with the check"}
     with open(path) as f:
         n = json.load(f)
     out = {k: n.get(k) for k in ("gateway", "panel", "link", "adb_over_network", "quiet", "tail_ms")}
@@ -1890,9 +1901,12 @@ def ha_transport_line(rep):
     if not t or t.get("transport") != "lan":
         return []
     how = "with --ha-transport auto" if t.get("chosen_by") == "auto" else "with --ha-transport lan"
+    n = rep.get("test_network")
+    check = ("the network check below counts them." if n and n.get("measured", True)
+             else "the network check didn't run, so the grade is provisional.")
     return [f"**Home Assistant over the LAN:** the fake Home Assistant reached the panel over this computer's network, "
             f"not through adb reverse ({how}: {t.get('reason')}). Its pages and live updates crossed that network, as a "
-            "real Home Assistant's do; the network check below counts them."]
+            f"real Home Assistant's do; {check}"]
 
 
 def network_line(rep):
@@ -1900,6 +1914,9 @@ def network_line(rep):
     n = rep.get("test_network")
     if not n:
         return []
+    if n.get("measured") is False:
+        return [f"The test computer's network wasn't checked (netcheck.py failed), though it carried the "
+                f"{' and the '.join(n['carried'])}. **Limited by the test:** {n['limited']}."]
     fmt = lambda s: f"p95 {s['p95_ms']} ms, max {s['max_ms']} ms" if s else "no answer"  # noqa: E731
     line = (f"The test computer's network ({n['link'] or 'link unknown'}): to its gateway {fmt(n['gateway'])}; "
             f"to the panel {fmt(n['panel'])}. It carried "

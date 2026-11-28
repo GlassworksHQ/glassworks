@@ -59,16 +59,28 @@ internal class TestHoldFile(private val file: File) {
             return host in setOf("127.0.0.1", "localhost", "[::1]") || localAddress(host)
         }
 
-        /** [host] (a URI's: IPv6 in brackets) is an IP address literal on the local network. Never resolves a name. */
+        /**
+         * [host] (a URI's: IPv6 in brackets) is an IP address literal on the local network. Never resolves a name.
+         * Dotted parts take no leading zero: Java reads `010.0.0.1` as decimal (10.0.0.1, private), but Gecko parses a
+         * URL's host by the WHATWG rules, as octal (8.0.0.1, public), so such a literal is refused rather than read.
+         */
         private fun localAddress(host: String): Boolean {
-            val ipv4 = IPV4.matches(host)
-            val ipv6 = host.startsWith("[") && host.endsWith("]") && IPV6.matches(host.substring(1, host.length - 1))
-            if (!ipv4 && !ipv6) return false
-            val a = runCatching { InetAddress.getByName(host.trim('[', ']')) }.getOrNull() ?: return false
+            val literal = when {
+                IPV4.matches(host) -> host
+                host.startsWith("[") && host.endsWith("]") -> host.substring(1, host.length - 1).takeIf(::ipv6Literal)
+                else -> null
+            } ?: return false
+            val a = runCatching { InetAddress.getByName(literal) }.getOrNull() ?: return false
             return HaSignIn.isLocalAddress(a)
         }
 
-        private val IPV4 = Regex("""(\d{1,3}\.){3}\d{1,3}""")
+        /** An IPv6 literal, its embedded IPv4 part (`::ffff:10.0.0.1`), if any, under [IPV4]'s rule too. */
+        private fun ipv6Literal(s: String): Boolean =
+            IPV6.matches(s) && ('.' !in s || IPV4.matches(s.substringAfterLast(':')))
+
+        /** One part of a dotted IPv4 address, 0 to 255, with no leading zero. */
+        private const val OCTET = """(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"""
+        private val IPV4 = Regex("""$OCTET(\.$OCTET){3}""")
         private val IPV6 = Regex("""[0-9a-fA-F:.]+""")
     }
 }

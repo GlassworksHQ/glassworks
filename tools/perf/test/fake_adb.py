@@ -30,6 +30,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import clock as C  # noqa: E402
+import perflib as P  # noqa: E402
 
 STATE = os.environ["FAKE_ADB_STATE"]
 PKG = "sh.edm.s1kiosk"
@@ -183,21 +184,15 @@ def test_dashboard(value):
 
 def test_dashboard_ok(url):
     """As the kiosk's TestHoldFile.isTestDashboard: http(s) on loopback, or on an IP address of the local network (a
-    test whose adb reverse doesn't work, run.sh --ha-transport lan). Python's is_private takes the test's own
-    addresses too (TEST-NET, loopback), which a real panel never sees. FAKE_TEST_DASH_LOOPBACK_ONLY: loopback only."""
-    import ipaddress
+    test whose adb reverse doesn't work, run.sh --ha-transport lan), by the kiosk's own rule (perflib.local_address).
+    FAKE_TEST_DASH_LOOPBACK_ONLY: loopback only, as before."""
     import urllib.parse
     u = urllib.parse.urlsplit(url)
     if u.scheme not in ("http", "https") or " " in url:
         return False
     if u.hostname in ("127.0.0.1", "localhost", "::1"):
         return True
-    if os.environ.get("FAKE_TEST_DASH_LOOPBACK_ONLY"):
-        return False
-    try:
-        return ipaddress.ip_address(u.hostname or "").is_private
-    except ValueError:
-        return False
+    return not os.environ.get("FAKE_TEST_DASH_LOOPBACK_ONLY") and P.local_address(u.hostname or "")
 
 
 def shell(cmd):

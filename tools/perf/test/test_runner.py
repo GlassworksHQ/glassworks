@@ -1925,7 +1925,8 @@ class SignInStays(unittest.TestCase):
 def lan_address():
     """An address of this computer for the fake Home Assistant over the LAN that isn't 127.0.0.1, so a URL left on
     loopback shows: 127.0.0.2 where loopback takes it (Linux), else this computer's own LAN address (macOS), found
-    at run time and never written down. None when neither works here."""
+    at run time and never written down, if the kiosk would take it (perflib.local_address: not a VPN's or a public
+    one). None when neither works here."""
     for addr in ("127.0.0.2", None):
         try:
             if addr is None:
@@ -1933,7 +1934,8 @@ def lan_address():
                 addr = webrtc.media_address()
             with socket.socket() as s:
                 s.bind((addr, 0))
-            return addr
+            if P.local_address(addr):
+                return addr
         except Exception:      # noqa: BLE001 (no such address here, no route, no ifaddr)
             continue
     return None
@@ -1949,8 +1951,9 @@ class HaOverLan(unittest.TestCase):
         if not self.lan:
             self.skipTest("no address here for the fake over the LAN")
         tmp = tempfile.mkdtemp()
-        env, state = fake_env(tmp, FAKE_HA_URL=f"http://{self.lan}:{port(n)}", GW_PERF_WEBRTC_ADDR=self.lan,
-                              GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0", GW_PERF_BETWEEN_QUIET="0.3", **env_extra)
+        env, state = fake_env(tmp, **dict(dict(FAKE_HA_URL=f"http://{self.lan}:{port(n)}", GW_PERF_WEBRTC_ADDR=self.lan,
+                                               GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0", GW_PERF_BETWEEN_QUIET="0.3"),
+                                          **env_extra))
         out = os.path.join(tmp, "out")
         p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", out, "--port", port(n), "--taps", "2",
                             "--quick", *extra], env=env, capture_output=True, text=True, timeout=300)
@@ -1982,7 +1985,9 @@ class HaOverLan(unittest.TestCase):
         with open(os.path.join(out, "report.md")) as f:
             self.assertIn("**Home Assistant over the LAN:**", f.read())
         with open(os.path.join(out, "server.log")) as f:
-            self.assertIn(f"on http://{self.lan}:{port(n)}", f.read())                # bound there, not every address
+            # Bound there, not every address; a LAN address isn't written in the run's directory (loopback is).
+            self.assertIn(f"on http://{self.lan}:{port(n)}" if self.lan.startswith("127.")
+                          else f"on this computer's LAN address, port {port(n)}", f.read())
         self.assertEqual(rep["grade"]["grade"], "A+")
         self.assertFalse(rep["grade"]["provisional"], rep["grade"].get("provisional_reasons"))
 
@@ -2020,6 +2025,17 @@ class HaOverLan(unittest.TestCase):
         self.assertEqual(urls, {f"http://127.0.0.1:{port(91)}"})
         self.assertEqual(rep["ha_transport"], {"transport": "adb", "chosen_by": "auto", "reason": "adb reverse works on this device"})
         self.assertNotIn("ha_over_lan", rep["test_network"])
+
+    def test_a_lan_address_the_kiosk_wouldnt_take_stops_the_run_first(self):
+        """A VPN's or a public address on this computer's default route: the kiosk refuses a test dashboard there, so
+        the run stops before the fake starts, saying it's the address (not the app). 192.0.2.10 is TEST-NET-1."""
+        p, out, commands, _ = self.run_sh(77, "--ha-transport", "lan", "--skip-synthetic", "--skip-real-use",
+                                          GW_PERF_WEBRTC_ADDR="192.0.2.10")
+        self.assertEqual(p.returncode, 2, p.stderr[-2000:])
+        self.assertIn("isn't on a private network", p.stderr)
+        self.assertNotIn("192.0.2.10", p.stderr)
+        self.assertFalse(os.path.exists(os.path.join(out, "server.log")))
+        self.assertEqual([c for c in commands if "test_dashboard 'http" in c], [])
 
     def test_an_app_that_takes_loopback_only_is_refused_with_why(self):
         p, out, commands, _ = self.run_sh(93, "--ha-over-lan", "--skip-synthetic", "--skip-real-use",

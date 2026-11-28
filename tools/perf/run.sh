@@ -385,6 +385,13 @@ if [ "$SYNTH" = 1 ] || [ "$REF" = 1 ] || [ -n "$PANE_RAM" ]; then
     # it alone, for this run only.
     HA_HOST=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import webrtc; print(webrtc.media_address())' "$HERE") \
       || { echo "--ha-transport lan needs an IPv4 address on this computer that the panel can reach (GW_PERF_WEBRTC_ADDR sets one)" >&2; exit 2; }
+    # The kiosk takes a test dashboard only on a local network address (TestHoldFile.isTestDashboard): checked here by
+    # the same rule, so a VPN or public address on the default route stops the run now, saying so.
+    python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import perflib; sys.exit(0 if perflib.local_address(sys.argv[2]) else 1)' \
+      "$HERE" "$HA_HOST" || {
+      echo "this computer's LAN address (its default route's) isn't on a private network, a VPN's or a public one perhaps, and the panel takes a test dashboard only on a local network address: set GW_PERF_WEBRTC_ADDR to this computer's address on the panel's network" >&2
+      exit 2
+    }
     [ "$WEBRTC_TRANSPORT" = adb ] && { echo "--webrtc-transport adb needs adb reverse, which the fake over the LAN doesn't use" >&2; exit 2; }
     # Recorded for the report, without the address: the fake's traffic crossed this computer's network.
     python3 -c 'import json,sys; json.dump({"transport": "lan", "chosen_by": sys.argv[1], "reason": sys.argv[2]}, open(sys.argv[3], "w"), indent=1)' \
