@@ -44,24 +44,23 @@ describe('the picker', () => {
 
   it('shows the frames, and Continue goes to the picked one\'s start', () => {
     render(<Picker />);
-    // stable: no stage in its name and no pill; the beta frames say Beta and can be picked
+    // stable: no stage in its name and no pill, and every frame can be picked
     expect(screen.getByRole('radio', { name: 'Aqara S1 Plus' })).toHaveProperty('dataset.state', 'checked');
-    expect(screen.getByRole('radio', { name: 'lululemon Studio Mirror, Beta' })).toHaveProperty('disabled', false);
-    expect(screen.getByRole('radio', { name: 'Generic Android, Beta' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('radio', { name: 'lululemon Studio Mirror' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('radio', { name: 'Generic Android' })).toHaveProperty('disabled', false);
     // a tested device installs through its base: Ready to install, and Continue goes to generic Android's route
-    expect(screen.getByRole('radio', { name: 'Google Pixel Tablet, Beta' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('radio', { name: 'Google Pixel Tablet' })).toHaveProperty('disabled', false);
     const pills = (name: string) => screen.getByRole('radio', { name }).textContent ?? '';
-    expect(pills('Aqara S1 Plus')).not.toMatch(/Stable|Beta/);
-    expect(pills('lululemon Studio Mirror, Beta')).toContain('Beta');
+    for (const name of ['Aqara S1 Plus', 'lululemon Studio Mirror', 'Generic Android']) expect(pills(name), name).not.toMatch(/Stable|Beta/);
     expect(screen.queryByText(/still working/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(router.push).toHaveBeenCalledWith('/aqara-s1-plus');
-    // a beta frame is picked and continued like any other: its route, opened to everyone
-    fireEvent.click(screen.getByRole('radio', { name: 'lululemon Studio Mirror, Beta' }));
+    // another frame is picked and continued like the first: its route, opened to everyone
+    fireEvent.click(screen.getByRole('radio', { name: 'lululemon Studio Mirror' }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(router.push).toHaveBeenLastCalledWith('/lululemon-mirror');
     // a tested device goes to its base's pages, and says what its base needs
-    fireEvent.click(screen.getByRole('radio', { name: 'Google Pixel Tablet, Beta' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Google Pixel Tablet' }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(router.push).toHaveBeenLastCalledWith('/android');
     expect(screen.getByText('Already installed on Google Pixel Tablet?')).toBeTruthy();
@@ -76,7 +75,7 @@ describe('the picker', () => {
 
   it('a tested device says who tested it and on what, to screen readers too (#700)', () => {
     render(<Picker />);
-    const tab = screen.getByRole('radio', { name: 'Samsung Galaxy Tab A 10.1 (2016), Beta' });
+    const tab = screen.getByRole('radio', { name: 'Samsung Galaxy Tab A 10.1 (2016)' });
     expect(tab).toHaveProperty('disabled', false);
     const described = (tab.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
     expect(described).toContain('Tested by the community on LineageOS');

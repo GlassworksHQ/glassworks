@@ -314,8 +314,9 @@ describe('Glass Panes', () => {
   it.each(['image-link', 'image-download', 'image-confirm'] as const)('%s offers Install Glassworks instead, which drops what was downloaded', async (d) => {
     const flash = await show(d);
     fireEvent.click(screen.getByRole('button', { name: 'Install Glassworks instead' }));
-    expect(flash.state).toMatchObject({ screen: 'image', picked: 'glassworks' });
-    expect(flash.state.files.map((x) => [x.name, x.state])).toEqual([['system.img', 'waiting']]);
+    // the Glassworks install the choice starts on (the recommended one, on the stock software), not the frame's first
+    expect(flash.state).toMatchObject({ screen: 'image', picked: 'glassworks-in-place' });
+    expect(flash.state.files).toEqual([]);
   });
 
   it('Done says what is next in its own project, and the way back to Glassworks', async () => {

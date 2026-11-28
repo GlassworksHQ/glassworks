@@ -6,6 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import { paneById } from '@glassworks/frame-card';
 import { fmtSize } from '@glassworks/kiln-core';
+import { hostOs } from './explain';
 import Link from 'next/link';
 import { BuiltOn, stepCredits } from '../components/Credit';
 import { SilentUpdates } from '../components/SilentUpdates';
@@ -28,17 +29,13 @@ type P = { s: WizardState; session: Session; frame: KilnFrame };
 /** The standard flow's screens (every frame's steps after its install): any frame's session, the frame as the flow reads it. */
 type SP = { s: WizardState; session: StandardSession; frame: StandardFrame };
 
-function os(): 'win' | 'linux' | 'other' {
-  const ua = navigator.userAgent;
-  return /Android/.test(ua) ? 'other' : /Windows/.test(ua) ? 'win' : /Linux/.test(ua) ? 'linux' : 'other';
-}
 
 /**
  * 2 · Connect: the drawing, and beside it the frame's numbered steps to tick off (its `recoverySteps`), so both fit the
  * first screen. The picker opens inside the click.
  */
 export function Connect({ s, session, frame }: P) {
-  const driver = useMemo(() => { const o = os(); return o === 'other' ? undefined : frame.drivers[o]; }, [frame]);
+  const driver = useMemo(() => { const o = hostOs(); return o === 'other' ? undefined : frame.drivers[o]; }, [frame]);
   const steps = frame.recoverySteps;
   return (
     <section className="card" aria-labelledby="h">

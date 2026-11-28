@@ -142,17 +142,17 @@ describe('the real frames', () => {
   it('rate every pane, explicitly or worked out', () => {
     for (const id of ['aqara-s1-plus', 'lululemon-mirror', 'generic-android']) expect(Object.keys(support(id)).sort(), id).toEqual([...PANE_IDS].sort());
     expect(support('aqara-s1-plus')).toMatchObject({
-      assist: ['stable', false], diagnostics: ['stable', true], radio: ['beta', false], sendspin: ['stable', false],
-      timers: ['stable', false], 'time-zone': ['stable', true], 'wall-base': ['alpha', false], 'bluetooth-proxy': ['beta', true],
+      assist: ['stable', false], diagnostics: ['stable', true], radio: ['stable', false], sendspin: ['stable', false],
+      timers: ['stable', false], 'time-zone': ['stable', true], 'wall-base': ['alpha', false], 'bluetooth-proxy': ['stable', true],
       camera: ['no', true],
     });
     // the legacy build ships every pane the Mirror has the hardware for, so frame.json rates them (not "planned")
     expect(support('lululemon-mirror')).toMatchObject({
-      assist: ['alpha', false], timers: ['alpha', false], sendspin: ['alpha', false], notifications: ['alpha', false],
-      diagnostics: ['alpha', false], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['alpha', false], camera: ['alpha', false],
+      assist: ['stable', false], timers: ['stable', false], sendspin: ['stable', false], notifications: ['stable', false],
+      diagnostics: ['stable', false], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['stable', false], camera: ['stable', false],
     });
     expect(support('generic-android')).toMatchObject({
-      notifications: ['beta', true], diagnostics: ['stable', true], 'time-zone': ['no', true], 'wall-base': ['no', false],
+      notifications: ['stable', true], diagnostics: ['stable', true], 'time-zone': ['no', true], 'wall-base': ['no', false],
       'bluetooth-proxy': ['depends', false], camera: ['depends', false],
     });
   });

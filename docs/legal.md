@@ -39,10 +39,23 @@ Some Silicon Labs code does ship, though: the client library `libcpc` (from Sili
 panel's own Silicon Labs radio. [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md#2-radio-bundle-inside-release-apks)
 lists them.
 
+## The lululemon Studio Mirror
+
+The project doesn't distribute lululemon's software. On the Mirror, Kiln installs Glassworks in one of
+two ways. The Glassworks image is built in your browser from the community
+[Glass Panes](https://github.com/git-nimrod/glass-panes) image, which Kiln downloads from Glass Panes' own
+GitHub release through Refract, our pass-through proxy at `refract.glassworks.dev`. Refract streams the
+files and stores nothing, and Kiln checks each file's SHA-256 before it uses it. Glass Panes' own code is
+MIT; the Android and kernel sources in the image keep their own licences, and its vendor binaries belong
+to their owners ([why Kiln downloads it this way](../frames/lululemon-mirror/research/community-image-terms.md)).
+The experimental install on the stock software keeps lululemon's system on the Mirror and changes only
+the parts Glassworks needs, after saving a restore point of them that stays with you.
+
 ## Trademarks
 
-Glassworks is not affiliated with, endorsed by or sponsored by Aqara or Lumi United Technology.
-"Aqara", "Panel Hub S1 Plus" and the other product names are trademarks of their owners. They are
+Glassworks is not affiliated with, endorsed by or sponsored by Aqara, Lumi United Technology or
+lululemon. "Aqara", "Panel Hub S1 Plus", "lululemon", "Studio Mirror" and the other product names are
+trademarks of their owners. They are
 used here only to say which device the project works with. The same applies to Silicon Labs, Home
 Assistant and other names mentioned in this project.
 

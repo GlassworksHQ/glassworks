@@ -17,6 +17,18 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "source": "panes/assist/src/main/java/dev/glassworks/assist"
   },
   {
+    "id": "bluetooth-proxy",
+    "name": "Bluetooth proxy",
+    "does": "Relays nearby BLE sensors to Home Assistant, and connects to devices that need it.",
+    "requires": [
+      "bluetooth-le"
+    ],
+    "status": "stable",
+    "docs": "docs/esphome.md#bluetooth-proxy",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 7.5 16.5 16 12 20V4l4.5 4L7 16.5\"/><circle cx=\"4\" cy=\"12\" r=\"1\"/><circle cx=\"20\" cy=\"12\" r=\"1\"/></svg>",
+    "source": "panes/bluetooth-proxy/src/main/java/dev/glassworks/bluetoothproxy"
+  },
+  {
     "id": "camera",
     "name": "Camera",
     "does": "Wakes the screen on motion that isn't a light change; snapshots and an ONVIF stream if you allow them.",
@@ -49,6 +61,26 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "source": "panes/diagnostics/src/main/java/dev/glassworks/diagnostics"
   },
   {
+    "id": "notifications",
+    "name": "Notifications",
+    "does": "Home Assistant's notifications over the dashboard, with a picture, buttons and a sound.",
+    "requires": [],
+    "status": "stable",
+    "docs": "docs/notifications.md",
+    "blueprints": [
+      {
+        "file": "blueprints/doorbell-panels.yaml",
+        "summary": "When the doorbell rings, the panels ring and show the door's view and camera."
+      },
+      {
+        "file": "blueprints/ask-panels.yaml",
+        "summary": "A question with buttons on the panels. Each button runs a script you pick."
+      }
+    ],
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z\"/><path d=\"M10 20.5a2 2 0 0 0 4 0\"/></svg>",
+    "source": "panes/notifications/src/main/java/dev/glassworks/notifications"
+  },
+  {
     "id": "sendspin",
     "name": "Sendspin",
     "does": "Synced Music Assistant player.",
@@ -74,45 +106,13 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "source": "panes/timers/src/main/java/dev/glassworks/timers"
   },
   {
-    "id": "bluetooth-proxy",
-    "name": "Bluetooth proxy",
-    "does": "Relays nearby BLE sensors to Home Assistant, and connects to devices that need it.",
-    "requires": [
-      "bluetooth-le"
-    ],
-    "status": "beta",
-    "docs": "docs/esphome.md#bluetooth-proxy",
-    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 7.5 16.5 16 12 20V4l4.5 4L7 16.5\"/><circle cx=\"4\" cy=\"12\" r=\"1\"/><circle cx=\"20\" cy=\"12\" r=\"1\"/></svg>",
-    "source": "panes/bluetooth-proxy/src/main/java/dev/glassworks/bluetoothproxy"
-  },
-  {
-    "id": "notifications",
-    "name": "Notifications",
-    "does": "Home Assistant's notifications over the dashboard, with a picture, buttons and a sound.",
-    "requires": [],
-    "status": "beta",
-    "docs": "docs/notifications.md",
-    "blueprints": [
-      {
-        "file": "blueprints/doorbell-panels.yaml",
-        "summary": "When the doorbell rings, the panels ring and show the door's view and camera."
-      },
-      {
-        "file": "blueprints/ask-panels.yaml",
-        "summary": "A question with buttons on the panels. Each button runs a script you pick."
-      }
-    ],
-    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z\"/><path d=\"M10 20.5a2 2 0 0 0 4 0\"/></svg>",
-    "source": "panes/notifications/src/main/java/dev/glassworks/notifications"
-  },
-  {
     "id": "radio",
     "name": "Zigbee / Thread radio",
     "does": "Zigbee coordinator or router, Thread border router.",
     "requires": [
       "silabs-radio"
     ],
-    "status": "beta",
+    "status": "stable",
     "docs": "frames/aqara-s1-plus/docs/radio.md",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14\"/></svg>",
     "source": "panes/zigbee-thread/src/main/java/dev/glassworks/radio"

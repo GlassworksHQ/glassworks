@@ -111,7 +111,7 @@ describe('the Mirror in Kiln\'s registry', () => {
     expect(registry.activity(MIRROR_BASE)).toBe(kept);
   });
 
-  it('the page keeps its session in the registry with or without ?apk=…: the Mirror is open (beta)', async () => {
+  it('the page keeps its session in the registry with or without ?apk=…: the Mirror is open (stable)', async () => {
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('Choose what to install on the Mirror');
     expect(registry.activities()).toHaveLength(1);
