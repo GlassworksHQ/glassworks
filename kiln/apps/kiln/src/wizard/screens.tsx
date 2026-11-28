@@ -22,7 +22,7 @@ import { HomeAssistant, Panes, Radio, RadioNext, Wifi } from '../setup/steps';
 import { eta, firingSteps, type Setup, type WizardState } from './state';
 import x from './screens.module.css';
 import { Foot } from '../components/Nav';
-import { BrowserAsk, Hands, Instructions, Note, Progress, Usually, Wait, type ProgressRow } from '../components/Kit';
+import { BrowserAsk, DriverNote, Hands, Instructions, Note, Progress, Usually, Wait, type ProgressRow } from '../components/Kit';
 import { rich } from '../device/rich';
 
 type P = { s: WizardState; session: Session; frame: KilnFrame };
@@ -35,7 +35,8 @@ type SP = { s: WizardState; session: StandardSession; frame: StandardFrame };
  * first screen. The picker opens inside the click.
  */
 export function Connect({ s, session, frame }: P) {
-  const driver = useMemo(() => { const o = hostOs(); return o === 'other' ? undefined : frame.drivers[o]; }, [frame]);
+  const os = useMemo(() => hostOs(), []);
+  const driver = os === 'other' ? undefined : frame.drivers[os];
   const steps = frame.recoverySteps;
   return (
     <section className="card" aria-labelledby="h">
@@ -45,6 +46,7 @@ export function Connect({ s, session, frame }: P) {
         : `Nothing changes on ${frame.the} yet. Kiln backs up your original software first, before writing anything.`}</p>
       {/* how long the whole install takes, from the frame's words, in the same line as a choice card's */}
       {s.flow !== 'undo' && <Usually time={frame.time?.total} />}
+      <DriverNote os={os} line={driver} guide={frame.help.drivers} />
       {steps?.length
         ? <div className="howto">
             <div className="howto-art"><Recovery data={frame.recovery} /></div>
@@ -55,7 +57,6 @@ export function Connect({ s, session, frame }: P) {
       <BrowserAsk listed={frame.felPick} short={frame.short} the={frame.the ?? `the ${frame.short}`}>
         It shows a list of devices. Pick <code>{frame.felPick}</code>, which is your panel in recovery mode, then click Connect.
       </BrowserAsk>
-      {driver && <p className="small">{driver} <a className="link" href={frame.help.drivers} target="_blank" rel="noopener">Setup guide</a></p>}
       <LastRun />
       <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
       <Foot busy={!!s.busy}>

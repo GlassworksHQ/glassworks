@@ -45,10 +45,10 @@
       "why": "The name Chrome's USB list shows the Mirror by, over adb and in fastboot alike: nobody finds \"the Mirror\" there (maintainer, 2026-11-21). Kiln's screens say it wherever they ask for a pick, and set-up's sheet names it"
     },
     "drivers": {
-      "win": "Windows needs a driver once: with the Mirror in fastboot mode, install the Google USB Driver, or in Zadig give the device with USB ID 18d1:d00d the WinUSB driver.",
-      "linux": "Linux needs a udev rule once for 18d1:d00d, the Mirror in fastboot mode.",
+      "win": "Try finding the Mirror first: click Connect and look for Android. If it doesn’t appear (or won’t open), use Zadig to give USB ID 18d1:d00d the WinUSB driver once, then unplug and reconnect it.",
+      "linux": "Try finding the Mirror first: click Connect and look for Android. If it doesn’t appear (or won’t open), add a udev rule once for USB ID 18d1:d00d, then unplug and reconnect it.",
       "guide": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/lululemon-mirror/README.md#one-time-setup-for-your-computer",
-      "why": "Chrome on Windows opens a USB device only through WinUSB, and the Mirror's LK in fastboot (18d1:d00d, flash.ts MIRROR_FASTBOOT) gets no driver by itself; on Linux a device needs a udev rule before the browser may open it (SecurityError, Access denied). Untested on a Mirror from Windows or Linux: the Mirror installs so far ran from macOS, which needs neither"
+      "why": "Chrome on Windows opens a USB device only through WinUSB, and the Mirror's LK in fastboot (18d1:d00d, flash.ts MIRROR_FASTBOOT) gets no driver by itself; Google's USB Driver (android_winusb.inf) does not list PID d00d (confirmed on Windows, 2026-11-27), so Zadig -> WinUSB is required. On Linux a device needs a udev rule before the browser may open it (SecurityError, Access denied)."
     },
     "board": "msm8916",
     "apk": {
@@ -87,8 +87,7 @@
       "image.lede": "Kiln adds Glassworks to the Glass Panes system image and writes it over USB.",
       "image.apkLabel": "Glassworks APK (legacy build, test only)",
       "fastboot.restarted": "The Mirror is restarting into fastboot mode. Click Connect and pick `Android`.",
-      "fastboot.byHandSteps": "**Switch the Mirror off** with the rocker switch in its bottom edge, unplug its power cord, and lay it face down.\n**Take off the stand:** remove the 4 screws in the bottom edge and lift it off.\n**Take off the back cover:** remove the 14 screws in the back, including 2 on either side of the recess by the feet, and lift it off.\n**Plug the power cord back in** to its socket in that recess, keeping the switch off.\n**Connect the micro-USB port** near the top corner to this computer.\n**Press and hold VOL− (SW3)** on the small green board at the top end: of its two buttons, the one closer to the top edge.\n**Keep holding while you switch the Mirror on**, and for about 5 seconds more. The screen stays dark, which is normal.",
-      "fastboot.byHandNote": "Hold only VOL−: VOL+ or both buttons start other modes. Some Mirrors have a small service hatch on the back that reaches the board without taking the whole cover off.",
+      "fastboot.byHandSteps": "**Switch the Mirror off** with the rocker switch in its bottom edge, unplug its power cord, and lay it face down.\n**Take off the stand:** remove the 4 screws in the bottom edge and lift it off.\n**Take off the back cover:** remove the 14 screws in the back, including 2 on either side of the recess by the feet, and lift it off (or open the small rear service hatch if your Mirror has one).\n**Plug the power cord back in** to its socket in that recess, keeping the switch off.\n**Connect the micro-USB port** near the top corner to this computer.\n**Press and hold VOL− (SW3)** on the small green board at the top end: of its two buttons, the one closer to the top edge (only VOL−; VOL+ or both buttons start other modes).\n**Keep holding while you switch the Mirror on**, and for about 5 seconds more. The screen stays dark, which is normal.",
       "fastboot.overUsb": "Already running Glassworks or Glass Panes? Restart over USB",
       "confirm.title": "This replaces lululemon’s software for good",
       "confirm.lede": "The Mirror's bootloader can't read its original software back, so Kiln can't create a backup before replacing it. You can always return to the plain Glass Panes image from Kiln.",

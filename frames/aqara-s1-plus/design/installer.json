@@ -57,8 +57,8 @@
     ],
     "felPick": "USB Device (1f3a:efe8)",
     "drivers": {
-      "win": "Windows needs a driver once: in Zadig, give USB Device (1f3a:efe8) the WinUSB driver.",
-      "linux": "Linux needs a udev rule once for 1f3a:efe8 and 1f3a:1010."
+      "win": "Try finding the panel first: click Connect and look for USB Device (1f3a:efe8). If it doesn’t appear (or won’t open), use Zadig to give it the WinUSB driver once, then unplug and reconnect it.",
+      "linux": "Try finding the panel first: click Connect and look for USB Device (1f3a:efe8). If it doesn’t appear (or won’t open), add a udev rule once for 1f3a:efe8 and 1f3a:1010, then unplug and reconnect it."
     },
     "help": {
       "recovery": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs/install.md#troubleshooting",
