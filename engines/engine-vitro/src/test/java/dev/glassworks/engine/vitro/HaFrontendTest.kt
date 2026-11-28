@@ -159,6 +159,27 @@ class HaFrontendTest {
     }
 
     @Test
+    fun aReadQueuedForAClientThatWasReplacedFetchesNothing() {
+        // A slow or unreachable Home Assistant: a reconnect's read queues behind one still waiting for HA. When another
+        // client takes over meanwhile, the queued read fetches nothing, so it can't hold the new client's reads up.
+        val old = Any()
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val indexReads = java.util.concurrent.atomic.AtomicInteger(0)
+        HaFrontend.fetch = { url ->
+            if (url == "$origin/") { indexReads.incrementAndGet(); gate.await() }
+            served[url]?.toByteArray()
+        }
+        HaFrontend.claim(old, origin)
+        HaFrontend.ensure(old, origin, "de") {}
+        awaitCondition("the first read waits for HA") { indexReads.get() == 1 }
+        HaFrontend.ensure(old, origin, "de", revalidate = true) {}
+        HaFrontend.claim(Any(), origin)
+        gate.countDown()
+        assertTrue(HaFrontend.awaitIdle())
+        assertEquals("the replaced client's queued read never asked HA", 1, indexReads.get())
+    }
+
+    @Test
     fun anOlderReadEndingFirstLeavesTheNewerOneWanted() {
         // D22: two reconnects in a row queue two reads of the same strings. The first one ending must not mark them as
         // no longer on their way while the second is still queued, or the next ensure queues a third.

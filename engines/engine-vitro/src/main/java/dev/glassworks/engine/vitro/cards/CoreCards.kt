@@ -2006,6 +2006,20 @@ internal class HaHorizontalSliderView(
     private var gradientShader: android.graphics.Shader? = null
     private var gradientWidth = 0f
 
+    /**
+     * Mushroom's tilt slider (`mushroom-cover-tilt-position-control`): no fill, the track striped from the right in
+     * its 20% color (24 stripes, each wider than the last), and `.slider-track-indicator` at the value. Disabled (an
+     * unavailable cover), Mushroom's `.inactive` drops the stripes.
+     */
+    var tiltStripes: Boolean = false
+        set(v) { if (field != v) { field = v; invalidate() } }
+    /** The indicator's white pill, with its shadow layer where one draws ([drawMushroomIndicator]). */
+    private val pillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.WHITE
+    }
+    private val stripePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
     /** `show-handle`: the bar keeps room for the handle at 0 (HA's brightness feature while the light is on). */
     var showHandle: Boolean = false
         set(v) { if (field != v) { field = v; invalidate() } }
@@ -2213,7 +2227,11 @@ internal class HaHorizontalSliderView(
         }
         val fillW = (w * fraction).coerceIn(0f, w)
         val gradient = trackGradient
-        if (mushroom && gradient != null) {
+        if (mushroom && tiltStripes) {
+            val color = if (active) accentColor else inactiveColor
+            if (isEnabled) drawTiltStripes(canvas, w, h, color)
+            drawMushroomIndicator(canvas, w, h, color)
+        } else if (mushroom && gradient != null) {
             if (gradientShader == null || gradientWidth != w) {
                 gradientShader = android.graphics.LinearGradient(0f, 0f, w, 0f, gradient, null, android.graphics.Shader.TileMode.CLAMP)
                 gradientWidth = w
@@ -2244,9 +2262,52 @@ internal class HaHorizontalSliderView(
         canvas.restore()
     }
 
+    /**
+     * The tilt control's `--gradient`: `-webkit-linear-gradient(right, …)` (it starts at the right edge) with Mushroom's
+     * 24 hard stripes of `--slider-bg-color`, the i-th from `i/24` to `i/24 + i/24² · 0.8 + 0.2/24` of the width.
+     */
+    private fun drawTiltStripes(canvas: Canvas, w: Float, h: Float, color: Int) {
+        stripePaint.color = CardSurface.withAlpha(color, 0.20f)
+        for (i in 0 until TILT_STRIPES) {
+            val from = i.toFloat() / TILT_STRIPES
+            val to = from + i / (TILT_STRIPES.toFloat() * TILT_STRIPES) * (1f - TILT_STRIPE_MIN) + TILT_STRIPE_MIN / TILT_STRIPES
+            canvas.drawRect(w * (1f - to), 0f, w * (1f - from), h, stripePaint)
+        }
+    }
+
+    /**
+     * mushroom-slider's `.slider-track-indicator`: a 10 px white pill the height of the slider at `value · (W - 10 px)`,
+     * 3 px corners and a `0 1px 3px rgba(0,0,0,.12)` shadow, with a 2 x 20 px bar of the main color centered in it.
+     */
+    private fun drawMushroomIndicator(canvas: Canvas, w: Float, h: Float, color: Int) {
+        val iw = 10f * ctx.dp
+        val left = fraction.coerceIn(0f, 1f) * (w - iw).coerceAtLeast(0f)
+        handleRect.set(left, 0f, left + iw, h)
+        val r = 3f * ctx.dp
+        // The box shadow: a blurred shadow layer (a 3 px CSS blur) where the canvas draws one (a hardware canvas from
+        // API 28, any software one), else a 1 px band under the pill.
+        if (dev.glassworks.platform.Platform.hasHardwareShapeShadows || !canvas.isHardwareAccelerated) {
+            pillPaint.setShadowLayer(1.73f * ctx.dp, 0f, 1f * ctx.dp, SHADOW)
+        } else {
+            pillPaint.clearShadowLayer()
+            stripePaint.color = SHADOW
+            canvas.drawRoundRect(handleRect.left, handleRect.top + ctx.dp, handleRect.right, handleRect.bottom + ctx.dp, r, r, stripePaint)
+        }
+        canvas.drawRoundRect(handleRect, r, r, pillPaint)
+        val bw = 2f * ctx.dp
+        val bh = (20f * ctx.dp).coerceAtMost(h)
+        val cx = handleRect.centerX()
+        fillPaint.color = color
+        canvas.drawRoundRect(cx - bw / 2f, (h - bh) / 2f, cx + bw / 2f, (h + bh) / 2f, bw / 2f, bw / 2f, fillPaint)
+    }
+
     private companion object {
         const val VALUE_MS = 160L
         const val COLOR_MS = 180L
+        const val TILT_STRIPES = 24
+        const val TILT_STRIPE_MIN = 0.2f
+        /** `rgba(0, 0, 0, 0.12)`. */
+        const val SHADOW = 0x1F000000
     }
 }
 

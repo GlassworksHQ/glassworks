@@ -13,7 +13,9 @@ import java.io.File
  * - the copy of HA's `localStorage` ([HaPageStorage]);
  * - the island server's port ([ISLAND_PREFS]): forgetting it gives the islands a new origin, so whatever cards kept in
  *   the old one's storage can't be read by the next Home Assistant's cards;
- * - HA's frontend strings, cached per frontend version and language ([FRONTEND_CACHE], in the app's cache folder).
+ * - HA's frontend strings, cached per frontend version and language ([FRONTEND_CACHE], in the app's cache folder);
+ * - the fonts the dashboard's stylesheets declared, fetched from that Home Assistant ([FONTS_CACHE], in the cache folder);
+ * - the sizes its custom cards gave in islands, by a digest of each card's config ([CARD_SIZES_CACHE], in the cache folder).
  */
 object HaPageData {
     /** Vitro's island server keeps its port here (VitroEngine). */
@@ -22,12 +24,19 @@ object HaPageData {
     /** Vitro's cache of HA's frontend strings, under the app's cache folder (VitroEngine, HaFrontend). */
     const val FRONTEND_CACHE = "vitro-frontend"
 
+    /** Vitro's cache of the dashboard's web fonts and their stylesheets, under the app's cache folder (WebFonts). */
+    const val FONTS_CACHE = "vitro-fonts"
+
+    /** Vitro's island card sizes, under the app's cache folder (IslandCardSizes). */
+    const val CARD_SIZES_CACHE = "vitro-card-sizes"
+
     /** Removes all of it. False when a file stayed. */
     fun forget(context: Context): Boolean {
         val app = context.applicationContext
         val storage = HaPageStorage.of(app).clear()
         val island = app.getSharedPreferences(ISLAND_PREFS, Context.MODE_PRIVATE).edit().clear().commit()
-        val cache = File(app.cacheDir, FRONTEND_CACHE).let { !it.exists() || it.deleteRecursively() }
+        val cache = listOf(FRONTEND_CACHE, FONTS_CACHE, CARD_SIZES_CACHE).map { File(app.cacheDir, it) }
+            .map { !it.exists() || it.deleteRecursively() }.all { it }
         return storage && island && cache
     }
 }

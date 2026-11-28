@@ -1016,18 +1016,27 @@ class MushroomFanCardView(ctx: VitroCardContext, config: CardConfig) : MushroomS
 
 /**
  * `custom:mushroom-cover-card` with controls: the state and position under the name ("Open ⸱ 100%"), and the open /
- * stop / close buttons (`show_buttons_control`) or the position slider (`show_position_control`).
+ * stop / close buttons (`show_buttons_control`), the position slider (`show_position_control`) or the tilt slider
+ * (`show_tilt_position_control`), with Mushroom's one button to the next of them.
  */
 class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : MushroomShellCardView(ctx, config) {
     private val row = controlRow()
-    /** Mushroom's `_controls`, in its order: with both, the buttons show first and a button switches to the other. */
+    /** Mushroom's `_controls`, in its order: the first one the cover has shows, and a button moves on to the next. */
     private val coverControls = listOfNotNull(
         "buttons_control".takeIf { config.raw.optBoolean("show_buttons_control") },
         "position_control".takeIf { config.raw.optBoolean("show_position_control") },
+        "tilt_position_control".takeIf { config.raw.optBoolean("show_tilt_position_control") },
     )
     private var activeControl = coverControls.firstOrNull()
     private val slider = if ("position_control" in coverControls)
         mushroomSlider(BLUE) { frac -> call("cover", "set_cover_position") { it.put("position", (frac * 100f).roundToInt()) } } else null
+    /**
+     * `mushroom-cover-tilt-position-control` (Mushroom 5.3.0): `current_tilt_position` on a striped track with the
+     * indicator at it (no fill), in the position slider's colors; it sends `set_cover_tilt_position`.
+     */
+    private val tiltSlider = if ("tilt_position_control" in coverControls)
+        mushroomSlider(BLUE) { frac -> call("cover", "set_cover_tilt_position") { it.put("tilt_position", (frac * 100f).roundToInt()) } }
+            .apply { tiltStripes = true } else null
     /**
      * `mushroom-cover-buttons-control` (Mushroom 5.3.0): open, stop and close, each only when the cover supports it
      * (`supported_features` OPEN 1, STOP 8, CLOSE 2) and each disabled while it can't act. Open and close: an
@@ -1040,7 +1049,13 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
         COVER_STOP to mushroomButton("mdi:stop", "Stop") { call("cover", "stop_cover") },
         COVER_CLOSE to mushroomButton("mdi:arrow-down", "Close") { call("cover", "close_cover") },
     ) else emptyList()
-    private val switchButtons = LinkedHashMap<String, View>()
+    /**
+     * Mushroom's `renderNextControlButton`: one button, with the icon of the control after the active one (the first
+     * after the last), shown while the cover has another. Its description names that control.
+     */
+    private val nextButton: FrameLayout? = if (coverControls.size > 1) mushroomButton(COVER_CONTROL_ICONS.getValue(coverControls[1]), coverControls[1]) {
+        nextControl(available(lastState))?.let { activeControl = it; showActive() }
+    } else null
 
     /**
      * The state the controls were last chosen for ([available]). Declared before `init`: `start()` renders the stored
@@ -1052,26 +1067,29 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
     init {
         buttons.forEach { (_, b) -> addCell(row, b) }
         slider?.let { addCell(row, it, fill = true) }
-        // The other control as a button beside the active one (Mushroom's _renderOtherControls).
-        if (coverControls.size > 1) coverControls.forEach { c ->
-            val b = mushroomButton(COVER_CONTROL_ICONS.getValue(c), c) { activeControl = c; showActive() }
-            switchButtons[c] = b
-            row.addView(b, LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)).apply { marginStart = ctx.px(12f) })
-        }
+        tiltSlider?.let { addCell(row, it, fill = true) }
+        nextButton?.let { row.addView(it, LinearLayout.LayoutParams(ctx.px(42f), ctx.px(42f)).apply { marginStart = ctx.px(12f) }) }
         showActive()
         start()
     }
 
     /**
      * Mushroom's `_controls` for [s]: the configured controls the cover supports (buttons with OPEN, CLOSE or STOP;
-     * the position slider with SET_POSITION 4), none without a state.
+     * the position slider with SET_POSITION 4; the tilt slider with SET_TILT_POSITION 128), none without a state.
      */
     private fun available(s: EntityState?): List<String> = if (s == null) emptyList() else coverControls.filter { c ->
         when (c) {
             "buttons_control" -> s.supports(COVER_OPEN or COVER_CLOSE or COVER_STOP)
             "position_control" -> s.supports(COVER_SET_POSITION)
+            "tilt_position_control" -> s.supports(COVER_SET_TILT_POSITION)
             else -> false
         }
+    }
+
+    /** Mushroom's `_nextControl`: the control after the active one in [available], else the first. */
+    private fun nextControl(available: List<String>): String? {
+        val active = activeControl ?: return null
+        return available.getOrNull(available.indexOf(active) + 1) ?: available.firstOrNull()
     }
 
     private fun showActive() {
@@ -1080,8 +1098,16 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
         if (activeControl !in available) activeControl = available.firstOrNull()
         bindButtons(lastState)
         slider?.visibility = if (activeControl == "position_control") VISIBLE else GONE
-        // Mushroom's next-control button: only while the cover has more than one control.
-        switchButtons.forEach { (c, b) -> b.visibility = if (c == activeControl || c !in available || available.size < 2) GONE else VISIBLE }
+        tiltSlider?.visibility = if (activeControl == "tilt_position_control") VISIBLE else GONE
+        // Mushroom's next-control button: only while there's a next control that isn't the active one.
+        nextButton?.let { b ->
+            val next = nextControl(available)?.takeIf { it != activeControl }
+            b.visibility = if (next == null) GONE else VISIBLE
+            if (next != null && b.contentDescription != next) {
+                b.contentDescription = next
+                (b.getChildAt(0) as? MdiIconView)?.let { it.setIcon(COVER_CONTROL_ICONS.getValue(next), it.tintColor) }
+            }
+        }
     }
 
     override fun render(s: EntityState?) {
@@ -1093,6 +1119,12 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
         // Mushroom: HA's state label, then a position that isn't 0 ("Open ⸱ 100%").
         setSecondary(s?.let { mushroomStateLine(config.type, it) } ?: "…")
         slider?.setValue((pos ?: 0) / 100f, active = open)
+        val tilt = (s?.attributes?.get("current_tilt_position") as? Number)?.toDouble()?.roundToInt()
+        tiltSlider?.setValue((tilt ?: 0) / 100f, active = open)
+        // mushroom-slider `.disabled` (`!isAvailable`): an unavailable cover's sliders take no touch.
+        val usable = s != null && s.state != "unavailable"
+        slider?.isEnabled = usable
+        tiltSlider?.isEnabled = usable
         lastState = s
         showActive()
         collapseWhen(!open)
@@ -1129,12 +1161,17 @@ class MushroomCoverCardView(ctx: VitroCardContext, config: CardConfig) : Mushroo
         const val COVER_CLOSE = 2
         const val COVER_STOP = 8
         const val COVER_SET_POSITION = 4
+        const val COVER_SET_TILT_POSITION = 128
 
         /** `--rgb-state-cover`: Mushroom's blue. */
         val BLUE = 0xFF2196F3.toInt()
 
         /** Mushroom's cover CONTROLS_ICONS. */
-        val COVER_CONTROL_ICONS = mapOf("buttons_control" to "mdi:gesture-tap-button", "position_control" to "mdi:gesture-swipe-horizontal")
+        val COVER_CONTROL_ICONS = mapOf(
+            "buttons_control" to "mdi:gesture-tap-button",
+            "position_control" to "mdi:gesture-swipe-horizontal",
+            "tilt_position_control" to "mdi:rotate-right",
+        )
     }
 }
 
