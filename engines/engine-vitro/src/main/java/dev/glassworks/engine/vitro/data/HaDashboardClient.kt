@@ -1168,7 +1168,23 @@ class HaDashboardClient(
         if (displayPending.decrementAndGet() == 0 && displayChanged.getAndSet(false) && !closed.get()) store.renotifyAll()
     }
 
-    private fun loadDisplayFor(entityIds: Collection<String>) {
+    /**
+     * Sends a batch of display requests ([send]) holding one count of its own: an answer that lands (on the socket's
+     * thread) before the batch's last request is counted can't bring [displayPending] to zero, so the cards re-render
+     * once when the whole batch is in, not once early and again after. A connection that ended meanwhile reset the
+     * count: its batch leaves it alone.
+     */
+    private inline fun displayBatch(send: () -> Unit) {
+        val gen = connectionGen.get()
+        displayPending.incrementAndGet()
+        try {
+            send()
+        } finally {
+            if (gen == connectionGen.get()) settleDisplay()
+        }
+    }
+
+    private fun loadDisplayFor(entityIds: Collection<String>) = displayBatch {
         val (domains, platforms) = HaDisplay.missingFor(entityIds)
         val newDomains = domains.filter { displayRequested.add("d:$it") }
         val newPlatforms = platforms.filter { displayRequested.add("p:$it") }
@@ -1351,28 +1367,31 @@ class HaDashboardClient(
         // 7. Display data, after everything the first paint needs: the entity registry, then the icons and state
         // translations for the view's entities.
         // The registry counts as one display request: when it is the only one that succeeds, cards still re-render.
+        // Sent as one batch: the first answer can't re-render before the other requests are counted.
         val gen = connectionGen.get()
-        displayPending.incrementAndGet()
-        request(JSONObject().put("type", "config/entity_registry/list_for_display")) { res ->
-            if (gen != connectionGen.get()) return@request
-            if (res.optBoolean("success", false)) res.optJSONObject("result")?.let { r -> applyDisplay { HaDisplay.applyRegistry(r) } }
-            loadDisplayFor(displayIds())
-            settleDisplay()
-        }
-        // Device names, for HA's default tile names ("<device> <entity>").
-        displayPending.incrementAndGet()
-        request(JSONObject().put("type", "config/device_registry/list")) { res ->
-            if (gen != connectionGen.get()) return@request
-            if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyDevices(r) } }
-            settleDisplay()
-        }
-        // Areas, for the area card (its name, icon, picture and sensors).
-        displayPending.incrementAndGet()
-        request(JSONObject().put("type", "config/area_registry/list")) { res ->
-            if (gen != connectionGen.get()) return@request
-            if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyAreas(r) } }
-            followFloorsIfNeeded(gen)
-            settleDisplay()
+        displayBatch {
+            displayPending.incrementAndGet()
+            request(JSONObject().put("type", "config/entity_registry/list_for_display")) { res ->
+                if (gen != connectionGen.get()) return@request
+                if (res.optBoolean("success", false)) res.optJSONObject("result")?.let { r -> applyDisplay { HaDisplay.applyRegistry(r) } }
+                loadDisplayFor(displayIds())
+                settleDisplay()
+            }
+            // Device names, for HA's default tile names ("<device> <entity>").
+            displayPending.incrementAndGet()
+            request(JSONObject().put("type", "config/device_registry/list")) { res ->
+                if (gen != connectionGen.get()) return@request
+                if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyDevices(r) } }
+                settleDisplay()
+            }
+            // Areas, for the area card (its name, icon, picture and sensors).
+            displayPending.incrementAndGet()
+            request(JSONObject().put("type", "config/area_registry/list")) { res ->
+                if (gen != connectionGen.get()) return@request
+                if (res.optBoolean("success", false)) res.optJSONArray("result")?.let { r -> applyDisplay { HaDisplay.applyAreas(r) } }
+                followFloorsIfNeeded(gen)
+                settleDisplay()
+            }
         }
         // ... and each of the three read again when it changes.
         watchDisplayRegistries()
