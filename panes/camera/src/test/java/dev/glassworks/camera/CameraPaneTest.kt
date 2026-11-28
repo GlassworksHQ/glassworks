@@ -224,6 +224,8 @@ class CameraPaneTest {
         assertFalse(e.getValue("camera_privacy").disabledByDefault)
         assertTrue("only an encrypted connection may turn privacy off (#847)", e.getValue("camera_privacy").authOnly)
         assertTrue(e.getValue("camera_use").disabledByDefault)
+        // Camera use turns snapshots on: like privacy and the stream, only Home Assistant with the key may change it.
+        assertTrue("only an encrypted connection may turn snapshots on", e.getValue("camera_use").authOnly)
         assertEquals(EntityCategory.CONFIG, e.getValue("onvif_stream").category)
         assertTrue(e.getValue("camera").authOnly)
     }

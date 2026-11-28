@@ -1069,10 +1069,12 @@ public class ApiServer(
         /**
          * `SendspinPairingTokenResponse` (ESPHome sendspin_hub.cpp semantics): only over an encrypted
          * session with a provisioned key, since the token is a long-lived credential. Never logged.
+         * [authenticated], not whether the device has a key now: a connection that came in on the zero PSK before a key
+         * was provisioned is Noise too, but with a key anyone could use.
          */
         private fun sendspinToken(): ProtoWriter {
             val ss = sendspin
-            val encrypted = keys?.hasKey == true && transport is NoiseTransport
+            val encrypted = authenticated
             val (status, token) = when {
                 ss == null -> SendspinApi.STATUS_DISABLED to null
                 !encrypted -> SendspinApi.STATUS_ENCRYPTION_REQUIRED to null

@@ -310,10 +310,12 @@ class ManageServer(
     }
 
     fun handle(req: HttpRequest): HttpResponse {
+        // First, for the QR pages too: a page on another site whose name resolves here (DNS rebinding) mustn't start or
+        // finish the panel's sign-in either. Every QR code names the panel by one of its own addresses.
+        if (!hostAllowed(req.headers["host"], ownHosts())) return HttpResponse.text(400, "Open this page with the panel's address.")
         if (req.path in qrPaths) return qrPage(req)
         // Before setup, / is the QR sign-in, except for a browser already signed in to Manage (with the code).
         if (req.path == "/" && !setUp() && sessions.lookup(req.cookies[SESSION], haBase()) == null) return qrPage(req)
-        if (!hostAllowed(req.headers["host"], ownHosts())) return HttpResponse.text(400, "Open this page with the panel's address.")
         // Called from a page on another panel, with a Home Assistant token rather than this page's cookie (#466).
         if (req.path.startsWith(ManageApi.PREFIX)) return api.handle(req)
         if (req.path == HANDOFF) return if (req.method == "POST") handoff(req) else HttpResponse.seeOther("/")
@@ -335,6 +337,9 @@ class ManageServer(
     }
 
     // ------------------------------------------------------------------ the QR pages
+
+    /** [req] carries a live session for this page (its cookie, for the Home Assistant the panel uses now). */
+    fun signedIn(req: HttpRequest): Boolean = sessions.lookup(req.cookies[SESSION], haBase()) != null
 
     /** The QR pages as they are, with the way back to Manage in their header for a signed-in browser. */
     private fun qrPage(req: HttpRequest): HttpResponse {
@@ -1032,12 +1037,27 @@ class ManageServer(
         fun hostAllowed(host: String?, own: Set<String>): Boolean {
             val h = host?.trim()?.lowercase()?.takeIf { it.isNotEmpty() && it.length <= 255 } ?: return false
             val name = when {
-                h.startsWith("[") -> h.substringAfter('[').substringBefore(']').takeIf { h.indexOf(']') > 0 } ?: return false
-                h.count { it == ':' } == 1 -> h.substringBefore(':').takeIf { h.substringAfter(':').all(Char::isDigit) } ?: return false
+                // `[address]` or `[address]:port`, nothing else after the bracket: the whole header reaches pages
+                // (LanSetup's Content-Security-Policy names it), so `[fd00::40]evil` or `[fd00::40];x` is refused.
+                h.startsWith("[") -> {
+                    val close = h.indexOf(']')
+                    if (close <= 1 || !portOrNothing(h.substring(close + 1))) return false
+                    h.substring(1, close)
+                }
+                h.count { it == ':' } == 1 -> h.substringBefore(':').takeIf { portOrNothing(h.substring(h.indexOf(':'))) && it.isNotEmpty() } ?: return false
                 h.contains(':') -> return false
                 else -> h
             }
             return name in own
+        }
+
+        /** Empty, or `:` and a port of 1 to 5 ASCII digits in 1..65535. */
+        private fun portOrNothing(rest: String): Boolean {
+            if (rest.isEmpty()) return true
+            if (rest[0] != ':') return false
+            val digits = rest.substring(1)
+            if (digits.isEmpty() || digits.length > 5 || digits.any { it !in '0'..'9' }) return false
+            return digits.toInt() in 1..65535
         }
 
         /** The request came from a page on this panel: its `Origin` is the panel's own address (header names lowercase). */

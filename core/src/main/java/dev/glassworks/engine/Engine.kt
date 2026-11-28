@@ -79,6 +79,13 @@ interface Page {
      * dashboard behind it this way, with one page and no second engine.
      */
     fun capture(done: (android.graphics.Bitmap?) -> Unit) = done(null)
+
+    /**
+     * Ends the page for good: its view lets go of the engine's session and the session closes, so an activity that is
+     * destroyed (a recreate for a new locale or font scale) leaves no live session holding it. Idempotent; the page
+     * does nothing after it.
+     */
+    fun close() {}
 }
 
 /** A page script's connection to the app (the web extension's native port). */
