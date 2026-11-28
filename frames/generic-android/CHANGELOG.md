@@ -25,8 +25,8 @@ line of each version is what Home Assistant shows on the update card. A change o
 ### Fixed
 - **Kiln explains a USB connection this computer won't open.** When Windows or Linux won't let the browser open
   the Mirror or the panel, or another program such as adb already holds it, Kiln now says which it is and what to do,
-  instead of saying it disconnected. The Mirror's fastboot screen also shows the one-time USB setup for Windows (the
-  Google USB Driver or WinUSB) and Linux (a udev rule), with a link to the steps. Comes with Kiln, not the app.
+  instead of saying it disconnected. The Mirror's fastboot screen also shows the one-time USB setup for Windows
+  (WinUSB via Zadig) and Linux (a udev rule), with a link to the steps. Comes with Kiln, not the app.
 - **Kiln checks the Mirror's and Android's app against GitHub's own checksum.** The app Kiln downloads from a release
   is now checked only against the SHA-256 GitHub publishes for it, as the S1's already was, never against the
   checksum file that comes from the same download server as the app. Comes with Kiln, not the app.
