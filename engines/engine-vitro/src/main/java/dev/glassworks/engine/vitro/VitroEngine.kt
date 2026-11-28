@@ -1061,7 +1061,7 @@ class VitroEngine(
                 keepAliveMs = keepAliveMs,
                 configRetryMs = configRetryMs,
             )
-            listener.client = wsClient
+            listener.ownClient = wsClient
             client = wsClient
             // Islands holding the registries keep them, now from this Home Assistant.
             if (registryWatchers.isNotEmpty()) attachRegistries()
@@ -1330,8 +1330,11 @@ class VitroEngine(
 
         /** The listener of the client of [generation]; once that client is replaced or closed, its calls do nothing. */
         private inner class WsListener(private val generation: Int) : HaDashboardClient.Listener {
-            /** The client this listens to, set once it's made (its calls on the socket's thread use it). */
-            @Volatile var client: HaDashboardClient? = null
+            /**
+             * The client this listens to, set once it's made (its calls on the socket's thread use it). Not named
+             * `client`: that's the page's own, which the callbacks below close and clear.
+             */
+            @Volatile var ownClient: HaDashboardClient? = null
 
             /**
              * Socket thread. Follows what the page will follow for [config]'s first view ([subscribeSelectedView] from
@@ -1440,7 +1443,7 @@ class VitroEngine(
                 // Route the cards off the UI thread while the config waits for it to build the view.
                 CompatWarmup.start(config, pendingViewPath)
                 // A cold start: the view about to be built asks for its states now, not once the main thread gets to it.
-                if (generation == clientGeneration) client?.let { followFirstView(it, urlPath, config) }
+                if (generation == clientGeneration) ownClient?.let { followFirstView(it, urlPath, config) }
                 post {
                     // An older request's answer for a dashboard the page has left must not replace the current one.
                     if (urlPath != currentDashboardPath) return@post

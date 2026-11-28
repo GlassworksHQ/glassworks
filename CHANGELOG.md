@@ -39,10 +39,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
 ### Changed
-- **The dashboard shows sooner after the panel starts.** The panel now draws your dashboard first, and starts its voice
-  assistant, music player, wall base and its ESPHome device a moment later, once the dashboard is on screen.
-  With Vitro on, the dashboard also asks Home Assistant for its states as soon as it gets the layout. Everything else
-  works as before and comes up within a few seconds of the dashboard, even if it can't load.
+- **The dashboard shows sooner after the panel starts.** The panel now waits to start its voice assistant, music
+  player, wall base and ESPHome device until the dashboard starts to show, or the setup screen does, so they no
+  longer slow down the first draw. If neither shows within 10 seconds, for example when Home Assistant can't be
+  reached, they start anyway. Once started, they work as before. With Vitro on, the dashboard also asks Home
+  Assistant for its states as soon as it gets the layout.
 - **Vitro dashboards open faster and stay smoother while values change.** With Vitro on, big dashboards build their
   cards with less work, history graphs and sensor graphs read their history in the background, and a value that keeps
   changing, such as a power sensor or a clock with seconds, no longer makes the whole dashboard lay itself out again.

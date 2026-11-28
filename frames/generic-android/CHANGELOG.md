@@ -12,9 +12,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Changed
-- **The dashboard shows sooner after the app starts.** The app now draws your dashboard first, and starts its voice
-  assistant, music player and its ESPHome device a moment later, once the dashboard is on screen. Everything
-  else works as before and comes up within a few seconds of the dashboard, even if it can't load.
+- **The dashboard shows sooner after the app starts.** The app now waits to start its voice assistant, music player
+  and ESPHome device until the dashboard starts to show, or the setup screen does, so they no longer slow down the
+  first draw. If neither shows within 10 seconds, for example when Home Assistant can't be reached, they start
+  anyway. Once started, they work as before.
 
 ### Fixed
 - **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
