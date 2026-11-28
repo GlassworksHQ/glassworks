@@ -33,6 +33,7 @@ import dev.glassworks.setup.HotspotPermission
 import dev.glassworks.setup.HotspotStep
 import dev.glassworks.setup.LanSetup
 import dev.glassworks.setup.SetupHotspot
+import dev.glassworks.auth.AuthRedirectGuard
 import dev.glassworks.auth.FrontendUrls
 import dev.glassworks.auth.HaAuth
 import dev.glassworks.auth.HaTokenClient
@@ -121,6 +122,9 @@ open class MainActivity : Activity() {
     /** Signed out on this panel (HA button / frontend logout) and not signed in again (this process). */
     private var signedOutHere = false
 
+    /** Breaks `/auth/authorize` → `external_auth=1` bounce loops when HA rejects auth without revoking the token. */
+    private val authRedirectGuard = AuthRedirectGuard(clock = SystemClock::elapsedRealtime)
+
     /** Setup screen preview (`--ez show_setup true`, `--es setup_step …`): never changes state. */
     private var setupPreview = false
     private var setupPreviewStep: String? = null
@@ -149,12 +153,14 @@ open class MainActivity : Activity() {
         val testing = glassworks.screen.testDashboard != null
         if (signedIn) {
             Log.i(TAG, "Signed in; loading the dashboard with external auth")
+            authRedirectGuard.reset()
             usePanelLogin = false
             signedOutHere = false
             if (setupPreview) closeSetupPreview()
             if (!testing) loadDashboard()
         } else {
             Log.i(TAG, "Signed out; showing the sign-in screen")
+            authRedirectGuard.reset()
             usePanelLogin = false
             signedOutHere = true
             if (!testing) prefs.url.takeIf { it.isNotEmpty() }?.let { page?.load(it) }
@@ -376,6 +382,7 @@ open class MainActivity : Activity() {
             }
         }
         dashboardLoadAt = SystemClock.elapsedRealtime()
+        authRedirectGuard.onDashboardLoad()
         page?.load(externalize(url))
     }
 
@@ -972,7 +979,10 @@ open class MainActivity : Activity() {
             restartProcess()
             return
         }
-        if (fromNewIntent && intent.getBooleanExtra("reload", false)) page?.reload()
+        if (fromNewIntent && intent.getBooleanExtra("reload", false)) {
+            authRedirectGuard.onDashboardLoad()
+            page?.reload()
+        }
         // One-off navigation that does NOT change the saved dashboard URL.
         if (fromNewIntent) intent.getStringExtra("open")?.takeIf { it.isNotBlank() }?.let { page?.load(it) }
     }
@@ -1250,6 +1260,14 @@ open class MainActivity : Activity() {
             }
         }
 
+        override fun onBlocked(reason: String) {
+            handler.post {
+                frontendLoading = false
+                handler.removeCallbacks(hideLoading)
+                hideConnecting("engine blocked")
+            }
+        }
+
         override fun onLocationChange(url: String?) {
             currentUrl = url
             // An unauthenticated HA frontend redirects to /auth/authorize: the setup screen covers it
@@ -1268,7 +1286,20 @@ open class MainActivity : Activity() {
             if (!HaAuth.signedIn) return null
             val base = HaAuth.signedInBase
             return when {
-                FrontendUrls.isAuthorizePage(url, base) -> prefs.url.takeIf { it.isNotEmpty() }?.let(::externalize)
+                FrontendUrls.isAuthorizePage(url, base) -> {
+                    val target = prefs.url.takeIf { it.isNotEmpty() }?.let(::externalize) ?: return null
+                    if (!authRedirectGuard.onAuthorizeRedirect()) {
+                        Log.w(TAG, "Stopping /auth/authorize redirect loop; letting the sign-in page load")
+                        handler.post {
+                            frontendLoading = false
+                            handler.removeCallbacks(hideLoading)
+                            hideConnecting("auth redirect loop")
+                        }
+                        null
+                    } else {
+                        target
+                    }
+                }
                 FrontendUrls.needsFlag(url, base) -> FrontendUrls.withFlag(url)
                 else -> null
             }
@@ -1280,7 +1311,9 @@ open class MainActivity : Activity() {
             frontendLoading = false
             pageStartedAt = SystemClock.uptimeMillis()
             offlineShown = false
-            if (url.startsWith("http")) loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, prefs.shownHost(url)))
+            if (url.startsWith("http") && !(authRedirectGuard.loopBroken && FrontendUrls.isAuthorizePage(url, prefs.haBase))) {
+                loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, prefs.shownHost(url)))
+            }
         }
 
         override fun onPageStop(success: Boolean) {
@@ -1367,6 +1400,7 @@ open class MainActivity : Activity() {
      */
     private fun onPageReady(sender: PagePort, why: String) {
         if (!sender.topLevel) { Log.i(TAG, "A frame said ready ($why): ignored"); return }
+        if (!FrontendUrls.isAuthorizePage(sender.url, HaAuth.signedInBase)) authRedirectGuard.reset()
         handler.post {
             frontendLoading = false
             handler.removeCallbacks(hideLoading)
@@ -1418,6 +1452,13 @@ open class MainActivity : Activity() {
     private fun externalAuth(msg: JSONObject, sender: PagePort, reply: (JSONObject) -> Unit) {
         if (!senderAllowed(sender)) {
             Log.w(TAG, "getExternalAuth from ${sender.url} refused (not the signed-in Home Assistant)")
+            if (sender.topLevel) {
+                handler.post {
+                    frontendLoading = false
+                    handler.removeCallbacks(hideLoading)
+                    hideConnecting("external auth refused")
+                }
+            }
             reply(JSONObject().put("success", false))
             return
         }
@@ -1430,6 +1471,12 @@ open class MainActivity : Activity() {
                     .put("expires_in", a.expiresIn.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt())
                 is HaAuth.Access.Failed -> {
                     Log.w(TAG, "getExternalAuth failed: ${a.reason}")
+                    authRedirectGuard.onExternalAuthFailed()
+                    handler.post {
+                        frontendLoading = false
+                        handler.removeCallbacks(hideLoading)
+                        hideConnecting("external auth failed: ${a.reason}")
+                    }
                     JSONObject().put("success", false)
                 }
             }

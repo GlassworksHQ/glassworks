@@ -113,6 +113,13 @@ interface PageHost {
     fun onContentGone(killed: Boolean)
 
     /**
+     * The engine blocked a load or couldn't start its guard, and is showing its own explanation over the page
+     * (the legacy engine's lockdown). Hosts covering the page with a loading screen should hide it so the
+     * message is visible.
+     */
+    fun onBlocked(reason: String) {}
+
+    /**
      * Whether a page at [url] may have the microphone, the camera and the permissions it asks for, with no prompt
      * (#847). The engine asks for the top-level page and for the document that asks, and grants only when both are
      * trusted.

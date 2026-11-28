@@ -11,6 +11,19 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Fixed
+- **Home Assistant addresses entered without `http://` or a port now work.** Typing a bare address such as
+  `192.0.2.10` or `homeassistant.local` in Settings or manual setup now fills in `http://` and port `8123`
+  automatically, while explicit `http://` and `https://` addresses keep their scheme and port. Invalid addresses
+  are rejected with an inline error instead of being saved.
+- **Sign-in errors no longer trap the panel on the connecting screen or loop forever.** If Home Assistant rejects
+  authentication without revoking the panel's token (for example during a temporary error or IP ban), the panel now
+  stops bouncing between the dashboard and the login page and hides the connecting screen right away so the error
+  or sign-in screen is visible.
+- **Lockdown messages are no longer hidden behind the connecting screen.** When the legacy browser engine blocks a
+  page or waits on its lockdown, the connecting screen now steps aside so you can read the message. In the legacy
+  build.
+
 ## [0.9.1] - 2026-11-27
 
 **One volume for everything the panel plays, and a round of fixes for the lululemon Mirror: a real camera picture, Wi-Fi that stays on, and a screen that wakes without lines.**

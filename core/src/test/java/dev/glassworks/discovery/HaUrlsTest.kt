@@ -44,9 +44,52 @@ class HaUrlsTest {
     @Test
     fun normalize() {
         assertEquals("http://192.168.1.100:8123", HaUrls.normalize(" 192.168.1.100:8123/ "))
+        assertEquals("http://192.0.2.10:8123", HaUrls.normalize("192.0.2.10"))
+        assertEquals("http://homeassistant.local:8123", HaUrls.normalize("homeassistant.local"))
+        assertEquals("http://[fd00::5]:8123", HaUrls.normalize("[fd00::5]"))
+        assertEquals("http://192.0.2.10:80", HaUrls.normalize("192.0.2.10:80"))
+        assertEquals("https://ha.example.com", HaUrls.normalize("https://ha.example.com"))
+        assertEquals("http://ha.example.com", HaUrls.normalize("http://ha.example.com"))
         assertEquals("http://homeassistant.local:8123", HaUrls.normalize("http://homeassistant.local:8123/lovelace/0"))
         assertNull(HaUrls.normalize(""))
         assertNull(HaUrls.normalize("ftp://x"))
+    }
+
+    @Test
+    fun normalizeDashboardUrl() {
+        // Missing scheme: prepend http:// and default port to 8123 when none was specified.
+        assertEquals("http://192.0.2.10:8123", HaUrls.normalizeDashboardUrl("192.0.2.10"))
+        assertEquals("http://192.0.2.10:8123", HaUrls.normalizeDashboardUrl(" 192.0.2.10 "))
+        assertEquals("http://homeassistant.local:8123", HaUrls.normalizeDashboardUrl("homeassistant.local"))
+        assertEquals("http://homeassistant.local:8123", HaUrls.normalizeDashboardUrl("HomeAssistant.Local"))
+        assertEquals("http://192.0.2.10:8123/lovelace/0?kiosk=0#top", HaUrls.normalizeDashboardUrl("192.0.2.10/lovelace/0?kiosk=0#top"))
+        assertEquals("http://[fd00::5]:8123", HaUrls.normalizeDashboardUrl("[fd00::5]"))
+        assertEquals("http://[fd00::5]:8123/lovelace/0", HaUrls.normalizeDashboardUrl("[fd00::5]/lovelace/0"))
+
+        // Missing scheme with an explicit port: keep that port.
+        assertEquals("http://192.0.2.10:80", HaUrls.normalizeDashboardUrl("192.0.2.10:80"))
+        assertEquals("http://homeassistant.local:8123/lovelace/0", HaUrls.normalizeDashboardUrl("homeassistant.local:8123/lovelace/0"))
+        assertEquals("http://[fd00::5]:8124/lovelace/0", HaUrls.normalizeDashboardUrl("[fd00::5]:8124/lovelace/0"))
+
+        // Explicit http:// or https://: keep scheme, host, port (never force :8123), and path/query/fragment.
+        assertEquals("https://ha.example.com", HaUrls.normalizeDashboardUrl("https://ha.example.com"))
+        assertEquals("http://ha.example.com", HaUrls.normalizeDashboardUrl("http://ha.example.com"))
+        assertEquals("https://ha.example.com/lovelace/0?a=1#b", HaUrls.normalizeDashboardUrl("HTTPS://HA.Example.Com/lovelace/0?a=1#b"))
+        assertEquals("http://192.0.2.10:8123/lovelace/0", HaUrls.normalizeDashboardUrl("http://192.0.2.10:8123/lovelace/0"))
+        assertEquals("https://[fd00::5]/lovelace/0", HaUrls.normalizeDashboardUrl("https://[fd00::5]/lovelace/0"))
+
+        // Invalid inputs are rejected.
+        val invalid = listOf(
+            null, "", "   ",
+            "ftp://192.0.2.10:8123", "ws://192.0.2.10:8123", "file:///etc/hosts",
+            "javascript:alert(1)", "mailto:user@example.com", "about:blank",
+            "http://", "https://", "://192.0.2.10", "http://:8123", "/lovelace/0", "http:///lovelace/0",
+            "http:/192.0.2.10", "192.0.2.10:", "192.0.2.10:0", "192.0.2.10:65536", "192.0.2.10:abc",
+            "http://192.0.2.10:abc", "192.0.2.10:80:81",
+            "not a url", "192.0.2.10 8123", "http://exa mple.com", "http://192.0.2.10\\evil.example",
+            "[fd00::5", ".", "http://fa\u00df.example", "http://a%20b.example",
+        )
+        for (bad in invalid) assertNull("expected null for <$bad>", HaUrls.normalizeDashboardUrl(bad))
     }
 
     @Test

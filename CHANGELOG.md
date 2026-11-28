@@ -25,6 +25,14 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   steps, and the main button stays at the bottom of the screen.
 
 ### Fixed
+- **Home Assistant addresses entered without `http://` or a port now work.** Typing a bare address such as
+  `192.0.2.10` or `homeassistant.local` in Settings or manual setup now fills in `http://` and port `8123`
+  automatically, while explicit `http://` and `https://` addresses keep their scheme and port. Invalid addresses
+  are rejected with an inline error instead of being saved.
+- **Sign-in errors no longer trap the panel on the connecting screen or loop forever.** If Home Assistant rejects
+  authentication without revoking the panel's token (for example during a temporary error or IP ban), the panel now
+  stops bouncing between the dashboard and the login page and hides the connecting screen right away so the error
+  or sign-in screen is visible.
 - **Another device on your network can no longer replace the panel's Home Assistant sign-in.** Once the panel is
   signed in, its sign-in page only lets you sign in again from a browser signed in to the panel's Manage page. To use
   another account, sign the panel out first. The panel's web pages also answer only to the panel's own address now,

@@ -8,6 +8,7 @@ import dev.glassworks.screen.ScreenHardware
 import dev.glassworks.theme.Themes
 import dev.glassworks.KioskPrefs
 import dev.glassworks.audio.MasterVolume
+import dev.glassworks.discovery.HaUrls
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -61,13 +62,26 @@ class CoreSettings(
 
     fun sections(): Map<SettingsPlace, SettingsSection> = mapOf(
         SettingsPlace.DASHBOARD to SettingsSection("dashboard", DASHBOARD_TITLE, listOfNotNull(
-            text(
-                "Home Assistant", "Found automatically", TextKind.ADDRESS,
-                value = { prefs.urlSetting.takeIf { it != KioskPrefs.AUTO }.orEmpty() },
+            SettingsItem.Text(
+                "Home Assistant", HA_ADDRESS_HINT, TextKind.ADDRESS,
+                value = { prefs.urlSetting.takeIf { !it.equals(KioskPrefs.AUTO, ignoreCase = true) }.orEmpty() },
                 shown = { it.ifBlank { found() } }, restartsApp = true,
                 // The panel's own connection: copying another panel's would sign this one's dashboard out (#466 panel run).
                 perPanel = true,
-            ) { prefs.urlSetting = it.ifBlank { KioskPrefs.AUTO } },
+            ) { raw, done ->
+                val v = raw.trim()
+                if (v.isEmpty() || v.equals(KioskPrefs.AUTO, ignoreCase = true)) {
+                    prefs.urlSetting = KioskPrefs.AUTO
+                    done(null)
+                } else {
+                    val normalized = HaUrls.normalizeDashboardUrl(v)
+                    if (normalized == null) done(HA_ADDRESS_ERROR)
+                    else {
+                        prefs.urlSetting = normalized
+                        done(null)
+                    }
+                }
+            },
             account()?.let { SettingsItem.Info(title = { ACCOUNT_TITLE }, detail = { account().orEmpty() }) },
             switch("Full screen", "Hide Home Assistant's header and sidebar", { prefs.hideHeader }) {
                 prefs.hideHeader = it
@@ -319,6 +333,8 @@ class CoreSettings(
     companion object {
         /** The dashboard's page: where Home Assistant is and how its dashboard shows. */
         const val DASHBOARD_TITLE = "Home Assistant & dashboard"
+        const val HA_ADDRESS_HINT = "Found automatically (e.g. http://homeassistant.local:8123)"
+        const val HA_ADDRESS_ERROR = "Enter a Home Assistant address like http://homeassistant.local:8123 or 192.0.2.10:8123, or leave blank to find it automatically."
         /** The Screen page's id, and its blueprints' `pane` in the app's blueprint list (core/src/main/java/dev/glassworks/screen/page.json). */
         const val SCREEN = "screen"
         const val ACCOUNT_TITLE = "Dashboard sign-in"
