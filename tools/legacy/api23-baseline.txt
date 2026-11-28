@@ -11,6 +11,8 @@
 # VitroAccess.kt: View.getFocusable behind Platform.hasFocusableAuto (Vitro a11y, #814).
 # VitroAccess.kt: AccessibilityNodeInfo.setStateDescription behind Platform.hasStateDescription, and
 #   ACTION_SET_PROGRESS behind Platform.hasSetProgressAction (Vitro sliders, AdjustableAccess).
+# OutlineClip.kt: Outline.getRadius behind Platform.hasGradientDrawableGetters (Vitro's card clip, #980): below
+#   Android 7 every rounded card keeps its clip, as before.
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.Collection#removeIf
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/camera/onvif/RtspServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
@@ -22,6 +24,7 @@ dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#
 dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#setItalic
 dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#setWeight
 dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder()
+dev/glassworks/engine/vitro/ui/OutlineClip.kt|android.graphics.Outline#getRadius
 dev/glassworks/engine/vitro/ui/VitroAccess.kt|android.view.accessibility.AccessibilityNodeInfo#setStateDescription
 dev/glassworks/engine/vitro/ui/VitroAccess.kt|android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction#ACTION_SET_PROGRESS
 dev/glassworks/engine/vitro/ui/VitroAccess.kt|android.view.View#getFocusable
