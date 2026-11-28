@@ -394,8 +394,7 @@ The Ed25519 checker for radio bundles. Release `installer-files-3`, sha256 `6aa0
   ([`tools/mirror`](tools/mirror)) does: the tool fetches it through Refract, checks its size and SHA-256
   against [`tools/mirror/device-bins.json`](tools/mirror/device-bins.json) (held to Refract's allowlist by
   `tools/check-device-bins.py`), and embeds it in a one-boot patch on the Mirror. It isn't in this
-  repository or in any APK. `--backup-module` takes a module you built yourself instead. Until that release
-  is published, the default `--backup` fetch can't resolve, and `--backup-module` is the way to run it.
+  repository or in any APK. `--backup-module` takes a module you built yourself instead.
 
 ### This project's files
 
