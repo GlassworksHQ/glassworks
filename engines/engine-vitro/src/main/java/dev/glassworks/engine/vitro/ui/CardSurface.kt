@@ -1151,7 +1151,14 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         } else if (!keepRadius) {
             (background as? GradientDrawable)?.mutate()?.let { (it as GradientDrawable).cornerRadius = 0f }
         }
+        onMadeSeamless(keepBackground, keepRadius)
     }
+
+    /**
+     * A seamless container took this card's surface off ([makeSeamless]). A card that draws its own `ha-card` (an
+     * island's page) styles it as the container does.
+     */
+    protected open fun onMadeSeamless(keepBackground: Boolean, keepRadius: Boolean) {}
 
     /**
      * stack-in-card's style on a card it holds is inline (`box-shadow: none; background: transparent;

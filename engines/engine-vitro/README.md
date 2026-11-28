@@ -254,7 +254,9 @@ Vitro reads the themes Home Assistant already has, so a dashboard looks the same
 - Entity state colors follow the domain and the device class, such as amber for a light that is on.
 - A view or a single card can set its own `theme:`, and `card_mod` styles apply on the container.
 
-The resolved variables are also exported to Tier 3 islands, so native and custom cards match.
+The resolved variables are also exported to Tier 3 islands, so native and custom cards match. An island starts from every variable Home Assistant's own page defines for the light or dark mode (its color, spacing and font tokens), puts the theme over them, and then the custom properties that the cards around it set in their `card_mod`. A theme value that names one of Home Assistant's variables (`var(--ha-color-surface-default)`) resolves to Home Assistant's value, natively and in islands.
+
+In an island, card-mod styles the card's `ha-card` as it does in Home Assistant, when card-mod is one of the dashboard's Lovelace resources. A custom card in an island inside a `stack-in-card` gets stack-in-card's look too: no background, shadow or rounded corners of its own, unless the stack's `keep` options say otherwise.
 
 Vitro applies card-mod natively wherever it can draw the result the way Home Assistant does: the card's own surface (backgrounds, borders, corners, shadows, padding, a pinned position, fonts) and the inside of Markdown and clock cards. The details are under [Rendering like Home Assistant does](#rendering-like-home-assistant-does) and [What Vitro draws natively](#what-vitro-draws-natively).
 

@@ -307,6 +307,14 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
   - Copyright: © 1991-2025 Unicode, Inc.
   - Upstream: https://cldr.unicode.org
   - Source: https://github.com/unicode-org/cldr (through ICU, https://github.com/unicode-org/icu)
+- `dev/glassworks/engine/vitro/theme/ha-root-vars.json` (a Java resource, in APKs that carry the Vitro engine): the
+  **Home Assistant frontend**'s default CSS variables, the names and values its page defines on `:root` with its
+  default theme in light and dark mode, as Home Assistant frontend 20261028.5 computes them, recorded by
+  `tools/vitro-parity/ha-root-vars.mjs`. Vitro's islands start their page from them, as a card in Home Assistant's
+  page inherits them.
+  - Licence: Apache-2.0 (`LICENSES/Apache-2.0.txt`)
+  - Copyright: Home Assistant contributors
+  - Upstream: https://github.com/home-assistant/frontend (tag `20261028.5`)
 - `dev.glassworks.platform.HttpsTrust` (in the code, as text): **ISRG Root X1**, Let's Encrypt's root CA
   certificate, unmodified, from https://letsencrypt.org/certs/isrgrootx1.pem (SHA-256
   `96bcec06264976f37460779acf28c5a7cfe8a3c0aae11a8ffcee05c0bddf08c6`, the same file as AOSP's

@@ -611,6 +611,47 @@ class ThemeResolverTest {
     // ---- Exports ----
 
     @Test
+    fun aThemeValueThatNamesOneOfHasOwnVariablesTakesHasValue() {
+        // HA's page defines its tokens around the theme, so `var(--ha-color-…)` in a theme is valid there. Without them
+        // the name was missing, the theme's card background invalid, and an island fell back to `white`.
+        val ha = dev.glassworks.engine.vitro.theme.HaRootVars.of(true)
+        val token = ha.getValue("ha-color-fill-disabled-normal-resting")
+        val t = resolveWith("""{"card-background-color": "var(--ha-color-fill-disabled-normal-resting)", "ha-card-background": "var(--card-background-color)"}""")
+        assertEquals(token, t.vars["card-background-color"])
+        assertEquals(ThemeResolver.parseColor(token), t.cardBackgroundColor)
+        // Light mode reads light mode's.
+        val light = ThemeResolver.resolve(catalog("""{"themes": {"t": {"x": "var(--disabled-color)"}}}"""), false, "t")
+        assertEquals("#bdbdbd", light.vars["x"])
+        assertEquals("#464646", resolveWith("""{"x": "var(--disabled-color)"}""").vars["x"])
+    }
+
+    @Test
+    fun anIslandsRootStartsFromHasVariablesThenTheThemeThenTheCardsAroundIt() {
+        val ha = dev.glassworks.engine.vitro.theme.HaRootVars.of(true)
+        assertTrue("HA's page has hundreds", ha.size > 400)
+        val t = resolveWith("""{"primary-color": "#ff5722", "secondary-text-color": "var(--a)", "a": "var(--a)"}""")
+        val css = t.toCssRootBlock(mapOf("primary-text-color" to "#abcdef"))
+        fun count(name: String) = Regex("\\s--" + Regex.escape(name) + ":").findAll(css).count()
+        assertTrue("one of HA's own", css.contains("  --rgb-disabled-color: ${ha.getValue("rgb-disabled-color")};\n"))
+        assertTrue("the theme over HA's", css.contains("  --primary-color: #ff5722;\n"))
+        assertEquals("each name once", 1, count("primary-color"))
+        assertTrue("an enclosing card's variable over the theme", css.contains("  --primary-text-color: #abcdef;\n"))
+        assertEquals(1, count("primary-text-color"))
+        // An invalid theme name hides HA's default, as the theme's declaration does in HA's page.
+        assertEquals(0, count("secondary-text-color"))
+        // Window- and direction-bound names aren't in the table.
+        assertFalse(css.contains("--safe-area-inset-top"))
+        assertFalse(css.contains("--header-height"))
+    }
+
+    @Test
+    fun hasVariablesComeFromThePinnedFrontend() {
+        val pinned = Regex("^VERSION = \"([^\"]+)\"", RegexOption.MULTILINE)
+            .find(java.io.File(dev.glassworks.testing.RepoFiles.root, "tools/perf/hafrontend.py").readText())!!.groupValues[1]
+        assertEquals("run node tools/vitro-parity/ha-root-vars.mjs after a frontend update", pinned, dev.glassworks.engine.vitro.theme.HaRootVars.frontend)
+    }
+
+    @Test
     fun cssRootBlockExportsVariablesAndSkipsCardMod() {
         val t = resolveWith(
             """{"primary-color": "#ff5722", "card-mod-card": "ha-card { opacity: 0.9; }", "card-mod-card-yaml": "opacity: 0.9", "multi": "a;b\nc"}""",

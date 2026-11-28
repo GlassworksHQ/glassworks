@@ -151,6 +151,17 @@ node tools/vitro-parity/island-probe.mjs tools/vitro-parity/island-cases/better-
 GW_VITRO_ISLAND_E2E=1 node --test tools/vitro-parity/test/island-detect.e2e.test.mjs
 ```
 
+`island-probe.mjs` also takes a case's `"in_stack": {"background": false, "border_radius": false}`: the card is one a stack-in-card holds, with those `keep` options, and the probe tells the page so as Vitro does for an island in a native stack-in-card. `island-cases/mushroom-media-card-mod.json` is such a card, with card-mod and Mushroom as its resources: its `ha-card` should come out transparent, square and borderless, as HA draws it.
+
+### HA's own variables in an island
+
+An island's page starts its `:root` from every CSS variable Home Assistant's page defines with its default theme, in light and dark mode, and puts the dashboard's theme over them. The table is `engines/engine-vitro/src/main/resources/dev/glassworks/engine/vitro/theme/ha-root-vars.json`, read from the pinned frontend on the fake HA:
+
+```sh
+node tools/vitro-parity/ha-root-vars.mjs           # write the table again (after a frontend update)
+node tools/vitro-parity/ha-root-vars.mjs --check   # exit 1 when the committed table differs
+```
+
 ### Cases with their own stylesheets
 
 Home Assistant is read-only for the harness, apart from its own dashboard, so a case that needs a stylesheet (a web font, say) doesn't add a Lovelace resource. It lists the sheet instead: `"resources": [{"type": "css", "url": "/local/vitro-harness-fixtures/fonts/cardmod.css"}]`, with the file in `fixtures/fonts/cardmod.css`. Only `type: css` under that path is accepted. Such a case gets a page of its own in the capture, and the next case a fresh one, because what a sheet declares stays in the page. The font cases (`font-*`) use fonts under the SIL Open Font License; their licenses sit next to them.

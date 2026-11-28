@@ -82,6 +82,9 @@ export async function probeIsland(root, caseFile, opts = {}) {
       });
       // As the panel's seed: where HA's connection is (a page asks for its subscriptions once it hears), then states.
       ws.send(JSON.stringify({ type: 'conn', connected: true, epoch: 1 }) + '\n');
+      // A card a stack-in-card holds (`in_stack`: its `keep` options): the panel says so in its theme message, as Vitro
+      // does for an island in a native stack-in-card. No css: the page keeps the theme it was written with.
+      if (c.in_stack) ws.send(JSON.stringify({ type: 'theme', dark: c.dark !== false, name: '', stack: c.in_stack }) + '\n');
       const snapshot = () => ws.send(JSON.stringify({ type: 'snapshot', states }) + '\n');
       if (opts.snapshotDelayMs) setTimeout(snapshot, opts.snapshotDelayMs); else snapshot();
     });

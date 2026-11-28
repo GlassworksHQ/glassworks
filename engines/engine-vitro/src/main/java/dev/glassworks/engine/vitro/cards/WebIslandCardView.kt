@@ -18,6 +18,7 @@ import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.ViewConfig
+import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.errorCardContent
@@ -107,6 +108,22 @@ class WebIslandCardView(
     }
 
     private val watchedEntities = CopyOnWriteArraySet<String>()
+
+    /**
+     * The custom properties the cards around this one set in their card_mod, which reach it through HA's shadow roots
+     * (a stack's `ha-card { --primary-text-color: … }`): the card scope it was built in, less the card's own card_mod
+     * properties, which card-mod sets on the card's `ha-card` in the island as in HA.
+     */
+    private val inheritedVars: Map<String, String> = run {
+        val own = ThemeResolver.parseCardMod(config.raw.optJSONObject("card_mod"), ctx.theme.vars).customProperties.keys
+        if (own.isEmpty()) ctx.cardVars.toMap() else ctx.cardVars.filterKeys { it !in own }
+    }
+
+    /**
+     * stack-in-card's style for the card it holds, when this island is one of its cards ([onMadeSeamless]): which of
+     * the card's own `keep` options are on. Null for a card in no such container.
+     */
+    @Volatile private var stackKeep: JSONObject? = null
     private var slotId: String? = null
     private var islandPage: Page? = null
 
@@ -207,7 +224,7 @@ class WebIslandCardView(
             lateinit var idRef: String
             val handler = object : VitroIslandServer.SlotHandler {
                 override val html: String
-                    get() = buildIslandHtml(ctx, config, fillViewport, slotId = idRef, base = server.capPath)
+                    get() = buildIslandHtml(ctx, config, fillViewport, slotId = idRef, base = server.capPath, inherited = inheritedVars)
 
                 override fun onConnected(send: (JSONObject) -> Unit) {
                     // The snapshot goes first: no patch for this socket can be queued before it (the observer
@@ -842,12 +859,25 @@ class WebIslandCardView(
         all.forEach { it.cancel() }
     }
 
-    /** The bridge message that restyles the island to this card's theme. */
+    /**
+     * The bridge message that restyles the island to this card's theme, and to stack-in-card's style on its cards when
+     * it is one of them (`stack`, null otherwise).
+     */
     private fun themeMessage(): JSONObject = JSONObject()
         .put("type", "theme")
-        .put("css", themeCss(ctx, fillViewport))
+        .put("css", themeCss(ctx, fillViewport, inheritedVars))
         .put("dark", ctx.theme.dark)
         .put("name", ctx.theme.name)
+        .put("stack", stackKeep ?: JSONObject.NULL)
+
+    override fun onMadeSeamless(keepBackground: Boolean, keepRadius: Boolean) {
+        stackKeep = JSONObject().put("background", keepBackground).put("border_radius", keepRadius)
+        // A page already connected (one handed over from an earlier build) is told now; a new one hears it on connect.
+        if (senders.isNotEmpty()) {
+            val msg = themeMessage()
+            senders.forEach { it(msg) }
+        }
+    }
 
     /** The token and the user (`hass.user`, as JSON text) sent to the page last (under [seedLock]). */
     private var sentToken: String? = null
@@ -1018,8 +1048,8 @@ class WebIslandCardView(
          * view, not the white GeckoView draws behind a transparent page. A theme change sends it again. `html:root`
          * outranks the page's own `html, body { background: transparent }`, which comes after this block.
          */
-        internal fun themeCss(ctx: VitroCardContext, fillViewport: Boolean): String {
-            val vars = ctx.theme.toCssRootBlock()
+        internal fun themeCss(ctx: VitroCardContext, fillViewport: Boolean, inherited: Map<String, String> = emptyMap()): String {
+            val vars = ctx.theme.toCssRootBlock(inherited)
             if (fillViewport) return vars + "html:root { background-color: ${ctx.theme.hex(ctx.theme.backgroundColor)}; }\n"
             // An inline island on a view of one opaque color paints that color itself: what it shows at its edges
             // (a card's rounded corners and ends) is then drawn by the page, never left half transparent for the
@@ -1204,9 +1234,10 @@ function vitroSeedStorage(store, origin, seed) {
             fillViewport: Boolean = false,
             slotId: String = "s0",
             base: String = "",
+            inherited: Map<String, String> = emptyMap(),
         ): String {
             val tag = config.type.removePrefix("custom:")
-            val themeCss = themeCss(ctx, fillViewport)
+            val themeCss = themeCss(ctx, fillViewport, inherited)
             val resourceScripts = ctx.resources.joinToString("\n") { r ->
                 val inlineJs = decodeInlineModule(r.url)
                 val src = resourceUrl(r.url, base)
@@ -1285,7 +1316,19 @@ if (!customElements.get('ha-card')) {
       root.innerHTML = '<slot></slot><style>' + HA_CARD_CSS + '</style>';
       this._h = null;
     }
-    connectedCallback() { vitroUpgradeCard(this); }
+    connectedCallback() {
+      vitroUpgradeCard(this);
+      // HA's ha-card is a LitElement, and card-mod applies a card's card_mod from its firstUpdated, which card-mod
+      // patches onto ha-card's class (patch/ha-card.ts): Lit calls it once, in a microtask after the first connect,
+      // once the card that holds it has its config. This element calls it the same way, so card-mod (a Lovelace
+      // resource like any other) styles an island's card as it does in HA. Without card-mod, there is none to call.
+      if (this._vitroFirstUpdated) return;
+      this._vitroFirstUpdated = true;
+      Promise.resolve().then(() => {
+        if (typeof this.firstUpdated !== 'function') return;
+        try { Promise.resolve(this.firstUpdated(new Map())).catch(() => {}); } catch (e) {}
+      });
+    }
     attributeChangedCallback(name, _old, v) { if (name === 'header') this.header = v; }
     // HA: the header, when set, as an h1 above the card's content; none without one.
     set header(v) {
@@ -1308,6 +1351,19 @@ if (!customElements.get('ha-card')) {
       if (Object.prototype.hasOwnProperty.call(el, p)) { const v = el[p]; delete el[p]; el[p] = v; }
     }
   }
+}
+// Where card-mod (and the helpers thomasloven's cards share, auto-entities') find hass: HA's `home-assistant`, or
+// `hc-main`, the element of HA's Cast receiver, which holds the same hass. card-mod styles nothing until one has a
+// hass with its themes: without it, an island's card_mod never applied. The island stands in as `hc-main`, a hidden
+// element whose hass is the card's: `home-assistant` stays undefined, as cards that look inside HA's own page (Bubble
+// Card's view lookups) expect of an island. card-mod's templates then see `browser` as "CAST", as on a Cast screen.
+if (!customElements.get('home-assistant') && !customElements.get('hc-main')) {
+  customElements.define('hc-main', class extends HTMLElement {
+    get hass() { return window.__vitroHass; }
+    connectedCallback() { this.style.display = 'none'; }
+  });
+  const addMain = () => { if (!document.querySelector('hc-main')) document.body.appendChild(document.createElement('hc-main')); };
+  if (document.body) addMain(); else document.addEventListener('DOMContentLoaded', addMain);
 }
 if (!customElements.get('ha-icon')) {
   const iconCache = new Map();
@@ -2719,7 +2775,8 @@ function connectBridge() {
         const style = document.getElementById('vitro-theme');
         if (style && typeof m.css === 'string') style.textContent = m.css;
         hassBase.themes = Object.assign({}, hassBase.themes, { darkMode: !!m.dark, default_theme: String(m.name || '') });
-        if (cardEl) feedCard();
+        vitroStackKeep = m.stack && typeof m.stack === 'object' ? m.stack : null;
+        if (cardEl) { feedCard(); vitroStackStyleCard(cardEl); }
       } else if (m.type === 'config' && m.config && typeof m.config === 'object') {
         // HA's config as the panel has it now (a page made before it arrived had none): hass.config follows it.
         haConfig = m.config;
@@ -2913,6 +2970,7 @@ async function boot() {
   wireEvents();
   if (!resizeWired) wireResize();
   settleCard(cardEl);
+  vitroStackStyleCard(cardEl);
   // HA's own elements the card draws with that this page lacks (frontend-watch.js): its view goes to HA's frontend.
   vitroWatchFrontend(cardEl, { report: (tags, cards) => sendBridge({ type: 'needsFrontend', tags, cards }) });
 }
@@ -3026,6 +3084,53 @@ function wireResize() {
   if (window.ResizeObserver) new ResizeObserver(scheduleResize).observe(mount);
   resizeNow = scheduleResize;
   scheduleResize();
+}
+// stack-in-card 0.2.0's style on each card it holds (its _updateChildren and _updateStyle), when this island is one
+// of them (the panel's `stack` in its theme message, null otherwise): inline on the card's ha-card, `box-shadow:
+// none` and `border-radius: 0` once the card has rendered, and `background: transparent` half a second later (unless
+// a `keep` option or the card's `--keep-background: true` says otherwise). Inline, so card_mod's own sheet can't bring
+// them back, as in HA. A card that holds its cards in a #root or #card (a stack of its own) gets it on each of them.
+let vitroStackKeep = null;
+const vitroStackStyled = new Set();
+function vitroStackStyleOne(e, withBg) {
+  if (!e || !e.style) return;
+  vitroStackStyled.add(e);
+  const keep = vitroStackKeep || {};
+  e.style.boxShadow = 'none';
+  if (!keep.background && withBg && getComputedStyle(e).getPropertyValue('--keep-background').trim() !== 'true') e.style.background = 'transparent';
+  if (!keep.border_radius) e.style.borderRadius = '0';
+}
+function vitroStackChildren(e, withBg, depth) {
+  if (!e || depth > 8) return;
+  const visit = (root) => root.childNodes.forEach((c) => {
+    if (c.tagName === 'STACK-IN-CARD') return;
+    if (c.style) c.style.margin = '0px';
+    vitroStackWait(c, withBg, depth + 1);
+  });
+  if (e.shadowRoot) {
+    const card = e.shadowRoot.querySelector('ha-card');
+    if (card) { vitroStackStyleOne(card, withBg); return; }
+    const root = e.shadowRoot.getElementById('root') || e.shadowRoot.getElementById('card');
+    if (root) visit(root);
+  } else {
+    if (typeof e.querySelector === 'function') { const card = e.querySelector('ha-card'); if (card) vitroStackStyleOne(card, withBg); }
+    if (e.childNodes) visit(e);
+  }
+}
+function vitroStackWait(e, withBg, depth) {
+  const done = e && e.updateComplete && typeof e.updateComplete.then === 'function' ? e.updateComplete : Promise.resolve();
+  Promise.resolve(done).catch(() => {}).then(() => vitroStackChildren(e, withBg, depth || 0));
+}
+function vitroStackStyleCard(el) {
+  if (!el) return;
+  if (!vitroStackKeep) {
+    // No longer a stack's card (a page handed to another build): the card's own look back.
+    vitroStackStyled.forEach((e) => { e.style.boxShadow = ''; e.style.background = ''; e.style.borderRadius = ''; });
+    vitroStackStyled.clear();
+    return;
+  }
+  vitroStackWait(el, false, 0);
+  setTimeout(() => { if (vitroStackKeep && cardEl === el) vitroStackWait(el, true, 0); }, 500);
 }
 // Set once the card had its first render (its updateComplete, or a second after it was made): a 0 px card from then
 // on draws nothing, and its island collapses.

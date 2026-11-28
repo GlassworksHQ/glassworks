@@ -1,0 +1,42 @@
+{
+ "_comment": "A Mushroom media player card in an island with card_mod on its ha-card, as a stack-in-card's child: card-mod has to reach the island's ha-card, and the island has to draw it in the dashboard's dark theme. A made-up speaker.",
+ "card": {
+  "type": "custom:mushroom-media-player-card",
+  "entity": "media_player.study_speaker",
+  "use_media_info": true,
+  "media_controls": [
+   "play_pause_stop",
+   "previous",
+   "next"
+  ],
+  "card_mod": {
+   "style": "ha-card { background: none; border: none; }"
+  }
+ },
+ "in_stack": {
+  "background": false,
+  "border_radius": false
+ },
+ "resources": [
+  "/hacsfiles/lovelace-card-mod/card-mod.js?hacstag=v4.2.1",
+  "/hacsfiles/lovelace-mushroom/mushroom.js?hacstag=v5.3.0"
+ ],
+ "fixture": {
+  "states": {
+   "media_player.study_speaker": {
+    "state": "paused",
+    "last_changed": -720,
+    "attributes": {
+     "volume_level": 0.31,
+     "is_volume_muted": false,
+     "media_content_type": "music",
+     "media_title": "Evening Tide",
+     "media_artist": "The Placeholder Trio",
+     "device_class": "speaker",
+     "friendly_name": "Study Speaker",
+     "supported_features": 8321599
+    }
+   }
+  }
+ }
+}

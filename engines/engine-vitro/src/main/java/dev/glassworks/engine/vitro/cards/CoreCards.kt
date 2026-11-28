@@ -1302,7 +1302,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
      */
     private fun buildMushroomTemplate() {
         val raw = config.raw
-        val vertical = raw.optString("layout") == "vertical" || raw.optBoolean("vertical", false)
+        val vertical = mushroomTemplateVertical(raw)
         val multiline = raw.optBoolean("multiline_secondary", false)
         // Mushroom 5's `fixed-info-height` (HA 2026.8+, a card straight in a sections grid whose rows aren't "auto"):
         // a vertical card's primary sits on a 16 px line in a 32 px box, with 2 px gaps. Anywhere else (in a stack,
@@ -1403,7 +1403,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             })
             addView(labels, LinearLayout.LayoutParams(if (vertical) MATCH_PARENT else 0, WRAP_CONTENT, if (vertical) 0f else 1f))
             // HA's vertical tile draws its info 6 px into the icon's 48 px box (measured in HA's DOM: the info
-            // starts 44 px under the icon box's top while the column is centered as if it didn't).
+            // starts 44 px under the icon box's top while the column is centered as if it didn't). refreshParts
+            // takes it back when there is no icon.
             if (fixedInfo) labels.translationY = -6f * ctx.dp
         }
         // Mushroom 5's horizontal content (`.content`, min-height 56 px) starts at the card's padding: card-mod padding
@@ -1444,22 +1445,40 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         var pictureLoaded = false
         var badgeIconName = ""
         var badgeColorValue: Int? = null
+        var primaryValue = ""
+        var secondaryValue = ""
+        /**
+         * Mushroom 5.3.0's render: `ha-tile-icon` (and the badge inside it) only for an `icon` or a `picture`,
+         * `ha-tile-info` only for a `primary` or a `secondary`, and no content at all when all four are empty
+         * ([MushroomTemplateParts]). There is no fallback icon: a card with text alone draws its text from the
+         * content's 10 px padding.
+         */
+        fun refreshParts() {
+            val parts = MushroomTemplateParts.of(iconName, pictureUrl, primaryValue, secondaryValue)
+            avatarFrame.visibility = if (parts.icon) VISIBLE else GONE
+            labels.visibility = if (parts.info) VISIBLE else GONE
+            row.visibility = if (parts.content) VISIBLE else GONE
+            if (!vertical) row.setPaddingRelative(if (parts.icon) gap else ctx.px(10f), 0, ctx.px(10f), 0)
+            // HA's vertical tile draws its info 6 px into the icon's 48 px box: with no icon, there is no box.
+            if (fixedInfo) labels.translationY = if (parts.icon) -6f * ctx.dp else 0f
+        }
         fun refreshAvatar() {
             val showPicture = pictureUrl.isNotBlank() && pictureLoaded
             picture.visibility = if (showPicture) VISIBLE else GONE
-            icon.visibility = if (showPicture) GONE else VISIBLE
+            icon.visibility = if (showPicture || iconName.isBlank()) GONE else VISIBLE
             avatar.background = if (showPicture) null else avatarBg
             val tint = iconColor ?: ctx.theme.stateInactiveColor
             // HA's tile icon only draws its tinted shape when the icon is interactive.
             avatarBg.setColor(if (interactiveIcon) withAlpha(tint, 0.2f) else Color.TRANSPARENT)
-            icon.setIcon(iconName.trim().ifBlank { "mdi:home" }, tint)
+            icon.setIcon(iconName.trim(), tint)
             mushroom?.iconColor = tint
+            refreshParts()
         }
         fun refreshBadge() {
             badge.visibility = if (badgeIconName.isBlank()) GONE else VISIBLE
             val bg = badgeColorValue ?: ctx.theme.primaryColor
             badgeOvalBg.setColor(bg)
-            badgeIcon.setIcon(badgeIconName.trim().ifBlank { "mdi:home" }, Color.WHITE)
+            badgeIcon.setIcon(badgeIconName.trim(), Color.WHITE)
             mushroom?.badgeColor = bg
         }
 
@@ -1479,8 +1498,8 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             text = sb
             visibility = if (v.isEmpty()) GONE else VISIBLE
         }
-        bindTpl("primary", config.name(null).orEmpty()) { v -> primary.setLine(v) }
-        bindTpl("secondary", "") { v -> secondary.setLine(v) }
+        bindTpl("primary", config.name(null).orEmpty()) { v -> primaryValue = v; primary.setLine(v); refreshParts() }
+        bindTpl("secondary", "") { v -> secondaryValue = v; secondary.setLine(v); refreshParts() }
         bindTpl("icon", config.icon ?: "") { v -> iconName = v; refreshAvatar() }
         bindTpl("icon_color", "") { v -> iconColor = MushroomColors.parse(v, ctx.theme); refreshAvatar() }
         bindTpl("picture", "") { v ->
@@ -1815,6 +1834,21 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         menu.show()
     }
 
+    /**
+     * Which parts Mushroom 5.3.0's template card renders for its (rendered) values, as its `render()` decides with
+     * JavaScript truthiness: `ha-tile-icon` for an [icon] or a [picture] (its badge lives inside it, so no icon means no
+     * badge either), `ha-tile-info` for a [primary] or a [secondary], and the content row for any of them. A template
+     * that hasn't rendered yet, or rendered empty, counts as empty.
+     */
+    internal data class MushroomTemplateParts(val icon: Boolean, val info: Boolean) {
+        val content: Boolean get() = icon || info
+
+        companion object {
+            fun of(icon: String, picture: String, primary: String, secondary: String) =
+                MushroomTemplateParts(icon = icon.isNotEmpty() || picture.isNotEmpty(), info = primary.isNotEmpty() || secondary.isNotEmpty())
+        }
+    }
+
     /** The views of a Mushroom template tile, for live updates and tests. */
     internal class MushroomTemplateViews(
         val row: LinearLayout,
@@ -1832,6 +1866,30 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     companion object {
         const val MUSHROOM_TEMPLATE = "custom:mushroom-template-card"
+
+        /**
+         * Mushroom 5.3.0's `vertical` after `migrateTemplateCardConfig`: the legacy `layout` sets it only when
+         * `vertical` itself isn't given (`layout: vertical` with `vertical: false` is horizontal).
+         */
+        internal fun mushroomTemplateVertical(raw: JSONObject): Boolean = when {
+            raw.has("vertical") && !raw.isNull("vertical") -> raw.optBoolean("vertical", false)
+            else -> raw.optString("layout") == "vertical"
+        }
+
+        /**
+         * Mushroom 5.3.0's `getGridOptions` rows for the template card (features aside: Vitro draws none): one row for
+         * any content, and a vertical card one more for its info, when it has a `primary`, or a `secondary` and no
+         * `icon`. It reads the config as written, templates unrendered. Null for 0 rows or `multiline_secondary`
+         * (no rows given: the card's own height).
+         */
+        internal fun mushroomTemplateGridRows(raw: JSONObject): Int? {
+            if (raw.optBoolean("multiline_secondary", false)) return null
+            fun has(key: String) = raw.optString(key).isNotEmpty()
+            val content = has("icon") || has("picture") || has("primary") || has("secondary")
+            var rows = if (content) 1 else 0
+            if (mushroomTemplateVertical(raw) && (has("primary") || (has("secondary") && !has("icon")))) rows++
+            return rows.takeIf { it > 0 }
+        }
 
         /** The domains whose entity's icon Mushroom's template card toggles by default (its `_e` and buttons). */
         private val MUSHROOM_TOGGLE_DOMAINS = setOf(

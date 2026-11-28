@@ -11,6 +11,7 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import dev.glassworks.engine.vitro.VitroFailures
+import dev.glassworks.engine.vitro.cards.TileCardView
 import dev.glassworks.engine.vitro.model.AreaCardConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import kotlin.math.max
@@ -341,12 +342,7 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                     val forecast = raw.optBoolean("show_forecast", true)
                     HaGridSize(12, 1 + (if (current) 1 else 0) + (if (forecast) 1 + (if (raw.optString("forecast_type") == "daily") 1 else 0) else 0))
                 }
-                "custom:mushroom-template-card" -> {
-                    val hasContent = listOf("icon", "picture", "primary", "secondary").any { raw.optString(it).isNotBlank() }
-                    val vertical = raw.optBoolean("vertical", false) || raw.optString("layout") == "vertical"
-                    if (raw.has("multiline_secondary") && raw.optBoolean("multiline_secondary")) HaGridSize(6, null)
-                    else HaGridSize(6, ((if (hasContent) 1 else 0) + if (vertical) 1 else 0).takeIf { it > 0 })
-                }
+                "custom:mushroom-template-card" -> HaGridSize(6, TileCardView.mushroomTemplateGridRows(raw))
                 "custom:mushroom-entity-card", "custom:mushroom-light-card", "custom:mushroom-fan-card",
                 "custom:mushroom-cover-card", "custom:mushroom-person-card", "custom:mushroom-lock-card",
                 "custom:mushroom-media-player-card", "custom:mushroom-climate-card", "custom:mushroom-vacuum-card",

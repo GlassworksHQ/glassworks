@@ -815,6 +815,47 @@ class IslandSessionsTest {
         assertTrue(slots(islands).isEmpty())
     }
 
+    @Test fun anIslandInAStackInCardGetsTheStacksLookAndTheVariablesAroundIt() {
+        // 2026-11-28, a real dashboard: a Mushroom media player in a stack-in-card, an island, drew its own card where
+        // HA draws it transparent. stack-in-card styles the ha-card of every card it holds, and the variables the cards
+        // around it set reach it through HA's shadow roots: the island's page hears both in its theme message.
+        val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
+        val pages = ArrayList<RecordingPage>()
+        val ctx = context(EntityStore(), islands, dark = true, pages)
+        // The stack's card_mod set these; the card's own card_mod sets --mush-icon-size, which card-mod applies itself.
+        ctx.cardVars = mapOf("primary-text-color" to "#abcdef", "mush-icon-size" to "30px")
+        val card = LovelaceParser.parseCard(JSONObject("""{"type": "custom:mushroom-media-player-card", "entity": "media_player.study",
+            "card_mod": {"style": "ha-card { --mush-icon-size: 30px; background: none; border: none; }"}}"""))
+        val island = WebIslandCardView(ctx, card)
+        ctx.cardVars = emptyMap() // the view restores the scope after the build: the island keeps what it was built in
+        island.makeSeamless(keepBackground = false, keepRadius = false)
+
+        val sent = ArrayList<JSONObject>()
+        slots(islands).values.single().onConnected { sent += it }
+        val theme = sent.first()
+        assertEquals("theme", theme.getString("type"))
+        val stack = theme.getJSONObject("stack")
+        assertFalse(stack.getBoolean("background"))
+        assertFalse(stack.getBoolean("border_radius"))
+        val css = theme.getString("css")
+        assertTrue("the stack's variable reaches the card", css.contains("--primary-text-color: #abcdef;"))
+        assertFalse("the card's own is card-mod's to set, on its ha-card", css.contains("--mush-icon-size"))
+        assertTrue("HA's own dark variables are there", css.contains("--rgb-disabled-color: 70,70,70;"))
+
+        // A page already connected hears it when the stack takes the card's surface after it.
+        val before = slots(islands).keys.toSet()
+        val other = WebIslandCardView(context(EntityStore(), islands, dark = true, pages), LovelaceParser.parseCard(JSONObject(cardJson)))
+        val otherSent = ArrayList<JSONObject>()
+        slots(islands).entries.single { it.key !in before }.value.onConnected { otherSent += it }
+        assertTrue("a card in no stack", otherSent.first().isNull("stack"))
+        otherSent.clear()
+        other.makeSeamless(keepBackground = true, keepRadius = false)
+        val restyled = otherSent.single { it.getString("type") == "theme" }
+        assertTrue(restyled.getJSONObject("stack").getBoolean("background"))
+        island.release()
+        other.release()
+    }
+
     @Test fun aHandedOffPageWhoseBridgeConnectsWhileTheNextCardIsBuiltIsSeeded() {
         val islands = VitroIslandServer(haBase = { base }, accessToken = { null }).also { islandServers += it }
         val pages = ArrayList<RecordingPage>()

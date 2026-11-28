@@ -151,6 +151,12 @@ data class ResolvedTheme(
      * clamped to 0.7..2.2. Cards apply it through [dev.glassworks.engine.vitro.ui.VitroCardContext.scaledSp].
      */
     val fontScale: Float = 1f,
+    /**
+     * Names the theme sets that are invalid at computed-value time (a reference cycle, or a missing name with no
+     * fallback): left out of [vars], and in an island they hide HA's own default of that name, as the theme's
+     * declaration does in HA's page.
+     */
+    val invalidVarNames: Set<String> = emptySet(),
 ) {
     private fun themeVar(key: String): String? =
         vars[key]?.takeIf { themeVarNames == null || key in themeVarNames }
@@ -188,15 +194,24 @@ data class ResolvedTheme(
     }
 
     /** Export resolved CSS custom properties for Tier 3 Micro-Web Islands so web cards match native cards. */
-    fun toCssRootBlock(): String = buildString {
+    /**
+     * The island page's `:root`: HA's own variables for this mode ([HaRootVars], what every card in HA's page
+     * inherits), then the theme's resolved [vars] over them, then [inherited]: the custom properties the cards around
+     * the island set in their card_mod (`ha-card { --primary-text-color: … }` on a stack), which reach a card inside
+     * them through HA's shadow roots. A theme name that is invalid ([invalidVarNames]) hides HA's default, as in HA.
+     */
+    fun toCssRootBlock(inherited: Map<String, String> = emptyMap()): String = buildString {
         append(":root {\n")
-        for ((k, v) in vars) {
-            if (k.startsWith("card-mod-")) continue
+        fun put(k: String, v: String) {
+            if (k.startsWith("card-mod-")) return
             // This block goes inside an island's <style>: no angle brackets, so a theme value can't close it.
             val safeKey = k.filter { it != '<' && it != '>' && it != '\n' && it != ';' && it != '{' && it != '}' }
             val safeVal = v.replace("\n", " ").replace(";", "").filter { it != '<' && it != '>' }
             append("  --").append(safeKey).append(": ").append(safeVal).append(";\n")
         }
+        for ((k, v) in HaRootVars.of(dark)) if (k !in vars && k !in invalidVarNames && k !in inherited) put(k, v)
+        for ((k, v) in vars) if (k !in inherited) put(k, v)
+        for ((k, v) in inherited) put(k, v)
         append("}\n")
     }
 
@@ -489,8 +504,13 @@ object ThemeResolver {
         // one with no fallback (`b: var(--a)` with `a` in a cycle): left out of the scope, so a `var()` of one takes
         // its fallback (as the card parser does). They're left out of the result entirely, not exported empty:
         // `--b: ;` would be a valid empty value, and an island's `var(--b, fallback)` would never take its fallback.
-        val invalid = invalidNames(raw)
-        val scope: Map<String, String> = if (invalid.isEmpty()) raw else raw - invalid
+        // HA's own variables for the mode ([HaRootVars]) are defined around the theme, as on HA's page: a theme value
+        // that names one (`var(--ha-color-surface-default)`) takes HA's value instead of being invalid.
+        val ha = HaRootVars.of(dark)
+        val invalid = invalidNames(raw, ha.keys)
+        val own: Map<String, String> = if (invalid.isEmpty()) raw else raw - invalid
+        // A theme name that is invalid hides HA's default of that name: a `var()` of it takes its fallback.
+        val scope: Map<String, String> = if (ha.isEmpty()) own else (if (invalid.isEmpty()) ha else ha - invalid) + own
         val resolved = LinkedHashMap<String, String>(raw.size)
         for (k in raw.keys) {
             if (k !in invalid) resolved[k] = resolveValue(raw[k].orEmpty(), scope, 0)
@@ -541,6 +561,7 @@ object ThemeResolver {
             cardGapDp = cardGap,
             viewPaddingDp = viewPad,
             themeVarNames = themeVarNames,
+            invalidVarNames = invalid,
             fontScale = parseFontScale(resolved),
         )
     }

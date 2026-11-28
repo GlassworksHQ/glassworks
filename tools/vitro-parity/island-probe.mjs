@@ -20,6 +20,8 @@
 // The resource names a file cards.json pins (or one in island-cases/cards/ under /__island-test/); the fixture is a
 // corpus fixture (README.md, "Fixtures"). An optional `"storage": {key: value}` is HA's localStorage on the panel: the
 // island takes it in before its card, and the probe reports what the island's localStorage holds after it ran.
+// An optional `"in_stack": {"background": false, "border_radius": false}` makes the card one a stack-in-card holds,
+// with those `keep` options: the probe's theme message says so, as Vitro's does for an island in a native stack-in-card.
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
