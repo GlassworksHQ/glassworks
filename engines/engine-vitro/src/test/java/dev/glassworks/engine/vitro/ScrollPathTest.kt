@@ -370,6 +370,69 @@ class ScrollPathTest {
         assertTrue("caught up as it came back", "777" in texts(card))
     }
 
+    /**
+     * A culled card whose content is replaced by one that must always be drawn (an auto-entities card that now matches a
+     * camera) is drawn again at once; one whose new content may stay culled keeps its live changes waiting.
+     */
+    @Test
+    fun aCulledCardThatNowHoldsACameraIsDrawnAgain() {
+        seed()
+        val vv = masonry(90, cull = true)
+        val cull = requireNotNull(vv.currentCull())
+        vv.currentScroll()!!.scrollTo(0, 0)
+        cull.update()
+        val columns = generateSequence(listOf<View>(vv.currentScroll()!!)) { level ->
+            level.flatMap { v -> (v as? ViewGroup)?.let { g -> (0 until g.childCount).map(g::getChildAt) } ?: emptyList() }.takeIf { it.isNotEmpty() }
+        }.flatten().filterIsInstance<dev.glassworks.engine.vitro.ui.CardColumn>().toList()
+        val (column, card) = columns.firstNotNullOf { col ->
+            (0 until col.childCount).map(col::getChildAt).lastOrNull { cull.skips(it) }?.let { col to it as CardSurface }
+        }
+        // New content that may stay culled: still left out, and its live changes wait too.
+        val plain = object : CardSurface(ctx()) {}
+        card.addView(plain)
+        dev.glassworks.engine.vitro.ui.ViewportCull.contentChanged(plain)
+        assertTrue(cull.skips(card))
+        assertTrue(plain.culled)
+        // A picture card (a camera's): drawn again at once.
+        val picture = PictureCardView(ctx(), LovelaceParser.parseCard(JSONObject("""{"type": "picture", "image": "/local/room.png"}""")))
+        card.addView(picture)
+        dev.glassworks.engine.vitro.ui.ViewportCull.contentChanged(picture)
+        assertFalse("drawn again", cull.skips(card))
+        assertFalse(card.culled)
+        assertFalse(plain.culled)
+        // And it stays drawn as the view scrolls on.
+        vv.currentScroll()!!.scrollTo(0, 10)
+        cull.update()
+        assertFalse(cull.skips(card))
+        assertTrue(column.indexOfChild(card) >= 0)
+    }
+
+    /**
+     * A view built again (another dashboard, the same scroller's view rebuilt) keeps nothing of the old scroller: its
+     * culling, and with it the old card tree, can go.
+     */
+    @Test
+    fun aRebuiltViewLeavesTheOldScrollersCullingCollectable() {
+        seed()
+        val vv = masonry(30, cull = true)
+        val oldScroll = java.lang.ref.WeakReference(vv.currentScroll()!!)
+        val oldCull = java.lang.ref.WeakReference(requireNotNull(vv.currentCull()))
+        val cards = org.json.JSONArray()
+        for (i in 0 until 30) cards.put(JSONObject().put("type", "entity").put("entity", "sensor.s$i").put("name", "again $i"))
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject().put("views", org.json.JSONArray().put(JSONObject().put("path", "v").put("cards", cards)))), "v")
+        repeat(10) { idle() }
+        val newCull = requireNotNull(vv.currentCull())
+        assertTrue("a new scroller, with its own culling", newCull !== oldCull.get())
+        repeat(20) {
+            if (oldCull.get() == null && oldScroll.get() == null) return@repeat
+            System.gc()
+            Thread.sleep(20)
+            idle()
+        }
+        assertNull("the old culling is gone", oldCull.get())
+        assertNull("the old scroller is gone", oldScroll.get())
+    }
+
     /** Above the Vitro view: counts the redraws asked of the window (each one a frame on a device). */
     private class Redraws(context: Context) : FrameLayout(context) {
         var asked = 0

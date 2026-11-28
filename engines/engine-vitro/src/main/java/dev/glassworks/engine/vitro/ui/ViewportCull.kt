@@ -35,6 +35,14 @@ import java.util.WeakHashMap
  * nothing.
  */
 internal class ViewportCull(private val scroll: ScrollView) {
+    /**
+     * A masonry view's scroller, holding its culling: no registry elsewhere, so a scroller dropped with its view (a
+     * rebuild, another dashboard) takes its culling and card tree with it.
+     */
+    internal class Scroller(context: android.content.Context) : ScrollView(context) {
+        var cull: ViewportCull? = null
+    }
+
     /** The cards (a column's children) left out now, by identity. */
     private val skipped: MutableSet<View> = Collections.newSetFromMap(WeakHashMap())
 
@@ -96,6 +104,31 @@ internal class ViewportCull(private val scroll: ScrollView) {
             }
         } finally {
             android.os.Trace.endSection()
+        }
+    }
+
+    /**
+     * [card] (or a card inside it) replaced what it holds, as an auto-entities card does when its matches change: what
+     * it holds now may have to be drawn always (a camera, an island). A column's card left out is drawn again then;
+     * one still left out has its new cards' live changes wait, as the old ones did.
+     */
+    fun contentChanged(card: View) {
+        var child: View = card
+        var parent = card.parent
+        while (parent is View && parent !is CardColumn) {
+            child = parent
+            parent = parent.parent
+        }
+        val col = parent as? CardColumn ?: return
+        if (col.cull !== this) return
+        keep.remove(child)
+        if (child !in skipped) return
+        if (cullable(child)) {
+            forEachCard(child) { it.setCulled(true) }
+        } else {
+            skipped.remove(child)
+            forEachCard(child) { it.setCulled(false) }
+            col.invalidate()
         }
     }
 
@@ -164,14 +197,29 @@ internal class ViewportCull(private val scroll: ScrollView) {
 
     private fun countViews(v: View): Int = 1 + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).sumOf { countViews(g.getChildAt(it)) } } ?: 0)
 
-    private companion object {
+    companion object {
+        /**
+         * [card] replaced its content ([contentChanged]): tells the culling of the masonry view it's in, if any.
+         * Main thread.
+         */
+        fun contentChanged(card: View) {
+            var p = card.parent
+            while (p is View) {
+                if (p is CardColumn) {
+                    p.cull?.contentChanged(card)
+                    return
+                }
+                p = p.parent
+            }
+        }
+
         /** How deep under the scroller columns are looked for (a masonry view's are 2 or 3 down). */
-        const val MAX_DEPTH = 6
+        private const val MAX_DEPTH = 6
 
         /**
          * The band above and below the viewport, percent of its height: cards come back early enough to have caught
          * up and recorded before they show, on the S1's fastest flings.
          */
-        const val MARGIN_PERCENT = 50
+        private const val MARGIN_PERCENT = 50
     }
 }

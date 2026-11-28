@@ -99,9 +99,14 @@ class HeavyViewMeasure {
         for (c in all(vv).filterIsInstance<ClockCardView>()) {
             val loc = IntArray(2).also { c.getLocationInWindow(it) }
             val root = IntArray(2).also { vv.getLocationInWindow(it) }
-            val x0 = (loc[0] - root[0]).coerceIn(0, W)
-            val y0 = (loc[1] - root[1]).coerceIn(0, H)
-            for (y in y0 until (y0 + c.height).coerceAtMost(H)) for (x in x0 until (x0 + c.width).coerceAtMost(W)) px[y * W + x] = 0
+            // The clock's own rectangle, then its part on screen (none when it's scrolled off).
+            val left = loc[0] - root[0]
+            val top = loc[1] - root[1]
+            val x0 = left.coerceIn(0, W)
+            val y0 = top.coerceIn(0, H)
+            val x1 = (left + c.width).coerceIn(0, W)
+            val y1 = (top + c.height).coerceIn(0, H)
+            for (y in y0 until y1) for (x in x0 until x1) px[y * W + x] = 0
         }
         return px
     }

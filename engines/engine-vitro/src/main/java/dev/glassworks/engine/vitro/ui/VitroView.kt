@@ -1047,11 +1047,8 @@ class VitroView(
     /** The view on screen's scrolling container, if it scrolls (a panel view doesn't). */
     internal fun currentScroll(): ScrollView? = viewCache[currentViewIndex] as? ScrollView
 
-    /** Each masonry scroller's culling ([ViewportCull]). */
-    private val culls = java.util.WeakHashMap<ScrollView, ViewportCull>()
-
     /** The view on screen's culling (tests and measures); null with [ScrollPath.cull] off. */
-    internal fun currentCull(): ViewportCull? = currentScroll()?.let { culls[it] }
+    internal fun currentCull(): ViewportCull? = (currentScroll() as? ViewportCull.Scroller)?.cull
 
     /** Opens the view at [path] as its tab does (the page's history and location follow). False with no dashboard. */
     internal fun openViewAsTab(path: String): Boolean {
@@ -2026,17 +2023,18 @@ class VitroView(
             }
         }
 
-        val scroll = ScrollView(context).apply {
+        val scroll = ViewportCull.Scroller(context).apply {
             isFillViewport = true
             isVerticalScrollBarEnabled = false
         }
         // Masonry columns draw only the cards near the viewport: the render thread walks only those ([ViewportCull]).
+        // The scroller holds its culling, and nothing else does: a view dropped or rebuilt takes it along.
         if (ScrollPath.cull) {
             val cull = ViewportCull(scroll)
+            scroll.cull = cull
             scroll.setOnScrollChangeListener { _, _, _, _, _ -> cull.onScrolled() }
             // The scroller's size; the columns tell their own layouts ([ViewportCull.columns]).
             scroll.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> cull.onLayout() }
-            culls[scroll] = cull
         }
         val widthDp = (resources.displayMetrics.widthPixels / dp).toInt()
         val outerPad = px(ctx.theme.viewPaddingDp)

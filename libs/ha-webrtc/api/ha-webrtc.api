@@ -57,8 +57,11 @@ public final class dev/glassworks/hawebrtc/HaWebRtcPlayer$Companion {
 	public final fun prewarm (Landroid/content/Context;)V
 }
 
-public abstract interface class dev/glassworks/hawebrtc/HaWebRtcPlayer$Listener {
+public abstract interface class dev/glassworks/hawebrtc/HaWebRtcPlayer$FrameDemand {
 	public abstract fun getWantsFrames ()Z
+}
+
+public abstract interface class dev/glassworks/hawebrtc/HaWebRtcPlayer$Listener {
 	public abstract fun onError (Ldev/glassworks/hawebrtc/HaError;)V
 	public abstract fun onFirstFrame (JII)V
 	public abstract fun onFrameRendered ()V
@@ -66,7 +69,6 @@ public abstract interface class dev/glassworks/hawebrtc/HaWebRtcPlayer$Listener 
 }
 
 public final class dev/glassworks/hawebrtc/HaWebRtcPlayer$Listener$DefaultImpls {
-	public static fun getWantsFrames (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;)Z
 	public static fun onFrameRendered (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;)V
 	public static fun onReconnecting (Ldev/glassworks/hawebrtc/HaWebRtcPlayer$Listener;ILdev/glassworks/hawebrtc/HaError;)V
 }
