@@ -6,6 +6,9 @@
 # that a file makes again is already known there. A new call, or a known one in a new file, fails.
 # AppManage.kt: DevicePolicyManager.reboot behind Platform.hasDeviceOwnerReboot (#198 Phase B).
 # MarkdownRenderer.kt: TextView.setFallbackLineSpacing behind Platform.hasFallbackLineSpacing (Vitro, #797).
+# EntityRowView.kt: StaticLayout.Builder.setUseLineSpacingFromFallbacks behind Platform.hasFallbackLineSpacing, and
+#   BoringLayout's isBoring and make with fallback line spacing behind Platform.hasBoringFallbackLineSpacing (the
+#   entities row that draws its own text lays it out as a TextView does on each Android).
 # WebFonts.kt: Typeface.Builder (a variable web font at a weight) behind Platform.hasTypefaceBuilder (Vitro, #811).
 # MoreInfoSheet.kt: View.setAccessibilityPaneTitle behind Platform.hasAccessibilityPaneTitle (Vitro a11y, #814).
 # VitroAccess.kt: View.getFocusable behind Platform.hasFocusableAuto (Vitro a11y, #814).
@@ -17,6 +20,9 @@ dev/glassworks/camera/onvif/OnvifServer.kt|java.util.Collection#removeIf
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/camera/onvif/RtspServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/diagnostics/AndroidProbe.kt|android.os.Process#getStartElapsedRealtime
+dev/glassworks/engine/vitro/cards/EntityRowView.kt|android.text.BoringLayout#isBoring
+dev/glassworks/engine/vitro/cards/EntityRowView.kt|android.text.BoringLayout#make
+dev/glassworks/engine/vitro/cards/EntityRowView.kt|android.text.StaticLayout.Builder#setUseLineSpacingFromFallbacks
 dev/glassworks/engine/vitro/cards/MarkdownRenderer.kt|android.widget.TextView#setFallbackLineSpacing
 dev/glassworks/engine/vitro/cards/MoreInfoSheet.kt|android.view.View#setAccessibilityPaneTitle
 dev/glassworks/engine/vitro/fonts/WebFonts.kt|android.graphics.Typeface.Builder#build

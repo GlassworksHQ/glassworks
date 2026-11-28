@@ -61,7 +61,7 @@ object MdiIcons {
      * that did are redrawn once the catalog is in ([redrawWhenReady]).
      */
     @Volatile private var loading = false
-    private val waitingViews: MutableSet<MdiIconView> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
+    private val waitingViews: MutableSet<IconHost> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
 
     /** Path data packed in one byte array; [index] maps a name to `offset shl 32 or length`. */
     private class Catalog(val blob: ByteArray, val index: HashMap<String, Long>) {
@@ -128,7 +128,7 @@ object MdiIcons {
     }
 
     /** [view] drew a built-in glyph while the catalog was loading: it gets its icon again once the catalog is in. */
-    internal fun redrawWhenReady(view: MdiIconView) {
+    internal fun redrawWhenReady(view: IconHost) {
         synchronized(waitingViews) { waitingViews += view }
         if (!loading) redrawWaitingViews() // finished in between
     }
@@ -885,8 +885,16 @@ object MdiIcons {
     )
 }
 
+/**
+ * A view that draws an MDI glyph of its own ([MdiIconView], or a row that draws its icon itself): it looks its glyph
+ * up again when the catalog arrives ([MdiIcons.redrawWhenReady]). Main thread.
+ */
+interface IconHost {
+    fun reloadIcon()
+}
+
 /** Lightweight Android View drawing one crisp 24x24 MDI icon path in [tintColor]. */
-class MdiIconView(context: Context) : View(context) {
+class MdiIconView(context: Context) : View(context), IconHost {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     /** The glyph, looked up when first set or drawn (a view always given an icon never parses `home`). */
     private var iconPath: Path? = null
@@ -918,7 +926,7 @@ class MdiIconView(context: Context) : View(context) {
     }
 
     /** The catalog arrived after this view drew a stand-in: look the icon up again. Main thread. */
-    internal fun reloadIcon() {
+    override fun reloadIcon() {
         iconPath = MdiIcons.pathFor(iconName)
         invalidate()
     }

@@ -12,6 +12,8 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import dev.glassworks.engine.vitro.cards.ClockCardView
+import dev.glassworks.engine.vitro.cards.EntitiesCardView
+import dev.glassworks.engine.vitro.cards.EntityRowView
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.ui.CardColumn
@@ -151,7 +153,89 @@ class HeavyViewMeasure {
         assertTrue("the screen differs with culling: $differ", differ.isEmpty())
     }
 
+    /**
+     * What the heavy view's entities cards cost to make, measure, lay out and draw, off the dashboard, at the width
+     * the view gives them: the median of [ROUNDS] rounds after a warm-up, all 26 cards each round. Robolectric's
+     * clock is the computer's, not the S1's, so only the split and a before/after ratio mean anything: the rows as
+     * one view each ([EntityRowView]) and as the four views they were made of, measured in turns. Also the views one
+     * row is made of, each made [ROW_PARTS] times. Appends to `heavy-measure.txt`.
+     */
+    @Test
+    fun entitiesCost() {
+        assumeTrue("set -PvitroHeavyMeasure=<dir> with Clarity's dashboard in it", dir != null && File(dir, "clarity-lovelace.json").isFile)
+        val vv = heavy(cull = true)
+        val ctx = vv.contextFactory!!(dev.glassworks.engine.vitro.theme.ThemeResolver.resolve(dev.glassworks.engine.vitro.theme.ThemeCatalog(), true))
+        val sample = all(vv.currentScroll()!!.getChildAt(0)).filterIsInstance<EntitiesCardView>()
+        val width = sample.maxOf { it.width }
+        val view = JSONObject(File(dir, "clarity-lovelace.json").readText()).getJSONArray("views").let { vs ->
+            (0 until vs.length()).map { vs.getJSONObject(it) }.single { it.optString("path") == "heavy" }
+        }
+        val cfgs = LovelaceParser.parseCards(view.getJSONArray("cards")).filter { it.type == "entities" }
+        val rows = cfgs.sumOf { it.entities().size }
+        val wSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)
+        val hSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        val bmp = Bitmap.createBitmap(width, 2000, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        // The rows as one view each, and (EntityRowView.enabled off) as the four views they replaced: rounds of the two
+        // alternate, so both see the same machine.
+        class Cost(val flat: Boolean) {
+            val make = ArrayList<Long>(); val measure = ArrayList<Long>(); val layout = ArrayList<Long>(); val draw = ArrayList<Long>()
+            var views = 0
+        }
+        val costs = listOf(Cost(flat = false), Cost(flat = true))
+        try {
+            repeat(WARMUP + ROUNDS) { round ->
+                for (c in costs) {
+                    EntityRowView.enabled = c.flat
+                    val t0 = System.nanoTime()
+                    val cards = cfgs.map { EntitiesCardView(ctx, it) }
+                    val t1 = System.nanoTime()
+                    cards.forEach { it.measure(wSpec, hSpec) }
+                    val t2 = System.nanoTime()
+                    cards.forEach { it.layout(0, 0, it.measuredWidth, it.measuredHeight) }
+                    val t3 = System.nanoTime()
+                    cards.forEach { it.draw(canvas) }
+                    val t4 = System.nanoTime()
+                    if (round >= WARMUP) { c.make += t1 - t0; c.measure += t2 - t1; c.layout += t3 - t2; c.draw += t4 - t3 }
+                    c.views = cards.sumOf(::count)
+                }
+            }
+        } finally {
+            EntityRowView.enabled = true
+        }
+        fun ms(v: List<Long>) = v.sorted()[v.size / 2] / 1e6
+        val out = StringBuilder()
+        out.append("entities cost: ${cfgs.size} cards, $rows rows, $width px wide, median of $ROUNDS rounds\n")
+        for (c in costs) {
+            out.append(String.format(
+                "  %-22s %4d views (%.2f a row, card frames included): make %.1f ms, measure %.1f ms, layout %.1f ms, draw %.1f ms, all %.1f ms%n",
+                if (c.flat) "rows as one view" else "rows as four views", c.views, c.views.toDouble() / rows,
+                ms(c.make), ms(c.measure), ms(c.layout), ms(c.draw), ms(c.make) + ms(c.measure) + ms(c.layout) + ms(c.draw),
+            ))
+        }
+        // The parts a row was made of before it was drawn as one view, and that view, made alone.
+        val rowPaint = EntityRowView.paint(ctx)
+        val parts = linkedMapOf<String, () -> View>(
+            "EntityRowView" to { EntityRowView(ctx, rowPaint, null) },
+            "TextView" to { android.widget.TextView(activity) },
+            "LinearLayout" to { android.widget.LinearLayout(activity) },
+            "MdiIconView" to { dev.glassworks.engine.vitro.ui.MdiIconView(activity) },
+            "HaSwitchView" to { dev.glassworks.engine.vitro.cards.HaSwitchView(ctx) },
+        )
+        for ((name, f) in parts) {
+            repeat(ROW_PARTS) { f() }
+            val t = System.nanoTime()
+            repeat(ROW_PARTS) { f() }
+            out.append(String.format("  %-13s %.1f µs each%n", name, (System.nanoTime() - t) / 1e3 / ROW_PARTS))
+        }
+        File(dir, "heavy-measure.txt").appendText(out.toString())
+        println(out)
+    }
+
     private companion object {
+        const val WARMUP = 5
+        const val ROUNDS = 15
+        const val ROW_PARTS = 2_000
         const val W = 1440
         const val H = 720
         const val NOW = 1_794_500_000_000L

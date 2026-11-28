@@ -90,6 +90,13 @@ class ScrollPathTest {
         Triple("tile with a feature", """{"type": "tile", "entity": "light.kitchen", "features": [{"type": "light-brightness"}]}""", false),
         Triple("entities", """{"type": "entities", "title": "Room", "entities": ["light.kitchen", "switch.fan", "sensor.power"]}""", false),
         Triple("entities without title", """{"type": "entities", "entities": ["switch.fan", "sensor.temp"]}""", false),
+        // Corners rounder than the rows' 16 px inset: a row's ripple reaches into them, so the clip stays, as it did
+        // when a row was a LinearLayout of views.
+        Triple(
+            "entities with round corners",
+            """{"type": "entities", "entities": ["sensor.temp", "switch.fan"], "card_mod": {"style": "ha-card { border-radius: 40px }"}}""",
+            true,
+        ),
         Triple("entity", """{"type": "entity", "entity": "sensor.power"}""", false),
         Triple("glance", """{"type": "glance", "entities": ["light.kitchen", "switch.fan", "sensor.temp"]}""", false),
         // Content along the edges: the clip stays.

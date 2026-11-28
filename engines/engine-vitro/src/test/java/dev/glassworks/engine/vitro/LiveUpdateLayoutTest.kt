@@ -15,6 +15,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
+import dev.glassworks.engine.vitro.cards.EntityRowView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDisplay
@@ -94,6 +95,8 @@ class LiveUpdateLayoutTest {
     /** Every view's box under [v], in tree order. */
     private fun boxes(v: View, out: MutableList<String> = ArrayList(), path: String = "0"): List<String> {
         out += "$path ${v.javaClass.simpleName} ${v.left},${v.top},${v.right},${v.bottom} ${v.visibility}"
+        // A row that draws its own texts: where each sits in it, as a TextView's box would say.
+        if (v is EntityRowView) v.drawnTexts().forEachIndexed { i, t -> out += "$path.t$i ${t.left},${t.top} ${t.layout.width}" }
         if (v is ViewGroup) for (i in 0 until v.childCount) boxes(v.getChildAt(i), out, "$path.$i")
         return out
     }
@@ -105,7 +108,7 @@ class LiveUpdateLayoutTest {
     }
 
     private fun texts(v: View): List<String> =
-        if (v is ViewGroup) (0 until v.childCount).flatMap { texts(v.getChildAt(it)) } else listOfNotNull((v as? TextView)?.text?.toString())
+        drawnWords(v) + if (v is ViewGroup) (0 until v.childCount).flatMap { texts(v.getChildAt(it)) } else emptyList()
 
     @Test
     fun aWiderValueLaysOutItsRowAsAFullPassWould() {

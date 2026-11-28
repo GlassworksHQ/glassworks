@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
+import dev.glassworks.engine.vitro.cards.EntityRowView
 import dev.glassworks.engine.vitro.cards.GlanceCardView
 import dev.glassworks.engine.vitro.cards.HaCodeDialog
 import dev.glassworks.engine.vitro.cards.HaSwitchView
@@ -98,7 +99,7 @@ class PlainConfigParityTest {
         }
         return true
     }
-    private fun texts(v: View) = all(v).filterIsInstance<TextView>().filter { it.shownIn(v) && it.text.isNotEmpty() }.map { it.text.toString() }
+    private fun texts(v: View) = all(v).filter { it.shownIn(v) }.flatMap(::drawnWords).filter { it.isNotEmpty() }
     private fun put(id: String, state: String, vararg attrs: Pair<String, Any?>) =
         store.putLocal(EntityState(id, state, mapOf(*attrs), lastChanged = (NOW - 5 * 60_000) / 1000.0))
     private fun headerSwitch(v: View): HaSwitchView? = all(v).filterIsInstance<HaSwitchView>().firstOrNull { it.contentDescription == "Toggle entities" }
@@ -410,11 +411,11 @@ class PlainConfigParityTest {
         val parent = android.widget.FrameLayout(activity)
         activity.setContentView(parent)
         parent.addView(row)
-        val value = all(row).filterIsInstance<TextView>().first { it.text.toString() == "In 2 minutes" }
+        val value = all(row).filterIsInstance<EntityRowView>().first { it.stateText.toString() == "In 2 minutes" }
         assertTrue(TimestampText.isTicking(value))
         now = NOW + 60_000L
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_100))
-        assertEquals("In 30 seconds", value.text.toString())
+        assertEquals("In 30 seconds", value.stateText.toString())
     }
 
     @Test fun aDiscardedTimestampTextIsntKeptByItsTicker() {

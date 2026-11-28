@@ -68,6 +68,9 @@ internal object EntityRowControls {
         val update: (EntityState?) -> Unit,
     )
 
+    /** Whether [build] makes a control for a row of [entityId]: its domain is one HA draws a control for. */
+    fun hasControl(entityId: String): Boolean = entityId.substringBefore('.') in DOMAINS
+
     /**
      * The control for [row]'s domain, or null when it isn't one of [DOMAINS]. [name] is the row's name as HA's
      * `formatEntityName` gives it (the dropdown's label, TalkBack's labels); [rowContentWidth] the row's width inside

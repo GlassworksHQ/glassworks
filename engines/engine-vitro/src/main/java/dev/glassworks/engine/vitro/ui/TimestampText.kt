@@ -24,7 +24,7 @@ internal object TimestampText {
      * The ticker of each text that shows a timestamp now. A ticker holds its text, so the map holds tickers weakly: a
      * strong value would keep its weak key alive. The text's attach listener holds the ticker while it ticks.
      */
-    private val tickers = WeakHashMap<TextView, WeakReference<Ticker>>()
+    private val tickers = WeakHashMap<View, WeakReference<Ticker>>()
 
     /**
      * Shows [s]'s state in [view]: as `hui-timestamp-display` draws it when it's a timestamp
@@ -53,10 +53,26 @@ internal object TimestampText {
         current: (String) -> EntityState?,
         main: Handler,
         relative: (EntityState, Long) -> String?,
+    ) = show(view, { view.text }, { view.text = it }, s, otherwise, now, current, main, relative)
+
+    /**
+     * [show] for a text a view draws itself ([view] holds one such text, read by [get] and set by [set]): the entities
+     * card's row, which draws its state without a TextView. [view] keys its ticker, and its attachment runs it.
+     */
+    fun show(
+        view: View,
+        get: () -> CharSequence?,
+        set: (CharSequence) -> Unit,
+        s: EntityState?,
+        otherwise: String,
+        now: () -> Long,
+        current: (String) -> EntityState?,
+        main: Handler,
+        relative: (EntityState, Long) -> String?,
     ) {
         val ts = s?.let { relative(it, now()) }
         val text = ts ?: otherwise
-        if (view.text?.toString() != text) view.text = text
+        if (get()?.toString() != text) set(text)
         val old = tickers[view]?.get()
         if (ts == null || s == null) {
             old?.stop()
@@ -65,8 +81,20 @@ internal object TimestampText {
         }
         if (old != null && old.entityId == s.entityId && old.relative === relative) return
         old?.stop()
-        tickers[view] = WeakReference(Ticker(view, s.entityId, relative, now, current, main).also { it.start() })
+        tickers[view] = WeakReference(Ticker(view, get, set, s.entityId, relative, now, current, main).also { it.start() })
     }
+
+    /** A row's own state text ([show] with a getter and setter): as `hui-timestamp-display` draws a timestamp, else [otherwise]. */
+    fun showRowState(
+        view: View,
+        get: () -> CharSequence?,
+        set: (CharSequence) -> Unit,
+        s: EntityState?,
+        otherwise: String,
+        now: () -> Long,
+        current: (String) -> EntityState?,
+        main: Handler,
+    ) = show(view, get, set, s, otherwise, now, current, main, ROWS)
 
     private val ROWS: (EntityState, Long) -> String? = { s, now -> s.timestampDisplay(now) }
     private val ANY_DOMAIN: (EntityState, Long) -> String? = { s, now -> s.timestampDisplay(now, anyDomain = true) }
@@ -87,10 +115,12 @@ internal object TimestampText {
     private val MUSHROOM_DOMAINS = setOf("button", "input_button", "scene")
 
     /** Whether [view] keeps a relative time current (for tests). */
-    fun isTicking(view: TextView): Boolean = tickers[view]?.get() != null
+    fun isTicking(view: View): Boolean = tickers[view]?.get() != null
 
     private class Ticker(
-        val view: TextView,
+        val view: View,
+        val get: () -> CharSequence?,
+        val set: (CharSequence) -> Unit,
         val entityId: String,
         val relative: (EntityState, Long) -> String?,
         val now: () -> Long,
@@ -111,7 +141,7 @@ internal object TimestampText {
             if (!view.isAttachedToWindow) return
             // A text in a hidden cached view (or a hidden row) isn't set: a set would lay the shown view out again.
             // It counts on from the next second it's shown.
-            if (view.isShown) current(entityId)?.let { relative(it, now()) }?.let { if (view.text?.toString() != it) view.text = it }
+            if (view.isShown) current(entityId)?.let { relative(it, now()) }?.let { if (get()?.toString() != it) set(it) }
             main.postDelayed(this, 1_000L)
         }
 

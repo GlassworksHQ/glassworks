@@ -2659,7 +2659,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 }
             }.toSet()
         }
-        val rowViews = ArrayList<LinearLayout>()
+        val rowViews = ArrayList<View>()
+        // One paint for every row this card draws as one view ([EntityRowView]).
+        val rowPaint by lazy(LazyThreadSafetyMode.NONE) { EntityRowView.paint(ctx) }
         // The rows (entity or special) that take the 8 px gap after another row.
         val gapRows = HashSet<View>()
         val rowVisible = ArrayList<Boolean>()
@@ -2686,7 +2688,69 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
             refreshMaster()
         }
 
+        /**
+         * A row with a toggle or its state at the end and nothing else ([EntityRowView]): one view, the toggle its only
+         * child. It reads, taps and updates as [entityRow]'s row of views does.
+         */
+        fun flatEntityRow(rowCfg: EntityRowConfig, isSwitchable: Boolean): View {
+            val idx = rowViews.size
+            val switchView = if (isSwitchable) HaSwitchView(ctx) else null
+            val row = EntityRowView(ctx, rowPaint, switchView).apply {
+                isClickable = true
+                applyHaRipple(this, 4f * ctx.dp, ctx.theme.dark)
+            }
+            rowViews += row
+            rowVisible += (stateFilter == null)
+            val tap = rowCfg.tapAction ?: ActionConfig("more-info")
+            row.setOnClickListener { ctx.performAction(tap, rowCfg.entity) }
+            row.bindHoldAction(ctx, rowCfg.holdAction ?: ActionConfig("more-info"), rowCfg.entity)
+            switchView?.apply {
+                isClickable = true
+                setOnClickListener { ctx.performAction(ActionConfig("toggle"), rowCfg.entity) }
+            }
+            // The state, set here and by hui-timestamp-display's ticker, which sets it each second for a timestamp. A
+            // ticker's set lays the row out itself; a render's sets (name and state) lay it out once, at its end.
+            val getState = { row.stateText }
+            var rendering = false
+            val setState = { t: CharSequence -> if (row.setState(t) && !rendering) row.commit() }
+            observe(rowCfg.entity) { s ->
+                if (stateFilter != null) {
+                    rowVisible[idx] = s != null && s.state in stateFilter
+                    refreshFilter()
+                }
+                val active = s?.isActive == true
+                row.setIcon(
+                    MdiIcons.resolveIconName(rowCfg.icon, s),
+                    if (active) s.lightTintColor() ?: ctx.theme.activeColor(s.domain) else ctx.theme.stateIconColor,
+                )
+                val setsBefore = row.textSets
+                rendering = true
+                try {
+                    row.setName(rowCfg.nameFor(s) ?: s?.displayName ?: rowCfg.entity)
+                    if (switchView != null) {
+                        // ha-entity-toggle's label: "Toggle Desk lamp".
+                        switchView.contentDescription = "Toggle ${row.nameText}"
+                        switchView.setOn(active)
+                    } else {
+                        // hui-sensor-entity-row and hui-simple-entity-row draw a timestamp with hui-timestamp-display.
+                        TimestampText.showRowState(row, getState, setState, s, s?.formattedState() ?: "…", ctx.now, { ctx.store[it] }, ctx.main)
+                    }
+                } finally {
+                    rendering = false
+                }
+                if (row.textSets != setsBefore) row.commit()
+            }
+            gapRows += row
+            return row
+        }
+
         fun entityRow(rowCfg: EntityRowConfig): View {
+            val isSwitchable = rowCfg.entity.substringBefore('.') in SWITCH_DOMAINS
+            if (EntityRowView.enabled && !rowCfg.entity.startsWith("cover.") && rowCfg.secondaryInfo in NO_SECONDARY_INFO &&
+                !EntityRowControls.hasControl(rowCfg.entity)
+            ) {
+                return flatEntityRow(rowCfg, isSwitchable)
+            }
             val idx = rowViews.size
             val row = EntityRowLayout(ctx.context, ctx.px(8f)).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -2703,7 +2767,6 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             }
-            val isSwitchable = rowCfg.entity.substringBefore('.') in SWITCH_DOMAINS
             val isCover = rowCfg.entity.startsWith("cover.")
             // A slider, a dropdown or HA's plain buttons (EntityRowControls), for the domains HA draws with one.
             val control = EntityRowControls.build(ctx, rowCfg, { nameView.text.toString() }, { row.contentWidth })
@@ -2718,7 +2781,7 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
                 null
             }
             // HA's `.secondary` line: 14 px, as HA's page draws it (the locale-* cases measure it).
-            val secondaryView = if (control?.hideName != true && rowCfg.secondaryInfo !in setOf(null, "", "none")) {
+            val secondaryView = if (control?.hideName != true && rowCfg.secondaryInfo !in NO_SECONDARY_INFO) {
                 textView(ctx, 14f, ctx.theme.secondaryTextColor).apply {
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
@@ -2952,6 +3015,9 @@ class EntitiesCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(
 
     private companion object {
         val SWITCH_DOMAINS = setOf("light", "switch", "input_boolean", "fan", "automation", "humidifier", "siren")
+
+        /** A row's `secondary_info` that shows no secondary line. */
+        val NO_SECONDARY_INFO = setOf(null, "", "none")
 
         /**
          * state-badge's icon color on a row with a control: `--state-unavailable-color` when unavailable, else HA's

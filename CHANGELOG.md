@@ -43,6 +43,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   cards with less work, history graphs and sensor graphs read their history in the background, and a value that keeps
   changing, such as a power sensor or a clock with seconds, no longer makes the whole dashboard lay itself out again.
   Nothing looks different.
+- **Vitro dashboards with many entities cards are ready sooner after they open.** With Vitro on, each plain row of an
+  entities card, a light or switch with its toggle or a sensor with its value, is now built from one view instead of
+  four, so a long dashboard spends less time building its cards once its first screen is up. Rows look, read aloud
+  and respond to taps exactly as before.
 - **Softer voice chimes.** The wake word and finished timers now play a soft, rounded chime that swells in and
   rings out, instead of electronic beeps. The timer chime is the wake chime followed by a higher one, so it still
   stands out as an alert.
