@@ -12,6 +12,7 @@ import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.IframeCardView
 import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.model.LovelaceParser
 import dev.glassworks.engine.vitro.ui.MasonryColumnsLayout
 import dev.glassworks.engine.vitro.ui.VitroCardContext
@@ -96,6 +97,20 @@ class MasonrySlicesTest {
         return vv
     }
 
+    /**
+     * Runs the chunks until the build ends, [each] after every one. A build still in progress with no chunk waiting, or
+     * one that runs past [max] chunks, fails rather than hangs.
+     */
+    private fun drain(vv: VitroView, max: Int = 300, each: () -> Unit = {}) {
+        var n = 0
+        while (vv.buildInProgress) {
+            assertTrue("a build in progress has its next chunk waiting", queued.isNotEmpty())
+            assertTrue("the build ends within $max chunks", n++ < max)
+            chunk()
+            each()
+        }
+    }
+
     /** The next chunk runs, and whatever else the main thread has queued. */
     private fun chunk() {
         queued.removeFirstOrNull()?.run()
@@ -173,10 +188,10 @@ class MasonrySlicesTest {
         val added = attached(row).sum() - before
         assertTrue("a chunk places several cards: $added", added in 2..6)
         assertEquals("the chunks after it are posted the same way", listOf(true, false), firstAfterFrame)
-        while (queued.size > 0 && vv.buildInProgress) {
-            val placed = attached(row).sum()
-            chunk()
+        var placed = attached(row).sum()
+        drain(vv) {
             assertTrue("each chunk places its own cards", attached(row).sum() > placed)
+            placed = attached(row).sum()
         }
         assertFalse(vv.buildInProgress)
         assertEquals(80, attached(row).sum())
@@ -299,10 +314,7 @@ class MasonrySlicesTest {
             layOut(vv)
             val firstScreen = cardViews(columns(vv)).toSet()
             assertTrue("$mode: a first screen, then chunks", vv.buildInProgress && firstScreen.size < 80)
-            while (vv.buildInProgress) {
-                chunk()
-                layOut(vv)
-            }
+            drain(vv) { layOut(vv) }
             val cards = cardViews(columns(vv))
             assertEquals(80, cards.size)
             assertTrue("$mode: every card is big", cards.all { VitroView.isBigCard(it.width, it.height, 1440, 720) })
@@ -394,13 +406,14 @@ class MasonrySlicesTest {
         layOut(vv)
         chunk()
         layOut(vv)
-        while (vv.buildInProgress && queued.isNotEmpty()) {
-            val placed = cardViews(row).filterIsInstance<dev.glassworks.engine.vitro.ui.CardSurface>()
-            val counts = placed.associateWith { it.measures to it.layouts }
-            chunk()
+        var counts = emptyMap<dev.glassworks.engine.vitro.ui.CardSurface, Pair<Int, Int>>()
+        fun count() { counts = cardViews(row).filterIsInstance<dev.glassworks.engine.vitro.ui.CardSurface>().associateWith { it.measures to it.layouts } }
+        count()
+        drain(vv) {
             layOut(vv)
-            val again = placed.filter { (it.measures to it.layouts) != counts.getValue(it) }
+            val again = counts.keys.filter { (it.measures to it.layouts) != counts.getValue(it) }
             assertTrue("measured or laid out again: ${again.map(::nameOf)}", again.isEmpty())
+            count()
         }
         assertFalse(vv.buildInProgress)
         assertEquals(80, attached(row).sum())
@@ -480,14 +493,13 @@ class MasonrySlicesTest {
         val config = JSONObject().put("views", JSONArray().put(JSONObject().put("path", "heavy").put("cards", heavy))).toString()
         val vv = vitroView(config, sliced = true)
         var checked = 0
-        while (vv.buildInProgress && queued.isNotEmpty()) {
-            chunk()
-            val made = vv.lastChunk
+        vv.onChunk = { made ->
             val heavyAt = made.indices.filter { made[it] is dev.glassworks.engine.vitro.cards.EntitiesCardView }
             // A big entities card is the first card of its chunk, and the only big one in it.
             assertTrue("chunk ${made.map { it.javaClass.simpleName }}", heavyAt.isEmpty() || heavyAt == listOf(0))
             checked += heavyAt.size
         }
+        drain(vv)
         assertTrue("several big entities cards were made in chunks: $checked", checked >= 3)
         assertFalse(vv.buildInProgress)
     }
@@ -502,7 +514,7 @@ class MasonrySlicesTest {
         val config = JSONObject().put("views", JSONArray().put(JSONObject().put("path", "heavy").put("cards", heavy))).toString()
         val vv = vitroView(config, sliced = true)
         assertTrue("the clock is below the first screen", all(vv).none { it is dev.glassworks.engine.vitro.cards.ClockCardView })
-        while (vv.buildInProgress && queued.isNotEmpty()) chunk()
+        drain(vv)
         assertFalse(vv.buildInProgress)
         val clock = all(vv).filterIsInstance<dev.glassworks.engine.vitro.cards.ClockCardView>().single()
         assertTrue("in its column, shown", clock.isShown && clock.parent?.parent is MasonryColumnsLayout)
@@ -523,7 +535,7 @@ class MasonrySlicesTest {
         // The panel's window shows, as on the panel: a camera in a hidden window starts nothing.
         val vv = vitroView(config, sliced = true) { showWindow(activity.window.decorView) }
         assertTrue("the camera is below the first screen", all(vv).none { it is dev.glassworks.engine.vitro.cards.PictureCardView })
-        while (vv.buildInProgress && queued.isNotEmpty()) chunk()
+        drain(vv)
         assertFalse(vv.buildInProgress)
         ShadowLooper.idleMainLooper(100, java.util.concurrent.TimeUnit.MILLISECONDS)
         val card = all(vv).filterIsInstance<dev.glassworks.engine.vitro.cards.PictureCardView>().single()
@@ -541,5 +553,32 @@ class MasonrySlicesTest {
         // What a frame after the scroll dispatches, which Robolectric's window doesn't: the card looks again.
         vv.viewTreeObserver.dispatchOnGlobalLayout()
         assertTrue("scrolled to, on screen", feed.stateForTests.third)
+    }
+
+    // A locale change builds the view again where it was scrolled: the scroll follows the content as the chunks add it,
+    // however long they take, until it reaches where it was (CodeRabbit on #950: it gave up 5 s after the rebuild).
+    @Test
+    fun aRebuildInAnotherLanguageScrollsBackAsItsChunksArrive() {
+        // Laid out by the window alone, as on a panel (a second layout at another height would move the scroll).
+        fun frame() = ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS)
+        val vv = vitroView(dashboard("heavy" to 80), sliced = true)
+        drain(vv)
+        frame()
+        val scroll = vv.currentScroll()!!
+        scroll.scrollTo(0, 1200)
+        assertEquals("scrolled down", 1200, scroll.scrollY)
+
+        vv.setLocale(dev.glassworks.engine.vitro.data.FrontendLocale(language = "de"), "UTC", HaText.version)
+        assertTrue("built again, in chunks", vv.buildInProgress)
+        val rebuilt = vv.currentScroll()!!
+        frame()
+        assertTrue("the first screen alone doesn't reach it: ${rebuilt.scrollY}", rebuilt.scrollY < 1200)
+        // Two seconds between chunks: the whole build takes longer than the restore's old 5 s.
+        drain(vv) {
+            frame()
+            ShadowLooper.idleMainLooper(2, java.util.concurrent.TimeUnit.SECONDS)
+        }
+        frame()
+        assertEquals("back where it was", 1200, rebuilt.scrollY)
     }
 }
