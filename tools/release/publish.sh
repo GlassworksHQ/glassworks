@@ -104,7 +104,7 @@ for ((i = 0; i < n; i++)); do
     echo "$tag: a draft from an earlier try, never public: making it again"
     gh release delete "$tag" -R "$repo" --yes
   fi
-  # --latest for the line marked latest (none until 1.0.0: v0.4.4 stays releases/latest for panels up to 0.4.3),
+  # --latest for the line marked latest (none yet, 1.0.0 included: v0.4.4 stays releases/latest for panels up to 0.4.3),
   # and only on a stable; everything else --latest=false. A beta is a pre-release, which only apps on the Beta channel take.
   flags=(--latest=false)
   [ "$(item latest)" = true ] && flags=(--latest)
