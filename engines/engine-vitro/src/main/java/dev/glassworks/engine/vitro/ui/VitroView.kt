@@ -1077,6 +1077,12 @@ class VitroView(
     /** The view on screen's scrolling container, if it scrolls (a panel view doesn't). */
     internal fun currentScroll(): ScrollView? = viewCache[currentViewIndex] as? ScrollView
 
+    /** Each masonry scroller's culling ([ScrollTuning.Knob.CULL]). */
+    private val culls = java.util.WeakHashMap<ScrollView, ViewportCull>()
+
+    /** The view on screen's culling, when the knob is on (tests, Clarity's counts). */
+    internal fun currentCull(): ViewportCull? = currentScroll()?.let { culls[it] }
+
     /** Opens the view at [path] as its tab does (the page's history and location follow). False with no dashboard. */
     internal fun openViewAsTab(path: String): Boolean {
         val cfg = dashboard ?: return false
@@ -2050,8 +2056,20 @@ class VitroView(
         val scroll = ScrollView(context).apply {
             isFillViewport = true
             isVerticalScrollBarEnabled = false
-            // State animations land at once while the view scrolls (ScrollTuning.Knob.ANIM_SNAP).
-            if (ScrollTuning.animSnap) setOnScrollChangeListener { _, _, _, _, _ -> ScrollActivity.moved() }
+        }
+        // Masonry columns draw only the cards near the viewport (ScrollTuning.Knob.CULL).
+        val cull = if (ScrollTuning.cull) ViewportCull(scroll) else null
+        if (ScrollTuning.animSnap || cull != null) {
+            scroll.setOnScrollChangeListener { _, _, _, _, _ ->
+                // State animations land at once while the view scrolls (ScrollTuning.Knob.ANIM_SNAP).
+                if (ScrollTuning.animSnap) ScrollActivity.moved()
+                cull?.onScrolled()
+            }
+        }
+        if (cull != null) {
+            // The scroller's size; the columns tell their own layouts ([ViewportCull.columns]).
+            scroll.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> cull.onLayout() }
+            culls[scroll] = cull
         }
         val widthDp = (resources.displayMetrics.widthPixels / dp).toInt()
         val outerPad = px(ctx.theme.viewPaddingDp)

@@ -305,6 +305,82 @@ class ScrollKnobsTest {
         return out
     }
 
+    /** A masonry view of [n] entity cards (one sensor each) at the S1's size, with culling [cull]. */
+    private fun masonry(n: Int, cull: Boolean): dev.glassworks.engine.vitro.ui.VitroView {
+        ScrollTuning.setForTest(ScrollTuning.Knob.CULL, cull)
+        val cards = org.json.JSONArray()
+        for (i in 0 until n) {
+            store.putLocal(state("sensor.s$i", "${10 + i}", mapOf("unit_of_measurement" to "W")))
+            cards.put(JSONObject().put("type", if (i % 3 == 0) "entities" else "entity")
+                .apply { if (i % 3 == 0) put("entities", org.json.JSONArray().put("sensor.s$i").put("switch.fan")) else put("entity", "sensor.s$i") })
+        }
+        val dash = JSONObject().put("views", org.json.JSONArray().put(JSONObject().put("path", "v").put("cards", cards)))
+        val vv = dev.glassworks.engine.vitro.ui.VitroView(activity, store, 0xFF111111.toInt())
+        vv.contextFactory = { theme ->
+            VitroCardContext(
+                context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = emptyList(),
+                accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} }, now = { NOW },
+            )
+        }
+        activity.setContentView(vv)
+        vv.setDashboard(LovelaceParser.parseDashboard(JSONObject(dash.toString())), "v")
+        repeat(10) { idle() }
+        screenOf(vv)
+        return vv
+    }
+
+    private fun screenOf(vv: View): IntArray {
+        vv.measure(View.MeasureSpec.makeMeasureSpec(1440, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(720, View.MeasureSpec.EXACTLY))
+        vv.layout(0, 0, 1440, 720)
+        val bmp = Bitmap.createBitmap(1440, 720, Bitmap.Config.ARGB_8888)
+        vv.draw(Canvas(bmp))
+        return IntArray(1440 * 720).also { bmp.getPixels(it, 0, 1440, 0, 0, 1440, 720) }
+    }
+
+    @Test
+    fun cullingLeavesFarCardsOutAndDrawsTheSameScreen() {
+        seed()
+        val off = masonry(90, cull = false)
+        val on = masonry(90, cull = true)
+        val cull = requireNotNull(on.currentCull())
+        for (y in listOf(0, 2_000, 4_000)) {
+            off.currentScroll()!!.scrollTo(0, y)
+            on.currentScroll()!!.scrollTo(0, y)
+            idle()
+            cull.update()
+            val (drawn, left) = cull.counts()
+            assertTrue("some cards left out at $y: $drawn drawn, $left left", left > drawn)
+            assertTrue("the same screen at $y", screenOf(on).contentEquals(screenOf(off)))
+        }
+        cull.release()
+    }
+
+    @Test
+    fun aCulledCardCatchesUpBeforeItIsDrawnAgain() {
+        seed()
+        val vv = masonry(90, cull = true)
+        val scroll = vv.currentScroll()!!
+        val cull = requireNotNull(vv.currentCull())
+        scroll.scrollTo(0, 0)
+        idle()
+        cull.update()
+        fun texts(v: View): List<String> = if (v is ViewGroup) (0 until v.childCount).flatMap { texts(v.getChildAt(it)) } else listOfNotNull((v as? android.widget.TextView)?.text?.toString())
+        // A card far below, left out: its live change waits.
+        val card = generateSequence(listOf<View>(scroll)) { level -> level.flatMap { v -> (v as? ViewGroup)?.let { g -> (0 until g.childCount).map(g::getChildAt) } ?: emptyList() }.takeIf { it.isNotEmpty() } }
+            .flatten().filterIsInstance<EntityCardView>().first { it.culled }
+        val entity = "sensor." + texts(card).first { Regex("""s\d+""").matches(it) }
+        store.putLocal(state(entity, "777", mapOf("unit_of_measurement" to "W")))
+        idle()
+        assertFalse("not rendered while left out", "777" in texts(card))
+        // Scrolled to it: drawn again, caught up first.
+        val at = IntArray(2).also(card::getLocationInWindow)[1] - IntArray(2).also(scroll::getLocationInWindow)[1] + scroll.scrollY
+        scroll.scrollTo(0, (at - 100).coerceAtLeast(0))
+        cull.update()
+        assertFalse(card.culled)
+        assertTrue("caught up as it came back", "777" in texts(card))
+    }
+
     /** The window's root: counts the layout requests that reach it. */
     private class Root(context: Context) : FrameLayout(context) {
         var requests = 0

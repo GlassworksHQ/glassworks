@@ -43,7 +43,25 @@ object ScrollTuning {
 
         /** The clock sets a line again only when its text changed. */
         CLOCK_SPAN("clockspan", true, "clock lines skip unchanged text"),
+
+        /**
+         * A masonry column draws only the cards in a band around the viewport ([cullMarginPercent] of its height
+         * above and below): the others aren't in its display list, so the render thread doesn't walk them.
+         */
+        CULL("cull", false, "masonry columns draw only cards near the viewport"),
     }
+
+    /**
+     * `debug.glassworks.scroll.cullmargin`: the band [Knob.CULL] keeps drawn above and below the viewport, in percent
+     * of the viewport's height (default 50, 0 to 400).
+     */
+    @JvmStatic
+    var cullMarginPercent: Int = DEFAULT_CULL_MARGIN
+        get() {
+            load()
+            return field
+        }
+        private set
 
     private val values = BooleanArray(Knob.values().size)
     private val sources = arrayOfNulls<String>(Knob.values().size)
@@ -73,6 +91,7 @@ object ScrollTuning {
     val animSnap: Boolean get() = on(Knob.ANIM_SNAP)
     val camReport: Boolean get() = on(Knob.CAM_REPORT)
     val clockSpan: Boolean get() = on(Knob.CLOCK_SPAN)
+    val cull: Boolean get() = on(Knob.CULL)
 
     /** Reads the properties now and logs the values in force, once. MainActivity calls it as the app starts. */
     @JvmStatic
@@ -108,9 +127,10 @@ object ScrollTuning {
                 }
             }
             trace = flag(property("trace")) == true
+            cullMarginPercent = property("cullmargin").trim().toIntOrNull()?.coerceIn(0, 400) ?: DEFAULT_CULL_MARGIN
             loaded = true
             runCatching {
-                Log.i(TAG, Knob.values().joinToString(" ", postfix = " trace=${if (trace) 1 else 0}") { k ->
+                Log.i(TAG, Knob.values().joinToString(" ", postfix = " cullmargin=$cullMarginPercent trace=${if (trace) 1 else 0}") { k ->
                     "${k.key}=${if (values[k.ordinal]) 1 else 0}(${sources[k.ordinal]})"
                 })
             }
@@ -148,4 +168,13 @@ object ScrollTuning {
 
     /** Trace's limit on a section's name. */
     const val MAX_SECTION = 127
+
+    private const val DEFAULT_CULL_MARGIN = 50
+
+    /** Tests: [ScrollTuning.cullMarginPercent] as given. */
+    @JvmStatic
+    fun setCullMarginForTest(percent: Int) {
+        load()
+        cullMarginPercent = percent
+    }
 }

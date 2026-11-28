@@ -1401,6 +1401,33 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
      * view shows, before it draws. The subscriptions stay, so nothing is asked of HA again. Main thread.
      */
     internal fun setViewHidden(hidden: Boolean) {
+        hiddenByView = hidden
+        applyHidden()
+    }
+
+    /** [setViewHidden]'s own state, apart from [culled]. Main thread. */
+    private var hiddenByView = false
+
+    /**
+     * True while the card is outside the band of the view its column draws ([ViewportCull], ScrollTuning.Knob.CULL):
+     * attached and shown as far as Android knows, but not drawn. Its live changes wait, as a hidden view's do, and
+     * catch up before it's drawn again. Main thread.
+     */
+    internal var culled = false
+        private set
+
+    internal fun setCulled(culled: Boolean) {
+        if (this.culled == culled) return
+        this.culled = culled
+        applyHidden()
+        onCulledChanged(culled)
+    }
+
+    /** The card stopped being drawn ([culled]) or is drawn again: a card with a timer of its own pauses it. */
+    protected open fun onCulledChanged(culled: Boolean) {}
+
+    private fun applyHidden() {
+        val hidden = hiddenByView || culled
         if (viewHidden == hidden) return
         val due = synchronized(renderLock) {
             viewHidden = hidden

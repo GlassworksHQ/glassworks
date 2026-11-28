@@ -188,6 +188,14 @@ internal class CardColumn(context: Context, private val firstTopPx: Int, private
         orientation = VERTICAL
     }
 
+    /** The view's culling ([ViewportCull], ScrollTuning.Knob.CULL), once it found this column; null: every card drawn. */
+    internal var cull: ViewportCull? = null
+
+    override fun drawChild(canvas: android.graphics.Canvas, child: View, drawingTime: Long): Boolean {
+        if (cull?.skips(child) == true) return false
+        return super.drawChild(canvas, child, drawingTime)
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val unbounded = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
         var first = true
