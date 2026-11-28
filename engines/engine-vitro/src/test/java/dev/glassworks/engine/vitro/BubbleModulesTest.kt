@@ -25,6 +25,9 @@ import java.util.concurrent.CopyOnWriteArrayList
  * ([FakeHaServer]) before it hands over the resources: Bubble Card Tools, the modules sensor, then the legacy file.
  */
 class BubbleModulesTest {
+    /** Its clients never go to the network for HA's frontend files ([NoHaFrontendFetch]). */
+    @get:org.junit.Rule val noFrontendFetch = NoHaFrontendFetch()
+
     private val server = FakeHaServer()
     private val clients = CopyOnWriteArrayList<HaDashboardClient>()
     private val resources = CopyOnWriteArrayList<List<LovelaceResource>>()

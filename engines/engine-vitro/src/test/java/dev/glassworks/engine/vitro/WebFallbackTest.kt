@@ -52,6 +52,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class WebFallbackTest {
+    /** Its clients never go to the network for HA's frontend files ([NoHaFrontendFetch]). */
+    @get:org.junit.Rule val noFrontendFetch = NoHaFrontendFetch()
+
     /** The picture loads a test starts are all back before the next test: one in flight lands in its looper (D28). */
     private val pendingImagesBefore = dev.glassworks.engine.vitro.ui.VitroCardContext.pendingImageLoads.get()
 

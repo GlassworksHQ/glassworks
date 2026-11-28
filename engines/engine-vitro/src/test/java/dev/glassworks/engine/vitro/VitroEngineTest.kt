@@ -57,6 +57,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class VitroEngineTest {
+    /** Its clients never go to the network for HA's frontend files ([NoHaFrontendFetch]). */
+    @get:org.junit.Rule val noFrontendFetch = NoHaFrontendFetch()
+
 
     private val base = FakeHaServer.BASE
     /** What the panel is set to: a test that moves it to another Home Assistant replaces it. */
