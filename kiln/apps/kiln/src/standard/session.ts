@@ -354,7 +354,7 @@ export class StandardSession implements SetupSteps, WifiSteps {
   set haAddress(v: string | undefined) { this.setUp.haAddress = v; }
   homeAssistant(): Promise<void> { return this.setUp.homeAssistant(); }
   signIn(url: string): void { this.setUp.signIn(url); }
-  saveHa(url: string): Promise<void> { return this.setUp.saveHa(url); }
+  saveHa(url: string, dashboard?: string): Promise<void> { return this.setUp.saveHa(url, dashboard); }
   skipHa(url: string): Promise<void> { return this.setUp.skipHa(url); }
   panes(): Promise<void> { return this.setUp.panes(); }
   applyPanes(on: readonly string[]): Promise<void> { return this.setUp.applyPanes(on); }

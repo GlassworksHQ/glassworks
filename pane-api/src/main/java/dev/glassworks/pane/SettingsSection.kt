@@ -385,6 +385,11 @@ sealed interface SettingsItem {
          * (#691's theme picker). A tap on an orb picks it at once.
          */
         val swatch: ((String) -> Swatch)? = null,
+        /**
+         * This panel's own setting, not copied across panels by All panels (e.g. which dashboard this panel shows):
+         * ManageApi refuses writes to it and marks it `copy: false`.
+         */
+        val perPanel: Boolean = false,
         val save: (String, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 

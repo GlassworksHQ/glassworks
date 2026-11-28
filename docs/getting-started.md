@@ -75,8 +75,9 @@ By default, Glassworks loads your default Home Assistant dashboard and hides the
 
 To display a specific dashboard:
 
-- **In Home Assistant:** open the panel's ESPHome device page, expand the disabled entities, enable the **Dashboard** select entity (or **Dashboard URL**), and pick the dashboard you want.
-- **On the panel or Manage page:** open the hidden settings menu on the panel by **tapping the top-left corner five times**, or open the [Manage page](manage.md) at `http://<panel>:8099/` from your browser and go to **Home Assistant & dashboard**.
+- **During setup:** After you sign in to Home Assistant in Kiln or on the panel's `/setup` page, pick a dashboard from the **Dashboard** dropdown whenever your Home Assistant has custom dashboards.
+- **In Home Assistant:** Open the panel's ESPHome device page and use the **Dashboard** select entity (enabled by default). For an arbitrary URL, expand the disabled entities and enable **Dashboard URL**.
+- **On the panel or Manage page:** Open the hidden settings menu on the panel by **tapping the top-left corner five times**, or open the [Manage page](manage.md) at `http://<panel>:8099/` from your browser, go to **Home Assistant & dashboard**, and choose **Dashboard**.
 
 ## Where to go next
 

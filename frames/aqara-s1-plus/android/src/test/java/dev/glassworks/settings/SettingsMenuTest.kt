@@ -334,4 +334,59 @@ class SettingsMenuTest {
         assertEquals("1.25", CoreSettings.number(1.25f))
         assertEquals("2", CoreSettings.number(2f))
     }
+
+    @Test
+    fun dashboardPickerAppearsWhenDashboardsExistAndReloadsInPlace() {
+        val prefs = KioskPrefs(app)
+        val dashes = listOf(
+            dev.glassworks.dashboard.Dashboard("tablet", "Tablet"),
+            dev.glassworks.dashboard.Dashboard("energy", "Energy"),
+        )
+        val reloaded = mutableListOf<String>()
+        fun build(list: List<dev.glassworks.dashboard.Dashboard>) = CoreSettings(
+            prefs, "1.0.0", status = { "" }, deviceSettings = null,
+            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
+            live = CoreSettings.Live(dashboard = { reloaded += it }),
+            hardware = MenuFixture.S1_HARDWARE,
+            dashboards = { list },
+        ).sections().getValue(SettingsPlace.DASHBOARD)
+
+        // Hidden until Home Assistant is known.
+        assertTrue(build(dashes).items.none { it is SettingsItem.Choice && it.title == CoreSettings.DASHBOARD_ROW_TITLE })
+
+        prefs.setHaUrl("http://192.0.2.10:8123", dev.glassworks.discovery.HaDiscovery.SOURCE_MDNS)
+        // Hidden when no custom dashboards exist and on Default.
+        assertTrue(build(emptyList()).items.none { it is SettingsItem.Choice && it.title == CoreSettings.DASHBOARD_ROW_TITLE })
+
+        // Shown right under Home Assistant when custom dashboards exist; no Custom option while on Default.
+        val page = build(dashes)
+        assertEquals(listOf("Home Assistant", "Dashboard", "Full screen", "Zoom", "Secure hosts"), titles(page.items))
+        val choice = page.items[1] as SettingsItem.Choice
+        assertTrue("each panel owns its dashboard", choice.perPanel)
+        assertFalse("reloads in place without restart", SettingsChange.restarts(choice))
+        assertEquals("Default", choice.value())
+        assertEquals(listOf("Default", "Tablet", "Energy"), choice.options().map { it.first })
+
+        // Picking a dashboard saves the URL and invokes live.dashboard(url).
+        var err: String? = "unset"
+        choice.save("Tablet") { err = it }
+        assertEquals(null, err)
+        assertEquals("http://192.0.2.10:8123/tablet", prefs.urlSetting)
+        assertEquals(listOf("http://192.0.2.10:8123/tablet"), reloaded)
+        assertEquals("Tablet", choice.value())
+
+        // Picking the current dashboard again is a no-op.
+        choice.save("Tablet") { err = it }
+        assertEquals(null, err)
+        assertEquals(1, reloaded.size)
+
+        // Custom appears only while on a custom URL.
+        prefs.urlSetting = "http://192.0.2.10:8123/custom-view"
+        val withCustom = build(dashes).items[1] as SettingsItem.Choice
+        assertEquals("Custom", withCustom.value())
+        assertEquals(listOf("Default", "Tablet", "Energy", "Custom"), withCustom.options().map { it.first })
+        withCustom.save("Custom") { err = it }
+        assertEquals(null, err)
+        assertEquals(1, reloaded.size)
+    }
 }

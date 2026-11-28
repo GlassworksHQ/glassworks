@@ -42,6 +42,7 @@ describe('one ember action per screen', () => {
     ['wifi', 'Continue'],
     ['wifi-new', 'Connect'],
     ['home-assistant', 'Sign in'], // not signed in yet: Sign in is the way on, not Continue
+    ['home-assistant-signed-in', 'Continue'], // signed in with custom dashboards: Continue saves the pick and moves on
     ['radio', 'Finish'],
     ['radio-next', 'Finish'],
     ['undo', 'Continue'],

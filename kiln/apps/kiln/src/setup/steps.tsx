@@ -138,19 +138,33 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
   // kept in the session as it is typed, so another set-up step and back doesn't lose it
   const [typed, setTyped] = useState<string | undefined>(() => steps.haAddress);
   const url = typed ?? suggested; // follows what the panel finds until the person types
+  const dashboards = setup.ha.dashboards;
+  const showDashboard = setup.ha.signedIn && !!dashboards && dashboards.length > 1;
+  const currentDashboard = setup.ha.dashboard ?? dashboards?.[0] ?? 'Default';
+  const [pickedDashboard, setPickedDashboard] = useState<string | undefined>(undefined);
+  const dashboard = pickedDashboard && dashboards?.includes(pickedDashboard) ? pickedDashboard : currentDashboard;
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{setup.ha.signedIn ? 'Signed in to Home Assistant' : 'Sign in to Home Assistant'}</h2>
       <p className="lede">{setup.ha.discovered ? `Found Home Assistant at ${new URL(setup.ha.discovered).host}.` : 'We couldn\'t find Home Assistant automatically. Enter its address below.'}</p>
       <label className="field"><span>Address</span><input className="input" value={url} onChange={(e) => { setTyped(e.target.value); steps.haAddress = e.target.value; }} inputMode="url" autoComplete="off" /></label>
       {setup.ha.signedIn && <p className="status ok">{`${capThe} is signed in.`}</p>}
+      {showDashboard && (
+        <label className="field">
+          <span>Dashboard</span>
+          <select className="select" value={dashboard} disabled={setup.busy || busy} onChange={(e) => setPickedDashboard(e.target.value)}>
+            {dashboards.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+          <span className="small">Leave on Default for your Home Assistant default dashboard.</span>
+        </label>
+      )}
       {setup.note && !setup.ha.signedIn && <p className="status" role="status">{setup.note}</p>}
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
-      {/* One way on: Sign in until the panel is signed in (the step then moves on by itself), Continue after. */}
+      {/* One way on: Sign in until the panel is signed in, Continue after. */}
       {setup.ha.signedIn ? (
         <Foot>
           <span />
-          <button type="button" className="btn ember" disabled={setup.busy || busy} onClick={() => void steps.click('save-ha', () => steps.saveHa(url.trim()))}>Continue</button>
+          <button type="button" className="btn ember" disabled={setup.busy || busy} onClick={() => void steps.click('save-ha', () => steps.saveHa(url.trim(), showDashboard ? dashboard : undefined))}>Continue</button>
         </Foot>
       ) : (
         <Foot>

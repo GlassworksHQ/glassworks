@@ -11,6 +11,9 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **Pick your Home Assistant dashboard anywhere.** Glassworks now fetches your Lovelace dashboards directly from Home Assistant as soon as the panel signs in. Choose which dashboard the panel shows right after signing in in Kiln or on the `/setup` page, anytime in **Home Assistant & dashboard** on the panel or the Manage page (reloading in place without restarting), or from the **Dashboard** select entity in Home Assistant, which is now enabled by default.
+
 ## [0.9.2] - 2026-11-28
 
 **Bluetooth devices Home Assistant connects to now work through the Mirror, with steadier sign-in, simpler addresses and softer chimes.**

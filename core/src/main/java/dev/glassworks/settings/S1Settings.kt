@@ -23,6 +23,8 @@ import dev.glassworks.Glassworks
 import dev.glassworks.KioskPrefs
 import dev.glassworks.Licences
 import dev.glassworks.auth.HaAuth
+import dev.glassworks.dashboard.DashboardOptions
+import dev.glassworks.dashboard.Dashboards
 import dev.glassworks.manage.AppManage
 import dev.glassworks.setup.SetupPrefs
 
@@ -59,6 +61,11 @@ object S1Settings {
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) { c -> (c as? Activity)?.let(Licences::show) },
             live = CoreSettings.Live(
                 fullScreen = fullScreen,
+                dashboard = { url ->
+                    val i = Intent().putExtra("url", url)
+                    if (Looper.myLooper() == Looper.getMainLooper()) runtime.commandSink?.invoke(i)
+                    else Handler(Looper.getMainLooper()).post { runtime.commandSink?.invoke(i) }
+                },
                 presenceRange = { runtime.screen.applyPresenceRange() },
                 brightness = { runtime.screen.refreshBrightness() },
                 screenAwake = {
@@ -75,6 +82,7 @@ object S1Settings {
             screenLock = { dev.glassworks.platform.ScreenLock.secure(context) },
             panelIp = { dev.glassworks.platform.PanelAddress.now(context) },
             volume = runtime.volume(context),
+            dashboards = { Dashboards.latest ?: DashboardOptions.parse(prefs.dashboardsJson).orEmpty() },
         )
         // One pane's failure leaves the others' pages.
         val sections = panes.flatMap { d ->

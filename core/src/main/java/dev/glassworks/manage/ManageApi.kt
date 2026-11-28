@@ -67,8 +67,8 @@ class ManageApi(
         val item = section?.let { SettingsChange.find(it, key) }
             ?: return json(req, 404, JSONObject().put("problem", "This panel doesn't have that setting.").put("missing", true))
         if (item is SettingsItem.SignIn || item is SettingsItem.Action) return json(req, 422, JSONObject().put("problem", "Change this on the panel's own Manage page."))
-        // The panel's own connection (its Home Assistant address): never from another panel's page (#466 panel run).
-        if (item is SettingsItem.Text && item.perPanel) return json(req, 422, JSONObject().put("problem", PER_PANEL))
+        // The panel's own connection and dashboard choice: never overwritten from another panel's page (#466 panel run).
+        if ((item is SettingsItem.Text && item.perPanel) || (item is SettingsItem.Choice && item.perPanel)) return json(req, 422, JSONObject().put("problem", PER_PANEL))
         val raw = f["value"].orEmpty().trim()
         val what = what(section, key)
         question(item, raw)?.takeIf { !answered(f["answer"], owner, section.id, key, raw) }?.let { q ->
@@ -147,6 +147,7 @@ class ManageApi(
                 is SettingsItem.TimeRange -> i.value().let { v -> o.put("kind", "time-range").put("value", v).put("shown", i.shown(v)) }
                 is SettingsItem.Choice -> o.put("kind", "choice").put("value", i.value()).put("shown", SettingsChange.shown(i))
                     .put("options", JSONArray(i.options().map { (id, name) -> JSONArray(listOf(id, name)) }))
+                    .also { if (i.perPanel) it.put("copy", false) }
                 is SettingsItem.Text -> o.put("kind", "text").put("value", i.value()).put("shown", SettingsChange.shown(i)).put("restarts", i.restartsApp)
                     .also { if (i.perPanel) it.put("copy", false) }
                 is SettingsItem.SignIn -> o.put("kind", "sign-in").put("set", i.isSet())

@@ -29,7 +29,7 @@ If a panel is already on Wi-Fi (or broadcasting its temporary setup Wi-Fi), you 
 
 1. **Pair:** Click **Show the code on the panel**. A 6-digit code appears on the panel's screen; type it into your browser and click **Pair** to prove you are physically near the panel.
 2. **Wi-Fi** *(shown only when the panel is not yet connected to a network)*: Choose your Wi-Fi network and enter the password. The panel closes its temporary setup Wi-Fi and joins your home network, showing its progress and new home-network address on its screen. *(If your browser can still reach the setup hotspot 45 seconds later, joining did not start and the page offers **Try again**.)* Once your phone or laptop is back on your home Wi-Fi, open `http://<panel-ip>:8099/setup` at the panel's new IP address and pair again with a fresh 6-digit code—pairing sessions are bound to the client IP, so switching networks starts a new session.
-3. **Home Assistant:** Confirm the discovered Home Assistant address (or enter it manually) and sign in.
+3. **Home Assistant:** Confirm the discovered Home Assistant address (or enter it manually), sign in, and pick a dashboard if your Home Assistant has custom dashboards.
 4. **Radio:** On frames with a radio, choose your radio role and view the Home Assistant next steps.
 5. **Done:** Finishes setup and closes the pairing session.
 

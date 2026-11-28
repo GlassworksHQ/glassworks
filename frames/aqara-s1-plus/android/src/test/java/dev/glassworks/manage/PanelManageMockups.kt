@@ -38,7 +38,11 @@ class PanelManageMockups {
     fun sideBySide() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
         val out = File(Mockup.dir!!, "parity").apply { mkdirs() }
-        val model = panes.model(panes.all(), off = setOf("bluetooth-proxy"))
+        val model = panes.model(
+            panes.all(),
+            off = setOf("bluetooth-proxy"),
+            dashboards = { listOf(dev.glassworks.dashboard.Dashboard("tablet", "Tablet"), dev.glassworks.dashboard.Dashboard("energy", "Energy")) },
+        )
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         o.reload = model
         o.show(model())

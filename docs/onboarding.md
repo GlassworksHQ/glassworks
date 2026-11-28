@@ -28,9 +28,7 @@ lightly tested end to end. Nothing below is implemented unless marked ✅.
    whose boot image has no update service (Kiln adds it), or a tablet where Android needs "Install unknown
    apps" allowed or a device owner (#422). Never required: Continue or Not now answers it. A panel that was
    set up before this step existed never sees it.
-5. **Pick a dashboard** from a dropdown on the panel's device page in HA (defaults to your default
-   dashboard). HA adds that dropdown turned off: turn on **Dashboard** first
-   ([how](esphome.md#categories-and-defaults)).
+5. **Pick a dashboard** right after signing in during setup (Kiln or `/setup`), from **Home Assistant & dashboard** in panel settings or on Manage, or from the **Dashboard** dropdown on the panel's device page in Home Assistant (defaults to your default dashboard).
 6. **Optional: night mode.** The panel has no night schedule of its own. To turn the screen off sooner
    and dim it at night, add the [Panel night mode](blueprints.md#panel-night-mode) blueprint from
    **Settings → Screen** and pick your panels. Setup doesn't ask for it.
@@ -259,6 +257,8 @@ line, both ways:
   `ip` (wlan0 IPv4), `ha.discovered` (the HA address the app found itself: `ha_url_source` `mdns` or
   `esphome`, not `manual`), `ha.url` (the address in use, `KioskPrefs.haBase`, "" until known),
   `ha.signedIn`, `ha.signinUrl` (`http://<ip>:8099/signin` once there is an ip and an HA address),
+  `ha.dashboards` (selectable dashboard labels once signed in and custom dashboards exist),
+  `ha.dashboard` (the currently selected dashboard label),
   `radio.mode` (RadioMode id), `radio.status` (RadioController's status text), `radio.options` (the
   radio's modes: id, label, detail, `experimental` only when true), `radio.helper`
   (root helper installed) and `radio.answered` (the panel's radio step is answered; an app that doesn't
@@ -266,6 +266,7 @@ line, both ways:
 - `ha.set_url` (first name `set_ha`, which still works) with `url` (http/https only): applied on the main thread exactly as the `url` intent extra
   (dashboard URL setting saved, then the dashboard reloads, or the process restarts when the
   secure-context hosts or the dashboard's origin (scheme, host or port) change, after the reply). The panel's setup screen moves on by itself.
+- `ha.set_dashboard` with `dashboard` (a label from `ha.dashboards`): resolves the Lovelace dashboard URL on the panel's existing Home Assistant host, saves it, and reloads the dashboard in place without restarting.
 - `radio.set_mode` (first name `set_radio`) with `mode`: through `RadioController.request`, like the
   radio card on the panel's Panes step. Only the ids in `radio.options` (the radio step's options, `RadioStep.OPTIONS`)
   are accepted. Any other id, also a `RadioMode` id the step doesn't offer, is `ok:false` with
@@ -519,10 +520,13 @@ on the way:
   out. HA 2026.11.0 `lovelace/dashboard.py` `DashboardsCollectionWebSocket.ws_list_item` returns
   `dashboard.config` for every dashboard that has one (storage and YAML). The built-in default has
   none, so it is never listed.
-- **Not done:** the app-side fallback (fetching the list over HA's websocket with the refresh token
-  when no HA page is open). There's no websocket client in the app, and a hand-written one isn't
-  trivial. The frontend path covers both session types, so the list only goes stale while the panel
-  shows a non-HA page; the last list is kept in the prefs (`dashboards`).
+- ✅ **App-side WebSocket fetch on sign-in:** `HaGatewayClient.dashboards` connects to Home Assistant's
+  `/api/websocket` with the panel's access token right when sign-in completes, checks `auth/current_user`
+  (`is_admin`, filtering out `require_admin` dashboards for non-admins just like `content.js`), and calls
+  `lovelace/dashboards/list`. That makes the dashboard list available immediately during setup (Kiln and
+  `/setup`), in panel settings and Manage, and in Home Assistant before the dashboard frontend finishes
+  loading. The frontend path keeps refreshing the list every 10 minutes and covers cookie sessions. The
+  last list is persisted in prefs (`dashboards`).
 - ✅ **Options are static per entity listing**, so a changed option list rebuilds the entity set and
   drops the API connections (`ApiServer.setEntities`, the same mechanism as the wall base), and HA
   re-lists. It's debounced in `dashboard/StableChange.kt` (`StableChangeTest`): only when the

@@ -74,6 +74,8 @@ object MenuFixture {
         hardware: ScreenHardware = S1_HARDWARE,
         /** The master volume, for the Sound page; none leaves the page out. */
         volume: dev.glassworks.audio.MasterVolume? = null,
+        /** Lovelace dashboards for the Dashboard picker; empty leaves the row out. */
+        dashboards: () -> List<dev.glassworks.dashboard.Dashboard> = { emptyList() },
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
@@ -85,6 +87,7 @@ object MenuFixture {
             account = { account },
             panelIp = panelIp,
             volume = volume,
+            dashboards = dashboards,
         )
         val sections = paneSections(panes, blueprints, running)
         return KioskSettingsOverlay.Model(withHaLink(settingsOrder(core.sections(), sections), link), version, sections.map { it.id }.toSet())

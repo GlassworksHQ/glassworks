@@ -13,10 +13,14 @@ import dev.glassworks.glassworks
 import dev.glassworks.frame.nodeName
 import dev.glassworks.setup.SetupChannelServer
 import dev.glassworks.manage.PanelHosts
+import dev.glassworks.dashboard.Dashboard
+import dev.glassworks.dashboard.DashboardOptions
+import dev.glassworks.dashboard.Dashboards
 import dev.glassworks.setup.LanSetup
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The panel's Home Assistant credentials: the refresh token from the QR sign-in (stored in the
@@ -34,6 +38,9 @@ object HaAuth {
 
     /** The Manage log reads it as "Setup" (S1Manage.logSource). */
     private const val LAN_TAG = "Glassworks.SetupChannel"
+    /** Tight timeout for the sign-in dashboard lookup so it finishes fast on the LAN and never stalls sign-in. */
+    private const val DASHBOARDS_TIMEOUT_MS = 2_000
+    private const val SIGNIN_DASHBOARDS_WAIT_MS = 2_000L
 
     private lateinit var prefs: KioskPrefs
     private val main = Handler(Looper.getMainLooper())
@@ -42,6 +49,13 @@ object HaAuth {
     private val tokens = HaTokenClient(http)
     private val cache = AccessTokenCache()
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
+    private val dashboardsFetchedFor = AtomicReference<StoredAuth?>(null)
+    /** Fetches the user's Lovelace dashboards over HA's websocket; replaceable in tests. */
+    @Volatile var dashboardClient: (base: String, token: String) -> List<Dashboard>? = { base, token ->
+        HaGatewayClient(tokens) { url ->
+            WsHaSocket.connect(url, connectTimeoutMs = DASHBOARDS_TIMEOUT_MS, readTimeoutMs = DASHBOARDS_TIMEOUT_MS)
+        }.dashboards(base, token)
+    }
     private var server: HttpServer? = null
     /**
      * The sign-in server's pending sign-ins ([signInStates]), made once per process and kept across server restarts, so
@@ -231,6 +245,8 @@ object HaAuth {
         prefs.auth = auth
         cache.put(first.accessToken, first.expiresIn)
         AuthLog.i("Refresh token stored for ${auth.haBase}")
+        dashboardsFetchedFor.set(auth)
+        fetchDashboards(auth, first.accessToken, waitMs = SIGNIN_DASHBOARDS_WAIT_MS)
         notifyChanged()
     }
 
@@ -241,8 +257,42 @@ object HaAuth {
      */
     fun signInStored(how: String) {
         cache.clear()
+        dashboardsFetchedFor.set(null)
         AuthLog.i("$how${signedInBase?.let { " for $it" } ?: ""}")
         notifyChanged()
+        ensureDashboards()
+    }
+
+    /**
+     * Best-effort background fetch of Lovelace dashboards when the panel is signed in and no list has been
+     * reported in this process yet (e.g. before the dashboard frontend finishes booting). Runs at most once per sign-in.
+     */
+    fun ensureDashboards() {
+        val auth = stored ?: return
+        if (Dashboards.latest != null) return
+        val prev = dashboardsFetchedFor.get()
+        if (prev == auth || !dashboardsFetchedFor.compareAndSet(prev, auth)) return
+        accessToken(force = false) { a ->
+            val token = (a as? Access.Ok)?.accessToken ?: return@accessToken
+            fetchDashboards(auth, token, waitMs = 0L)
+        }
+    }
+
+    /** Fetches [auth]'s dashboards on a daemon thread, waiting up to [waitMs] so immediate setup reads see them. */
+    private fun fetchDashboards(auth: StoredAuth, token: String, waitMs: Long) {
+        val t = Thread({
+            val list = try {
+                dashboardClient(auth.haBase, token)
+            } catch (e: Throwable) {
+                AuthLog.w("fetching Lovelace dashboards failed: ${e.message ?: e.javaClass.simpleName}")
+                null
+            } ?: return@Thread
+            if (!::prefs.isInitialized || prefs.auth != auth) return@Thread
+            prefs.dashboardsJson = DashboardOptions.toJson(list)
+            Dashboards.report(list)
+            AuthLog.i("Fetched ${list.size} Lovelace dashboard(s) from ${auth.haBase}")
+        }, "ha-dashboards").apply { isDaemon = true; start() }
+        if (waitMs > 0L) runCatching { t.join(waitMs) }
     }
 
     /**
@@ -298,6 +348,8 @@ object HaAuth {
         val had = prefs.hasAuth
         val cleared = try { prefs.auth = null; true } catch (e: SignInNotStored) { AuthLog.w("${e.message}; it stays until the key store is back"); false }
         cache.clear()
+        dashboardsFetchedFor.set(null)
+        Dashboards.clear()
         if (had) notifyChanged()
         return cleared
     }

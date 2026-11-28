@@ -19,7 +19,7 @@ bluetooth_proxy|1860802466|SwitchEntity|Bluetooth proxy|mdi:bluetooth||CONFIG|au
 bluetooth_proxy_status|-602386831|TextSensorEntity|Bluetooth proxy status|mdi:bluetooth-settings||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 cpu_temperature|577453544|SensorEntity|CPU temperature||temperature|DIAGNOSTIC|authOnly=false|options=|eventTypes=
 cpu_usage|-1945155459|SensorEntity|CPU usage|mdi:cpu-32-bit||DIAGNOSTIC|authOnly=false|options=|eventTypes=
-dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=false|options=Default,Custom|eventTypes=|disabledByDefault
+dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=false|options=Default,Custom|eventTypes=
 dashboard_url|-228981371|TextEntity|Dashboard URL|mdi:web||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
@@ -105,7 +105,7 @@ bluetooth_proxy|1860802466|SwitchEntity|Bluetooth proxy|mdi:bluetooth||CONFIG|au
 bluetooth_proxy_status|-602386831|TextSensorEntity|Bluetooth proxy status|mdi:bluetooth-settings||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 cpu_temperature|577453544|SensorEntity|CPU temperature||temperature|DIAGNOSTIC|authOnly=false|options=|eventTypes=
 cpu_usage|-1945155459|SensorEntity|CPU usage|mdi:cpu-32-bit||DIAGNOSTIC|authOnly=false|options=|eventTypes=
-dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=false|options=Default,Custom|eventTypes=|disabledByDefault
+dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=false|options=Default,Custom|eventTypes=
 dashboard_url|-228981371|TextEntity|Dashboard URL|mdi:web||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
@@ -193,7 +193,7 @@ bluetooth_proxy|1860802466|SwitchEntity|Bluetooth proxy|mdi:bluetooth||CONFIG|au
 bluetooth_proxy_status|-602386831|TextSensorEntity|Bluetooth proxy status|mdi:bluetooth-settings||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 cpu_temperature|577453544|SensorEntity|CPU temperature||temperature|DIAGNOSTIC|authOnly=false|options=|eventTypes=
 cpu_usage|-1945155459|SensorEntity|CPU usage|mdi:cpu-32-bit||DIAGNOSTIC|authOnly=false|options=|eventTypes=
-dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=false|options=Default,Custom|eventTypes=|disabledByDefault
+dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=false|options=Default,Custom|eventTypes=
 dashboard_url|-228981371|TextEntity|Dashboard URL|mdi:web||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
@@ -272,7 +272,7 @@ bluetooth_proxy|1860802466|SwitchEntity|Bluetooth proxy|mdi:bluetooth||CONFIG|au
 bluetooth_proxy_status|-602386831|TextSensorEntity|Bluetooth proxy status|mdi:bluetooth-settings||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 cpu_temperature|577453544|SensorEntity|CPU temperature||temperature|DIAGNOSTIC|authOnly=false|options=|eventTypes=
 cpu_usage|-1945155459|SensorEntity|CPU usage|mdi:cpu-32-bit||DIAGNOSTIC|authOnly=false|options=|eventTypes=
-dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=false|options=Default,Custom|eventTypes=|disabledByDefault
+dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=false|options=Default,Custom|eventTypes=
 dashboard_url|-228981371|TextEntity|Dashboard URL|mdi:web||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
@@ -351,7 +351,7 @@ bluetooth_proxy|1860802466|SwitchEntity|Bluetooth proxy|mdi:bluetooth||CONFIG|au
 bluetooth_proxy_status|-602386831|TextSensorEntity|Bluetooth proxy status|mdi:bluetooth-settings||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 cpu_temperature|577453544|SensorEntity|CPU temperature||temperature|DIAGNOSTIC|authOnly=false|options=|eventTypes=
 cpu_usage|-1945155459|SensorEntity|CPU usage|mdi:cpu-32-bit||DIAGNOSTIC|authOnly=false|options=|eventTypes=
-dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=false|options=Default,Custom|eventTypes=|disabledByDefault
+dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=false|options=Default,Custom|eventTypes=
 dashboard_url|-228981371|TextEntity|Dashboard URL|mdi:web||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=

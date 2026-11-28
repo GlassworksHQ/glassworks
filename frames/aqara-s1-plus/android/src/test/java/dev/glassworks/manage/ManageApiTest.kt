@@ -24,6 +24,7 @@ class ManageApiTest {
     private var role = "zigbee"
     private var cameraSet = true
     private var haUrl = "http://homeassistant.local:8123/lovelace/0"
+    private var dashboard = "Default"
     private val f = ManageFixture()
 
     /** Not JWT-shaped, so the Log's redaction wouldn't catch it: only never writing it keeps it out. */
@@ -45,6 +46,7 @@ class ManageApiTest {
         ))
         val dashboard = SettingsSection("dashboard", "Home Assistant & dashboard", listOf(
             SettingsItem.Text("Home Assistant", "Found automatically", SettingsItem.TextKind.ADDRESS, { haUrl }, perPanel = true) { v, d -> haUrl = v; d(null) },
+            SettingsItem.Choice("Dashboard", { this.dashboard }, { listOf("Default" to "Default", "Tablet" to "Tablet") }, perPanel = true) { v, d -> this.dashboard = v; d(null) },
         ))
         f.statusFn = { f.status.copy(sections = listOf(screen, radio, camera, dashboard)) }
     }
@@ -80,13 +82,22 @@ class ManageApiTest {
     }
 
     @Test fun thePanelsOwnHomeAssistantAddressIsNeverCopiedNorChangedFromAnotherPanel() {
-        val row = json(page().get()).getJSONArray("sections").getJSONObject(3).getJSONArray("items").getJSONObject(0)
+        val items = json(page().get()).getJSONArray("sections").getJSONObject(3).getJSONArray("items")
+        val row = items.getJSONObject(0)
         assertEquals("Home Assistant", row.getString("key"))
         assertFalse("marked as not copyable", row.getBoolean("copy"))
         val r = page().post("section" to "dashboard", "key" to "Home Assistant", "value" to "http://192.0.2.10:8123")
         assertEquals(422, r.status)
         assertEquals(ManageApi.PER_PANEL, json(r).getString("problem"))
         assertEquals("http://homeassistant.local:8123/lovelace/0", haUrl)
+
+        val dashRow = items.getJSONObject(1)
+        assertEquals("Dashboard", dashRow.getString("key"))
+        assertFalse("dashboard choice is marked as not copyable", dashRow.getBoolean("copy"))
+        val dashRes = page().post("section" to "dashboard", "key" to "Dashboard", "value" to "Tablet")
+        assertEquals(422, dashRes.status)
+        assertEquals(ManageApi.PER_PANEL, json(dashRes).getString("problem"))
+        assertEquals("Default", dashboard)
         assertEquals(0, f.onMainCalls)
     }
 

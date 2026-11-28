@@ -242,7 +242,7 @@ export class LanSession implements SetupSteps, WifiSteps {
   joinWifi(ssid: string, psk: string): Promise<void> { return this.steps.joinWifi(ssid, psk); }
   homeAssistant(): Promise<void> { return this.steps.homeAssistant(); }
   signIn(url: string): void { this.steps.signIn(url); }
-  saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
+  saveHa(url: string, dashboard?: string): Promise<void> { return this.steps.saveHa(url, dashboard); }
   skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }
   panes(): Promise<void> { return this.steps.panes(); }
   applyPanes(on: readonly string[]): Promise<void> { return this.steps.applyPanes(on); }

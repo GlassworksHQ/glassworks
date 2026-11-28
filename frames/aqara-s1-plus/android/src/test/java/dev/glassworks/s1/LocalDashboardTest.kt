@@ -128,6 +128,7 @@ class LocalDashboardTest {
         exec.runDue()
 
         val select = device.entityList().filterIsInstance<SelectEntity>().single { it.objectId == "dashboard" }
+        assertFalse("dashboard select is enabled by default in Home Assistant", select.disabledByDefault)
         assertEquals("the setting's dashboard, matched by name", "Default", select.shownState())
         select.command(ProtoMessage(ProtoWriter().fixed32(1, select.key, true).string(2, "Tablet").toByteArray()))
         shadowOf(Looper.getMainLooper()).idle()

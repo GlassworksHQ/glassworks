@@ -45,7 +45,7 @@ export interface SetupSteps {
   /** The Panes switches as the person set them, kept if the step's screen goes and comes back (pairing again). */
   panesDraft?: Record<string, boolean>;
   signIn(url: string): void;
-  saveHa(url: string): Promise<void>;
+  saveHa(url: string, dashboard?: string): Promise<void>;
   /** Skip the sign-in (the panel asks for it on its own screen): keeps a valid address, then moves on. */
   skipHa(url: string): Promise<void>;
   /** The Panes step, when the app offers it; else on to the radio. */
@@ -90,6 +90,7 @@ export const stillOnHotspot = (ssid: string) =>
   `The panel still has its setup Wi-Fi up, so it didn't join ${ssid}. Check the network and password, and try again.`;
 
 const NOT_AN_ADDRESS = 'That doesn\'t look like a web address (http://… or https://…).';
+const hasDashboardChoice = (ha: SetupState['ha']) => (ha.dashboards?.length ?? 0) > 1;
 
 export class ChannelSetup {
   haAddress?: string;
@@ -187,8 +188,12 @@ export class ChannelSetup {
       const cur = this.d.phase();
       // a state that comes once set-up is over (Done, another screen) changes nothing
       if (cur.phase !== 'ha' || !this.d.here()) return;
-      // A sign-in this page started has finished in its own window: on to the next step, with no click.
-      if (cur.signingIn && s.ha.signedIn) { this.haState(s); void this.panes(); return; }
+      // A sign-in this page started has finished in its own window: stay to pick a dashboard when custom ones exist, else move on with no click.
+      if (cur.signingIn && s.ha.signedIn) {
+        this.haState(s);
+        if (!hasDashboardChoice(s.ha)) void this.panes();
+        return;
+      }
       this.haState(s, { note: cur.note, signingIn: cur.signingIn });
     };
     this.haState(c.state!);
@@ -307,13 +312,25 @@ export class ChannelSetup {
     })();
   }
 
-  async saveHa(url: string): Promise<void> {
+  async saveHa(url: string, dashboard?: string): Promise<void> {
     const s = this.d.phase();
     if (s.phase !== 'ha') return;
-    if (url && url !== this.channel?.state?.ha.url) {
+    const urlChanged = !!url && url !== this.channel?.state?.ha.url;
+    const currentDashboard = this.channel?.state?.ha.dashboard ?? 'Default';
+    const dashboardChanged = !!dashboard && dashboard !== currentDashboard && dashboard !== 'Custom';
+    if (urlChanged) {
       if (!validHaUrl(url)) { this.d.show({ ...s, error: NOT_AN_ADDRESS }); return; }
       this.d.show({ ...s, busy: true, error: undefined });
       try { await this.request((x) => x.setHa(url)); } catch (e) { this.d.show({ ...s, busy: false, error: (e as Error).message }); return; }
+    }
+    if (dashboardChanged && (!urlChanged || this.channel?.state?.ha.dashboards?.includes(dashboard))) {
+      const cur = this.d.phase();
+      if (cur.phase === 'ha') this.d.show({ ...cur, busy: true, error: undefined });
+      try { await this.request((x) => x.setDashboard(dashboard)); } catch (e) {
+        const now = this.d.phase();
+        if (now.phase === 'ha') this.d.show({ ...now, busy: false, error: (e as Error).message });
+        return;
+      }
     }
     await this.panes();
   }
@@ -349,7 +366,7 @@ export class ChannelSetup {
     const g = this.gen;
     const st = await this.state().catch(() => undefined);
     if (g !== this.gen) return; // closed meanwhile: this run is over
-    if (st?.ha.signedIn) await this.panes();
+    if (st?.ha.signedIn && !hasDashboardChoice(st.ha)) await this.panes();
     else await this.homeAssistant();
   }
 

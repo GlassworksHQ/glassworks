@@ -209,14 +209,19 @@ class PaneFixtures(private val app: Application) {
      * The menu's model with [running] panes, the S1's own definitions with the radio on [coordinator]; the
      * panes in [off] are turned off. Read again on each call, as the menu and the Manage page do.
      */
-    fun model(running: List<Pane>, off: Set<String> = emptySet(), link: () -> HaLink = { HaLink.CONNECTED }): () -> KioskSettingsOverlay.Model {
+    fun model(
+        running: List<Pane>,
+        off: Set<String> = emptySet(),
+        link: () -> HaLink = { HaLink.CONNECTED },
+        dashboards: () -> List<dev.glassworks.dashboard.Dashboard> = { emptyList() },
+    ): () -> KioskSettingsOverlay.Model {
         KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel" }
         val radio = radioDefinition(app, FixedReadout(coordinator, running = true, allowedNow = "192.0.2.20"))
         val definitions = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
             .map { when (it.id) { "radio" -> radio; "bluetooth-proxy" -> bluetoothProxyDefinition; else -> it } }
         definitions.forEach { d -> d.switch?.on = d.id !in off }
         val byId = running.associateBy { it.id }
-        return { MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = definitions, running = { byId[it] }, link = link) }
+        return { MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = definitions, running = { byId[it] }, link = link, dashboards = dashboards) }
     }
 
     /** Every pane the S1 has, running. */

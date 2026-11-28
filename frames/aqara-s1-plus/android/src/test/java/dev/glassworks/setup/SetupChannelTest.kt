@@ -44,6 +44,12 @@ class SetupChannelTest {
             state = state.copy(ha = state.ha.copy(url = url))
             return SetupChannel.Change(afterReply = { after += "reload $url" })
         }
+        override fun setDashboard(dashboard: String): SetupChannel.Change {
+            calls += "set_dashboard $dashboard"
+            if (haError != null) return SetupChannel.Change(error = haError)
+            state = state.copy(ha = state.ha.copy(dashboard = dashboard))
+            return SetupChannel.Change(afterReply = { after += "dashboard $dashboard" })
+        }
 
         val step = object : SetupStep {
             override val id = "radio"
@@ -503,5 +509,27 @@ class SetupChannelTest {
         }
         val r = JSONObject(SetupChannel(old).handle("""{"id":9,"op":"pairing.arm"}""").first)
         assertFalse(r.getBoolean("ok"))
+    }
+
+    @Test
+    fun dashboardsAndSetDashboardRoundTrip() {
+        val withDash = base.copy(ha = base.ha.copy(signedIn = true, dashboards = listOf("Default", "Tablet", "Energy"), dashboard = "Default"))
+        val fake = Fake(withDash)
+        val c = fake.channel()
+        val s = reply(c, """{"id":1,"op":"state"}""").getJSONObject("state").getJSONObject("ha")
+        assertEquals("""["Default","Tablet","Energy"]""", s.getJSONArray("dashboards").toString())
+        assertEquals("Default", s.getString("dashboard"))
+
+        val (line, after) = c.handle("""{"id":2,"op":"ha.set_dashboard","dashboard":"Tablet"}""")
+        val r = JSONObject(line)
+        assertTrue(r.getBoolean("ok"))
+        assertEquals("Tablet", r.getJSONObject("state").getJSONObject("ha").getString("dashboard"))
+        assertEquals(listOf("set_dashboard Tablet"), fake.calls)
+        assertTrue(fake.after.isEmpty())
+        after!!()
+        assertEquals(listOf("dashboard Tablet"), fake.after)
+
+        assertFalse(reply(c, """{"id":3,"op":"ha.set_dashboard","dashboard":""}""").getBoolean("ok"))
+        assertEquals(SetupChannel.NOT_PAIRED, reply(fake.channel { false }, """{"id":4,"op":"ha.set_dashboard","dashboard":"Tablet"}""").getString("error"))
     }
 }

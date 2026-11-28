@@ -24,6 +24,9 @@ class DashboardOptionsTest {
         assertEquals(list, DashboardOptions.parse(json))
         assertNull(DashboardOptions.parse("{}"))
         assertEquals(list, DashboardOptions.parse(DashboardOptions.toJson(list)))
+        val withAdmin = org.json.JSONArray("""[{"url_path":"tablet-home","title":"Tablet","require_admin":false},{"url_path":"admin","title":"Admin","require_admin":true}]""")
+        assertEquals(listOf(Dashboard("tablet-home", "Tablet"), Dashboard("admin", "Admin")), DashboardOptions.fromJson(withAdmin, includeAdmin = true))
+        assertEquals(listOf(Dashboard("tablet-home", "Tablet")), DashboardOptions.fromJson(withAdmin, includeAdmin = false))
     }
 
     @Test
@@ -33,6 +36,10 @@ class DashboardOptionsTest {
         assertEquals(listOf(DEFAULT, "Tablet", "Energy", "map-x", CUSTOM), DashboardOptions.options(list, DEFAULT))
         assertEquals(listOf(DEFAULT, CUSTOM), DashboardOptions.options(emptyList(), DEFAULT))
         assertEquals(DashboardOptions.options(list, DEFAULT), DashboardOptions.options(list, CUSTOM))
+        // Interactive pickers omit Custom unless the current URL is Custom.
+        assertEquals(listOf(DEFAULT, "Tablet", "Energy", "map-x"), DashboardOptions.pickerOptions(list, DEFAULT))
+        assertEquals(listOf(DEFAULT, "Tablet", "Energy", "map-x"), DashboardOptions.pickerOptions(list, "Tablet"))
+        assertEquals(listOf(DEFAULT, "Tablet", "Energy", "map-x", CUSTOM), DashboardOptions.pickerOptions(list, CUSTOM))
     }
 
     @Test

@@ -20,4 +20,9 @@ object Dashboards {
         latest = list
         listeners.forEach { runCatching { it(list) } }
     }
+
+    /** Clears the in-memory list (e.g. on sign-out so a new account fetches its own). */
+    fun clear() {
+        latest = null
+    }
 }

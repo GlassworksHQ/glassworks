@@ -95,7 +95,7 @@ The Music Assistant Sendspin player and Bluetooth Improv use the same friendly n
 
 ### Categories and defaults
 
-Following [Glassworks Principles](principles.md#entities), entities you use every day start enabled, while one-time setup and deep diagnostic entities start disabled so your Home Assistant device page stays readable. On a fresh Aqara S1 Plus, 16 entities are enabled out of the box (23 with a two-channel wall base).
+Following [Glassworks Principles](principles.md#entities), entities you use every day start enabled, while one-time setup and deep diagnostic entities start disabled so your Home Assistant device page stays readable. On a fresh Aqara S1 Plus, 17 entities are enabled out of the box (24 with a two-channel wall base).
 
 To enable any disabled entity in Home Assistant: open **Settings → Devices & services → ESPHome → \<Your panel\>**, click **+N entities not shown**, select the entity, and toggle **Enabled** on.
 
@@ -119,7 +119,7 @@ To enable any disabled entity in Home Assistant: open **Settings → Devices & s
 | Auto brightness | `auto_brightness` | Core | Config | No | Usually configured once |
 | Presence range | `presence_range` | Core | Config | No | Frames with adjustable range only (S1 Plus) |
 | Zoom | `zoom` | Core | Config | No | Usually configured once |
-| Dashboard | `dashboard` | Core | Config | No | Enable to pick a Lovelace dashboard from HA |
+| Dashboard | `dashboard` | Core | Config | Yes | Pick a Lovelace dashboard from Home Assistant |
 | Dashboard URL | `dashboard_url` | Core | Config | No | Custom dashboard URL override |
 | Hide HA header | `hide_ha_header` | Core | Config | No | Usually configured once |
 | Open device settings | `open_settings` | Core | Config | No | Opens the device's Android settings on screen |

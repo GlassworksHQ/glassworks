@@ -52,7 +52,16 @@ data class ChannelState(
      */
     val touch: Boolean? = null,
 ) {
-    data class Ha(val discovered: String?, val url: String, val signedIn: Boolean, val signinUrl: String?)
+    data class Ha(
+        val discovered: String?,
+        val url: String,
+        val signedIn: Boolean,
+        val signinUrl: String?,
+        /** Selectable Lovelace dashboards (`Default`, then named dashboards); null when omitted. */
+        val dashboards: List<String>? = null,
+        /** Currently selected dashboard label from [dashboards]; null when omitted. */
+        val dashboard: String? = null,
+    )
 
     /** The core's part of the `SetupState` shape of channel.ts; optional fields are left out when unknown. */
     fun toJson(): JSONObject {
@@ -65,6 +74,8 @@ data class ChannelState(
             put("url", ha.url)
             put("signedIn", ha.signedIn)
             ha.signinUrl?.let { put("signinUrl", it) }
+            ha.dashboards?.let { put("dashboards", JSONArray(it)) }
+            ha.dashboard?.let { put("dashboard", it) }
         })
         return o
     }
@@ -122,6 +133,12 @@ class SetupChannel(
          * Blocking. [Change.afterReply] runs once the reply is written (e.g. a process restart).
          */
         fun setHa(url: String): Change
+
+        /**
+         * Switches the dashboard to [dashboard] (an option label from `ha.dashboards`), reloading in place
+         * without restarting.
+         */
+        fun setDashboard(dashboard: String): Change = Change(error = "This panel can't choose a dashboard from here.")
 
         /** Opens pairing over the LAN again for a while, though Home Assistant has adopted the panel. Null when it worked. */
         fun armPairing(): String? = "This panel can't be set up over the network."
@@ -199,6 +216,16 @@ class SetupChannel(
                     reply(id, error = "That doesn't look like a web address (http://… or https://…).") to null
                 } else {
                     val change = backend.setHa(url)
+                    if (change.error != null) reply(id, error = change.error) to null
+                    else reply(id, state = state()) to change.afterReply
+                }
+            }
+            HA_SET_DASHBOARD -> {
+                val dashboard = req.optString("dashboard", "").trim()
+                if (dashboard.isEmpty()) {
+                    reply(id, error = "Choose a dashboard first.") to null
+                } else {
+                    val change = backend.setDashboard(dashboard)
                     if (change.error != null) reply(id, error = change.error) to null
                     else reply(id, state = state()) to change.afterReply
                 }
@@ -287,6 +314,7 @@ class SetupChannel(
     companion object {
         const val SOCKET = "s1kiosk_setup"
         const val HA_SET_URL = "ha.set_url"
+        const val HA_SET_DASHBOARD = "ha.set_dashboard"
         const val PAIRING_ARM = "pairing.arm"
         const val WIFI_SCAN = "wifi.scan"
         const val WIFI_JOIN = "wifi.join"
@@ -298,7 +326,7 @@ class SetupChannel(
         /** The core's keys in the state; no step may take them. */
         val CORE_KEYS = setOf("ip", "ha", "online", PANES)
         /** The core's requests, by every name they have. */
-        val CORE_OPS = setOf("state", HA_SET_URL, "set_ha", PAIRING_ARM, WIFI_SCAN, WIFI_JOIN, PANES_SET)
+        val CORE_OPS = setOf("state", HA_SET_URL, HA_SET_DASHBOARD, "set_ha", PAIRING_ARM, WIFI_SCAN, WIFI_JOIN, PANES_SET)
 
         /**
          * No network takes a longer password: at most 63 bytes of UTF-8, or 64 ASCII hex digits (a raw WPA key). Shorter ones go
