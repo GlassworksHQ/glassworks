@@ -46,6 +46,12 @@ interface Engine {
      * the page's storage and the app keep it: with any other engine, nothing is copied.
      */
     val keepsPageStorage: Boolean get() = false
+
+    /**
+     * How the engine draws the dashboard now, for Settings → Labs ([Drawing]). Null for an engine that shows the whole
+     * dashboard in a browser, as GeckoView does, and so whenever Vitro is off. Cheap, and safe on any thread.
+     */
+    fun drawing(): Drawing? = null
 }
 
 /** What an engine starts with. */

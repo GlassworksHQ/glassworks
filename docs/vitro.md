@@ -55,6 +55,22 @@ To see how your own dashboard will do, paste it into the [Vitro compatibility ch
 
 If you use an AI coding agent, it can do the same audit for you and go further. The repo includes an agent skill, [vitro-native-dashboard](../.agents/skills/vitro-native-dashboard/SKILL.md), that checks a dashboard against the same card list and helps rewrite it so its cards draw natively wherever a native card can stand in, keeping your entities, actions and layout. Point your agent at the skill and your dashboard's YAML, and keep a copy of the original before it changes anything.
 
+## See how Vitro draws your dashboard
+
+While Vitro is on, **Settings → Labs** on the panel, and **Labs** on the Manage page, show how it draws your dashboard right now. The page follows the view on screen, so it changes when you switch views or edit the dashboard.
+
+| What Labs shows | What it means |
+|---|---|
+| **On screen now** | The view on screen and who draws it: Vitro, every card natively; Vitro, with some cards in small browser views of their own; or Home Assistant's frontend, with the reason Vitro left it there |
+| A row for each card in a browser view | Where the card sits, such as `home › section 2 › card 3 (custom:mushroom-media-player-card)`, and why Vitro doesn't draw it natively |
+| **Each view** | Every view of the dashboard: **Native**, how many **browser views** it runs, or **Home Assistant's frontend** |
+
+Each browser view is a small browser of its own, which costs the panel memory, so a view with fewer of them runs lighter. A view you haven't opened yet is judged from its cards. Some things only show once the view is open, such as the rows an auto-entities card matches, so its line can change when you open it.
+
+On the Manage page, the Overview's **Engine** tile says the same for the view on screen in a few words (**All native**, **2 browser views** or **HA's frontend**) and opens Labs. The Labs page reloads itself every few seconds to keep up; **Pause** stops that.
+
+While Vitro is off, Labs shows only the switch.
+
 ## Report a card that looks wrong
 
 Home Assistant's own look is the goal, so any difference is worth a report. [Open a bug report](https://github.com/GlassworksHQ/glassworks/issues/new?template=bug.yml) with:

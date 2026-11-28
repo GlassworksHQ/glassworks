@@ -76,15 +76,21 @@ object CompatChecker {
      * The [CompatReport.islands] of [check] for [view], without checking the cards that can only stay native
      * ([CardCompat.staysNative]): what a view logs after it builds, at the cost of routing it.
      */
-    fun islands(view: ViewConfig, scripts: IslandScripts = IslandScripts.ANY): List<CompatEntry> {
+    fun islands(view: ViewConfig, scripts: IslandScripts = IslandScripts.ANY, iframes: Boolean = false): List<CompatEntry> {
         val out = ArrayList<CompatEntry>()
         val viewName = view.path ?: view.title
         for (root in CardRouter.viewRoots(view)) {
             val where = root.section?.let { "$viewName › section ${it + 1} › card ${root.index + 1}" } ?: "$viewName › card ${root.index + 1}"
-            walk(root.card, where, scripts, out, islandsOnly = true)
+            walk(root.card, where, scripts, out, islandsOnly = true, iframes = iframes)
         }
         return out
     }
+
+    /**
+     * Why an `iframe` card takes an island page though Vitro draws it ([CardCompat]'s note): [islands] lists it with
+     * `iframes`, as a page it runs ([IslandBudget.islandCount] counts it too).
+     */
+    const val IFRAME_ISLAND = "the `iframe` card shows its page in a browser island of its own"
 
     /**
      * [holdsGenerated]: [card] is auto-entities' inner card under `card_param: cards`, whose `cards:` it generates.
@@ -97,8 +103,15 @@ object CompatChecker {
         out: MutableList<CompatEntry>,
         holdsGenerated: Int = -1,
         islandsOnly: Boolean = false,
+        iframes: Boolean = false,
     ) {
         val here = "$path (${card.type})"
+        // Native, but its page runs in an island page of its own: listed as one with [iframes]. One with an option Vitro
+        // doesn't draw is an island anyway, listed below with its reasons.
+        if (iframes && card.type == "iframe" && card.compat.effective(scripts).isNative) {
+            out += CompatEntry(here, card.compat.copy(reasons = listOf(IFRAME_ISLAND)))
+            return
+        }
         if (!(islandsOnly && card.nativeOnly)) {
             // A native auto-entities card is native only if the rows it matches at run time are: the report says so.
             val verdict = card.compat.effective(scripts).let { v ->
@@ -115,13 +128,13 @@ object CompatChecker {
             // By the child's index in the config, not its place among the built ones: a layout-break among the
             // explicit entries isn't built, and the first generated card mustn't take its place.
             CardRouter.producedCards(card, perEntity = false).filter { (i, _) -> i < holdsGenerated }.forEach { (i, child) ->
-                walk(child, "$here › entity ${i + 1}", scripts, out, islandsOnly = islandsOnly)
+                walk(child, "$here › entity ${i + 1}", scripts, out, islandsOnly = islandsOnly, iframes = iframes)
             }
             return
         }
         val explicit = if (CardRouter.generatesCards(card)) card.raw.optJSONArray("entities")?.length() ?: 0 else -1
         CardRouter.producedCards(card, perEntity = false).forEach { (i, child) ->
-            walk(child, "$here › card ${i + 1}", scripts, out, holdsGenerated = explicit, islandsOnly = islandsOnly)
+            walk(child, "$here › card ${i + 1}", scripts, out, holdsGenerated = explicit, islandsOnly = islandsOnly, iframes = iframes)
         }
     }
 }

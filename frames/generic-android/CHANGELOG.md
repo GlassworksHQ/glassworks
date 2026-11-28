@@ -11,6 +11,13 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **Labs shows how Vitro draws your dashboard.** With Vitro on, *Settings → Labs*, on the panel and on the Manage page,
+  says how the view on screen is drawn: all natively, natively with some cards in small browser views of their own, or
+  by Home Assistant's frontend. It lists each card that runs in a browser view, with where it sits in the dashboard and
+  why, and shows how each view of the dashboard is drawn. It follows the view on screen as it changes, and the Manage
+  page's Engine tile says the same in a few words and opens Labs.
+
 ### Fixed
 - **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
   saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing

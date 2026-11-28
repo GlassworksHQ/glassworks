@@ -50,7 +50,9 @@ import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.SignInServer
 import dev.glassworks.auth.WsHaSocket
 import dev.glassworks.device.PanelDevice
+import dev.glassworks.engine.Drawing
 import dev.glassworks.settings.CoreSettings
+import dev.glassworks.settings.VitroDrawingRows
 import dev.glassworks.settings.PanelBlueprints
 import dev.glassworks.settings.S1Settings
 import dev.glassworks.setup.SetupState
@@ -337,7 +339,8 @@ open class AppManage(
         return Tile("Wi-Fi", link.ssid ?: "Connected", listOfNotNull(link.rssi?.let { "$it dBm".replace('-', '−') }, link.ipv4).joinToString(" · "), Tile.Tone.OK)
     }
 
-    private fun engineTile(): Tile = engineTile(runtime.engine.name, vitroTurnedOff = prefs.vitroTurnedOff != null)
+    private fun engineTile(): Tile = engineTile(runtime.engine.name, vitroTurnedOff = prefs.vitroTurnedOff != null,
+        drawing = runCatching { runtime.engine.drawing() }.getOrNull())
 
     private fun memoryTile(): Tile {
         val mi = ActivityManager.MemoryInfo()
@@ -435,12 +438,16 @@ open class AppManage(
          * The Engine tile from the engine's name: "GeckoView 159" over "Version 159.0". The legacy engine's name ends in
          * a label ("GeckoView 144.0 (legacy, Home Assistant only)"), which the Legacy chip explains instead (#29).
          */
-        fun engineTile(name: String, vitroTurnedOff: Boolean = false): Tile {
+        fun engineTile(name: String, vitroTurnedOff: Boolean = false, drawing: Drawing? = null): Tile {
             val m = Regex("""^(.*?) ((\d+)(?:\.\d+)*)""").find(name)
             val value = m?.destructured?.let { (product, _, major) -> "$product $major" } ?: name.ifEmpty { "Unknown" }
             // VitroSentinel turned Vitro off after it crashed the app at start: the tile says so, and opens Labs.
             if (vitroTurnedOff) return Tile("Engine", value, VITRO_OFF_TILE, Tile.Tone.PROBLEM, href = "/${CoreSettings.LABS}")
-            return Tile("Engine", value, m?.destructured?.component2()?.let { "Version $it" }.orEmpty(), Tile.Tone.OK)
+            val version = m?.destructured?.component2()?.let { "Version $it" }.orEmpty()
+            // While Vitro draws a view: how it draws it ("2 browser views") in place of the version, which About keeps, and
+            // the tile opens Labs, which says which cards and why.
+            drawing?.shown?.let { v -> return Tile("Engine", value, VitroDrawingRows.tile(v), Tile.Tone.OK, href = "/${CoreSettings.LABS}") }
+            return Tile("Engine", value, version, Tile.Tone.OK)
         }
 
         /** The Engine tile's line while VitroSentinel has Vitro off. */
