@@ -64,6 +64,7 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
      * it existed keeps working. Read on the main thread.
      */
     public interface FrameDemand {
+        /** True while the listener wants a report of every rendered frame; false lets the player skip unchanged ones. */
         public val wantsFrames: Boolean
     }
 
