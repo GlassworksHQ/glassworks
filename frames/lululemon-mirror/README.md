@@ -29,8 +29,8 @@
     </picture>
   </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-beta-on-dark.svg">
-    <img alt="Status: beta" src="https://www.glassworks.dev/brand/badge-status-beta-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-stable-on-dark.svg">
+    <img alt="Status: stable" src="https://www.glassworks.dev/brand/badge-status-stable-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -62,7 +62,7 @@ These same credits are stored in [`design/frame.json`](design/frame.json) and di
 
 ## Status
 
-**Status: beta.** Glassworks for the Mirror is out as the legacy build of Glassworks for Generic Android, and Kiln installs its latest release on a supported Mirror straight from Chrome or Edge at [kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lululemon-mirror). After that, new releases show up in Home Assistant under **Settings → Updates**, as on any Glassworks panel ([Updates](../../docs/updates.md)).
+**Status: stable.** Glassworks for the Mirror is out as the legacy build of Glassworks for Generic Android, and Kiln installs its latest release on a supported Mirror straight from Chrome or Edge at [kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lululemon-mirror). After that, new releases show up in Home Assistant under **Settings → Updates**, as on any Glassworks panel ([Updates](../../docs/updates.md)).
 
 - **Supported hardware:** Original Qualcomm (MSM8916) Mirror units running stock software 1.x. Later revisions switched to an NXP i.MX8 board where only JTAG hardware access has been reported; those revisions are not supported. Note that screen size alone does not identify which board is inside ([see board revisions](research/revisions.md)).
 - **Android 6 legacy build:** Because the original Mirror runs Android 6.0.1, Kiln installs the dedicated legacy build of [Glassworks for Generic Android](../generic-android/README.md#the-legacy-build-android-6-and-7). It runs a frozen browser engine locked strictly to your Home Assistant address, starts upright in portrait mode, and guides you through Wi-Fi and Home Assistant sign-in from your phone or computer since the Mirror has no touchscreen.
@@ -95,7 +95,23 @@ These same credits are stored in [`design/frame.json`](design/frame.json) and di
 Open **[kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lululemon-mirror)** in Chrome or Edge on a computer connected to the Mirror with a micro-USB data cable.
 
 > [!IMPORTANT]
-> **Installing the Glassworks image permanently replaces lululemon's stock software.** The Mirror's bootloader cannot read existing partitions back, so Kiln cannot back up or restore lululemon's original firmware. Kiln asks you to confirm before writing anything. If you ever want to switch away from Glassworks later, Kiln offers a one-click path to install the plain **Glass Panes** Android image instead. To keep lululemon's system, choose [Glassworks on the stock software](#keeping-lululemons-system): it changes one system file, keeps a restore point for it, and resets only the Mirror's app data.
+> **Installing the Glassworks image permanently replaces lululemon's stock software.** The Mirror's bootloader cannot read existing partitions back, so Kiln cannot back up or restore lululemon's original firmware. Kiln asks you to confirm before writing anything. If you ever want to switch away from Glassworks later, Kiln offers a one-click path to install the plain **Glass Panes** Android image instead. To keep lululemon's system, choose [Glassworks on the stock software](#keeping-lululemons-system): it changes `services.jar` and, where it can, swaps in the Glassworks boot animation, keeps a restore point of what it changed, and resets only the Mirror's app data.
+
+### One-time setup for your computer
+
+The Mirror shows up in Chrome's USB list as `Android` (USB ID `18d1:d00d` in fastboot mode). On a Mac there's nothing to set up. Windows and Linux need one step first, so the browser is allowed to open it:
+
+| Operating system | One-time preparation |
+|---|---|
+| **macOS** | None. If you have `adb` installed, run `adb kill-server` first so nothing else holds the USB connection. |
+| **Windows** | With the Mirror in fastboot mode, install the [Google USB Driver](https://developer.android.com/studio/run/win-usb), or open [Zadig](https://zadig.akeo.ie/), turn on *Options → List all devices*, pick the device with USB ID `18d1:d00d`, choose **WinUSB** and click **Replace driver**. |
+| **Linux** | Save the udev rule below to `/etc/udev/rules.d/51-mirror.rules`, run `sudo udevadm control --reload`, then unplug the Mirror and plug it back in. Stop `adb` if it's running (`adb kill-server`). |
+
+```
+SUBSYSTEM=="usb", ATTR{idVendor}=="18d1", ATTR{idProduct}=="d00d", MODE="0660", TAG+="uaccess"
+```
+
+Kiln's fastboot screen shows the line for your computer and links back here. If Kiln says this computer didn't let the browser open the Mirror, it's this step. If it says another program is using the Mirror, close `adb` and any other Kiln tab.
 
 ### How the browser install works
 
@@ -114,20 +130,20 @@ Choose **Glassworks on the stock software** on Kiln's first screen to keep lulul
 
 | | Glassworks (image) | Glassworks on the stock software |
 |---|---|---|
-| lululemon's system | Replaced by the Glass Panes image | Kept, with one file changed |
+| lululemon's system | Replaced by the Glass Panes image | Kept, with `services.jar` changed (and, when Kiln can, the Glassworks boot animation in place of lululemon's) |
 | App data | Starts fresh | Starts fresh |
 | Way back | Install the plain Glass Panes image | The restore point puts lululemon's system back as it was |
 | Updates | Install by themselves | Install by themselves (Glassworks is the Device Owner) |
-| Status | Beta | Experimental |
+| Status | Stable | Experimental |
 
 1. **Prepare:** Pick the Glassworks APK and, if you like, your Wi-Fi network. Glassworks joins it on its first start, so the Mirror comes up online and ready for Home Assistant. You can also add it on the Mirror later.
 2. **First trip into fastboot:** Follow the same hardware guide as the image install. Kiln writes a small setup agent to the Mirror's app storage only, then restarts it. lululemon's system isn't touched.
-3. **Copy:** The setup agent opens a Wi-Fi network of its own, `mirror-<serial>`, with no password. It can take 5–7 minutes to appear, because Android optimizes its apps on this start. Join it from this computer and click **Continue**, and Kiln copies the one system file Glassworks changes (`services.jar`) and where it sits in a few seconds. Then you can go back to your usual network. If you'd rather not switch networks, click **Use Bluetooth instead** and pick the Mirror; that takes about five minutes. In a browser without Bluetooth, click **Download it by hand instead**, save the file from the agent's own page, and pick it in Kiln. Kiln checks that the file came from this Mirror, during this run, and stops before anything is written if the Mirror's software is a kind it can't change in place.
+3. **Copy:** The setup agent opens a Wi-Fi network of its own, `mirror-<serial>`, with no password. It can take 5–7 minutes to appear, because Android optimizes its apps on this start. Join it from this computer and click **Continue**, and Kiln copies the system files Glassworks changes (`services.jar`, and the boot animation when the agent sends it) and where they sit in a few seconds. Then you can go back to your usual network. If you'd rather not switch networks, click **Use Bluetooth instead** and pick the Mirror; that takes about five minutes. In a browser without Bluetooth, click **Download it by hand instead**, save the file from the agent's own page, and pick it in Kiln. Kiln checks that the file came from this Mirror, during this run, and stops before anything is written if the Mirror's software is a kind it can't change in place.
 
    Reinstalling on a Mirror that already runs Glassworks this way? The install turned off lululemon's setup hotspot, which is the network the agent would use. On the fastboot screen, click **Already running Glassworks or Glass Panes? Restart over USB** instead of holding VOL−, so Kiln can check first. When the hotspot is gone, the agent joins the Wi-Fi network you gave in the first step instead. Click **Connect over Bluetooth** and pick the Mirror, and Kiln copies over your network. That needs your Wi-Fi in the first step and a browser that can use Bluetooth, such as Chrome or Edge on a computer.
-4. **Second trip into fastboot:** Hold **VOL−** again while switching the Mirror on. Kiln builds the change in your browser and checks that it touches only that file's blocks.
+4. **Second trip into fastboot:** Hold **VOL−** again while switching the Mirror on. Kiln builds the change in your browser and checks that it touches only those files' blocks.
 5. **Restore point:** Before writing anything to the system, Kiln saves the exact blocks it will change, from your Mirror's own copy, in this browser, reads them back to check them, and offers a copy to download. Continue opens only once that's done. Keep the download somewhere safe.
-6. **Install:** Kiln writes the changed blocks and fresh app storage, then restarts the Mirror. The Mirror's bootloader can't read a write back, so once the Mirror has started and lets your browser in over USB, Kiln reads `services.jar` back and checks it against what it wrote. If they differ, the Mirror didn't take the change: Kiln stops before installing anything and offers the restore point. If Kiln can't read the file at all, it says so in the log and carries on. Then it installs Glassworks over USB, hides lululemon's apps, and makes Glassworks the Device Owner so its updates install by themselves. The changed file also turns off lululemon's own setup hotspot (`mirror-<serial>`), which would otherwise come back whenever the Mirror is offline and keep Glassworks' setup hotspot from starting. Setup continues as usual from there.
+6. **Install:** Kiln writes the changed blocks and fresh app storage, then restarts the Mirror. The Mirror's bootloader can't read a write back, so once the Mirror has started and lets your browser in over USB, Kiln reads `services.jar` back (and the boot animation, when it changed it) and checks each against what it wrote. If they differ, the Mirror didn't take the change: Kiln stops before installing anything and offers the restore point. If Kiln can't read the file at all, it says so in the log and carries on. Then it installs Glassworks over USB, hides lululemon's apps, and makes Glassworks the Device Owner so its updates install by themselves. The changed file also turns off lululemon's own setup hotspot (`mirror-<serial>`), which would otherwise come back whenever the Mirror is offline and keep Glassworks' setup hotspot from starting. Setup continues as usual from there.
 
 To go back, choose **Restore the original system** on Done (or open `kiln.glassworks.dev/lululemon-mirror/undo`). Kiln uses the restore point this browser saved, or the copy you downloaded, and writes it over the blocks it changed.
 
@@ -147,13 +163,13 @@ If your Mirror already runs the Glass Panes image and you only want to install t
 
 | Pane | Support | Notes |
 |---|---|---|
-| **Assist** | Alpha | Uses the built-in microphone for local wake word detection. |
-| **Timers** | Alpha | On-screen voice timers paired with Assist. |
-| **Sendspin** | Alpha | Synced Music Assistant playback over the Mirror's stereo speakers. |
-| **Notifications** | Alpha | Because the Mirror has no touchscreen, high/critical alerts without a tag or timeout dismiss automatically after 2 minutes. |
-| **Camera** | Alpha | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. The live video stream costs memory and can make the dashboard reload ([Known issues](#known-issues)). |
-| **Bluetooth proxy** | Alpha | Uses the built-in Bluetooth LE radio once location permission is granted. |
-| **Diagnostics** | Alpha | Reports uptime and memory (no CPU temperature sensor on this board). |
+| **Assist** | Stable | Uses the built-in microphone for local wake word detection. |
+| **Timers** | Stable | On-screen voice timers paired with Assist. |
+| **Sendspin** | Stable | Synced Music Assistant playback over the Mirror's stereo speakers. |
+| **Notifications** | Stable | Because the Mirror has no touchscreen, high/critical alerts without a tag or timeout dismiss automatically after 2 minutes. |
+| **Camera** | Stable | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. The live video stream costs memory and can make the dashboard reload ([Known issues](#known-issues)). |
+| **Bluetooth proxy** | Stable | Uses the built-in Bluetooth LE radio once location permission is granted. |
+| **Diagnostics** | Stable | Reports uptime and memory (no CPU temperature sensor on this board). |
 | **Zigbee / Thread radio** | Not supported | No 802.15.4 radio hardware. |
 | **Time zone** | Not supported | Aqara S1 Plus only. |
 | **Wall base** | Not supported | Aqara S1 Plus only. |

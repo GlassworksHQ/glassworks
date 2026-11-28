@@ -48,6 +48,17 @@ line of each version is what Home Assistant shows on the update card. A change o
   Nothing looks different.
 
 ### Fixed
+- **Kiln explains a USB connection this computer won't open.** When Windows or Linux won't let the browser open
+  the Mirror or the panel, or another program such as adb already holds it, Kiln now says which it is and what to do,
+  instead of saying it disconnected. The Mirror's fastboot screen also shows the one-time USB setup for Windows (the
+  Google USB Driver or WinUSB) and Linux (a udev rule), with a link to the steps. Comes with Kiln, not the app.
+- **Kiln checks the Mirror's and Android's app against GitHub's own checksum.** The app Kiln downloads from a release
+  is now checked only against the SHA-256 GitHub publishes for it, as the S1's already was, never against the
+  checksum file that comes from the same download server as the app. Comes with Kiln, not the app.
+- **The Mirror's Done screen no longer says its stock software can't come back.** After an install on the stock
+  software, Done offered to restore the original system and then said, right under it, that the install couldn't go
+  back to lululemon's software. It now only offers the restore. *Install Glassworks instead* on a community image
+  also opens the recommended install, on the stock software, as the first screen does. Comes with Kiln, not the app.
 - **Glassworks no longer crashes on devices with 16 KB memory pages.** The wake word engine's native library was
   built for 4 KB pages. On a device that uses 16 KB pages, the app crashed as soon as the wake word started and
   kept crashing each time Android restarted it. Debug builds on Android 15 and newer also showed an "Android App

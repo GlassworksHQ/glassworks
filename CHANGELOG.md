@@ -1,8 +1,8 @@
 # Changelog
 
-What changed in each S1 Kiosk release, for people running a panel. The first line of each version is
-what Home Assistant shows on the update card. Releases are built by the Release button,
-[`.github/workflows/release.yml`](.github/workflows/release.yml), which publishes the matching section
+What changed in each release of Glassworks for the Aqara S1 Plus, for people running a panel. The
+first line of each version is what Home Assistant shows on the update card. Releases are built by the
+Release button, [`.github/workflows/release.yml`](.github/workflows/release.yml), which publishes the matching section
 below as the release notes. Glassworks for generic Android and its legacy build have their own:
 [frames/generic-android/CHANGELOG.md](frames/generic-android/CHANGELOG.md).
 

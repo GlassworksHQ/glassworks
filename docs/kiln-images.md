@@ -19,7 +19,7 @@ and writes it with the same safety steps as Glassworks. The person doesn't downl
 gets a card on the frame's page, a line that says you make it and that questions go to your project,
 and a link of its own that opens straight into its install.
 
-Status: the first version supports the Mirror (`lululemon-mirror`), whose page is in beta, open to everyone.
+Status: the first version supports the Mirror (`lululemon-mirror`), whose page is stable and open to everyone.
 The design is in [docs/design/kiln/community-images.md](design/kiln/community-images.md).
 
 ## What an image is: a recipe

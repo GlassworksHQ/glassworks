@@ -85,11 +85,11 @@ describe('FrameCardBody', () => {
       const unshipped = { ...mirror, status: 'development' } as FrameDesign;
       expect(ships(unshipped.status)).toBe(false);
       expect(tags(<FrameCardBody f={unshipped} idPrefix="c" />)).toMatch(EXPECTED);
-      expect(tags(<FrameCardBody f={mirror} idPrefix="c" />)).not.toMatch(EXPECTED); // beta: it ships
+      expect(tags(<FrameCardBody f={mirror} idPrefix="c" />)).not.toMatch(EXPECTED); // stable: it ships
     });
 
     it('shows the status pill unless told not to (Kiln\'s picker: none for a stable frame)', () => {
-      expect(render(<FrameCardBody f={mirror} />).textContent).toContain('Beta');
+      expect(render(<FrameCardBody f={{ ...mirror, status: 'beta' }} />).textContent).toContain('Beta');
       expect(render(<FrameCardBody f={s1} />).textContent).toContain('Stable');
       expect(render(<FrameCardBody f={s1} pill={false} />).textContent).not.toContain('Stable');
     });

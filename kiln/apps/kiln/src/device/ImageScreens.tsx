@@ -4,7 +4,8 @@
 // the rest of Kiln (docs/design/kiln): one idea per screen, one ember button, the log one click away. What the device
 // is called and what only it needs said come from the frame (DeviceFrame `the`, `short`, `words`).
 import { cap, fmtSize, pickInList, type DeviceFrame } from '@glassworks/kiln-core';
-import { useState } from 'react';
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
 import { BuiltOn, Credit, stepCredits } from '../components/Credit';
 import { FRAMES } from '../frames/catalog';
 import { Recovery } from '../recovery/Recovery';
@@ -22,6 +23,7 @@ import { Foot, StartOverDialog } from '../components/Nav';
 import { BrowserAsk, ClockGlyph, Details, Hands, Instructions, Note, Problem, Progress, Wait, rowsAt, useForward, type ProgressRow } from '../components/Kit';
 import type { FlowActionSpec } from '../components/Shell';
 import { ManagePageRow } from '../wizard/screens';
+import { hostOs } from '../wizard/explain';
 
 type P = { f: ImageSession; s: ImageState; m: AppSession; ms: AppState };
 
@@ -295,6 +297,7 @@ export function ImageFastboot({ f, s }: P) {
         </Note>
       )}
       {!s.connecting && <BrowserAsk listed={d.listed} short={d.short} the={d.the} />}
+      <UsbSetup d={d} />
       {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <Note tone="bad">{s.connectError}</Note>}
       <Foot busy={s.connecting}>
@@ -305,6 +308,16 @@ export function ImageFastboot({ f, s }: P) {
       </Foot>
     </section>
   );
+}
+
+/**
+ * The frame's one-time USB setup for this computer's system, under a fastboot screen's browser ask (installer.json
+ * `device.drivers`, as the wizard's Connect shows a wizard frame's `drivers`): nothing on macOS, or for a frame that gives none.
+ */
+function UsbSetup({ d }: { d: DeviceFrame }) {
+  const line = useMemo(() => { const o = hostOs(); return o === 'other' ? undefined : d.drivers?.[o]; }, [d]);
+  if (!line) return null;
+  return <p className="small">{line}{d.drivers?.guide && <>{' '}<a className="link" href={d.drivers.guide} target="_blank" rel="noopener">Setup guide</a></>}</p>;
 }
 
 /** What Kiln's checks read in fastboot, all passed: one calm line, the details beside it. */
@@ -515,7 +528,8 @@ export function ImageOutcome({ f, s, away }: { f: ImageSession; s: ImageState; a
         </Note>
       )}
       {other && !f.inPlace && <WayBack f={f} other={other} then={away} />}
-      {rev && <p className="small">{rev}.</p>}
+      {/* the frame's rating is for the image install; an in-place install keeps the stock system and its way back above */}
+      {rev && !f.inPlace && <p className="small">{rev}.</p>}
     </>
   );
 }
@@ -622,7 +636,7 @@ export function InPlaceUndo({ f, s }: P) {
         <p className="small">{`Kiln checked the restore point before writing it. ${cap(d.the)} can’t be read after a restore, so its original start screen is the sign it worked.`}</p>
         <Foot back={null}>
           <button type="button" className="btn ghost" onClick={() => f.backToChoice()}>Install Glassworks again</button>
-          <a className="btn ember" href="/">Back to Kiln</a>
+          <Link className="btn ember" href="/">Back to Kiln</Link>
         </Foot>
         <Log s={s} />
       </section>
@@ -671,6 +685,7 @@ export function InPlaceUndo({ f, s }: P) {
         {u.restarted ? <p className="lede">{rich(d.words['fastboot.restarted'])}</p> : <ByHandFastboot d={d} />}
         {u.error && <Note tone="bad">{u.error}</Note>}
         {!s.connecting && <BrowserAsk listed={d.listed} short={d.short} the={d.the} />}
+        <UsbSetup d={d} />
         {s.connectError && <Note tone="bad">{s.connectError}</Note>}
         <Foot busy={s.connecting}>
           <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.undoFlash()}>Connect and restore</button>
