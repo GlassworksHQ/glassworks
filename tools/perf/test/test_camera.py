@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -63,6 +65,26 @@ class Root(unittest.TestCase):
             for _ in range(20):
                 self.assertEqual(camera.root(), first)
         self.assertEqual(len(calls), n)                     # nothing ran after the first
+
+    def test_callers_at_once_make_the_streams_once(self):
+        """The fake's request threads and its WebRTC warm-up can ask first together: one makes the
+        streams, the others wait for them (a second cold maker would empty the folder mid-write)."""
+        calls, cache, run = self.fake()
+
+        def slow(args, **kw):
+            time.sleep(0.05)
+            return run(args, **kw)
+        with mock.patch.object(camera.subprocess, "run", slow), mock.patch.object(camera.shutil, "which", lambda _: "/x/ffmpeg"), \
+                mock.patch.object(camera, "CACHE", cache):
+            got = []
+            threads = [threading.Thread(target=lambda: got.append(camera.root())) for _ in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(30)
+        self.assertEqual(len(set(got)), 1)
+        self.assertEqual(len(got), 4)
+        self.assertEqual(sum(1 for c in calls if c[1:3] == ["-hide_banner", "-encoders"]), 1)   # made once
 
     def test_no_ffmpeg_or_no_libx264_is_a_clear_error(self):
         with mock.patch.object(camera.shutil, "which", lambda _: None):

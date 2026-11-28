@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -366,7 +367,6 @@ class Session(unittest.TestCase):
         """A relay-only aiortc browser on `cam`, with the relay's TCP input from it routed through
         `between(tcp_in, conn, data)` (to drop or delay it); the session runs 1.5 s, then `play` runs
         on for `between.seconds`. Returns the fake's log since it started."""
-        from unittest import mock
         from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
         from aiortc.rtcconfiguration import RTCIceTransportPolicy
         since = time.time()
@@ -435,6 +435,81 @@ class Session(unittest.TestCase):
         self.assertEqual([e.get("webrtc_liveness") for e in log if "webrtc_liveness" in e], [])
         closed = [e for e in log if e.get("turn_closed") and e["to_peer"]]
         self.assertTrue(closed and closed[0]["checks"]["over_500_ms"] >= 1, closed)       # the answers were late
+
+
+class Warm(unittest.TestCase):
+    """A cold fake answers its first offers as promptly as later ones (METIS run 21, 2026-11-28: a
+    view's first offers took 6.6 to 7.2 s): the streams are read as the service starts, once each,
+    and offers that come together share one read."""
+
+    @classmethod
+    def setUpClass(cls):
+        need()
+        # Each test reads the stub's streams, whichever runs first or alone.
+        for prof, size in (("720p", "1280x720"), ("360p", "640x360")):
+            if not os.path.exists(os.path.join(STUB_CAMERA, prof, "stream.h264")):
+                make_stream(os.path.join(STUB_CAMERA, prof, "x"), size)
+                os.replace(os.path.join(STUB_CAMERA, prof, "x", "stream.h264"), os.path.join(STUB_CAMERA, prof, "stream.h264"))
+
+    def test_the_streams_are_read_at_start_once_and_offers_share_them(self):
+        from aiortc import RTCPeerConnection
+        reads, real = [], camera.access_units
+
+        def counted(path):
+            reads.append(os.path.basename(os.path.dirname(path)))
+            return real(path)
+        log = []
+        with mock.patch.object(camera, "access_units", counted):
+            svc = webrtc.WebRTC(0, lambda prof: os.path.join(STUB_CAMERA, prof, "stream.h264"), 15, record=log.append,
+                                preload=["360p", "720p"])
+            svc.warmed.result(30)
+            self.assertEqual(sorted(reads), ["360p", "720p"])
+            warm = {e["webrtc_warm"]: e for e in log if "webrtc_warm" in e}
+            self.assertEqual(set(warm), {"360p", "720p", "peer"}, log)
+            self.assertFalse([e for e in log if "webrtc_warm_error" in e])
+
+            async def offer():
+                pc = RTCPeerConnection()
+                pc.addTransceiver("video", direction="recvonly")
+                await pc.setLocalDescription(await pc.createOffer())
+                return pc, pc.localDescription.sdp
+            loop = asyncio.new_event_loop()
+            self.addCleanup(loop.close)
+            made = [loop.run_until_complete(offer()) for _ in range(3)]
+            answers, done = [], threading.Event()
+
+            def send(m):
+                answers.append(m["type"])
+                if len(answers) == 3:
+                    done.set()
+            for i, (_, sdp) in enumerate(made):
+                svc.offer(f"w{i}", "camera.clarity_cam_1", "360p", sdp, send)
+            self.assertTrue(done.wait(30))
+            # A real exchange each, and no stream read again.
+            self.assertEqual(answers, ["answer"] * 3)
+            self.assertEqual(sorted(reads), ["360p", "720p"])
+            for i in range(3):
+                svc.close(f"w{i}")
+            for pc, _ in made:
+                loop.run_until_complete(pc.close())
+
+    def test_a_read_that_failed_is_tried_again_by_the_next_offer(self):
+        log, calls = [], []
+
+        def streams(prof):
+            calls.append(prof)
+            if len(calls) == 1:
+                raise OSError("not there yet")
+            return os.path.join(STUB_CAMERA, prof, "stream.h264")
+        svc = webrtc.WebRTC(0, streams, 15, record=log.append, preload=["360p"])
+        svc.warmed.result(30)
+        self.assertEqual([e["webrtc_warm_error"] for e in log if "webrtc_warm_error" in e], ["360p"])
+
+        async def read():
+            return await svc._access_units("360p")
+        aus = svc.call(read())
+        self.assertTrue(aus)
+        self.assertEqual(calls, ["360p", "360p"])
 
 
 class LanUdp(unittest.TestCase):

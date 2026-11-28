@@ -667,6 +667,43 @@ legacy engine for chunks that don't load on an emulator, check `uptime` on the h
 Lesson for the next blank HA page on the legacy engine: open the same URL in a desktop browser before suspecting
 GeckoView 144. HA renames and removes frontend routes between releases.
 
+## `--es open /history` refused on the Mirror: a path has no origin (2026-11-28)
+
+**Result: the app handed the `open` extra to the engine as it came, so a bare path (`/history`) reached Vitro's
+fallback, and the legacy lockdown, without an origin. The app now puts a path on the dashboard's origin before any
+engine gets it (`FrontendUrls.resolve`), and Vitro does the same for a path that reaches its `load`.**
+
+**How we got here.** On the lululemon Mirror (Android 6, legacy GeckoView 144, a generic legacy test build of
+`exp/vitro` at 6e7f5b74e, Vitro on, HA 2026.11.0), `am start … --es open /history` (also `/logbook`,
+`/config/dashboard`) logged `Routing non-dashboard URL to fallback engine: /history`, then
+`Lockdown: refused page from a URL without a network origin`, and the screen showed the lockdown's "This address
+isn't the Home Assistant address the panel started with" note. On a Pixel Tablet (GeckoView 159), a fallback route
+had logged a full URL (`http://…/<dashboard>/camera`) and opened. Two readings fit: Vitro dropped the origin on its
+way to the fallback, or nothing ever added one. #983 had just changed how the app writes Home Assistant's address
+(default ports dropped), so a mismatch of `:80`/`:443` between the URL and the lockdown's origin was a third.
+
+The log settled it (**read**, `core/.../MainActivity.kt`, `applyIntent`): `open` went to `page.load(it)` as it
+came, and `VitroEngine.load` routes a URL that isn't a dashboard straight to `openInFallback`. The tablet's full URL
+was a dashboard view Vitro hands to the fallback, which `buildViewUrl` writes on the page's origin, so it never took
+this path. The lockdown
+was right to refuse: `Origin.of("/history")` is null, and a page with no origin never matches the dashboard's. #983
+isn't the cause: the refused URL had no port at all. Every other source of a URL already had an origin: a card's
+`navigate` and `url` actions and an island's links (`navigateInPlace`), More Info's "open in Home Assistant"
+(`buildViewUrl`), the core's notification views (absolute links, `NotifyRequest`), and Back (the URLs loaded before).
+
+**What changed.** A path (`/history`, `logbook?entity_id=…`, `#top`) goes on the origin the dashboard loads from:
+the test hold's while there is one, else `KioskPrefs.url`'s, which is what the lockdown started with
+(`engineStartWanted`). The origin is `OAuth.origin`'s (lower case, default port dropped), the query and fragment are
+kept, and a path in the dashboard's address is no prefix: Home Assistant serves its frontend at the root and has no
+setting for a base path. A URL with a scheme stays as it is, and a scheme-relative `//host` opens nothing.
+
+**Tests (verified 2026-11-28, unit tests only):** `FrontendUrlsResolveTest` (core), `VitroFallbackReturnTest`
+(`open /history` with Vitro on: the fallback gets `http://192.0.2.10:8123/history`, also on `:80`, `:443` and
+`:8443` dashboards, and from a card's `navigate`), `GeckoBehaviourPinTest` (the real `MainActivity` on GeckoView,
+Vitro off) and `LockdownPolicyTest` (the resolved URL loads under the lockdown for each port form, the bare path
+doesn't). **Untested** on the Mirror itself: the re-check is to run the same three `open`s there with Vitro on and
+off.
+
 ## How to reproduce
 
 Off-device: `./gradlew :engine-gecko-legacy:testDebugUnitTest` (the policy in Kotlin and in `policy.js`, the gate).

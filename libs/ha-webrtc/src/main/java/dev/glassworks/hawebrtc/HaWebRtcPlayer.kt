@@ -139,12 +139,26 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
             WebRtcRuntime.rendererUnavailable?.let { why ->
                 return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "renderer: $why")) }
             }
+            // The stream starts first: its first step is HA's client configuration, a round trip over the network,
+            // and libwebrtc's parts and the renderer are made on this thread meanwhile. The answer is taken on this
+            // thread too, after this task, so the peer it makes finds both ready ([runtime]). Either failing closes
+            // the stream before anything else is sent. The stream's wait for video ([HaWebRtcStream.Options.connectTimeoutMs])
+            // counts from here, that setup included, as its KDoc says.
+            val s = HaWebRtcStream(channel, entityId, { config, audio, events ->
+                val made = checkNotNull(runtime) { "libwebrtc isn't ready" }
+                LibWebRtcPeer(made.factory, config, audio, video, events)
+            }, HandlerScheduler(w), options.stream)
+            s.listener = Events()
+            s.steadyFrames = steady
+            stream = s
+            s.setActive(startActive)
+            s.start()
             val rt = try {
                 WebRtcRuntime.acquire(appContext)
             } catch (e: RuntimeException) {
-                return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "libwebrtc: ${e.message}")) }
+                return@post failStart(s, "libwebrtc: ${e.message}")
             } catch (e: LinkageError) {
-                return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "libwebrtc: ${e.message}")) }
+                return@post failStart(s, "libwebrtc: ${e.message}")
             }
             // The render thread's EGL context can fail too (no EGL config, a lost display): give the runtime back and
             // report it, as for the runtime itself, so the caller closes the player. The check, the start and the
@@ -159,17 +173,22 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
             }
             if (rendererFailed != null) {
                 WebRtcRuntime.release()
-                return@post report { it.onError(HaError(HaWebRtcStream.START_FAILED, "renderer: $rendererFailed")) }
+                return@post failStart(s, "renderer: $rendererFailed")
             }
             runtime = rt
-            val s = HaWebRtcStream(channel, entityId, { config, audio, events ->
-                LibWebRtcPeer(rt.factory, config, audio, video, events)
-            }, HandlerScheduler(w), options.stream)
-            s.listener = Events()
-            s.steadyFrames = steady
-            stream = s
-            s.setActive(startActive)
-            s.start()
+        }
+    }
+
+    /**
+     * The player's start failed after its stream started ([start]): the stream closes (its request to HA, if out,
+     * lands on nothing) and the failure is reported, as before the stream existed. The player's thread.
+     */
+    private fun failStart(s: HaWebRtcStream, why: String) {
+        try {
+            s.close()
+        } finally {
+            if (stream === s) stream = null
+            report { it.onError(HaError(HaWebRtcStream.START_FAILED, why)) }
         }
     }
 

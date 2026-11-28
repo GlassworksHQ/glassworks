@@ -6,10 +6,10 @@ This library contains one file of ported code under other licences:
 dev/glassworks/voice/MicroFrontend.kt is a Kotlin port of
 - TensorFlow Lite Micro's audio microfrontend (tensorflow/lite/experimental/microfrontend/lib:
   window, fft, filterbank, noise_reduction, pcan_gain_control, log_scale, log_lut).
-  Copyright 2018 The TensorFlow Authors. Apache License 2.0 (META-INF/LICENSE-APACHE-2.0).
+  Copyright 2018 The TensorFlow Authors. Apache License 2.0 (META-INF/dev.glassworks/voice/LICENSE-APACHE-2.0).
   https://github.com/tensorflow/tflite-micro
 - the 16-bit fixed-point real FFT it uses (kissfft kiss_fft.c and kiss_fftr.c).
-  Copyright (c) 2003-2010 Mark Borgerding. BSD 3-Clause licence (META-INF/LICENSE-BSD-3-CLAUSE).
+  Copyright (c) 2003-2010 Mark Borgerding. BSD 3-Clause licence (META-INF/dev.glassworks/voice/LICENSE-BSD-3-CLAUSE).
   https://github.com/mborgerding/kissfft
 
 Ported from the copies in rhasspy/pymicro-features v2.0.2 (commit

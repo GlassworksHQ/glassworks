@@ -15,6 +15,8 @@ import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PagePort
 import dev.glassworks.engine.vitro.data.HaDashboardClient
+import dev.glassworks.engine.vitro.theme.ThemeCatalog
+import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.engine.vitro.ui.VitroView
 import org.json.JSONObject
 import org.junit.After
@@ -151,6 +153,76 @@ class VitroFallbackReturnTest {
         idle()
         assertNative(page, fp)
         assertEquals(listOf("$base/history"), fp.loads.toList())
+    }
+
+    // ---- Paths the app is asked to open ----
+
+    /**
+     * The Mirror (Android 6, legacy engine): `--es open /history` reached the fallback as the bare path, and its lockdown
+     * refused it as "a URL without a network origin". A path goes on Home Assistant's origin before the fallback gets
+     * it, its query and fragment kept, on the first load (the configured dashboard's origin) and on a later one.
+     */
+    @Test fun aPathTheAppIsAskedToOpenReachesTheFallbackAsAUrlOnHomeAssistant() {
+        val fb = RecordingEngine(lockedDown = true)
+        val page = page(engine(fb))
+        page.load("/history?entity_id=light.kitchen#top")
+        idle()
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        assertEquals(listOf("$base/history?entity_id=light.kitchen#top"), fp.loads.toList())
+
+        page.goBack()
+        awaitMain("the dashboard") { host.messages("ready").isNotEmpty() }
+        page.load("/logbook")
+        idle()
+        page.load("config/dashboard")
+        idle()
+        assertEquals(listOf("$base/history?entity_id=light.kitchen#top", "$base/logbook", "$base/config/dashboard"), fp.loads.toList())
+        assertTrue("every load has Home Assistant's origin", fp.loads.all { it.startsWith("$base/") })
+
+        // A dashboard path draws natively, on Home Assistant's origin.
+        page.load("/wall-test/wall")
+        idle()
+        assertNative(page, fp)
+        assertEquals("$base/wall-test/wall", host.locations.last())
+    }
+
+    @Test fun aPathOnANonDefaultPortOrADefaultOneGoesOnTheOriginAsThePanelWritesIt() {
+        for ((dashboard, expected) in listOf(
+            "http://192.0.2.10:80/lovelace/0" to "http://192.0.2.10/history",
+            "https://192.0.2.10:443/lovelace/0" to "https://192.0.2.10/history",
+            "https://192.0.2.10:8443/lovelace/0" to "https://192.0.2.10:8443/history",
+        )) {
+            val fb = RecordingEngine(lockedDown = true)
+            val page = page(engine(fb, settings.copy(dashboard = dashboard)))
+            page.load("/history")
+            idle()
+            assertEquals(dashboard, listOf(expected), fb.fallbackPage().loads.toList())
+        }
+    }
+
+    @Test fun aPathWithNoHomeAssistantToGoOnLoadsNothing() {
+        val fb = RecordingEngine(lockedDown = true)
+        val page = page(engine(fb, settings.copy(dashboard = null)))
+        page.load("/history")
+        idle()
+        assertTrue("no fallback page for it", fb.opens.none { it.background == Color.BLACK })
+    }
+
+    /** A card's `navigate` to a page Vitro doesn't draw: the fallback gets it on HA's origin, query and fragment kept. */
+    @Test fun aCardsNavigateToANonDashboardPathReachesTheFallbackAsAUrl() {
+        val fb = RecordingEngine(lockedDown = true)
+        val page = readyPage(fb)
+        val ctx = vitroView(page).contextFactory!!(ThemeResolver.resolve(ThemeCatalog(), true))
+        ctx.navigate("/history?hours_to_show=24#graph")
+        idle()
+        val fp = fb.fallbackPage()
+        assertFallback(page, fp)
+        assertEquals(listOf("$base/history?hours_to_show=24#graph"), fp.loads.toList())
+        // A scheme-relative path names a host: it goes nowhere.
+        ctx.navigate("//192.0.2.30/history")
+        idle()
+        assertEquals(1, fp.loads.size)
     }
 
     @Test fun eachPageVitroSendsTheFallbackStartsWithNoHistory() {

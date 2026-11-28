@@ -34,7 +34,8 @@ internal class VideoSurfaceView(
     /** Where a going surface's release is asked for, off the main thread ([TEXTURE_RELEASER]). */
     private val releaser: java.util.concurrent.Executor = TEXTURE_RELEASER,
 ) : SurfaceView(context), SurfaceHolder.Callback, VideoOutput {
-    private val renderer = EglRenderer("ha-webrtc")
+    // Draws a texture frame with nothing allocated ([TextureFrameDrawer]).
+    private val renderer = EglRenderer("ha-webrtc", TextureFrameDrawer())
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var frameWidth = 0
     @Volatile private var frameHeight = 0
