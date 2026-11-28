@@ -1,15 +1,15 @@
 ---
 topic: access
-evidence: read
+evidence: verified
 ---
 
 # adb keys on the S1: how does a new computer get in, and why does Android 10 forget keys?
 
-**Status (2026-11-28): built, untested on a panel.** The frame agent answers Android's "Allow USB debugging?" for
-Manage's Security page, keeps `adb_keys`, turns off Android 10's 7-day key timeout, and puts the installer's key back
-when Android has dropped it. Everything below is read
-from AOSP `android10-release`, or tested off-device in `frames/aqara-s1-plus/tools/radio/test/`. Nothing here has
-run on a panel yet, and the panel checks are listed at the end.
+**Status (2026-11-28): the S1's adbd doesn't check keys (verified).** On a panel, adbd let in a key it had never seen,
+over TCP, with a working shell. It sent no request to Android, and no dialog appeared. That happened with
+`ro.adb.secure=1` and `ro.debuggable=0`. So "Allow a new computer" has nothing to answer on the S1 until adbd checks
+keys. The rest of this note, Android 10's key handling and the agent's side, still holds, and is read from AOSP
+`android10-release` or tested off-device in `frames/aqara-s1-plus/tools/radio/test/`.
 
 Device: Aqara Panel Hub S1 Plus, Android 10 (Aqara firmware 4.5.80). Source: AOSP `platform/frameworks/base`,
 branch `android10-release`.
@@ -99,11 +99,35 @@ remove it like any other key. The agent records that removal and doesn't undo it
    connection it has already let in, so METIS's open session survives. The next adbd restart or replug would ask on the
    screen. This fits the 7-day expiry, but it doesn't prove it: we never saw the files before they went.
 
-## Result
+4. **Run 20b: a throwaway computer on the panel** (2026-11-28, verified; driven from METIS, the maintainer's Windows
+   machine, with the PR's agent pinned at `cf217d5` through the loader's dev override). The props were
+   `ro.adb.secure=1`, `ro.secure=1`, `ro.debuggable=0`, `sys.usb.config=adb`, and the system log held no
+   `AdbDebuggingManager` lines.
+   - **The agent worked as built.** It started from the dev override with its adb status `ok`, set the timeout to `0`,
+     and put the boot image's key back into an `adb_keys` that Android had deleted ("the installer's key is back in
+     the adb key list"). Remove took that key out again through the request file (`ok removed`), and kept the file's
+     owner and mode.
+   - **adbd lets in any key.** TCP adb was turned on with `setprop service.adb.tcp.port 5555; stop adbd; start adbd`.
+     A second adb server on the same machine, with a freshly generated key and USB off, then connected:
+     ```
+     $ adb -P 5099 connect <panel>:5555; adb -P 5099 devices   -> device   (expected: unauthorized)
+     $ adb -P 5099 -s <panel>:5555 shell id -un                -> shell
+     ```
+     No `Received public key` line appeared, and the agent never saw anyone asking. `adb_keys` didn't change, and no
+     window drew on the screen. adbd's own log shows the connection go straight from transport to shell, with no auth
+     step. Android's AdbDebuggingManager lost its socket to adbd at the restart ("Connection refused"), so nothing
+     there could have approved it either.
+   - **What it rules out.** It isn't Android approving computers on its own: nothing reached the framework. It isn't
+     a stored key either: the throwaway key was new and in no key file. The maintainer never approved METIS or their
+     MacBook, and both got in with an empty `/data/misc/adb/`, which fits.
+   - **Not proven yet.** Only TCP was tested with a fresh key; that USB behaves the same is inferred from the two
+     computers above. Why adbd skips the check is open too: an Aqara build of adbd without authentication is the
+     likeliest reason.
+
 
 | Question | Answer | Evidence |
 |---|---|---|
-| Does the S1 let in any key? | No. adbd lets in only keys in `adb_keys`, and the installer's key is put there at first boot | `ro.adb.secure=1` ([findings.md](findings.md#usb--adb)), `glassworks_firstboot.sh` |
+| Does the S1 let in any key? | **Yes.** adbd let in a key it had never seen, with no request to Android and no dialog, although `ro.adb.secure=1` | Attempt 4 (run 20b, 2026-11-28) |
 | Can root answer "Allow USB debugging?" | Yes, through `service call adb 1 i32 1 s16 <key>`, only for the computer asking | `IAdbManager.aidl`, `AdbService.java:238`, `AdbDebuggingManager.java:358` |
 | Does Android 10 forget keys? | Yes, 7 days after the last connection, and the installer's key with them | `AdbDebuggingManager.java:943`–`1028`, `Settings.java:12393` |
 | Does a dropped installer key come back? | Not by itself: first boot runs once. The agent puts it back at every start, unless it was removed on Manage | `glassworks_firstboot.sh` (its marker), `glassworks_agent.sh` (`adb_restore`) |
@@ -124,6 +148,15 @@ Undo: `settings delete global adb_allowed_connection_time` (`tools/install.sh --
 out of `adb_keys`.
 
 ## Open questions
+
+- **Why doesn't adbd check keys?** The next step is to read `/system/bin/adbd` from Aqara's 4.5.80 firmware (kept
+  outside the repo) and see whether its authentication is compiled out, or tied to something other than
+  `ro.adb.secure`.
+- **USB:** is it the same as TCP? Plug in a computer with a fresh key over USB. The expected answer is yes.
+- **Stock firmware:** stock ships with adb off (`persist.sys.usb.config=none`), so only panels where adb is on are open.
+  Glassworks' first boot turns it on.
+
+The questions below were written before attempt 4:
 
 All of these need a real panel:
 

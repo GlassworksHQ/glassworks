@@ -125,9 +125,10 @@ Each step makes the next one safer. Don't skip ahead to flashing.
   `overlay.d/*.rc` is injected into the second stage, which is why we use it.
 - The panel already runs `vbmeta` with flags 3 (verification disabled) while it reports `locked`.
   Stock U-Boot doesn't enforce AVB. The flags are a big-endian u32 at offset 120.
-- Out of the box, adb is off (`persist.sys.usb.config=none`) and needs a key
-  (`ro.adb.secure=1`). The installer bakes the host's public key into the boot image, and a
-  one-shot service authorises it on first boot, so the user never has to tap the screen.
+- Out of the box, adb is off (`persist.sys.usb.config=none`). `ro.adb.secure=1`, but the S1's adbd turned out not to
+  check keys at all ([adb-keys.md](../../frames/aqara-s1-plus/research/adb-keys.md)). Test that with a fresh key on any
+  new device, and don't trust the property. The installer bakes the host's public key into the boot image anyway,
+  and a one-shot service authorizes it on first boot.
 - SELinux is permissive. That makes root easier, and it also means any app can start init services.
   Design every root service for that ([root.md](../../frames/aqara-s1-plus/research/root.md)).
 - The system WebView is Chromium 74, so the kiosk ships GeckoView. Never change `wm density`.
