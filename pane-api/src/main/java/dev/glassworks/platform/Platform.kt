@@ -112,7 +112,7 @@ open class PlatformApi(
     /** `Settings.Panel` (the Wi-Fi sheet over the app) exists (Android 10). */
     val hasSettingsPanel: Boolean get() = apiLevel >= 29
 
-    /** `GradientDrawable.getShape`, `getCornerRadius` and `getCornerRadii` exist, to read a shape back (Android 7). */
+    /** A drawable's rounded outline can be read back: `Outline.getRadius` (and `GradientDrawable`'s getters) exist (Android 7). */
     val hasGradientDrawableGetters: Boolean get() = apiLevel >= 24
 
     /** `TextView.setFallbackLineSpacing` exists, so text can keep CSS line boxes exact (Android 9). */

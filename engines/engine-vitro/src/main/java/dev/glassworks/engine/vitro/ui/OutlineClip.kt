@@ -5,6 +5,7 @@
 package dev.glassworks.engine.vitro.ui
 
 import android.graphics.Canvas
+import android.graphics.Outline
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -77,15 +78,15 @@ internal object OutlineClip {
 
     /**
      * Why [card] needs its outline clip (for the log), or null when nothing it draws reaches beyond its rounded corners.
-     * Its outline must be its background's, a rounded GradientDrawable whose radius can be read (Android 7 and later);
-     * anything else keeps the clip.
+     * Its outline must be its background's, a GradientDrawable whose outline is a rounded rect (its radius readable,
+     * Android 7 and later); anything else keeps the clip.
      */
     fun needsClip(card: CardSurface): String? {
         if (card.outlineProvider !== ViewOutlineProvider.BACKGROUND) return "outline provider"
         val bg = card.background ?: return "no background"
-        if (bg !is GradientDrawable || !Platform.hasGradientDrawableGetters) return "background " + bg.javaClass.simpleName
-        if (bg.shape != GradientDrawable.RECTANGLE || bg.cornerRadii != null) return "background shape"
-        return contentReachesCorners(card, bg.cornerRadius)
+        if (bg !is GradientDrawable) return "background " + bg.javaClass.simpleName
+        val radius = outlineRadius(bg, card.width, card.height) ?: return "background shape"
+        return contentReachesCorners(card, radius)
     }
 
     /**
@@ -238,14 +239,28 @@ internal object OutlineClip {
         return box.containsRoundRect(l, t, r, b, rc)
     }
 
-    /** A GradientDrawable's uniform corner radius over a [w] x [h] rect (an oval as a pill), or null when unknown. */
-    private fun gradientRadius(d: Drawable, w: Float, h: Float): Float? {
-        if (d !is GradientDrawable || !Platform.hasGradientDrawableGetters) return null
-        return when (d.shape) {
-            GradientDrawable.OVAL -> min(w, h) / 2f
-            GradientDrawable.RECTANGLE -> if (d.cornerRadii == null) d.cornerRadius else null
-            else -> null
-        }
+    /** A GradientDrawable's corner radius over a [w] x [h] rect, or null when it isn't a rounded rect. */
+    private fun gradientRadius(d: Drawable, w: Float, h: Float): Float? =
+        if (d is GradientDrawable) outlineRadius(d, w.toInt(), h.toInt()) else null
+
+    private val outline = Outline()
+
+    /**
+     * The radius of [d]'s outline over a [w] x [h] rect (already clamped to half the shorter side, as it's drawn and
+     * clipped), or null when its outline isn't a rounded rect (per-corner radii, an oval that isn't a circle, a line).
+     * Read from the outline, never from `getCornerRadii()`, which up to Android 10 throws for a drawable rounded with
+     * `setCornerRadius()` (it clones an array it never made), nor `getShape()`. `Outline.getRadius()` is Android 7.
+     */
+    private fun outlineRadius(d: GradientDrawable, w: Int, h: Int): Float? {
+        if (!Platform.hasGradientDrawableGetters || w <= 0 || h <= 0) return null
+        // The bounds the view draws it at (it sets them before each draw; the first draw comes after this test).
+        val b = d.bounds
+        if (b.width() != w || b.height() != h) d.setBounds(0, 0, w, h)
+        outline.setEmpty()
+        d.getOutline(outline)
+        if (outline.isEmpty) return null
+        val r = outline.radius
+        return if (r >= 0f) r else null
     }
 
     /** [cls] or a class between it and [stop] declares its own draw (onDraw, dispatchDraw, draw, onDrawForeground). */
