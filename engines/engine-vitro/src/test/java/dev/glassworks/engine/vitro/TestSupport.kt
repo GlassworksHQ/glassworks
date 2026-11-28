@@ -75,6 +75,13 @@ fun View.isInvalidated(): Boolean = privateFlags.getInt(this) and pflagInvalidat
  * `(String) -> HaSocket` shape both [HaDashboardClient] and `VitroEngine` take. Addresses are RFC 5737.
  */
 class FakeHaServer {
+    init {
+        // HA's frontend files (HaFrontend) are fetched over HTTP, not through the fake's socket: a test that doesn't
+        // serve them gets none, and no client of any test reaches the network for them (192.0.2.10 only times out,
+        // and HaFrontend reads on one thread, so a read stuck there held up a later test's: IslandSessionsTest).
+        dev.glassworks.engine.vitro.data.HaFrontend.fetch = { null }
+    }
+
     companion object {
         const val TOKEN = "test-token"
         const val BASE = "http://192.0.2.10:8123"

@@ -45,7 +45,8 @@ internal class VideoTextureView(
     /** Where a destroyed surface is given back and released, off the main thread ([TEXTURE_RELEASER]). */
     private val releaser: Executor = TEXTURE_RELEASER,
 ) : TextureView(context), TextureView.SurfaceTextureListener, VideoOutput {
-    private val renderer = EglRenderer("ha-webrtc")
+    // Draws a texture frame with nothing allocated ([TextureFrameDrawer]).
+    private val renderer = EglRenderer("ha-webrtc", TextureFrameDrawer())
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var frameWidth = 0
     @Volatile private var frameHeight = 0

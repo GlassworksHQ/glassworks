@@ -32,7 +32,8 @@ fi
 has() { grep -qx -- "$2" <<<"$1"; }
 classes_list=$(unzip -Z1 "$classes"); sources_list=$(unzip -Z1 "$base-sources.jar"); javadoc_list=$(unzip -Z1 "$base-javadoc.jar")
 has "$classes_list" 'META-INF/LICENSE' || fail "no META-INF/LICENSE in the classes jar"
-# Ported code's licences: `extraLicenses=<SPDX id>|<copyright>;…` in gradle.properties, and libs/<name>/NOTICE.
+# Ported code's licences: `extraLicenses=<SPDX id>|<copyright>;…` in gradle.properties, and libs/<name>/NOTICE, in
+# the library's own folder (META-INF/dev.glassworks/<name>/), so no two libraries' files share a path in an app.
 extra=$(sed -n 's/^extraLicenses=//p' "$props")
 extra_ids=()
 if [ -n "$extra" ]; then
@@ -40,13 +41,13 @@ if [ -n "$extra" ]; then
   for e in "${entries[@]}"; do
     id=${e%%|*}; copyright=${e#*|}
     extra_ids+=("$id")
-    f="META-INF/LICENSE-$(tr '[:lower:]' '[:upper:]' <<<"$id")"
+    f="META-INF/dev.glassworks/$name/LICENSE-$(tr '[:lower:]' '[:upper:]' <<<"$id")"
     has "$classes_list" "$f" || fail "no $f in the classes jar (extraLicenses names $id)"
     unzip -p "$classes" "$f" | grep -qF -- "$copyright" || fail "$f lacks its copyright line: $copyright"
   done
 fi
 if [ -f "$repo/libs/$name/NOTICE" ]; then
-  has "$classes_list" 'META-INF/NOTICE' || fail "no META-INF/NOTICE in the classes jar (libs/$name/NOTICE exists)"
+  has "$classes_list" "META-INF/dev.glassworks/$name/NOTICE" || fail "no META-INF/dev.glassworks/$name/NOTICE in the classes jar (libs/$name/NOTICE exists)"
 fi
 has "$javadoc_list" 'index.html' || fail "the KDoc jar has no index.html"
 grep -q '\.kt$' <<<"$sources_list" || fail "the sources jar has no Kotlin sources"

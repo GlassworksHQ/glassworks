@@ -125,6 +125,12 @@ open class PlatformApi(
     /** A drawable's rounded outline can be read back: `Outline.getRadius` (and `GradientDrawable`'s getters) exist (Android 7). */
     val hasGradientDrawableGetters: Boolean get() = apiLevel >= 24
 
+    /**
+     * A hardware-accelerated canvas draws `Paint.setShadowLayer` around shapes, not only text (Android 9). Below it,
+     * a shape's soft shadow has to be drawn some other way.
+     */
+    val hasHardwareShapeShadows: Boolean get() = apiLevel >= 28
+
     /** `TextView.setFallbackLineSpacing` exists, so text can keep CSS line boxes exact (Android 9). */
     val hasFallbackLineSpacing: Boolean get() = apiLevel >= 28
 

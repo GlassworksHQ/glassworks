@@ -79,7 +79,8 @@ class HaWebRtcPlayerTest {
 
     @Test
     fun `without libwebrtc's native library the player reports start_failed on the main thread`() {
-        val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
+        val channel = FakeChannel()
+        val player = HaWebRtcPlayer(context, channel, "camera.front_door")
         val done = CountDownLatch(1)
         var got: HaError? = null
         var onMain = false
@@ -99,6 +100,13 @@ class HaWebRtcPlayerTest {
         }
         assertEquals(HaWebRtcStream.START_FAILED, got?.code)
         assertTrue(onMain)
+        // HA's client configuration was asked for first, while libwebrtc loaded: the failure closed that stream, so
+        // its answer, when it comes, makes no peer and sends no offer.
+        assertEquals(1, channel.callsOf(HaWebRtcSignaling.TYPE_CLIENT_CONFIG).size)
+        channel.answerConfig()
+        Thread.sleep(200)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(channel.subs.isEmpty())
         player.close()
     }
 

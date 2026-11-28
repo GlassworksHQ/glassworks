@@ -15,10 +15,10 @@
 </p>
 
 <p align="center">
-  <a href="../../LICENSE">
+  <a href="NOTICE">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-license-mit-on-dark.svg">
-      <img alt="License: MIT" src="https://www.glassworks.dev/brand/badge-license-mit-on-light.svg" height="30">
+      <img alt="License: MIT, with one file's drawing steps under BSD-3-Clause" src="https://www.glassworks.dev/brand/badge-license-mit-on-light.svg" height="30">
     </picture>
   </a>
   <picture>
@@ -183,7 +183,9 @@ An app that keeps only the ABIs it needs (`ndk { abiFilters }`, or one APK per A
 
 ## Licences
 
-This library is MIT. libwebrtc is BSD-3-Clause and bundles third-party code under its own licences
+This library is MIT, except the drawing steps in `TextureFrameDrawer.kt`, which reproduce libwebrtc's own and stay
+under BSD-3-Clause ([NOTICE](NOTICE)). The AAR carries both texts (`META-INF/LICENSE`, and `LICENSE-BSD-3-CLAUSE` with the
+NOTICE in `META-INF/dev.glassworks/ha-webrtc/`), and the POM lists both. libwebrtc is BSD-3-Clause and bundles third-party code under its own licences
 (BoringSSL, libvpx, libyuv, dav1d, libaom, Opus, libsrtp, Abseil, libc++ and others, all permissive: BSD, MIT,
 ISC, Apache-2.0 and similar). An app that ships this library must show those notices. Glassworks lists them in
 [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md).

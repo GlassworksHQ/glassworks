@@ -11,6 +11,7 @@ import android.util.Base64
 import android.util.Log
 import dev.glassworks.engine.vitro.model.LovelaceResource
 import dev.glassworks.platform.Platform
+import dev.glassworks.web.HaPageData
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.HttpURLConnection
@@ -137,7 +138,7 @@ object WebFonts {
      */
     fun configure(haBase: String, resources: List<LovelaceResource>, cacheDir: File?) {
         val urls = sheetUrls(haBase, resources)
-        val dir = cacheDir?.let { File(it, "vitro-fonts") }
+        val dir = cacheDir?.let { File(it, HaPageData.FONTS_CACHE) } // the factory reset clears it
         if (urls == cssUrls && dir == this.cacheDir) return
         reset()
         cssUrls = urls

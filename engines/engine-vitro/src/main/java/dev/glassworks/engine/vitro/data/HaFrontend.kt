@@ -111,6 +111,13 @@ object HaFrontend {
             wantedRead
         }
         executor.execute {
+            // A read no one waits for any more (another client claimed the requests, or another language was asked
+            // for since) reads nothing: a slow or unreachable Home Assistant would hold every later read behind it,
+            // up to its timeouts for each file.
+            val stale = synchronized(lock) {
+                (owner !== requester || latest != key).also { if (it && wanted == key && wantedRead == mine) wanted = null }
+            }
+            if (stale) return@execute
             val r = runCatching { read(origin, language) }.getOrNull() ?: runCatching { readCached(origin, language) }.getOrNull()
             synchronized(lock) { if (wanted == key && wantedRead == mine) wanted = null }
             if (r != null && install(requester, key, r)) done()
