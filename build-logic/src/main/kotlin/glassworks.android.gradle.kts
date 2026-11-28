@@ -31,12 +31,15 @@ for (agp in listOf("com.android.library", "com.android.application")) {
 // also gives each interface with a default body a static `access$<name>$jd` bridge that invoke-supers the interface
 // itself. Android 10's verifier soft-fails that ("Cannot invoke-super on self as interface"), so the interface, and
 // every class that implements it, was verified again at run time on every start: 136 classes on the S1, MainActivity
-// and VitroPage among them. The published libraries keep the default, so apps that compiled against their
-// DefaultImpls keep working. StartPathVerifyTest fails on a `$jd` bridge in the APK.
+// and VitroPage among them. StartPathVerifyTest fails on a `$jd` bridge in the APK.
+// A library published to Maven builds in DISABLE mode instead (DefaultImpls, no bridges either), which its users
+// compiled against: set in the root build.gradle.kts, and here too. The mode is read when the task runs, after every
+// plugin is applied, so it doesn't depend on when the publishing plugin comes in.
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
-    if (!pluginManager.hasPlugin("com.vanniktech.maven.publish")) {
-        compilerOptions.jvmDefault.set(org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.NO_COMPATIBILITY)
-    }
+    compilerOptions.jvmDefault.set(provider {
+        if (pluginManager.hasPlugin("com.vanniktech.maven.publish")) org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.DISABLE
+        else org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.NO_COMPATIBILITY
+    })
 }
 
 // Robolectric fetches its Android jars (android-all-instrumented) itself while the tests run, from Maven Central by

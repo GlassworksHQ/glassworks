@@ -62,9 +62,11 @@ That gave the whole list, with reasons, in three seconds. It turned out to be mo
 2. **Newer APIs inside big classes**, as expected, in seven places. The worst is `PlatformApi`: every class asks
    `Platform` something at start, and four of its methods called Android 11, 13 and 14 APIs directly.
 
-Both fixes are mechanical. The app's modules can drop the bridges, since nothing outside this repo compiles against
-them. The libraries published to Maven keep them, because apps built against their `DefaultImpls` would break. Each
-newer call moves into a small nested `object ApiNN` that only its query's branch reaches, so the class that fails
+Both fixes are mechanical. The app's modules can drop the bridges (`NO_COMPATIBILITY`), since nothing outside this repo
+compiles against them. The libraries published to Maven never had any: they build at `languageVersion` 2.1, which means
+Kotlin 2.1's `DISABLE` mode, with default bodies only in `DefaultImpls` and no `$jd`. Apps built against those
+`DefaultImpls` call them, so the libraries now set `DISABLE` explicitly, and stay there whatever `languageVersion`
+becomes (`@JvmDefaultWithoutCompatibility` would break those apps too). Each newer call moves into a small nested `object ApiNN` that only its query's branch reaches, so the class that fails
 verification is a holder that never loads on Android 10.
 
 For compiling, the open question was what actually happens on the S1. Updates install through the root update service
@@ -205,6 +207,9 @@ What keeps it that way:
 
 - `StartPathVerifyTest` (the S1 app's unit tests) reads every compiled class the APK ships and the SDK's
   `api-versions.xml`. It fails on a call, field or type above API 29 outside an `ApiNN` holder, and on any `$jd` bridge.
+  It follows a call named on an app or library class (`stateDescription = …` inside a View subclass) up to the platform
+  class that declares it, and counts a newer type wherever it appears: an argument or result, a field, a supertype, a
+  lambda's interface.
 - `tools/perf/runtime-verify.sh` asks a real Android 10 the same question on a built APK.
 - The baseline profile is per module, by package: each `baseline-prof.txt` lists the packages of that module that run
   at every start, and leaves out those that only run when someone opens them (settings, setup screens, Improv

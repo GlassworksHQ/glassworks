@@ -33,7 +33,9 @@ trap '[ -z "$pushed" ] || "$adb" -s "$serial" shell rm -rf "$remote" >/dev/null 
 case "$serial" in *:*) "$adb" connect "$serial" >/dev/null ;; esac
 "$adb" -s "$serial" wait-for-device
 
-[ "$("$adb" -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r')" = 1 ] || { echo "runtime-verify: $serial isn't an emulator" >&2; exit 2; }
+# Older emulator images say so in ro.kernel.qemu, newer ones in ro.boot.qemu.
+qemu="$("$adb" -s "$serial" shell 'getprop ro.kernel.qemu; getprop ro.boot.qemu' | tr -d '\r')"
+printf '%s\n' "$qemu" | grep -qx 1 || { echo "runtime-verify: $serial isn't an emulator" >&2; exit 2; }
 "$adb" -s "$serial" root >/dev/null
 "$adb" -s "$serial" wait-for-device
 sdk="$("$adb" -s "$serial" shell getprop ro.build.version.sdk | tr -d '\r')"
