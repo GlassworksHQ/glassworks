@@ -201,6 +201,17 @@ class GlassworksRuntime(
     @Volatile override var panes: List<Pane> = emptyList()
 
     @Volatile override var discovery: HaDiscovery? = null
+
+    /** Made on first use (the activity's or the service's), which starts its timeout; on the main thread's handler. */
+    override val afterFirstFrame: AfterFirstFrame by lazy {
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        AfterFirstFrame(
+            schedule = { delayMs, task -> main.postDelayed(task, delayMs) },
+            log = { Log.i(TAG, it) },
+            warn = { msg, e -> Log.w(TAG, msg, e) },
+            now = android.os.SystemClock::uptimeMillis,
+        )
+    }
     @Volatile override var setupHotspot: dev.glassworks.setup.SetupHotspot? = null
     @Volatile override var lanSetup: dev.glassworks.setup.LanSetup? = null
     @Volatile override var hotspotScan: List<dev.glassworks.setup.WifiNetwork> = emptyList()

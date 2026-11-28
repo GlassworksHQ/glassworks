@@ -38,13 +38,19 @@ class HaDiscovery(
 
     private val ctx = context.applicationContext
     private val prefs = KioskPrefs(ctx)
-    private val nsd = ctx.getSystemService(Context.NSD_SERVICE) as NsdManager
+    /**
+     * Android's mDNS client, made on first use on [exec]'s thread (only the browse and its resolves use it). Never on
+     * the main thread: NsdManager's constructor waits for its channel to system_server's NsdService to connect, which
+     * took 211-228 ms of the S1's cold start (2026-11-28) while NsdService started the mdnssd daemon.
+     */
+    private val nsd: NsdManager? by lazy { ctx.getSystemService(Context.NSD_SERVICE) as? NsdManager }
     private val exec = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "ha-discovery").apply { isDaemon = true } }
     private var browse: NsdManager.DiscoveryListener? = null
     @Volatile private var esphomeTried = false
 
+    /** Browses for [BROWSE_MS]. KioskService calls it once the first dashboard frame is up ([dev.glassworks.AfterFirstFrame]). */
     fun start() {
-        exec.execute { startBrowse() }
+        if (!exec.isShutdown) runCatching { exec.execute { startBrowse() } }
     }
 
     /**
@@ -114,6 +120,11 @@ class HaDiscovery(
                 exec.execute { resolve(info, 0) }
             }
         }
+        val nsd = nsd
+        if (nsd == null) {
+            Log.w(TAG, "no mDNS on this device: Home Assistant is found over ESPHome alone")
+            return
+        }
         try {
             nsd.discoverServices(HaUrls.SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, l)
             browse = l
@@ -126,10 +137,11 @@ class HaDiscovery(
     private fun stopBrowse() {
         val l = browse ?: return
         browse = null
-        try { nsd.stopServiceDiscovery(l) } catch (_: Exception) {}
+        try { nsd?.stopServiceDiscovery(l) } catch (_: Exception) {}
     }
 
     private fun resolve(info: NsdServiceInfo, attempt: Int) {
+        val nsd = nsd ?: return
         try {
             nsd.resolveService(info, object : NsdManager.ResolveListener {
                 override fun onResolveFailed(si: NsdServiceInfo, errorCode: Int) {

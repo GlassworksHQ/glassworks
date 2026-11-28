@@ -396,6 +396,8 @@ class VitroView(
         val steps = ArrayDeque(steps)
         var slices = 0
         var longestMs = 0L
+        /** [onFirstScreenDrawn] has been told for this build. */
+        var firstScreenTold = false
         val run = Runnable { runSlice(this) }
         private var scheduled: (() -> Unit)? = null
 
@@ -439,6 +441,12 @@ class VitroView(
     /** The view build still adding cards ([SlicedBuild]), or null. */
     private var building: SlicedBuild? = null
 
+    /**
+     * View [index]'s first screen has been drawn while its cards below it are still being added ([SlicedBuild]): the
+     * dashboard is on screen, ahead of [onMetrics] at the build's end. A view built in one pass says nothing here.
+     */
+    var onFirstScreenDrawn: ((index: Int) -> Unit)? = null
+
     /** Told the cards each chunk made, in the order it made them (tests); nothing keeps them here. */
     internal var onChunk: ((List<View>) -> Unit)? = null
 
@@ -475,6 +483,11 @@ class VitroView(
      */
     private fun runSlice(b: SlicedBuild, start: Long = sliceClock(), budgetMs: Long = REST_SLICE_BUDGET_MS) {
         if (building !== b) return
+        // Every chunk after the build's own first one runs once the first screen has been drawn ([postSlice]).
+        if (b.slices > 0 && !b.firstScreenTold) {
+            b.firstScreenTold = true
+            onFirstScreenDrawn?.invoke(b.index)
+        }
         chunksRun++
         val began = sliceClock()
         b.slices++

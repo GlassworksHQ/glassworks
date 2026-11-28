@@ -11,6 +11,11 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Changed
+- **The dashboard shows sooner after the app starts.** The app now draws your dashboard first, and starts its voice
+  assistant, music player and its ESPHome device a moment later, once the dashboard is on screen. Everything
+  else works as before and comes up within a few seconds of the dashboard, even if it can't load.
+
 ### Fixed
 - **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
   saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing

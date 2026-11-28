@@ -26,7 +26,13 @@ import android.net.nsd.NsdServiceInfo
  * @param board The `board` TXT record (ESPHome puts its board id there), or null to leave it out.
  */
 public class EspHomeMdns(context: Context, private val board: String? = null) {
-    private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
+    private val app = context.applicationContext ?: context
+
+    /**
+     * Made on the first [start], on its thread: NsdManager's constructor waits for its channel to Android's NsdService
+     * to connect (a quarter of a second on a slow device), so making this object costs the thread that makes it nothing.
+     */
+    private val nsd: NsdManager? by lazy { app.getSystemService(Context.NSD_SERVICE) as? NsdManager }
     private var listener: NsdManager.RegistrationListener? = null
 
     /**
@@ -64,6 +70,7 @@ public class EspHomeMdns(context: Context, private val board: String? = null) {
             override fun onUnregistrationFailed(info: NsdServiceInfo, errorCode: Int) =
                 EspHomeLog.w("mDNS: unregistration failed ($errorCode)")
         }
+        val nsd = nsd ?: return EspHomeLog.w("mDNS: this device has no NsdManager")
         try {
             nsd.registerService(info, NsdManager.PROTOCOL_DNS_SD, l)
             listener = l
@@ -80,6 +87,6 @@ public class EspHomeMdns(context: Context, private val board: String? = null) {
     public fun stop() {
         val l = listener ?: return
         listener = null
-        try { nsd.unregisterService(l) } catch (e: Exception) { EspHomeLog.w("mDNS: unregister threw", e) }
+        try { nsd?.unregisterService(l) } catch (e: Exception) { EspHomeLog.w("mDNS: unregister threw", e) }
     }
 }

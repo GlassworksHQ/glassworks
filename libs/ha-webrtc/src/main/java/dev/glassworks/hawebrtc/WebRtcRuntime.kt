@@ -67,7 +67,9 @@ internal object WebRtcRuntime {
      * at a time, and none while the parts are kept already (several cameras ask at once).
      */
     fun prewarm(context: Context) {
-        if (parts.alive || !warming.compareAndSet(false, true)) return
+        // Neither check waits for the lock a make holds: the main thread asks, once per camera, while the first
+        // camera's prewarm is making the parts (a 77-88 ms wait on the S1, 2026-11-28).
+        if (warming.get() || parts.alive || !warming.compareAndSet(false, true)) return
         Thread({
             try {
                 runCatching {
@@ -126,7 +128,8 @@ internal class Lingering<T : Any>(
     private val dispose: (T) -> Unit,
     private val later: (delayMs: Long, task: () -> Unit) -> Unit,
 ) {
-    private var value: T? = null
+    /** Written under the lock; read without it by [alive]. */
+    @Volatile private var value: T? = null
     private var refs = 0
 
     /** Bumped by each [acquire] and each last [release]: a disposal scheduled before either is dropped. */
@@ -159,8 +162,11 @@ internal class Lingering<T : Any>(
         dispose(v)
     }
 
-    /** True while a value is kept (tests). */
-    val alive: Boolean @Synchronized get() = value != null
+    /**
+     * True while a value is kept. Never waits: while one is being made (under the lock, which may take a while), it is
+     * false until it's there, so a caller on the main thread isn't held up by a make on another thread.
+     */
+    val alive: Boolean get() = value != null
 
     companion object {
         /** Runs each task on a daemon thread named [name] that sleeps the delay first, then ends. */
