@@ -184,10 +184,13 @@ internal class ClarityCameras(private val now: () -> Double) {
                 out.put("found", true)
                     .put("first_frame_ms", ClarityStats.round1(first - nav))
                     // The stream's own time to that same first picture (one at or before t1, whatever came after).
+                    // WebRTC's counts its player's set-up too (libwebrtc's shared parts and the renderer, made while
+                    // HA's client configuration is asked for, since #989): across that change compare first_frame_ms
+                    // and started_ms, which it didn't move, rather than this.
                     .put("first_frame_since_start_ms", graded.flatMap { it.sinceStart }.firstOrNull { it.first == first }?.second
                         ?: JSONObject.NULL)
                     // When that stream was made and started, from nav: what passed before the stream's own clock ran
-                    // (the view's build up to the card, capabilities, the player's set-up).
+                    // (the view's build up to the card, capabilities). A player's own set-up comes after its start.
                     .let { o ->
                         val rec = graded.firstOrNull { first in it.firstFrames }
                         o.put("opened_ms", rec?.let { ClarityStats.round1(it.openedAt - nav) } ?: JSONObject.NULL)

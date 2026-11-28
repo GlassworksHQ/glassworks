@@ -511,6 +511,21 @@ class Warm(unittest.TestCase):
         self.assertTrue(aus)
         self.assertEqual(calls, ["360p", "360p"])
 
+    def test_a_waiter_cancelled_leaves_the_shared_read_to_the_others(self):
+        svc = webrtc.WebRTC(0, lambda prof: os.path.join(STUB_CAMERA, prof, "stream.h264"), 15)
+
+        async def cancel_one_then_read():
+            first = asyncio.ensure_future(svc._access_units("360p"))
+            second = asyncio.ensure_future(svc._access_units("360p"))
+            await asyncio.sleep(0)
+            first.cancel()
+            aus = await second
+            return first.cancelled(), svc.aus["360p"].cancelled(), len(aus)
+        was_cancelled, read_cancelled, n = svc.call(cancel_one_then_read())
+        self.assertTrue(was_cancelled)
+        self.assertFalse(read_cancelled)
+        self.assertGreater(n, 0)
+
 
 class LanUdp(unittest.TestCase):
     """The lan-udp diagnostic: no relay; the browser and the peer pair host candidates over UDP, as

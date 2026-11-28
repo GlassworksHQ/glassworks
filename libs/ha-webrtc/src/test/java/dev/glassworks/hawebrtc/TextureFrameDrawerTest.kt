@@ -114,6 +114,20 @@ class TextureFrameDrawerTest {
     }
 
     @Test
+    fun `a NaN draw matrix (a 0 x 0 frame's aspect ratio) skips the frame, as libwebrtc does, rather than throw`() {
+        val nan = Matrix().apply { setScale(Float.NaN, Float.NaN) }
+        for (size in listOf(1280 to 720, 0 to 0)) {
+            val frame = VideoFrame(Texture(size.first, size.second, VideoFrame.TextureBuffer.Type.OES, decoderTransform()), 0, 0)
+            val theirs = Recording()
+            val ours = Recording()
+            VideoFrameDrawer().drawFrame(frame, theirs, nan, 0, 0, 480, 270)
+            TextureFrameDrawer().drawFrame(frame, ours, nan, 0, 0, 480, 270)
+            assertEquals("${size.first}x${size.second}", theirs.calls, ours.calls)
+            assertEquals("${size.first}x${size.second}", 0, ours.calls)
+        }
+    }
+
+    @Test
     fun `a texture frame is drawn with nothing allocated, where libwebrtc allocates on every one`() {
         val frame = VideoFrame(Texture(1280, 720, VideoFrame.TextureBuffer.Type.OES, decoderTransform()), 0, 0)
         val extra = drawMatrix(16f / 9f, 1f)
