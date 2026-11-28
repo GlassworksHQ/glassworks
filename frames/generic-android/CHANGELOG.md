@@ -11,6 +11,11 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Changed
+- **Softer voice chimes.** The wake word and finished timers now play a soft, rounded chime that swells in and
+  rings out, instead of electronic beeps. The timer chime is the wake chime followed by a higher one, so it still
+  stands out as an alert.
+
 ### Fixed
 - **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
   saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing

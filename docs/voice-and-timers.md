@@ -8,7 +8,7 @@ When Voice is enabled, the panel continuously runs an on-device **microWakeWord*
 
 When you say the wake word:
 
-1. The panel plays a short two-tone wake chime (if **Wake sound** is enabled) and wakes the screen.
+1. The panel plays a soft wake chime (if **Wake sound** is enabled) and wakes the screen.
 2. Any music playing on the panel pauses automatically, and Music Assistant (Sendspin) mutes locally while staying synchronized with your speaker group.
 3. If **Voice overlay** is enabled, light runs along the edge of the screen and swells with your voice, with a small caption of what you said and the assistant's reply, while your dashboard stays in view. If you prefer a full-screen overlay with a reactive orb, pick **Orb** under **Assist** on the **Appearance** page. Tap anywhere on the screen to cancel the run at any time. The colors come from the theme you pick on the **Appearance** page, in the panel's settings or on the Manage page: five themes, each light or dark, or a Custom theme in your own colors. Turn on **Follow Home Assistant's dark mode** there and the glow or orb switches between light and dark along with your dashboard. Or pick the **Home Assistant** theme, which uses your dashboard's own colors.
 4. Your voice streams to your chosen Home Assistant Assist pipeline, and the reply plays through the panel's speaker.
@@ -60,7 +60,7 @@ Home Assistant creates the standard Assist entities on your panel's device page 
 | **Mute microphone** (`switch`) | Yes | Completely releases the microphone for privacy or when using another voice input. |
 | **Voice status** (`sensor`) | Yes | Reports `Ready`, `Getting ready`, or a specific error if the wake word cannot start. |
 | **Voice** (`switch`) | No | Turns the Voice pane (and timers) on or off. |
-| **Wake sound** (`switch`) | No | Plays a short two-tone chime when the wake word triggers (on by default). |
+| **Wake sound** (`switch`) | No | Plays a soft chime when the wake word triggers (on by default). |
 | **Voice overlay** (`switch`) | No | Shows the full-screen voice overlay while listening, thinking, and speaking (on by default). |
 | **Mic gain** (`number`, 0.5–4x) | No | Adjusts microphone gain before wake word detection and speech streaming. |
 | **Wake word threshold** (`number`, 0.10–0.99) | No | Sets detection sensitivity for the active wake word. Lower values make the panel more sensitive; switching wake words resets this to the new model's default cutoff. |
