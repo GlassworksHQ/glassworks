@@ -48,6 +48,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   cards with less work, history graphs and sensor graphs read their history in the background, and a value that keeps
   changing, such as a power sensor or a clock with seconds, no longer makes the whole dashboard lay itself out again.
   Nothing looks different.
+- **Softer voice chimes.** The wake word and finished timers now play a soft, rounded chime that swells in and
+  rings out, instead of electronic beeps. The timer chime is the wake chime followed by a higher one, so it still
+  stands out as an alert.
 - **Kiln is easier to move around in.** Every installer screen has a Back button in the same place when going back is
   safe, and says why when it isn't. Done steps on the side rail are links back to them. Reopening Kiln partway through
   an install shows where you stopped and what's already on the device, with Continue and a way out. Start over asks

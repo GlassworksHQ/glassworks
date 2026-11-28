@@ -16,6 +16,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   and ESPHome device until the dashboard starts to show, or the setup screen does, so they no longer slow down the
   first draw. If neither shows within 10 seconds, for example when Home Assistant can't be reached, they start
   anyway. Once started, they work as before.
+- **Softer voice chimes.** The wake word and finished timers now play a soft, rounded chime that swells in and
+  rings out, instead of electronic beeps. The timer chime is the wake chime followed by a higher one, so it still
+  stands out as an alert.
 
 ### Fixed
 - **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
