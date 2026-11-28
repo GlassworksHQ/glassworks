@@ -28,8 +28,8 @@
     </picture>
   </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-under-development-on-dark.svg">
-    <img alt="Status: under development" src="https://www.glassworks.dev/brand/badge-status-under-development-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-stable-on-dark.svg">
+    <img alt="Status: stable" src="https://www.glassworks.dev/brand/badge-status-stable-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -47,7 +47,7 @@ A **pane** is a feature: the Music Assistant player, voice, timers, the radio. T
 (`dev.glassworks.pane`) is the contract between the two.
 
 It's its own Gradle module, `:glassworks-pane-api` in `pane-api/`, and the core that builds on it is
-`:glassworks-core` in `core/`. The API will change until Glassworks v1.
+`:glassworks-core` in `core/`. The API is stable as of Glassworks 1.0.
 
 ## What's in it
 
@@ -685,10 +685,14 @@ sets the flag again at the end of its own shutdown.
 
 ## Licence
 
-The files in `dev.glassworks` are licensed under the
-[Mozilla Public License 2.0](../../../../../../LICENSES/MPL-2.0.txt), except the libraries in
-[`libs/`](../../../../../../libs): `dev.glassworks.esphome` with its subpackages, and
-`dev.glassworks.improv`. Those are MIT, like the rest of the repository.
+Glassworks Core is licensed under the [Mozilla Public License 2.0](../../../../../../LICENSES/MPL-2.0.txt):
+the files in `core/`, `pane-api/`, `engines/` and `panes/`. A few files there keep their own MIT header because
+they were ported from an MIT project: the camera pane's ONVIF, RTSP and motion detection code, which came from
+android-ip-camera ([THIRD-PARTY-NOTICES.md](../../../../../../THIRD-PARTY-NOTICES.md)).
+
+The rest of the repository is MIT, including the libraries in [`libs/`](../../../../../../libs)
+(`dev.glassworks.esphome`, `dev.glassworks.improv` and the others) and the apps built on the core, such as the S1
+app and the generic Android app.
 
 The MPL works file by file. You can ship Glassworks inside a closed product, and your own frames
 and panes, in their own files, can use any licence. Changes to Glassworks' own files must be
