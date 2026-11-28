@@ -81,6 +81,16 @@ export default async function DevelopersPage() {
 
       <ListCard id="build" title="Build with Glassworks" aside={<a href={links.s1}>GitHub ›</a>}>
         <Row
+          href="/docs/why-glassworks"
+          lead={
+            <Sq lit>
+              <ChipGlyph />
+            </Sq>
+          }
+          title="Why Glassworks (technical overview)"
+          sub="How Glassworks compares to other wall-panel stacks, plus Kiln, security, Clarity, and Vitro architecture."
+        />
+        <Row
           href="/docs/frames"
           lead={
             <Sq>

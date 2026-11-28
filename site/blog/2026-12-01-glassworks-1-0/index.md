@@ -45,7 +45,7 @@ Here's what you get today.
 
 **One native ESPHome device.** Your panel joins Home Assistant as a standard ESPHome device. Adopt it and you're done: no HACS integration, no cloud service, and no account. Every sensor and setting shows up as a normal entity you can use in automations and scripts.
 
-**Browser-based install with [Kiln](https://kiln.glassworks.dev).** Plug your panel into your computer over USB, open Chrome or Edge, and Kiln walks you through the install step by step. Every download is verified, flashable wall panels back up their stock software first with a guided way to restore it anytime, and on the Studio Mirror Kiln now supports both a browser-based **stock-in-place patcher** (keeping a true restore point back to stock firmware) and installing the community Glass Panes image. At 1.0, Kiln installs Glassworks on the Aqara S1 Plus, the lululemon Studio Mirror, and any Android device.
+**Browser-based install with [Kiln](https://kiln.glassworks.dev).** Plug your panel into your computer over USB, open Chrome or Edge, and Kiln walks you through the install step by step. Every download is verified, flashable wall panels back up their stock software first with a guided way to restore it anytime, and on supported Qualcomm Studio Mirrors Kiln now offers both the community Glass Panes image and an experimental browser-based **stock-in-place patcher** (preserving stock firmware with a restore point back to a stock factory reset). At 1.0, Kiln installs Glassworks on the Aqara S1 Plus, the lululemon Studio Mirror, and any Android 6+ device (Android 8+ standard build, Android 6–7 legacy build).
 
 **Automatic updates through Home Assistant.** New releases appear under *Settings → Updates* alongside the rest of your devices. Tap update, or automate it.
 
@@ -66,14 +66,14 @@ Optional panes like the Bluetooth proxy and camera stay off until you turn them 
 **Supported devices ("frames") at 1.0** — all **stable**:
 
 - **[Aqara Panel Hub S1 Plus](../../../frames/aqara-s1-plus/README.md)** — the reference device where Glassworks started and where every feature lands first. Clarity grade **D**.
-- **[lululemon Studio Mirror](../../../frames/lululemon-mirror/README.md)** — a 40-inch display behind a full-length mirror, installed via the community Glass Panes image or Kiln's stock-in-place patcher (with Device Owner silent updates and a true restore point back to stock). Clarity grade **E** on the web path.
-- **[Generic Android](../../../frames/generic-android/README.md)** — a no-root app for whatever Android tablet you already have, tested on the [Google Pixel Tablet](../../../frames/google-pixel-tablet/README.md) (Clarity grade **B**) and a 2016 [Samsung Galaxy Tab A 10.1](../../../frames/samsung-galaxy-tab-a-10-1-2016/README.md) running LineageOS.
+- **[lululemon Studio Mirror](../../../frames/lululemon-mirror/README.md)** — a 40-inch display behind a full-length mirror (original Qualcomm MSM8916 units running stock 1.x; later NXP i.MX8 revisions are not supported), installed via the community Glass Panes image or Kiln's experimental stock-in-place patcher (with Device Owner silent updates and a byte-exact restore point back to stock firmware). Clarity grade **E** on the web path.
+- **[Generic Android](../../../frames/generic-android/README.md)** — a no-root app for Android 6+ tablets (Android 8+ standard build, Android 6–7 legacy build), tested on the [Google Pixel Tablet](../../../frames/google-pixel-tablet/README.md) (Clarity grade **B**) and a 2016 [Samsung Galaxy Tab A 10.1](../../../frames/samsung-galaxy-tab-a-10-1-2016/README.md) running LineageOS.
 
 ![The lululemon Studio Mirror, Aqara Panel Hub S1 Plus, and Google Pixel Tablet side by side running the same Home Assistant dashboard on Glassworks 1.0](./devices.webp)
 
 ## Cracking open locked hardware—with a road back to stock
 
-Glassworks isn't just an Android app. A huge part of this project is the low-level hardware research underneath it—and neither the Aqara S1 Plus nor the lululemon Studio Mirror could be modified this way before. Through our own research, both devices now have a non-destructive path and a full road back to stock.
+Glassworks isn't just an Android app. A huge part of this project is the low-level hardware research underneath it—and neither the Aqara S1 Plus nor the lululemon Studio Mirror could be modified this way before. Through our own research, both devices now preserve a full road back to stock firmware.
 
 ### Aqara Panel Hub S1 Plus: unlocked from scratch
 
@@ -81,7 +81,7 @@ Out of the box, the S1 Plus was completely sealed—nobody had managed to run Ho
 
 ### lululemon Studio Mirror: breaking open a black box
 
-Until now, modifying a lululemon Studio Mirror meant flashing an entire replacement system image—a permanently destructive, one-way edit that left you with no way to bring the Mirror back to stock. The untouched stock firmware itself was a black box: the bootloader is locked, fastboot cannot read partitions back, there is no touchscreen to approve a USB debugging prompt, and stock `adbd` ignores user keys. Nobody had been able to pull the full stock system off a Mirror.
+Until now, modifying a Qualcomm lululemon Studio Mirror meant flashing an entire replacement system image—a permanently destructive, one-way edit that left you with no way to bring the Mirror back to stock firmware. The untouched stock firmware itself was a black box: the bootloader is locked, fastboot cannot read partitions back, there is no touchscreen to approve a USB debugging prompt, and stock `adbd` ignores user keys. Nobody had been able to pull the full stock system off a Mirror.
 
 Here is how we cracked it open:
 
@@ -89,7 +89,7 @@ Here is how we cracked it open:
 2. **Mapping the live system.** Over the network, that probe pulled readable parts of `/system`, the live SELinux policy, and the exact physical disk blocks where system files live on eMMC. That alone was enough to surgically patch a single file (`services.jar`) in place—saving the original blocks first—and open authorized USB debugging while leaving the rest of the system untouched.
 3. **Pulling the entire stock `system` and `boot` images.** That still left parts of `/system` and the `boot` partition out of reach. Using what the probe uncovered in the security policy, we found a system process (`dpmd`) running as `root` with permission to load kernel modules, hooked one of its libraries to load a small kernel module, and streamed out the complete, untouched raw `system` and `boot` images from a stock Mirror—something nobody had been able to do before—before restoring everything back to stock.
 
-Opening up that black box unlocked Kiln's **stock-in-place** mode for the Mirror. Instead of wiping lululemon's software forever, Kiln keeps the stock system intact, patches only the exact blocks needed for USB setup and silent Device Owner updates, hides lululemon's apps, and saves a byte-exact restore point that puts the Mirror right back to stock. The full investigation—including the dead ends—is written up in [the stock Mirror probe research note](../../../frames/lululemon-mirror/research/stock-firmware-probe.md).
+Opening up that black box unlocked Kiln's experimental **stock-in-place** mode for original Qualcomm Mirrors (stock 1.x). Instead of wiping lululemon's system partition forever, Kiln keeps stock firmware intact, patches only the exact blocks needed for setup and silent Device Owner updates, hides lululemon's apps, and saves a byte-exact restore point that puts the Mirror's stock system back as it was. Installing and restoring do reset `userdata` (so returning to stock is a clean factory reset rather than preserving prior lululemon account data), and the full investigation—including the dead ends—is written up in [the stock Mirror probe research note](../../../frames/lululemon-mirror/research/stock-firmware-probe.md).
 
 ## Standing on community work—and giving back
 
@@ -105,7 +105,7 @@ We're also pushing everything we build and learn back out:
   - **Home Assistant Voice ([home-assistant/core#192714](https://github.com/home-assistant/core/pull/192714)):** fixed an issue where an ESPHome satellite's wake word selector dropped changes made on the device. <!-- Update if merged before release. -->
   - **U-Boot:** submitted a DDR4 initialization fix discovered on the S1 Plus to the U-Boot mailing list, which should help other Allwinner A133 DDR4 boards too. <!-- Update if merged before release. -->
   - **Glass Panes ([git-nimrod/glass-panes#5](https://github.com/git-nimrod/glass-panes/issues/5)):** tested the community Mirror image on an unreported board revision and shared the findings back.
-- **Open hardware research.** Reverse-engineering a locked device is the hardest part of this work, and too much of it usually disappears into Discord scrollback. We've documented every finding in [the research notes](../../../docs/research/README.md) (61 of them at 1.0)—exact commands, outputs, dead ends, and confidence levels, covering everything from the S1 boot chain, DDR4 fix, and wall-base serial protocol to Mirror board revisions and stock-in-place patching on Android 6. We ask the same of anyone contributing a new frame ([CONTRIBUTING.md](../../../CONTRIBUTING.md)): publish the research alongside the PR so the whole community can build on it.
+- **Open hardware research.** Reverse-engineering a locked device is the hardest part of this work, and too much of it usually disappears into Discord scrollback. We've documented every finding in [the research notes](../../../docs/research/README.md) (over 60 of them at 1.0)—exact commands, outputs, dead ends, and confidence levels, covering everything from the S1 boot chain, DDR4 fix, and wall-base serial protocol to Mirror board revisions and stock-in-place patching on Android 6. We ask the same of anyone contributing a new frame ([CONTRIBUTING.md](../../../CONTRIBUTING.md)): publish the research alongside the PR so the whole community can build on it.
 
 **A quick note on licensing:** the standalone libraries are **MIT** (use them however you want), and Glassworks Core is **MPL-2.0**. Because MPL-2.0 is file-level, you can build your own product or commercial hardware on top of Glassworks, while any improvements to Glassworks core files stay open for everyone. Wall hardware stays mounted for years—usually longer than a vendor's cloud survives—and open code is the only way it lasts.
 

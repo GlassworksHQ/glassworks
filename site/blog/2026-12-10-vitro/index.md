@@ -3,17 +3,17 @@ title: "Introducing Vitro: why your wall panel shouldn't need a browser"
 date: 2026-12-10
 author: "Eduardo"
 summary: "Every Home Assistant wall panel app has fought the same WebView race. Vitro steps out of that race altogether—reading the Lovelace dashboard you already built and drawing it natively on Android, with zero browser process."
-cover_alt: "Drop the browser. Keep your dashboard. The Vitro mark and four native Home Assistant cards, above a bar showing 954 MB of GeckoView processes on the Aqara S1 Plus against 0 browser processes with Vitro."
+cover_alt: "Drop the browser. Keep your dashboard. The Vitro mark and four native Home Assistant cards, above a bar showing 954 MB total app RAM (all processes) on the Aqara S1 Plus web engine against 0 browser processes with Vitro."
 draft: true
 ---
 
 <!--
-Draft. Goes out with Glassworks 1.1, the release Vitro lands in (not 1.0), once #799 is on main,
-the wired S1 Clarity rerun clears the provisional tag, and the Mirror Vitro run (#796) is in.
-Text in [brackets] waits on #796 and release day. Once `exp/vitro` merges to `main`, update the
-GitHub links to relative repo links (`../../../engines/engine-vitro/README.md`,
-`../../../docs/vitro.md`, `../../../docs/engine-contract.md`,
-`../../../docs/research/vitro-island-census.md`).
+Draft. Goes out with Glassworks 1.1, the release Vitro lands in (not 1.0), once #799 is on main
+(which also adds the `/blueprints#vitro-check` compatibility checker referenced below), the wired
+S1 Clarity rerun clears the provisional tag, and the Mirror Vitro run (#796) is in. Text in
+[brackets] waits on #796 and release day. Once `exp/vitro` merges to `main`, update the GitHub
+links to relative repo links (`../../../engines/engine-vitro/README.md`, `../../../docs/vitro.md`,
+`../../../docs/engine-contract.md`, `../../../docs/research/vitro-island-census.md`).
 -->
 
 For years, every Home Assistant wall panel app has been running the same race: wrap a WebView around Home Assistant's web frontend, pile on kiosk settings, and hope the tablet has enough CPU and RAM to keep up.
@@ -22,7 +22,7 @@ Some apps are really good at that. If you mount a recent flagship tablet on the 
 
 **We aren't fighting that race.**
 
-The moment you put Home Assistant on *real* wall hardware—a light-switch panel like the Aqara S1 Plus, an Android 6 smart mirror with under 1 GB of RAM, or the ten-year-old tablet in your drawer—wrapping a desktop browser around a modern JavaScript frontend hits a wall. When we published [Clarity](https://www.glassworks.dev/blog/clarity), our own S1 Plus scored a **D** and the lululemon Studio Mirror scored an **E**. On the S1, GeckoView alone ate **954 MB of RAM** at idle and pegged the main thread just to keep a typical dashboard alive.
+The moment you put Home Assistant on *real* wall hardware—a light-switch panel like the Aqara S1 Plus, an Android 6 smart mirror with under 1 GB of RAM, or the ten-year-old tablet in your drawer—wrapping a desktop browser around a modern JavaScript frontend hits a wall. When we published [Clarity](https://www.glassworks.dev/blog/clarity), our own S1 Plus scored a **D** and the lululemon Studio Mirror scored an **E**. On the S1, Glassworks on the web engine ate **954 MB of RAM across all processes** at idle and pegged the main thread just to keep a typical dashboard alive.
 
 In **Glassworks 1.1** [link to the release], we're introducing **Vitro** under **Settings → Labs**: a native Android rendering engine for the Home Assistant dashboard you already built. No browser process. No custom Home Assistant integration. No rebuilding your dashboard in someone else's editor. On the exact same Aqara S1 Plus, it drops idle memory from **954 MB to 235 MB**, cuts cold restarts from **14 seconds to 3.5**, and moves the panel from Clarity **D** to a provisional **B**.
 
@@ -140,7 +140,7 @@ When a 32-bit wall switch can run a 120-card Home Assistant dashboard at 50 fps 
 
 You don't even have to touch a panel to see how your dashboard fares:
 
-1. **Test your dashboard right in your browser.** Paste your Lovelace YAML or JSON into the **[Vitro compatibility checker](https://www.glassworks.dev/blueprints#vitro-check)** on `glassworks.dev/blueprints`. It runs 100% client-side—nothing leaves your machine—and tells you card by card what renders natively and what triggers an island. (There's also a copyable prompt right above it if you want to convert a custom JS card to pure Vitro-native YAML.)
+1. **Test your dashboard right in your browser.** Paste your Lovelace YAML or JSON into the **[Vitro compatibility checker](https://www.glassworks.dev/blueprints#vitro-check)** *[lands with #799]* on `glassworks.dev/blueprints`. It runs 100% client-side—nothing leaves your machine—and tells you card by card what renders natively and what triggers an island. (There's also a copyable prompt right above it if you want to convert a custom JS card to pure Vitro-native YAML.)
 2. **Flip the switch in Labs.** On any Glassworks 1.1 panel (or from its Manage page), open **Settings → Labs** and enable **Vitro renderer**. The app restarts into Vitro. It's experimental and off by default—turn it off anytime and you're immediately back on GeckoView, with nothing touched in Home Assistant.
 
 Vitro gets better with every real dashboard we throw at it. Try yours, send us any card that looks even slightly off compared to Home Assistant, and come talk about it in [GitHub Discussions](https://github.com/GlassworksHQ/glassworks/discussions) or on [Discord](https://discord.gg/hHpf77fBMj).
