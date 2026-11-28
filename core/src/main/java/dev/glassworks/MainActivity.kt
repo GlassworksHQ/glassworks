@@ -1010,7 +1010,22 @@ open class MainActivity : Activity() {
             page?.reload()
         }
         // One-off navigation that does NOT change the saved dashboard URL.
-        if (fromNewIntent) intent.getStringExtra("open")?.takeIf { it.isNotBlank() }?.let { page?.load(it) }
+        if (fromNewIntent) intent.getStringExtra("open")?.takeIf { it.isNotBlank() }?.let(::openOnce)
+    }
+
+    /**
+     * `--es open <url>`: a URL as it is, or a path on Home Assistant (`/history`, query and fragment kept) on the origin
+     * the dashboard loads from: the test hold's while it has one, else the saved dashboard's as the panel reaches it
+     * ([KioskPrefs.url]). The legacy engine's lockdown started with that same origin ([engineStartWanted]).
+     */
+    private fun openOnce(ref: String) {
+        val base = glassworks.screen.testDashboard ?: prefs.url.ifEmpty { prefs.haBase }
+        val url = FrontendUrls.resolve(ref, base)
+        if (url == null) {
+            Log.w(TAG, "open: not a URL, nor a path on a known Home Assistant; nothing opens")
+            return
+        }
+        page?.load(url)
     }
 
     // ---- immersive full screen

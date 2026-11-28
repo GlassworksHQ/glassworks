@@ -17,6 +17,11 @@ line of each version is what Home Assistant shows on the update card. A change o
   stands out as an alert.
 
 ### Fixed
+- **`--es open` takes a path on your Home Assistant.** `adb shell am start … --es open /history` (or `/logbook`,
+  `/config/dashboard`, with any query) now opens that page on the Home Assistant your dashboard is on, as a full
+  address always did, with Vitro on or off. Before, the app handed the bare path to its browser, which didn't open it
+  as a Home Assistant page: on the legacy build the screen said the address wasn't
+  your Home Assistant's.
 - **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
   saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing
   the panel to refuse dashboard authentication tokens, dashboard lists, theme updates, and permissions. Default ports

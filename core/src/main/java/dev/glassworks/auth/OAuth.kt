@@ -398,6 +398,35 @@ object FrontendUrls {
         return a == OAuth.origin(base)
     }
 
+    /**
+     * [ref] as a URL an engine can load. A path on Home Assistant (`/history`, `logbook?entity_id=light.x`,
+     * `/lovelace/0#top`) goes on [base]'s origin, its query and fragment kept as they are; a URL with a scheme
+     * (`http://…`, `about:blank`) stays as it is. Null for a blank [ref], or a path with nowhere to go ([pathOn]).
+     *
+     * A bare path reaches no engine as one: GeckoView doesn't load it, and the legacy engine's lockdown refuses it as
+     * "a URL without a network origin", so Vitro's fallback showed "This address isn't the Home Assistant address…"
+     * for `--es open /history` on Android 6.
+     */
+    fun resolve(ref: String?, base: String?): String? {
+        val r = ref?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return if (SCHEME.containsMatchIn(r)) r else pathOn(base, r)
+    }
+
+    /**
+     * [path] on [base]'s origin ([OAuth.origin]: lower case, the default port dropped, as #983 writes Home Assistant's
+     * address), with a `/` before it if it has none. Home Assistant serves its frontend at the root, so a path in
+     * [base] (the dashboard's own) is no prefix. Null when [base] has no http(s) origin, for a scheme-relative `//host`
+     * (it names a host, not a path) and for a control character.
+     */
+    fun pathOn(base: String?, path: String): String? {
+        if (path.startsWith("//") || path.any { it.code < 0x20 || it.code == 0x7f }) return null
+        val origin = base?.let(OAuth::origin) ?: return null
+        return origin + if (path.startsWith("/")) path else "/$path"
+    }
+
+    /** A URL's scheme (RFC 3986): `http:`, `about:`. `homeassistant.local:8123/x` reads as one too, and stays as it is. */
+    private val SCHEME = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:")
+
     private fun path(url: String): String = try { java.net.URI(url).rawPath ?: "/" } catch (_: Exception) { "/" }
 
     /** HA's login page (what an unauthenticated frontend redirects to). */
