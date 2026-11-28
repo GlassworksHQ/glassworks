@@ -3577,6 +3577,9 @@ class PictureCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(c
         ) { bmp -> showBitmap(bmp) }
     }
 
+    /** Its camera's feed, or null. Tests. */
+    internal val feedForTests: LiveCameraFeed? get() = feed
+
     /** Width / height, from `aspect_ratio` (`16:9`, `4:3`, `50%` = height as % of width, or a decimal). */
     private val aspect: Float = parseAspectRatio(config.raw.opt("aspect_ratio")?.toString())
     /** `state_filter`: a CSS filter per state. */

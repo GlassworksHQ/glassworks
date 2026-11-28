@@ -463,11 +463,15 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         // late image can't leave a card drawn without its picture.
         val deadline = System.nanoTime() + IMAGE_TIMEOUT_MS * 1_000_000L
         // Web fonts too: the view draws again in a font once it has arrived, as HA's page swaps it in. And graph
-        // data, which statistics charts build and down-sample off the main thread.
-        while (VitroCardContext.pendingImageLoads.get() > 0 || WebFonts.pending.get() > 0 || GraphWork.pending.get() > 0) {
+        // data, which statistics charts build and down-sample off the main thread. And a masonry view's cards, which
+        // a slow build adds a slice per frame (VitroView.SlicedBuild): the shot is of the finished view.
+        while (VitroCardContext.pendingImageLoads.get() > 0 || WebFonts.pending.get() > 0 || GraphWork.pending.get() > 0 ||
+            (view as? VitroView)?.buildInProgress == true
+        ) {
             if (System.nanoTime() > deadline) {
                 throw IllegalStateException(
                     "${VitroCardContext.pendingImageLoads.get()} image, ${WebFonts.pending.get()} font and ${GraphWork.pending.get()} graph job(s) still pending after $IMAGE_TIMEOUT_MS ms" +
+                        (if ((view as? VitroView)?.buildInProgress == true) "; the masonry build still adding cards" else "") +
                         (if (WebFonts.pending.get() > 0) "; fonts: ${WebFonts.describe()}" else ""),
                 )
             }

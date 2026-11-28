@@ -827,10 +827,10 @@ class WebFallbackTest {
         val p = page()
         p.load("$base/wall-test/auto")
         awaitMain("ready") { host.messages("ready").isNotEmpty() }
-        idle()
+        // auto-entities builds its rows from the states once they're in: wait for the row, not one turn of the looper.
+        awaitMain("the matched light's row") { hasText(vitroView(p), "Lounge Lamp") }
         assertNull("no fallback page", pageFallback())
         assertEquals(View.VISIBLE, vitroView(p).visibility)
-        assertTrue(hasText(vitroView(p), "Lounge Lamp"))
     }
 
     @Test fun autoEntitiesMatchingARowVitroDoesntDrawOpensTheViewInHomeAssistantsFrontend() {

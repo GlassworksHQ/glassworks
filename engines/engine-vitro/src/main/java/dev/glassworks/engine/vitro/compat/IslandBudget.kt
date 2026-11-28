@@ -69,8 +69,9 @@ object IslandBudget {
     }
 
     /** Why [view] goes to HA's frontend for its islands, or null when it has [budget] of them or fewer. */
-    fun reason(view: ViewConfig, scripts: IslandScripts, budget: Int): String? {
-        val n = islandCount(view, scripts)
-        return if (n > budget) "$n cards in island pages, more than the $budget this device runs in one view" else null
-    }
+    fun reason(view: ViewConfig, scripts: IslandScripts, budget: Int): String? = reason(islandCount(view, scripts), budget)
+
+    /** Why a view with [islands] island pages ([islandCount]) goes to HA's frontend, or null within [budget]. */
+    fun reason(islands: Int, budget: Int): String? =
+        if (islands > budget) "$islands cards in island pages, more than the $budget this device runs in one view" else null
 }

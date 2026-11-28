@@ -902,7 +902,14 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         invalidate()
     }
 
+    /** How many times it was measured and laid out (tests: a card placed later lays none of the others out again). */
+    internal var measures = 0
+        private set
+    internal var layouts = 0
+        private set
+
     final override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        measures++
         if (failure == null) {
             try {
                 measureCard(widthMeasureSpec, heightMeasureSpec)
@@ -931,6 +938,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     }
 
     final override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        layouts++
         if (failure == null) {
             try {
                 layoutCard(changed, left, top, right, bottom)
