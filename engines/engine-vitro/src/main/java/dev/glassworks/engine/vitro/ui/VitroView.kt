@@ -439,9 +439,8 @@ class VitroView(
     /** The view build still adding cards ([SlicedBuild]), or null. */
     private var building: SlicedBuild? = null
 
-    /** The cards the last chunk made, in the order it made them. Tests. */
-    internal var lastChunk: List<View> = emptyList()
-        private set
+    /** Told the cards each chunk made, in the order it made them (tests); nothing keeps them here. */
+    internal var onChunk: ((List<View>) -> Unit)? = null
 
     /** How many chunks this view has run ([runSlice]). Tests. */
     internal var chunksRun = 0
@@ -508,7 +507,7 @@ class VitroView(
             android.os.Trace.endSection()
         }
         val added = made.map { it.second }
-        lastChunk = added
+        onChunk?.invoke(added)
         b.longestMs = maxOf(b.longestMs, sliceClock() - began)
         // Islands of the cards just added run only while their view is on screen, as [updateIslandsShown] sets them.
         val root = viewCache[b.index]
@@ -676,10 +675,11 @@ class VitroView(
         val width = (resources.displayMetrics.widthPixels / dp).toInt()
         fun holds(v: ViewConfig) = v.cards.any { root -> holdsCard(root, card.raw.toString()) }
         val masonry = cfg?.views?.withIndex()?.filter { (i, v) -> viewCache[i] != null && isMasonry(v) && holds(v) }.orEmpty()
-        val before = masonry.associate { (i, v) -> i to HaMasonry.place(v.cards, width, ::stateForBuild).let { (p, n) -> p.toList() to n } }
+        // A read-only look at the states: this probe isn't a build, and mustn't note guesses for one in progress.
+        val before = masonry.associate { (i, v) -> i to HaMasonry.place(v.cards, width, ::peekState).let { (p, n) -> p.toList() to n } }
         if (!IslandCardSizes.record(card.raw, size)) return
         for ((i, v) in masonry) {
-            val after = HaMasonry.place(v.cards, width, ::stateForBuild).let { (p, n) -> p.toList() to n }
+            val after = HaMasonry.place(v.cards, width, ::peekState).let { (p, n) -> p.toList() to n }
             if (after == before[i]) continue
             Log.i(TAG, "View '${v.path ?: i}': ${card.type} weighs $size (its getCardSize): its masonry columns are placed again")
             if (i == currentViewIndex && webViewIndex == null) renderView(i, forceRebuild = true, pushHistory = false) else staleViews += i
@@ -948,26 +948,39 @@ class VitroView(
     }
 
     /**
-     * Scrolls [scroll] to [y] as it's laid out: before that it has no content to scroll, and an island reports its
-     * height later, so each layout scrolls on (clamped to the content there is) until [y] is reached. It stops then,
-     * when anything else moved the scroll since (the user), or after [RESTORE_SCROLL_MS].
+     * Scrolls [scroll] to [y] as it's laid out: before that it has no content to scroll, and the content grows later
+     * (a masonry view's later chunks, an island reporting its height), so each layout scrolls on (clamped to the
+     * content there is) until [y] is reached. It stops then, when anything else moved the scroll since (the user), when
+     * the scroll view leaves the window (its tree replaced), or [RESTORE_SCROLL_MS] after the last layout: a view still
+     * being built lays out at each chunk, so it waits for the whole build.
      */
     private fun scrollOnLayout(scroll: ScrollView, y: Int) {
+        lateinit var stop: () -> Unit
+        val timeout = Runnable { stop() }
         val listener = object : OnLayoutChangeListener {
             var placed = -1
 
             override fun onLayoutChange(v: View, l: Int, t: Int, r: Int, b: Int, ol: Int, ot: Int, or: Int, ob: Int) {
-                if (placed >= 0 && v.scrollY != placed) {
-                    v.removeOnLayoutChangeListener(this)
-                    return
-                }
+                if (placed >= 0 && v.scrollY != placed) return stop()
                 v.scrollTo(0, y)
                 placed = v.scrollY
-                if (placed >= y) v.removeOnLayoutChangeListener(this)
+                if (placed >= y) return stop()
+                v.removeCallbacks(timeout)
+                v.postDelayed(timeout, RESTORE_SCROLL_MS)
             }
         }
+        val detach = object : OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = Unit
+            override fun onViewDetachedFromWindow(v: View) = stop()
+        }
+        stop = {
+            scroll.removeOnLayoutChangeListener(listener)
+            scroll.removeOnAttachStateChangeListener(detach)
+            scroll.removeCallbacks(timeout)
+        }
         scroll.addOnLayoutChangeListener(listener)
-        scroll.postDelayed({ scroll.removeOnLayoutChangeListener(listener) }, RESTORE_SCROLL_MS)
+        scroll.addOnAttachStateChangeListener(detach)
+        scroll.postDelayed(timeout, RESTORE_SCROLL_MS)
     }
 
     /**
@@ -1287,6 +1300,9 @@ class VitroView(
 
     /** Entities a build chose a card's class or size for without their state (it hadn't arrived yet). */
     private val guessedStates = HashSet<String>()
+
+    /** [card]'s state now, or null: [stateForBuild] without noting a missing one (no build is waiting on it). */
+    private fun peekState(card: CardConfig): EntityState? = card.entity?.let { store[it] }
 
     /** The build's look at [card]'s state; a missing one is noted, so the view is built again when it lands. */
     private fun stateForBuild(card: CardConfig): EntityState? {
