@@ -11,6 +11,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-28
+
+**Bluetooth devices Home Assistant connects to now work through the Mirror, with steadier sign-in, simpler addresses and softer chimes.**
+
 ### Changed
 - **Softer voice chimes.** The wake word and finished timers now play a soft, rounded chime that swells in and
   rings out, instead of electronic beeps. The timer chime is the wake chime followed by a higher one, so it still
