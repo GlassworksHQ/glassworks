@@ -32,7 +32,7 @@
 
 ---
 
-A minimal, clean-room **GeckoView** kiosk browser for the Aqara Panel Hub S1 Plus
+A minimal **GeckoView** kiosk app for the Aqara Panel Hub S1 Plus
 (Android 10, 32-bit `armeabi-v7a`, 1440×720). It shows a Home Assistant dashboard
 full-screen and can replace the Aqara launcher as the HOME app.
 
@@ -303,10 +303,6 @@ Encryption is automatic: a panel without a key lets HA 2026.11+ provision one wh
 (the API and the other entities stay). It turns off and on without a restart: Home Assistant
 reconnects to read the panel's voice features again.
 
-Not yet tested on the panel. The previous Wyoming satellite was verified there (HA connected,
-`announce` TTS played, wake-word inference used about 40% of one core); remove its Wyoming entry
-from HA when switching.
-
 ## Music Assistant: native Sendspin player
 
 The panel is a Sendspin client (the protocol behind Music Assistant's own players): Noise-encrypted
@@ -330,24 +326,22 @@ Parts of the app are standalone modules other projects can use:
   pure-Kotlin protocol and state machines. Its browser client is
   [`kiln/packages/improv-serial`](../../../kiln/packages/improv-serial/README.md).
 - [`libs/bluetooth-proxy`](../../../libs/bluetooth-proxy/README.md): an ESPHome Bluetooth proxy on Android:
-  BLE scanning on Android's terms, batched into `esphome-api`. Listening only so far; the app's
-  Bluetooth proxy pane runs it (#121).
+  BLE scanning and active GATT connections, batched into `esphome-api`. The app's Bluetooth proxy pane runs it.
 - [`libs/sendspin`](../../../libs/sendspin/README.md): the Sendspin player for Music Assistant (protocol,
-  Noise handshake, FLAC, playback in sync). The app's Sendspin pane runs it (#152).
+  Noise handshake, FLAC, playback in sync). The app's Sendspin pane runs it.
 - [`libs/voice`](../../../libs/voice/README.md): the voice assistant: microphone, on-device wake word
-  (microWakeWord on TFLite) and the Assist client over `esphome-api`. The app's Assist pane runs it (#152).
+  (microWakeWord on LiteRT) and the Assist client over `esphome-api`. The app's Assist pane runs it.
 
 They build with the app (`./gradlew :esphome-api:test :esphome-api-android:assembleDebug
 :improv:testDebugUnitTest :bluetooth-proxy:testDebugUnitTest :sendspin:testDebugUnitTest :voice:testDebugUnitTest`).
-`esphome-api`, `esphome-api-android` and `improv` are on Maven Central as `dev.glassworks:<name>`;
-`sendspin` and `voice` are set up for it but not released yet, and `bluetooth-proxy` isn't
+`esphome-api`, `esphome-api-android`, `improv`, `sendspin`, and `voice` are published on Maven Central as
+`dev.glassworks:<name>`; `bluetooth-proxy` is not published yet
 ([docs/releasing.md](../../../docs/releasing.md#libraries)).
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Clean-room implementation. It contains no code from
-`jxlarrea/kiosk-satellite` (CC BY-NC-ND), which was only used to prove that GeckoView works on this panel.
-GeckoView is MPL-2.0 and is pulled as a Maven dependency. The QR code uses ZXing core (Apache-2.0).
-The Sendspin client is a clean-room implementation from the Sendspin specification (Community
-Specification License 1.0), cross-checked against aiosendspin (Apache-2.0). It contains no code from
-either.
+The S1 app shell is MIT (see [LICENSE](LICENSE)); Glassworks Core (`core/`, `pane-api/`) is MPL-2.0
+(see [LICENSES/MPL-2.0.txt](../../../LICENSES/MPL-2.0.txt)). GeckoView is MPL-2.0 and is pulled as a
+Maven dependency. QR rendering uses ZXing core (Apache-2.0). The Sendspin client implements the
+Sendspin specification (Community Specification License 1.0). See
+[THIRD-PARTY-NOTICES.md](../../../THIRD-PARTY-NOTICES.md) for the full dependency list.
