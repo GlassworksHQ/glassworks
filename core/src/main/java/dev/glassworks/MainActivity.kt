@@ -190,19 +190,32 @@ open class MainActivity : Activity() {
         }
     }
 
+    private var setupWakeHeld = false
+
+    private fun syncSetupScreenStay() {
+        // #449: a frame with no presence sensor has nothing to wake it, so it stays on through setup and the
+        // connecting screen. The S1's sensor wakes it as before. Setup, which covers the connecting screen, only until
+        // Home Assistant has added the panel: a set-up panel that lost Wi-Fi sleeps on its idle timeout (#484).
+        val notReady = !presenceSensor && if (setupOverlay.isShowing) setupOverlay.needsHomeAssistant else loadingOverlay.isShowing
+        glassworks.screen.stayOn(NOT_READY, notReady)
+        // Without touch nothing on the panel can wake its screen during setup, and the person reads it from a
+        // computer's steps: wake it if it was asleep/blacked out and keep it on for as long as the setup screen is up.
+        val noTouchSetup = setupOverlay.input == Input.NONE && setupOverlay.isShowing && !setupPreview
+        glassworks.screen.stayOn(SETUP_NO_TOUCH, noTouchSetup)
+        val wakeForSetup = noTouchSetup || (!presenceSensor && setupOverlay.isShowing && setupOverlay.needsHomeAssistant && !setupPreview)
+        if (wakeForSetup && !setupWakeHeld && !glassworks.screen.screenOn) {
+            glassworks.screen.wake(SETUP_NO_TOUCH)
+        }
+        setupWakeHeld = wakeForSetup
+    }
+
     private val setupTick = object : Runnable {
         override fun run() {
             refreshSetup()
             setupOverlay.tick() // the panes' steps follow their state
             if (resumed) requestRuntimePermissions() // a pane turned on since (from Home Assistant) asks once
             refreshOffline()
-            // #449: a frame with no presence sensor has nothing to wake it, so it stays on through setup and the
-            // connecting screen. The S1's sensor wakes it as before. Setup, which covers the connecting screen, only until
-            // Home Assistant has added the panel: a set-up panel that lost Wi-Fi sleeps on its idle timeout (#484).
-            glassworks.screen.stayOn(NOT_READY, !presenceSensor && if (setupOverlay.isShowing) setupOverlay.needsHomeAssistant else loadingOverlay.isShowing)
-            // Without touch nothing on the panel can wake its screen during setup, and the person reads it from a
-            // computer's steps: it stays on for as long as the setup screen is up (a Mirror run, 2026-11-20).
-            glassworks.screen.stayOn(SETUP_NO_TOUCH, setupOverlay.input == Input.NONE && setupOverlay.isShowing && !setupPreview)
+            syncSetupScreenStay()
             handler.postDelayed(this, SETUP_TICK_MS)
         }
     }
@@ -530,6 +543,7 @@ open class MainActivity : Activity() {
             setupOverlay.finish { loadDashboardIfNeeded() }
         }
         if (setupOverlay.isShowing || d.step == SetupFlow.DONE) setupCarried = false
+        syncSetupScreenStay()
         syncImprovInline()
     }
 

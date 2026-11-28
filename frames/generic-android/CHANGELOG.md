@@ -23,6 +23,13 @@ line of each version is what Home Assistant shows on the update card. A change o
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
 ### Fixed
+- **Kiln recovers from a brief USB hiccup during the Mirror's first start.** On Windows and slow first boots,
+  a brief `getprop` stall or busy USB handle while reconnecting used to stop the install instead of retrying.
+  Kiln now waits for the dropped connection to close, retries transient busy errors, and allows more time per
+  first-start read. Comes with Kiln, not the app.
+- **Setup wakes a sleeping Mirror instead of staying dark.** When a no-touch Mirror enters setup while its
+  screen is blacked out (for example, after losing Wi-Fi), it now turns the backlight back on and keeps the
+  screen awake until setup finishes.
 - **Kiln explains a USB connection this computer won't open.** When Windows or Linux won't let the browser open
   the Mirror or the panel, or another program such as adb already holds it, Kiln now says which it is and what to do,
   instead of saying it disconnected. The Mirror's fastboot screen also shows the one-time USB setup for Windows

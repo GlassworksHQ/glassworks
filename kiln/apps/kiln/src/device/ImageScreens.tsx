@@ -89,7 +89,12 @@ function ImageCredit({ f }: { f: DeviceFrame }) {
 
 /** The technical log, closed until asked for. */
 function Log({ s }: { s: ImageState }) {
-  return <Details label="Technical log"><pre className="rawlog">{[...s.log].reverse().join('\n') || 'Nothing yet.'}</pre></Details>;
+  return (
+    <Details label="Technical log">
+      {s.log.length > 0 && <span className="small">Newest lines first.</span>}
+      <pre className="rawlog">{[...s.log].reverse().join('\n') || 'Nothing yet.'}</pre>
+    </Details>
+  );
 }
 
 
@@ -260,6 +265,7 @@ export function ImageImage({ f, s, m, ms }: P) {
 
 /** Fastboot by hand: the drawing, the numbered steps to tick off, what to watch for, then the browser's list. */
 function ByHandFastboot({ d, cover }: { d: DeviceFrame; cover?: string }) {
+  const note = word(d, 'fastboot.byHandNote');
   return (
     <>
       {/* the drawing beside the steps on a computer, so the steps stay in the first screen; above them on a phone */}
@@ -267,7 +273,7 @@ function ByHandFastboot({ d, cover }: { d: DeviceFrame; cover?: string }) {
         <div className="howto-art"><Recovery data={d.recovery} /></div>
         <Instructions steps={lines(d.words['fastboot.byHandSteps']).map((x) => rich(x))} label="Fastboot mode, by hand" />
       </div>
-      <Note tone="info">{d.words['fastboot.byHandNote']}</Note>
+      {note && <Note tone="info">{note}</Note>}
       {cover && <Note tone="turn" title="Keep the back cover off">{cover}</Note>}
     </>
   );
