@@ -212,10 +212,16 @@ class HttpServer(
                 log("[$id] refused: ${e.message}")
                 write(sock.getOutputStream(), HttpResponse.text(400, "Bad request"), head = false); return false
             } ?: return false
-            // A header value with a line break would split the answer (response splitting): checked before it is written.
-            var res = try { (front?.invoke(req) ?: handler(req)).also(::checkHeaders) } catch (t: Throwable) {
+            var res = try { front?.invoke(req) ?: handler(req) } catch (t: Throwable) {
                 log("[$id] ${req.method} ${req.path} failed: $t")
                 HttpResponse.text(500, "Something went wrong on the panel.")
+            }
+            // A header value with a line break would split the answer (response splitting): checked before it is
+            // written. A refused answer is released (onDone) once, as a written one would be, before the 500 replaces it.
+            try { checkHeaders(res) } catch (t: Throwable) {
+                log("[$id] ${req.method} ${req.path} failed: $t")
+                res.onDone?.invoke()
+                res = HttpResponse.text(500, "Something went wrong on the panel.")
             }
             val slots = upgradeSlots
             if (res.upgrade != null && slots != null) {
