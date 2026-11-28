@@ -38,6 +38,7 @@ import dev.glassworks.engine.vitro.data.HaLocale
 import dev.glassworks.engine.vitro.data.HaFormat
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
+import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.data.LightColor
 import dev.glassworks.engine.vitro.model.ActionConfig
@@ -46,6 +47,7 @@ import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.ui.A11yRole
 import dev.glassworks.engine.vitro.ui.AdjustableAccess
 import dev.glassworks.engine.vitro.ui.CardSurface
+import dev.glassworks.engine.vitro.ui.LocalRelayout
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroAccess
@@ -117,6 +119,21 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     /** HA pins the footer to the bottom only in a sections grid (`layout === "grid"`), where the card fills its slot. */
     private val fixedFooter = footer != null && ctx.cardLayout == "grid"
 
+    /**
+     * [ScrollTuning.Knob.RELAYOUT]: a new value or unit (text sized to itself) lays out this card again, not the
+     * dashboard, as long as the card keeps its size ([LocalRelayout]). Null while CardSurface's constructor runs.
+     */
+    private var local: LocalRelayout? = if (ScrollTuning.relayout) LocalRelayout(this) else null
+
+    override fun requestLayout() {
+        if (local?.take() != true) super.requestLayout()
+    }
+
+    override fun measureCard(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        local?.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        super.measureCard(widthMeasureSpec, heightMeasureSpec)
+    }
+
     init {
         val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
         val header = LinearLayout(ctx.context).apply {
@@ -155,7 +172,13 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
         setOnClickListener { ctx.performAction(ActionConfig.parse(config.raw.optJSONObject("tap_action"), "more-info"), eid) }
         bindHoldAction(ActionConfig.parse(config.raw.optJSONObject("hold_action"), "more-info"), eid)
         enablePressFeedback()
-        if (eid != null) observe(eid, ::render) else render(null)
+        if (eid != null) observe(eid, ::update) else render(null)
+    }
+
+    /** A state change: only what's inside the card changes ([render]), so with [local] it lays out only the card. */
+    private fun update(s: EntityState?) {
+        val l = local
+        if (l == null) render(s) else ScrollTuning.section({ "Vitro entity update" }) { l.run { render(s) } }
     }
 
     /** A line box of `--ha-line-height-condensed` (1.2) around [tv]'s [sizeCss] px text, as `.info` sets it. */
@@ -195,14 +218,22 @@ class EntityCardView(ctx: VitroCardContext, private val config: CardConfig) : Ca
     }
 
     private fun render(s: EntityState?) {
-        nameView.text = config.name(s) ?: s?.displayName ?: config.entity.orEmpty()
+        val same = ScrollTuning.relayout
+        val name = config.name(s) ?: s?.displayName ?: config.entity.orEmpty()
+        if (same) nameView.setTextIfChanged(name) else nameView.text = name
         val color = if (colored(s)) stateColor(s) else null
         // HA's `filter: stateColorBrightness`: a colored light's icon dims with its brightness.
         iconView.setIcon(MdiIcons.resolveIconName(config.icon, s), color?.let { stateColorBrightness(s, it) } ?: ctx.theme.stateIconColor)
         val (value, unit) = valueAndUnit(config.raw, s)
-        valueView.text = value
-        unitView.text = unit
-        unitView.visibility = if (unit.isEmpty()) GONE else VISIBLE
+        if (same) {
+            valueView.setTextIfChanged(value)
+            unitView.setTextIfChanged(unit)
+        } else {
+            valueView.text = value
+            unitView.text = unit
+        }
+        val unitVisibility = if (unit.isEmpty()) GONE else VISIBLE
+        if (!same || unitView.visibility != unitVisibility) unitView.visibility = unitVisibility
         // The footer takes the card's color only when the card sets `color` and has one (HA's `--accent-color`
         // override); otherwise, on every render, the theme's accent.
         footer?.color = color?.takeIf { config.raw.optString("color").isNotEmpty() } ?: ctx.theme.accentColor

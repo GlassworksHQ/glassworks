@@ -32,6 +32,8 @@ import android.widget.Space
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
+import dev.glassworks.engine.ScrollTuning
+import dev.glassworks.engine.vitro.ui.ScrollActivity
 import dev.glassworks.engine.vitro.data.HaText
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.HaDisplay
@@ -72,6 +74,9 @@ private const val INTER_SEMIBOLD = 600
  * entering and the accelerate ease for things leaving.
  */
 internal object HaMotion {
+    /** [run]'s on-screen test. Main thread. */
+    private val snapRect = android.graphics.Rect()
+
     fun standard() = PathInterpolator(0.4f, 0f, 0.2f, 1f)
     fun decelerate() = PathInterpolator(0f, 0f, 0.2f, 1f)
     fun accelerate() = PathInterpolator(0.4f, 0f, 1f, 1f)
@@ -99,6 +104,13 @@ internal object HaMotion {
             onFrame(1f)
             return null
         }
+        // ScrollTuning.Knob.ANIM_SNAP: a change while the view scrolls, or off screen, lands at once. Its ~11 frames
+        // would each record the card again (and redraw its layer, if it has one) in the middle of the scroll.
+        if (ScrollTuning.animSnap && (ScrollActivity.scrolling() || !view.getGlobalVisibleRect(snapRect))) {
+            ScrollTuning.mark("Vitro anim snap")
+            onFrame(1f)
+            return null
+        }
         return ValueAnimator.ofFloat(0f, 1f).apply {
             duration = durationMs
             interpolator = standard()
@@ -121,7 +133,7 @@ internal fun applyHaRipple(view: View, cornerRadiusPx: Float, isDark: Boolean) {
  * (its hotspot set, or a state the ripple shows), so a dashboard's hundreds of tiles and rows don't each build one
  * they may never show. At rest neither draws anything; once made, it's the ripple itself that draws and animates.
  */
-internal class HaRipple(private val cornerRadiusPx: Float, private val isDark: Boolean) : android.graphics.drawable.DrawableWrapper(null) {
+internal class HaRipple(internal val cornerRadiusPx: Float, private val isDark: Boolean) : android.graphics.drawable.DrawableWrapper(null) {
     /** The ripple, made now if it isn't yet ([DrawableWrapper.setDrawable] hands it this drawable's bounds and state). */
     internal fun ripple(): android.graphics.drawable.Drawable = drawable ?: RippleDrawable(
         ColorStateList.valueOf(if (isDark) 0x22FFFFFF else 0x1A000000),
@@ -3070,7 +3082,9 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                 observe(e.entity) { s ->
                     // HA's <state-badge> with the glance card's `color: "state"`.
                     icon.setIcon(MdiIcons.resolveIconName(e.icon, s), stateColorBrightness(s, HaStateColor.icon(ctx, s, hvacOverRgb = true)))
-                    name.text = e.nameFor(s) ?: s?.displayName ?: e.entity
+                    val label = e.nameFor(s) ?: s?.displayName ?: e.entity
+                    // A fixed-height line: new text never lays the card out, but setting the same one builds its layout again.
+                    if (ScrollTuning.relayout) name.setTextIfChanged(label) else name.text = label
                     // hui-glance-card: a timestamp state through hui-timestamp-display ("In 3 hours").
                     ctx.showTimestampOr(state, s, s?.plainState() ?: "…")
                 }

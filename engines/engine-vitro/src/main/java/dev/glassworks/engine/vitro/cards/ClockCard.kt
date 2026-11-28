@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.cards
 
+import dev.glassworks.engine.ScrollTuning
 import dev.glassworks.engine.vitro.data.FrontendLocale
 import dev.glassworks.engine.vitro.data.HaIntl
 import dev.glassworks.engine.vitro.data.HaLocale
@@ -11,6 +12,7 @@ import dev.glassworks.engine.vitro.data.HaFormat
 import android.content.Context
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -261,6 +263,8 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     }
 
     private fun TextView.setLine(t: String) {
+        // ScrollTuning.Knob.CLOCK_SPAN: most ticks change only the seconds; the other lines keep their text and spans.
+        if (ScrollTuning.clockSpan && TextUtils.equals(text, t)) return
         val old = text as? Spanned
         val span = old?.getSpans(0, old.length, CssLineBoxSpan::class.java)?.firstOrNull()
         val sb = SpannableStringBuilder(t)

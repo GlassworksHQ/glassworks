@@ -49,6 +49,13 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         /** Each frame drawn after the first. */
         public fun onFrameRendered() {}
 
+        /**
+         * Whether [onFrameRendered] is wanted now. While it's false the player skips the report of a frame that changes
+         * nothing (same run, same size), and the main-thread task that would bring it. A new size is still reported.
+         * Read on the main thread.
+         */
+        public val wantsFrames: Boolean get() = true
+
         /** The connection failed and the player is reconnecting (connection [attempt] of a row). */
         public fun onReconnecting(attempt: Int, error: HaError) {}
 
@@ -279,7 +286,8 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         if (closed || Looper.myLooper() !== main.looper || deliveredRun != viewRun || width != videoWidth || height != videoHeight) {
             false
         } else {
-            if (steadyPending++ == 0) main.post(steadyReport)
+            // Nobody listens for each frame: the frame is drawn, and reported as handled, with nothing posted.
+            if (listener?.wantsFrames != false && steadyPending++ == 0) main.post(steadyReport)
             true
         }
     }
