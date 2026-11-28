@@ -72,6 +72,8 @@
 # sys.glassworks.timezone.status = "<ok|error|none> [<id>][: detail]". The loop runs whatever the radio
 # mode does (also after "giving up"), and is restarted with the agent.
 #
+# Computers over USB adb: Manage answers "Allow USB debugging?" (see "computers allowed over USB adb" below).
+#
 # Bluetooth address (#246): Android 10 hides the Bluetooth adapter's address from apps, and the app's
 # Bluetooth proxy sends it to Home Assistant (bluetooth_mac_address), as an ESPHome proxy does. Once
 # Android knows a real one (settings secure bluetooth_address, after Bluetooth was first on), it is
@@ -925,7 +927,7 @@ hn_apply() {
   elif [ -n "$noenv_" ]; then hn_say "android: Magisk loads no modules here (no $HN_MAGISK_BB)"
   else hn_say "$want_"; fi
 }
-loops_stop() { tz_stop; portal_stop; }
+loops_stop() { tz_stop; portal_stop; adb_stop; }
 
 # --- our processes ---------------------------------------------------------------------------
 BRIDGE_PID=""; BRIDGE_RANGE=""; OTBR_PID=""; JOINED=""; FAILS=0
@@ -1642,12 +1644,188 @@ bt_publish() {
   BT_DONE=1; say "bluetooth address published for the app"
 }
 
+# --- computers allowed over USB adb (Manage's Security page) -----------------------------------------
+# adbd lets in a computer whose key is in $ADB_KEYS. Any other computer's key goes to Android, which logs
+# "Received public key: <key>" (AdbDebuggingManager, system log) and puts "Allow USB debugging?" on the screen.
+# Manage answers that question instead, for an administrator signed in with Home Assistant (read at
+# android10-release: frames/aqara-s1-plus/research/adb-keys.md):
+# - The asking computer: a background loop follows that log line. It takes only lines from system_server's pid,
+#   because any app may log under any tag, and a key whose fingerprint is already in $ADB_KEYS isn't asking. It
+#   publishes $PUB_DIR/adb-asking = "<epoch> <fingerprint> <key line>" (root 0644). A key is public; the
+#   fingerprint is the MD5 of the decoded key, as Android's dialog shows it.
+# - The list: $PUB_DIR/adb-keys = one "<installer|added> <fingerprint> <key line>" per key in $ADB_KEYS, where
+#   installer marks the boot image's own key (glassworks_adb_keys, the computer that installed Glassworks).
+# - The app writes "<id> allow <fingerprint>" or "<id> remove <fingerprint>" to its files/adb/request (taken with
+#   --move, at most 2 minutes old). allow takes only the computer asking now, by its fingerprint: the app can't
+#   name a key of its own. It answers Android's question with IAdbManager.allowDebugging(true, key) (`service call
+#   adb 1`, as root), which lets the computer in at once, and makes sure the key is in $ADB_KEYS. remove takes a
+#   key out of $ADB_KEYS, never the installer's. The answer goes to $PUB_DIR/adb-result = "<id> <ok|error> <detail>".
+# - Android 10 forgets a key 7 days after its computer last connected (adb_allowed_connection_time, rewriting
+#   $ADB_KEYS without it). The list on Manage is the record, so the loop sets that to 0 (never), as Android 11's
+#   "Disable adb authorization timeout" does. tools/install.sh --undo deletes the setting.
+# Status: sys.glassworks.adb.status = "ok" | "starting" | "error <detail>". The app shows the card when it's set.
+ADB_KEYS=${GWA_ADB_KEYS:-/data/misc/adb/adb_keys}
+ADB_STATUS=sys.glassworks.adb.status
+APP_ADB_REQ=adb/request                 # app -> agent, relative to the app's files/
+ADB_ASK=$DIR/adb-asking                 # root 0600: the computer asking, as the follower saw it
+ADB_TTL=${GWA_ADB_TTL:-600}             # how long a question counts (Android keeps it until the next one)
+ADB_PID=""; ADB_LISTED=""; ADB_WHY=""
+adb_say() { [ "$1" = "$(getprop $ADB_STATUS)" ] && return 0; setp $ADB_STATUS "$1"; say "adb: $1"; }
+adb_fp() { # key line -> its fingerprint (AA:BB:..., 16 pairs), or 1 when it isn't a key adb makes (524 bytes)
+  b_=${1%% *}
+  case "$b_" in ''|*[!A-Za-z0-9+/=]*) return 1 ;; esac
+  [ ${#b_} = 700 ] || return 1
+  [ $(( $(printf '%s' "$b_" | base64 -d 2>/dev/null | wc -c) + 0 )) -eq 524 ] || return 1
+  h_=$(printf '%s' "$b_" | base64 -d 2>/dev/null | md5sum) || return 1
+  h_=${h_%% *}; [ ${#h_} = 32 ] || return 1
+  printf '%s\n' "$h_" | tr a-f A-F | sed 's/../&:/g; s/:$//'
+}
+adb_line_ok() { # a key line as adb writes it: the key, then an optional printable name of up to 64 bytes
+  case "$1" in *[!\ -~]*) return 1 ;; esac
+  ln_=${1#* }; [ "$ln_" = "$1" ] && return 0
+  [ ${#ln_} -le 64 ]
+}
+adb_has() { # fingerprint -> 0 when a key with it is in $ADB_KEYS
+  [ -n "$1" ] || return 1
+  [ -f "$ADB_KEYS" ] || return 1
+  while IFS= read -r hk_ || [ -n "$hk_" ]; do [ "$(adb_fp "$hk_")" = "$1" ] && return 0; done < "$ADB_KEYS"
+  return 1
+}
+adb_put() { # name: stdin to $PUB_DIR/<name>, root 0644, atomically (a planted symlink is replaced, not followed)
+  if [ -L "$PUB_DIR" ] || { [ -e "$PUB_DIR" ] && [ ! -d "$PUB_DIR" ]; }; then rm -rf "$PUB_DIR"; fi
+  { mkdir -p "$PUB_DIR" && chown root:root "$PUB_DIR" && chmod 755 "$PUB_DIR"; } || { cat > /dev/null; return 1; }
+  rm -f "$PUB_DIR/.$1.tmp"
+  cat > "$PUB_DIR/.$1.tmp" && chmod 644 "$PUB_DIR/.$1.tmp" && mv -f "$PUB_DIR/.$1.tmp" "$PUB_DIR/$1"
+}
+adb_installer() { # fingerprint -> 0 when it is the boot image's key
+  [ -n "$1" ] || return 1
+  [ -s "$BUNDLE/glassworks_adb_keys" ] || return 1
+  while IFS= read -r ik_ || [ -n "$ik_" ]; do [ "$(adb_fp "$ik_")" = "$1" ] && return 0; done < "$BUNDLE/glassworks_adb_keys"
+  return 1
+}
+adb_list() { # publishes $PUB_DIR/adb-keys when $ADB_KEYS changed (or [force])
+  s_=$(stat -c %Y:%s:%i "$ADB_KEYS" 2>/dev/null)
+  [ -z "$1" ] && [ "$s_" = "$ADB_LISTED" ] && [ -f "$PUB_DIR/adb-keys" ] && return 0
+  { [ -f "$ADB_KEYS" ] && while IFS= read -r lk_ || [ -n "$lk_" ]; do
+      adb_line_ok "$lk_" || continue
+      f_=$(adb_fp "$lk_") || continue
+      if adb_installer "$f_"; then echo "installer $f_ $lk_"; else echo "added $f_ $lk_"; fi
+    done < "$ADB_KEYS"; } | adb_put adb-keys && ADB_LISTED=$s_
+  # The computer asking got in some other way (Android's own dialog on the screen): it isn't asking any more.
+  read -r a_ af_ rest_ < "$ADB_ASK" 2>/dev/null && adb_has "$af_" && { rm -f "$ADB_ASK"; : | adb_put adb-asking; }
+  return 0
+}
+adb_write() { # file: replaces $ADB_KEYS with it, keeping the owner, mode and label adbd and Android read it with
+  own_=$(stat -c %u:%g "$ADB_KEYS" 2>/dev/null); mode_=$(stat -c %a "$ADB_KEYS" 2>/dev/null)
+  chown "${own_:-1000:2000}" "$1" && chmod "${mode_:-640}" "$1" && mv -f "$1" "$ADB_KEYS" || { rm -f "$1"; return 1; }
+  restorecon "$ADB_KEYS" 2>/dev/null; return 0
+}
+adb_heard() { # one line of the follower's logcat (-v epoch): "<epoch>.<ms> <pid> <tid> <level> <tag>: <message>"
+  case "$1" in *"Received public key: "*|*"Received connected key message: "*) ;; *) return 0 ;; esac
+  l_=${1#"${1%%[! ]*}"}; t_=${l_%%.*}; l_=${l_#* }; l_=${l_#"${l_%%[! ]*}"}; p_=${l_%% *}
+  case "$t_" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$p_" = "$(pidof system_server 2>/dev/null)" ] || return 0
+  case "$1" in
+    *"Received connected key message: "*)  # the computer that asked got in: no longer asking
+      f_=$(adb_fp "$(printf '%s' "${1#*Received connected key message: }" | tr -d '\r')") || return 0
+      read -r a_ af_ rest_ < "$ADB_ASK" 2>/dev/null && [ "$af_" = "$f_" ] && { rm -f "$ADB_ASK"; : | adb_put adb-asking; }
+      return 0 ;;
+  esac
+  nk_=$(printf '%s' "${1#*Received public key: }" | tr -d '\r')
+  adb_line_ok "$nk_" || return 0
+  f_=$(adb_fp "$nk_") || return 0
+  [ $(( $(date +%s) - t_ )) -le "$ADB_TTL" ] || return 0
+  adb_has "$f_" && return 0
+  ( umask 077; printf '%s %s %s\n' "$t_" "$f_" "$nk_" > "$ADB_ASK.tmp" ) && mv -f "$ADB_ASK.tmp" "$ADB_ASK" || return 0
+  printf '%s %s %s\n' "$t_" "$f_" "$nk_" | adb_put adb-asking
+  say "adb: a computer is asking to connect over USB"
+}
+adb_timeout() { # Android forgets nothing by itself: adb_allowed_connection_time 0. 0 when it is, after this.
+  v_=$(timeout ${GWA_ADB_SETTINGS_TIMEOUT:-10} settings get global adb_allowed_connection_time 2>/dev/null | tr -d '\r') || return 1
+  [ "$v_" = 0 ] && return 0
+  timeout ${GWA_ADB_SETTINGS_TIMEOUT:-10} settings put global adb_allowed_connection_time 0 >/dev/null 2>&1 || return 1
+  [ "$(timeout ${GWA_ADB_SETTINGS_TIMEOUT:-10} settings get global adb_allowed_connection_time 2>/dev/null | tr -d '\r')" = 0 ] || return 1
+  say "adb: Android's 7-day adb key timeout turned off (was ${v_:-unset})"
+}
+adb_start() { # the follower: the timeout, then Android's log, from $ADB_TTL ago, again whenever logcat ends
+  adb_say starting   # the last question stays: it carries its own time ($ADB_TTL), and the follower replays it
+  parent_=$$
+  ( i_=0
+    until adb_timeout; do
+      i_=$((i_ + 1)); [ $i_ -ge ${GWA_ADB_TRIES:-20} ] && { adb_say "error Android's adb key timeout couldn't be turned off"; break; }
+      sleep ${GWA_ADB_RETRY:-30}
+    done
+    [ $i_ -lt ${GWA_ADB_TRIES:-20} ] && adb_say ok
+    # From $ADB_TTL ago, so a computer that asked before this start still shows. A logcat that won't take a time
+    # (it ends at once) is run from its newest line instead, from then on.
+    from_=time
+    while kill -0 "$parent_" 2>/dev/null; do
+      fs_=$(date +%s)
+      if [ $from_ = time ]; then ft_="$((fs_ - ADB_TTL)).000"; else ft_=1; fi
+      logcat -b system -v epoch -T "$ft_" -s AdbDebuggingManager:D 2>/dev/null |
+        while IFS= read -r l_; do adb_heard "$l_"; done
+      [ $(( $(date +%s) - fs_ )) -lt 5 ] && from_=newest
+      sleep ${GWA_ADB_RETRY:-30}
+    done ) &
+  ADB_PID=$!
+}
+adb_stop() { alive "$ADB_PID" && { pkill -P "$ADB_PID" 2>/dev/null; kill "$ADB_PID"; }; ADB_PID=""; }
+adb_answer() { # id ok|error detail
+  printf '%s %s %s\n' "$1" "$2" "$3" | adb_put adb-result; say "adb: $2: $3"
+}
+adb_request() { # one request from the app, if there is one
+  take_app_file "$APP_ADB_REQ" max:128 "$DIR/adb-request" move; r_=$?
+  [ $r_ = 1 ] && return 0
+  [ $r_ = 2 ] && { [ "$WHY" = "$ADB_WHY" ] || say "adb: request refused: $WHY"; ADB_WHY=$WHY; return 0; }
+  ADB_WHY=""
+  read -r id_ op_ fp_ rest_ < "$DIR/adb-request"; rm -f "$DIR/adb-request"
+  case "$id_" in ''|*[!0-9a-z]*) say "adb: request refused: bad id"; return 0 ;; esac
+  [ ${#id_} -le 32 ] || { say "adb: request refused: bad id"; return 0; }
+  age_=$(( $(date +%s) - TAKE_MTIME ))
+  [ $age_ -le 120 ] || { adb_answer "$id_" error "too old (${age_} s), ignored"; return 0; }
+  case "$fp_" in [0-9A-F][0-9A-F]:*) ;; *) adb_answer "$id_" error "not a fingerprint"; return 0 ;; esac
+  [ ${#fp_} = 47 ] && [ -z "$(printf '%s' "$fp_" | tr -d '0-9A-F:')" ] || { adb_answer "$id_" error "not a fingerprint"; return 0; }
+  case "$op_" in
+    allow) adb_allow "$id_" "$fp_" ;;
+    remove) adb_remove "$id_" "$fp_" ;;
+    *) adb_answer "$id_" error "unknown request" ;;
+  esac
+  adb_list force
+}
+adb_allow() { # id fingerprint
+  if ! read -r at_ af_ ak_ < "$ADB_ASK" 2>/dev/null; then adb_answer "$1" error "none-asking"; return 0; fi
+  case "$at_" in ''|*[!0-9]*) adb_answer "$1" error "none-asking"; return 0 ;; esac
+  [ $(( $(date +%s) - at_ )) -le "$ADB_TTL" ] || { adb_answer "$1" error "none-asking"; return 0; }
+  [ "$af_" = "$2" ] || { adb_answer "$1" error "changed"; return 0; }
+  if adb_has "$2"; then rm -f "$ADB_ASK"; : | adb_put adb-asking; adb_answer "$1" ok "already"; return 0; fi
+  # Android's own "Always allow": it answers adbd now (if the computer still waits) and writes the key the first time
+  # it sees one. Root holds every permission, MANAGE_DEBUGGING too. Its refusal (another computer asked) is silent.
+  timeout 10 service call adb 1 i32 1 s16 "$ak_" >/dev/null 2>&1 || say "adb: Android's allowDebugging call failed"
+  sleep ${GWA_ADB_SETTLE:-2}
+  if ! adb_has "$2"; then   # a key Android saw before keeps no line (its keystore has it): ours, then
+    mkdir -p "${ADB_KEYS%/*}" && { [ -f "$ADB_KEYS" ] && while IFS= read -r ck_ || [ -n "$ck_" ]; do printf '%s\n' "$ck_"; done < "$ADB_KEYS"; echo "$ak_"; } > "$ADB_KEYS.gw.tmp" && adb_write "$ADB_KEYS.gw.tmp" ||
+      { adb_answer "$1" error "couldn't write the adb key list"; return 0; }
+  fi
+  if ! adb_has "$2"; then adb_answer "$1" error "the key isn't in the adb key list after writing it"; return 0; fi
+  rm -f "$ADB_ASK"; : | adb_put adb-asking
+  adb_answer "$1" ok "allowed"
+}
+adb_remove() { # id fingerprint
+  if adb_installer "$2"; then adb_answer "$1" error "installer"; return 0; fi
+  adb_has "$2" || { adb_answer "$1" error "not-listed"; return 0; }
+  while IFS= read -r rk_ || [ -n "$rk_" ]; do [ "$(adb_fp "$rk_")" = "$2" ] || printf '%s\n' "$rk_"; done < "$ADB_KEYS" > "$ADB_KEYS.gw.tmp" &&
+    adb_write "$ADB_KEYS.gw.tmp" || { adb_answer "$1" error "couldn't write the adb key list"; return 0; }
+  if adb_has "$2"; then adb_answer "$1" error "the key is still in the adb key list"; return 0; fi
+  adb_answer "$1" ok "removed"
+}
+
 # --- main ------------------------------------------------------------------------------------
 status applying
 zstate
 fw_init
 portal_start
 hn_apply
+adb_start    # the computers allowed over USB adb: the follower, and Android's key timeout off
 bw_check     # once, on the first boot after the boot writer's restart
 [ -n "$GWA_ONCE" ] && LOOPS=$GWA_ONCE   # tests: run this many loops, then exit
 
@@ -1655,6 +1833,8 @@ while true; do
   fw_request   # an explicit firmware request runs first (and restarts the agent when done)
   thread_leave # "Leave Thread network", in every mode
   thread_stored
+  adb_request  # Manage's Allow or Remove of a computer over USB adb, in every mode
+  adb_list
   bt_publish   # the Bluetooth adapter's address for the app (#246), in every mode
   peer_report
   if [ -n "$FW_HOLD" ]; then

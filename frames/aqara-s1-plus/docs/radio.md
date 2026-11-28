@@ -455,6 +455,29 @@ settings under it) compiled in. Everything else in the v4 table holds. The app r
 for one release; `s1kiosk_radio.sh` and `s1kiosk_bundle.sh` stay in the repo for that release, for the
 old radio bundle that 0.4.3 boot images install.
 
+### Computers over USB adb
+
+Manage's Security page answers Android's "Allow USB debugging?" on the S1, as it does on the Mirror. Here the
+agent does the work, because the app can't hold `MANAGE_DEBUGGING` and can't read the system log. Why it goes
+this way is in [adb-keys.md](../research/adb-keys.md).
+
+| What | Where | Who writes it |
+|---|---|---|
+| The computer asking: `<epoch> <fingerprint> <key line>` | `/data/glassworks-pub/adb-asking` (root 0644) | the agent, from `Received public key:` lines that system_server's pid logged under `AdbDebuggingManager` in the last 10 minutes |
+| The allowed keys: `<installer\|added> <fingerprint> <key line>` per line of `/data/misc/adb/adb_keys` | `/data/glassworks-pub/adb-keys` | the agent; `installer` = a key in the boot image's `glassworks_adb_keys` |
+| A request: `<id> allow\|remove <fingerprint>` | the app's `files/adb/request` (taken with `--move`, at most 2 minutes old) | the app |
+| The answer: `<id> <ok\|error> <detail>` | `/data/glassworks-pub/adb-result` | the agent |
+| Status: `starting`, `ok`, `error <detail>` | `sys.glassworks.adb.status` | the agent |
+
+- `allow` takes only the computer asking now, by its fingerprint, so the app can never name a key of its own. The
+  agent answers Android with `IAdbManager.allowDebugging(true, key)` (`service call adb 1 i32 1 s16 <key>`, as root),
+  which lets the computer in at once, and then makes sure the key is in `adb_keys`.
+- `remove` takes a key out of `adb_keys`, keeping the file's owner, mode and label. It never removes the installer's
+  key, and a computer that is connected stays connected until it disconnects.
+- At every start the agent sets `adb_allowed_connection_time` to `0`. Android 10 would otherwise drop a key from
+  `adb_keys` 7 days after its computer last connected, the installer's key included. `tools/install.sh --undo`
+  deletes the setting again.
+
 ## Root helper contract (v4)
 
 The root half of the modes lives in a helper. The Magisk boot patch installs it as an init service

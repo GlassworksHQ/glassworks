@@ -85,6 +85,12 @@ open class AppManage(
         val logSource: (String) -> String? = { null },
         /** The About section's licence line. */
         val licence: String = "MPL-2.0 and MIT (see Open source licenses)",
+        /**
+         * The computers let in over USB adb, where the app's root side keeps `adb_keys` (the S1's frame agent): made
+         * with the app, the Manage files dir and a line for the Log. Null, or null back: none. Used only where
+         * the app can't answer Android itself ([UsbDebugging.available]).
+         */
+        val usb: ((Context, File, (String) -> Unit) -> UsbComputers?)? = null,
     )
     private val app = context.applicationContext
     private val dir = File(app.filesDir, "manage")
@@ -105,6 +111,9 @@ open class AppManage(
             // onHeard, which takes AdbComputers' own, so locking here (inside Allow) would invert the order.
             listening = { adbRequests?.following == true }, letIn = { coverQuestion(log = false) })
     }
+
+    /** The app's own kind ([Own.usb]), where the framework kind isn't available. */
+    private val rootAdb: UsbComputers? = if (adb != null) null else own.usb?.let { make -> orWithout(ADB_CARD, ::partFailed) { make(app, dir, ::adbEvent) } }
 
     private val adbRequests: UsbDebugging.Requests? = adb?.let { c ->
         orWithout(ADB_CARD, ::partFailed) {
@@ -136,7 +145,7 @@ open class AppManage(
         event = ::event,
         scripts = { name -> runCatching { app.assets.open("manage/$name").use { it.readBytes() } }.getOrNull() },
         // Without its log reader the card could see no computer asking, so it shows only with both.
-        usb = adb?.takeIf { adbRequests != null }?.let { ManageUsbDebugging(it, ManagePages()::time, ::adbEvent) },
+        usb = (adb?.takeIf { adbRequests != null } ?: rootAdb)?.let { ManageUsbDebugging(it, ManagePages()::time, ::adbEvent) },
     )
 
     /**

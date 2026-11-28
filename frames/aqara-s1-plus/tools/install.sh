@@ -525,6 +525,9 @@ if [[ $UNDO -eq 1 ]]; then
   for svc in zigbee_cpcd zigbee_socat zigbee_zigbeed zigbee_host zigbee_agent ha_matter ha_master; do
     try adb shell setprop ctl.start "$svc"
   done
+  # The frame agent turned Android's 7-day adb key timeout off (frames/aqara-s1-plus/docs/radio.md, computers over
+  # USB adb): back to Android's default.
+  try adb shell settings delete global adb_allowed_connection_time
   if [[ $DRY -eq 0 ]]; then
     HOME_ACT=$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tr -d '\r' | tail -1)
     case "$HOME_ACT" in

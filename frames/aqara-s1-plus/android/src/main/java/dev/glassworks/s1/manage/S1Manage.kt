@@ -8,11 +8,13 @@ import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.SignInServer
 import dev.glassworks.auth.ThreadJoin
 import dev.glassworks.manage.AppManage
+import java.io.File
 
 /**
  * The S1's Manage page (#33): the core's [AppManage], plus what only the S1 has. The radio's row links the
  * Thread network share, the QR pages serve the Thread join, the diagnostics end with the root side's
- * properties, and the log names the radio, time zone and wall base.
+ * properties, the log names the radio, time zone and wall base, and the Security page lets computers in over USB
+ * adb through the frame agent ([S1AdbComputers]).
  */
 class S1Manage(
     context: Context, runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs,
@@ -48,6 +50,11 @@ class S1Manage(
             },
             logSource = ::s1LogSource,
             licence = "MIT, with the Glassworks core under MPL-2.0",
+            // The computers over USB adb, which the frame agent keeps in adb_keys: on a frame loader image only.
+            usb = { context, dir, event ->
+                if (S1Names.of(AppManage::prop) !== S1Names.LOADER) null
+                else S1AdbComputers(File(S1AdbComputers.PUB), File(context.filesDir, S1AdbComputers.REQUEST), File(dir, "adb-notes.json"), event)
+            },
         )
     }
 }

@@ -9,13 +9,14 @@ import dev.glassworks.web.PageShell.esc
 
 /**
  * "Allow a new computer" on the Security page (#435), where the app can answer "Allow USB debugging?" itself
- * ([AdbComputers]): the computer asking now with its fingerprint and Allow, and the allowed list with Remove.
+ * ([AdbComputers]), or where a frame's root side keeps `adb_keys` (another [UsbComputers]): the computer asking now
+ * with its fingerprint and Allow, and the allowed list with Remove.
  * Allowing and removing need a browser signed in with Home Assistant, which lets in administrators only; one
  * signed in with the panel's code sees the cards without their buttons. Each try goes to the Log with the
  * computer's fingerprint, never its key.
  */
 class ManageUsbDebugging(
-    private val computers: AdbComputers,
+    private val computers: UsbComputers,
     /** A time as the Log shows it ([ManagePages.time]). */
     private val time: (Long) -> String,
     /** A line for the Log. */
@@ -30,17 +31,22 @@ class ManageUsbDebugging(
             asking == null -> """<div class="row static note"><span>${esc(NONE_ASKING)}</span></div>"""
             !v.homeAssistant -> """<div class="row static"><div><b>A computer is asking</b>${about(asking, null)}<span class="fix">${esc(NEEDS_HA)}</span></div></div>"""
             else -> """<form class="row usb" method="post" action="$ALLOW">${csrf(v)}<input type="hidden" name="fingerprint" value="${esc(asking.fingerprint)}">""" +
-                """<div><b>A computer is asking</b>${about(asking, null)}<label class="sw"><input type="checkbox" name="remember" value="1" checked> Let it in each time it connects</label></div>""" +
+                """<div><b>A computer is asking</b>${about(asking, null)}${remember()}</div>""" +
                 """<button class="pill sm primary" type="submit">Allow this computer</button></form>"""
         }
         val list = computers.list()
         val rows = if (list.isEmpty()) """<div class="row static note"><span>${esc(NONE_LISTED)}</span></div>""" else list.joinToString("") { l ->
             val remove = if (v.homeAssistant) """<form method="post" action="$REMOVE">${csrf(v)}<input type="hidden" name="fingerprint" value="${esc(l.key.fingerprint)}"><button class="pill sm" type="submit">Remove</button></form>""" else ""
-            """<div class="row static usb"><div><b>${esc(l.key.name ?: "A computer")}</b>${about(l.key, "Added ${time(l.addedMs)}${if (l.by.isNotEmpty()) " by ${l.by}" else ""}")}</div>$remove</div>"""
+            val added = if (l.addedMs > 0) "Added ${time(l.addedMs)}${if (l.by.isNotEmpty()) " by ${l.by}" else ""}" else ALLOWED_ELSEWHERE
+            """<div class="row static usb"><div><b>${esc(l.key.name ?: "A computer")}</b>${about(l.key, added)}</div>$remove</div>"""
         }
         return """<section class="card list"><div class="lh"><b>Allow a new computer</b><span>USB debugging</span></div>$status$ask</section>""" +
             """<section class="card list"><div class="lh"><b>Allowed computers</b><span>${list.size}</span></div>$rows</section>$CSS"""
     }
+
+    /** The "each time it connects" switch, where Allow can also let a computer in for this connection only. */
+    private fun remember() = if (computers.alwaysRemembers) "" else
+        """<label class="sw"><input type="checkbox" name="remember" value="1" checked> Let it in each time it connects</label>"""
 
     /** A computer's lines: [what] (or its name, when it gives one), then its fingerprint. */
     private fun about(key: AdbKey, what: String?): String {
@@ -67,8 +73,9 @@ class ManageUsbDebugging(
             AdbComputers.Removed.DONE -> Result.REMOVED
             AdbComputers.Removed.NOT_LISTED -> Result.GONE
             AdbComputers.Removed.NOT_SAVED -> Result.NOT_REMOVED
+            AdbComputers.Removed.NO_ANSWER -> Result.NO_ANSWER
         })
-        return done(when (computers.allowAsking(fingerprint, form["remember"] == "1", who)) {
+        return done(when (computers.allowAsking(fingerprint, computers.alwaysRemembers || form["remember"] == "1", who)) {
             AdbComputers.Allowed.ONCE -> Result.ONCE
             AdbComputers.Allowed.FROM_NOW_ON -> Result.FROM_NOW_ON
             AdbComputers.Allowed.CHANGED -> Result.CHANGED
@@ -79,6 +86,7 @@ class ManageUsbDebugging(
             AdbComputers.Allowed.REFUSED_NONE_WAITING -> Result.REFUSED_NONE_WAITING
             AdbComputers.Allowed.UNCONFIRMED -> Result.UNCONFIRMED
             AdbComputers.Allowed.NOT_REMEMBERED -> Result.NOT_REMEMBERED
+            AdbComputers.Allowed.NO_ANSWER -> Result.NO_ANSWER
         })
     }
 
@@ -99,6 +107,7 @@ class ManageUsbDebugging(
         REFUSED("refused", false, "Android didn't let it in: another computer is the one waiting. Plug this one in again, then reload this page."),
         NOT_REMEMBERED("unsaved", false, "Allowed for this connection only: the panel couldn't save the list. The computer asks again next time."),
         NOT_REMOVED("notremoved", false, "Not removed: the panel couldn't save the list. The computer is still allowed. Try again."),
+        NO_ANSWER("noanswer", false, "The panel didn't answer in time. Reload this page in a minute to see whether it took."),
         SIGN_IN("signin", false, NEEDS_HA),
     }
 
@@ -109,6 +118,8 @@ class ManageUsbDebugging(
         const val NEEDS_HA = "Allowing or removing a computer needs a Home Assistant administrator. Sign out, then sign in with Home Assistant."
         const val NONE_ASKING = "No computer is asking. Plug one in with USB debugging on and run adb devices: it shows as unauthorized there, and here."
         const val NONE_LISTED = "None yet. The computer that installed Glassworks always gets in."
+        /** A listed computer nobody recorded adding on this page: let in on the panel's own screen. */
+        const val ALLOWED_ELSEWHERE = "Allowed on the panel itself"
         private const val CSS = """<style>.row .fp{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
 .row.usb{flex-wrap:wrap;row-gap:10px}.row.usb>div{flex:1 1 280px;min-width:0}.row.usb .sw{display:flex;justify-content:flex-start;align-items:center;gap:10px;margin-top:8px;color:var(--muted);font-size:15px}</style>"""
     }

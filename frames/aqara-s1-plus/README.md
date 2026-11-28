@@ -336,6 +336,7 @@ Detailed engineering notes for the Aqara S1 Plus ([see all research notes](../..
 - [hardware.md](research/hardware.md): Board teardown, SoC, FEL button, and 3-pin UART console setup
 - [boot-log.md](research/boot-log.md): Annotated stock boot log, BOOT0 DRAM bring-up, secure boot, and partitions
 - [findings.md](research/findings.md): Root, SELinux, AVB, partitions, USB/adb defaults, and why buttonless USB entry is unavailable
+- [adb-keys.md](research/adb-keys.md): Why the panel never asks for an adb key, letting a new computer in from Manage, and Android 10's key timeout
 - [fel.md](research/fel.md): Mainline U-Boot over FEL, A133 DDR4 fix, CPU clocking, chunked uploads, and fastboot
 - [root.md](research/root.md): Persistent Magisk root, root helper threat model, first-boot adb provisioning, and `fel-install.sh`
 - [web-installer.md](research/web-installer.md): WebUSB installer design spec (FEL, fastboot, byte-exact boot patching, per-OS setup)
