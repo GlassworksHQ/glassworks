@@ -163,6 +163,13 @@ subprojects {
                 apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
             }
         }
+        // Interfaces as Kotlin 2.1 compiles them, whatever languageVersion says: default bodies in DefaultImpls, no
+        // interface default methods and no `$jd` bridges. Apps on Kotlin 2.1 and older that implement a library's
+        // interface call those DefaultImpls, so a library never drops them (no @JvmDefaultWithoutCompatibility, no
+        // other mode). The app's own modules build without them (build-logic/glassworks.android).
+        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
+            compilerOptions.jvmDefault.set(org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.DISABLE)
+        }
         // The licence in the jar, and in the AAR's classes.jar, as META-INF/LICENSE (which apps drop when they
         // package: one of AGP's default excludes), with any extraLicenses and the NOTICE in the library's own
         // folder, META-INF/dev.glassworks/<name>/. An app that depends on two libraries with the same extra

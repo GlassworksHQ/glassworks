@@ -339,9 +339,15 @@ public class WifiProvisioner(
     @SuppressLint("DiscouragedPrivateApi", "SoonBlockedPrivateApi")
     private fun requirePmf(c: WifiConfiguration, securityType: Int) {
         runCatching {
-            if (Compat.hasSecurityParams) c.setSecurityParams(securityType)
+            if (Compat.hasSecurityParams) Api30.setSecurityParams(c, securityType)
             else WifiConfiguration::class.java.getField("requirePMF").setBoolean(c, true)
         }.onFailure { Log.w(TAG, "could not require PMF", it) }
+    }
+
+    /** Android 11's call in a class of its own, so Android 10 never has to look for it in this one. */
+    @androidx.annotation.RequiresApi(30)
+    private object Api30 {
+        fun setSecurityParams(c: WifiConfiguration, securityType: Int) = c.setSecurityParams(securityType)
     }
 
     private fun wifiNetworkUp(): Boolean = runCatching {

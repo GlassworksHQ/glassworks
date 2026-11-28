@@ -1,0 +1,9 @@
+# The Sendspin pane: the classes and methods that run in a cold start, through the first dashboard frame, as an ART
+# baseline profile (human-readable rules; docs/research/art-start-path.md). The release build merges every module's
+# file into the APK (assets/dexopt/baseline.prof), and ProfileInstaller hands it to Android at the first start:
+# Android compiles these ahead of time the next time it optimizes the app. `*` is one package level, `**` any depth.
+# A package listed here runs at every start; the ones left out run only when someone opens them.
+
+# The pane (its client is in the core's rules)
+HSPLdev/glassworks/speaker/**;->**(**)**
+Ldev/glassworks/speaker/**;

@@ -166,12 +166,19 @@ class WifiLocalOnlyAp(context: Context, private val platform: PlatformApi = Plat
         return true
     }
 
-    @Suppress("DEPRECATION") // getWifiConfiguration below Android 11, SoftApConfiguration.getSsid from 13: both still answer
+    @Suppress("DEPRECATION") // getWifiConfiguration below Android 11: still answers
     private fun network(r: WifiManager.LocalOnlyHotspotReservation): HotspotNetwork? {
-        val (ssid, key) = if (platform.hasSoftApConfiguration) r.softApConfiguration.let { it.ssid to it.passphrase }
+        val (ssid, key) = if (platform.hasSoftApConfiguration) Api30.ssidAndKey(r)
         else r.wifiConfiguration?.let { it.SSID to it.preSharedKey } ?: (null to null)
         val s = ssid?.trim('"')?.takeIf { it.isNotEmpty() } ?: return null
         val k = key?.trim('"')?.takeIf { it.isNotEmpty() } ?: return null
         return HotspotNetwork(s, k)
+    }
+
+    /** SoftApConfiguration (Android 11) in a class of its own, so Android 10 verifies this one at install (StartPathVerifyTest). */
+    private object Api30 {
+        @Suppress("DEPRECATION") // SoftApConfiguration.getSsid from 13: still answers
+        fun ssidAndKey(r: WifiManager.LocalOnlyHotspotReservation): Pair<String?, String?> =
+            r.softApConfiguration.let { it.ssid to it.passphrase }
     }
 }

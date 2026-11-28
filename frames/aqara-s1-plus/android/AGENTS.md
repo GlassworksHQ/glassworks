@@ -56,6 +56,13 @@ A new library in `libs/` or a new pane needs a branded README header: see
 - **Never read `Build.VERSION.SDK_INT` outside `dev.glassworks.platform`.** Add a named query to
   `Platform` instead (libraries keep theirs in their own `Compat.kt`). `PlatformConfinementTest`
   fails the build otherwise.
+- **A call to an API above Android 10 goes in a nested `private object ApiNN`** (NN its API level, e.g.
+  `PlatformApi.Api30`) that only its `Platform` query's branch reaches, never inline in the class that asks. Android
+  10's verifier can't find the call, and one in a big class has it verify that class, and everything that extends it,
+  again at every start ([art-start-path.md](../../../docs/research/art-start-path.md)). `StartPathVerifyTest` fails
+  the build otherwise, and on Kotlin's interface-default bridges.
+- **A package that runs at every start is listed in its module's `src/main/baseline-prof.txt`**, the baseline
+  profile Android compiles ahead of time. A new package on the start path gets a line there.
 - **Never use GeckoView outside `dev.glassworks.engine.gecko`.** Everything else goes through
   `Engine` and `Page` (`glassworks.engine`). `EngineConfinementTest` fails the build otherwise.
 - Device-specific code (sensors, `/dev/ttyS3`, the radio, Aqara binder calls) belongs behind a seam

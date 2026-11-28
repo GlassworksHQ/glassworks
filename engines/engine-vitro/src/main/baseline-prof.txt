@@ -1,0 +1,29 @@
+# Vitro: the classes and methods that run in a cold start, through the first dashboard frame, as an ART
+# baseline profile (human-readable rules; docs/research/art-start-path.md). The release build merges every module's
+# file into the APK (assets/dexopt/baseline.prof), and ProfileInstaller hands it to Android at the first start:
+# Android compiles these ahead of time the next time it optimizes the app. `*` is one package level, `**` any depth.
+# A package listed here runs at every start; the ones left out run only when someone opens them (the Clarity harness, engine/vitro/clarity).
+
+# The engine and its page, HA's websocket client, the Lovelace model, the layouts and cards, fonts, themes, cameras
+HSPLdev/glassworks/engine/vitro/*;->**(**)**
+Ldev/glassworks/engine/vitro/*;
+HSPLdev/glassworks/engine/vitro/data/**;->**(**)**
+Ldev/glassworks/engine/vitro/data/**;
+HSPLdev/glassworks/engine/vitro/model/**;->**(**)**
+Ldev/glassworks/engine/vitro/model/**;
+HSPLdev/glassworks/engine/vitro/cards/**;->**(**)**
+Ldev/glassworks/engine/vitro/cards/**;
+HSPLdev/glassworks/engine/vitro/ui/**;->**(**)**
+Ldev/glassworks/engine/vitro/ui/**;
+HSPLdev/glassworks/engine/vitro/theme/**;->**(**)**
+Ldev/glassworks/engine/vitro/theme/**;
+HSPLdev/glassworks/engine/vitro/fonts/**;->**(**)**
+Ldev/glassworks/engine/vitro/fonts/**;
+HSPLdev/glassworks/engine/vitro/compat/**;->**(**)**
+Ldev/glassworks/engine/vitro/compat/**;
+HSPLdev/glassworks/engine/vitro/island/**;->**(**)**
+Ldev/glassworks/engine/vitro/island/**;
+HSPLdev/glassworks/engine/vitro/camera/**;->**(**)**
+Ldev/glassworks/engine/vitro/camera/**;
+HSPLdev/glassworks/engine/vitro/net/**;->**(**)**
+Ldev/glassworks/engine/vitro/net/**;

@@ -1,0 +1,21 @@
+# The GeckoView engine: the classes and methods that run in a cold start, through the first dashboard frame, as an ART
+# baseline profile (human-readable rules; docs/research/art-start-path.md). The release build merges every module's
+# file into the APK (assets/dexopt/baseline.prof), and ProfileInstaller hands it to Android at the first start:
+# Android compiles these ahead of time the next time it optimizes the app. `*` is one package level, `**` any depth.
+# A package listed here runs at every start; the ones left out run only when someone opens them (GeckoView's media classes).
+
+# The engine, and GeckoView's Java side that starts the runtime, a session and its content process (Vitro's islands and fallback use it too)
+HSPLdev/glassworks/engine/gecko/**;->**(**)**
+Ldev/glassworks/engine/gecko/**;
+HSPLorg/mozilla/geckoview/*;->**(**)**
+Lorg/mozilla/geckoview/*;
+HSPLorg/mozilla/gecko/*;->**(**)**
+Lorg/mozilla/gecko/*;
+HSPLorg/mozilla/gecko/util/**;->**(**)**
+Lorg/mozilla/gecko/util/**;
+HSPLorg/mozilla/gecko/process/**;->**(**)**
+Lorg/mozilla/gecko/process/**;
+HSPLorg/mozilla/gecko/gfx/**;->**(**)**
+Lorg/mozilla/gecko/gfx/**;
+HSPLorg/mozilla/gecko/mozglue/**;->**(**)**
+Lorg/mozilla/gecko/mozglue/**;

@@ -266,7 +266,7 @@ public class ImprovBleServer(
         val c = chars[p.uuid] ?: return
         inFlight = true
         val ok = if (Compat.hasValueNotify) {
-            s.notifyCharacteristicChanged(p.device, c, false, p.value) == BluetoothStatusCodes.SUCCESS
+            Api33.notify(s, p.device, c, p.value)
         } else {
             @Suppress("DEPRECATION")
             c.value = p.value
@@ -539,5 +539,16 @@ public class ImprovBleServer(
             AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "FEATURE_UNSUPPORTED"
             else -> "error $code"
         }
+    }
+
+    /**
+     * Android 13's notify in a class of its own: Android 10's verifier can't find it, and a call it can't find in this
+     * class would have it verify the whole server again at run time, in every process start that uses it.
+     */
+    @RequiresApi(33)
+    private object Api33 {
+        @SuppressLint("MissingPermission")
+        fun notify(s: BluetoothGattServer, device: BluetoothDevice, c: BluetoothGattCharacteristic, value: ByteArray): Boolean =
+            s.notifyCharacteristicChanged(device, c, false, value) == BluetoothStatusCodes.SUCCESS
     }
 }

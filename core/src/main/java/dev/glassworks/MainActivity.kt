@@ -14,6 +14,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import android.view.Window
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
@@ -1059,11 +1060,7 @@ open class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     private fun hideSystemUi() {
         if (Platform.hasWindowInsetsController) {
-            window.setDecorFitsSystemWindows(false)
-            window.insetsController?.let {
-                it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
+            Api30.hideSystemBars(window)
         } else {
             window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                 or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
@@ -1626,5 +1623,20 @@ open class MainActivity : Activity() {
         private const val STATE_SETUP_UP = "dev.glassworks.setup_up"
         private const val STATE_RESTARTED_IN_SETUP = "dev.glassworks.restarted_in_setup"
         private const val STATE_PID = "dev.glassworks.pid"
+    }
+
+    /**
+     * The Android 11 calls, in a class of their own: Android 10's verifier can't find them, and a call it can't find
+     * in MainActivity itself would have it verify the whole activity again at every start
+     * (docs/research/art-start-path.md, StartPathVerifyTest).
+     */
+    private object Api30 {
+        fun hideSystemBars(window: Window) {
+            window.setDecorFitsSystemWindows(false)
+            window.insetsController?.let {
+                it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        }
     }
 }

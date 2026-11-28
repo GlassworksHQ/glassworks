@@ -39,6 +39,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
 ### Changed
+- **The app starts faster after a restart.** Android now checks the app's code once, when it installs an update,
+  instead of again every time the app starts, which took about a quarter of a second of each start on the panel. The
+  app also tells Android which of its code runs at start, so Android can prepare that code ahead of time the next time
+  it optimizes its apps.
 - **Vitro dashboards open faster and stay smoother while values change.** With Vitro on, big dashboards build their
   cards with less work, history graphs and sensor graphs read their history in the background, and a value that keeps
   changing, such as a power sensor or a clock with seconds, no longer makes the whole dashboard lay itself out again.

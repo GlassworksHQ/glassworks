@@ -118,6 +118,17 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.17")
     // The panes' blueprints parsed as YAML (BlueprintCatalogTest): the version GeckoView already puts in the APK.
     testImplementation("org.yaml:snakeyaml:2.2")
+    // StartPathVerifyTest reads the app's compiled classes: the ASM Robolectric already brings (BSD-3-Clause), tests only.
+    testImplementation("org.ow2.asm:asm:9.10.1")
+}
+
+// StartPathVerifyTest's API database: api-versions.xml beside the compile SDK's android.jar.
+val apiVersions = androidComponents.sdkComponents.bootClasspath.map { jars ->
+    jars.map { it.asFile }.single { it.name == "android.jar" }.resolveSibling("data/api-versions.xml")
+}
+tasks.withType<Test>().configureEach {
+    inputs.file(apiVersions).withPropertyName("apiVersions").withPathSensitivity(PathSensitivity.NONE)
+    jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Dglassworks.apiVersions=${apiVersions.get().path}") })
 }
 
 // Open source licences screen (hidden settings → "Open source licences"): the repo's

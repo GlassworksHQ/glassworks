@@ -12,6 +12,8 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Changed
+- **The app starts faster.** The app now tells Android which of its code runs at start, so Android prepares that code
+  ahead of time the next time it optimizes its apps, and Android 10 and older check less of the app's code at every start.
 - **Softer voice chimes.** The wake word and finished timers now play a soft, rounded chime that swells in and
   rings out, instead of electronic beeps. The timer chime is the wake chime followed by a higher one, so it still
   stands out as an alert.
