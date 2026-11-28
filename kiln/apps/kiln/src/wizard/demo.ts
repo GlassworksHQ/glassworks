@@ -16,7 +16,7 @@ import { firstStart, type Changed } from './state';
 import type { AppPhase, DemoFrame } from '@glassworks/kiln-core';
 import { Session, type SessionDeps } from './session';
 
-export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'first-boot', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'panes', 'panes-busy', 'panes-refused', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
+export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'first-boot', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'home-assistant-signed-in', 'panes', 'panes-busy', 'panes-refused', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
   'done', 'done-old-boot', 'undo', 'undo-refused', 'undo-refused-splash', 'undo-apps-back', 'undo-still-on', 'undo-unreadable', 'undo-connect', 'restore', 'undo-done', 'error', 'error-written',
   'error-no-recovery', 'error-secure-boot', 'error-not-this-panel', 'error-usb-unreliable', 'error-download', 'error-release', 'error-no-release', 'error-not-started', 'error-adb-held',
   'error-backup-refused', 'error-nothing-picked', 'error-earlier', 'error-unknown', 'error-unknown-written'] as const;
@@ -48,11 +48,11 @@ export interface DemoPanes { cards: PaneCard[]; refuse?: string }
  * The app's setup channel on a simulated panel. `radio`: the app reports one (a frame without one leaves it out).
  * `panes`: the app offers the Panes step (issue 621); without, it has none, as apps before it.
  */
-function setupStream(net: Net, radio = true, panes?: DemoPanes): ByteStream {
+function setupStream(net: Net, radio = true, panes?: DemoPanes, ha?: Partial<SetupState['ha']>): ByteStream {
   let cb: (c: Uint8Array) => void = () => {};
   const state: SetupState = {
     ip: net.online ? IP : undefined,
-    ha: { discovered: 'http://homeassistant.local:8123', url: '', signedIn: false, signinUrl: `http://${IP}:8099/signin` },
+    ha: { discovered: 'http://homeassistant.local:8123', url: '', signedIn: false, signinUrl: `http://${IP}:8099/signin`, ...ha },
     radio: {
       mode: 'off', status: 'Off: radio idle', helper: true, answered: false,
       options: [
@@ -72,13 +72,14 @@ function setupStream(net: Net, radio = true, panes?: DemoPanes): ByteStream {
     close: async () => {},
     write: async (data) => {
       for (const line of new TextDecoder().decode(data).split('\n').filter(Boolean)) {
-        const m = JSON.parse(line) as { id: number; op: string; url?: string; mode?: string; on?: string };
+        const m = JSON.parse(line) as { id: number; op: string; url?: string; dashboard?: string; mode?: string; on?: string };
         if (m.op === 'panes.set' && panes?.refuse) { send({ id: m.id, ok: false, error: panes.refuse }, 1200); continue; }
         if (m.op === 'panes.set') {
           const on = new Set((m.on ?? '').split(',').filter(Boolean));
           state.panes = state.panes?.map((c) => ({ ...c, on: on.has(c.id) }));
         }
         if (m.op === 'set_ha') { state.ha.url = m.url; setTimeout(() => { state.ha.signedIn = true; send({ event: 'state', state }); }, 6000); }
+        if (m.op === 'ha.set_dashboard' && m.dashboard) state.ha.dashboard = m.dashboard;
         if (m.op === 'set_radio') {
           state.radio.mode = m.mode!;
           state.radio.answered = true;
@@ -151,7 +152,7 @@ export function withAppStreams(p: PanelShell, o: { online: boolean; wifiFails?: 
  * `app`: Glassworks' version on the device (`dumpsys package`), or null when it isn't installed. `current`: its
  * software is current, so it answers the frame's `sim.props`.
  */
-export function simulatedPanel({ frame, sim }: DemoFrame, wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }, current = true, panes?: DemoPanes): PanelShell {
+export function simulatedPanel({ frame, sim }: DemoFrame, wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }, current = true, panes?: DemoPanes, ha?: Partial<SetupState['ha']>): PanelShell {
   const net: Net = { online };
   const pkg = frame.appId.package;
   const prop = (cmd: string) => (current ? sim.props[cmd.replace(/^getprop /, '')] : undefined);
@@ -164,7 +165,7 @@ export function simulatedPanel({ frame, sim }: DemoFrame, wifiFails = false, onl
   return {
     run: async (cmd) => ({ out: out(cmd), code: 0 }),
     push: async () => {},
-    openStream: async (svc) => (svc === SETUP_SOCKET ? setupStream(net, true, panes) : improvStream(wifiFails, net)),
+    openStream: async (svc) => (svc === SETUP_SOCKET ? setupStream(net, true, panes, ha) : improvStream(wifiFails, net)),
   };
 }
 
@@ -226,7 +227,10 @@ export function demoSession(d: DemoFrame, which: Demo): Session {
     : which === 'radio-thread-old' ? { name: '0.4.3', code: 403 } : { name: '0.5.0', code: 500 };
   // the Panes mockup (issue 621, for approval): an app that offers the step; every other state's app has none, as today's
   const panes = which.startsWith('panes') ? { cards: sim.panes ?? [], refuse: which === 'panes-refused' ? 'Voice couldn\'t open the microphone. Try again, or leave Voice off.' : undefined } : undefined;
-  const panel = simulatedPanel(d, which === 'wifi-fail', which !== 'wifi-fail' && which !== 'wifi-new', app, true, panes);
+  const ha = which === 'home-assistant-signed-in'
+    ? { url: 'http://homeassistant.local:8123', signedIn: true, dashboards: ['Default', 'Tablet', 'Energy'], dashboard: 'Default' }
+    : undefined;
+  const panel = simulatedPanel(d, which === 'wifi-fail', which !== 'wifi-fail' && which !== 'wifi-new', app, true, panes, ha);
   let adbAllowed = which !== 'run'; // the static states start on an installed panel
   const deps: SessionDeps = {
     recipe: sim.recipe,
@@ -326,6 +330,7 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
       await session.route('wifi');
       return;
     case 'home-assistant':
+    case 'home-assistant-signed-in':
       await session.route('home-assistant');
       return;
     case 'panes': // the Panes step (issue 621): a switch per pane the app offers

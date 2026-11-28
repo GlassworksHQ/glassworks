@@ -217,6 +217,42 @@ describe('the setup steps over the LAN', () => {
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Finish' })); });
     expect(calls.at(-1)).toBe('applyRadio off');
   });
+
+  it('HomeAssistant shows a Dashboard select once signed in with custom dashboards and submits it on Continue', async () => {
+    const saved: [string, string | undefined][] = [];
+    const steps: SetupSteps = {
+      click: async (_name, run) => { await run(); },
+      signIn: () => {},
+      saveHa: async (u, d) => { saved.push([u, d]); },
+      skipHa: async () => {},
+      panes: async () => {},
+      applyPanes: async () => {},
+      radio: async () => {},
+      applyRadio: async () => {},
+      finish: () => {},
+    };
+    const { rerender } = render(
+      <HomeAssistant busy={false} steps={steps} setup={{
+        phase: 'ha',
+        ha: { ...panelState.ha, url: 'http://homeassistant.local:8123', signedIn: true, dashboards: ['Default', 'Tablet', 'Energy'], dashboard: 'Default' },
+      }} />,
+    );
+    const select = screen.getByRole('combobox', { name: /Dashboard/ }) as HTMLSelectElement;
+    expect(select.value).toBe('Default');
+    expect(screen.getByText('Leave on Default for your Home Assistant default dashboard.')).toBeTruthy();
+    fireEvent.change(select, { target: { value: 'Tablet' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(saved).toEqual([['http://homeassistant.local:8123', 'Tablet']]);
+
+    // Hidden when only Default exists (no custom dashboards).
+    rerender(
+      <HomeAssistant busy={false} steps={steps} setup={{
+        phase: 'ha',
+        ha: { ...panelState.ha, url: 'http://homeassistant.local:8123', signedIn: true, dashboards: ['Default'], dashboard: 'Default' },
+      }} />,
+    );
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
 });
 
 describe('the Panes step\'s switches', () => {

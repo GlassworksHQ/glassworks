@@ -23,6 +23,7 @@ function fakeApp(): ByteStream & { sent: object[]; push(o: object): void } {
         self.sent.push(m);
         if (m.op === 'set_radio' && !state.radio.helper && m.mode !== 'off') { queueMicrotask(() => self.push({ id: m.id, ok: false, error: 'needs the root helper' })); continue; }
         if (m.op === 'set_ha') state.ha.url = m.url;
+        if (m.op === 'ha.set_dashboard') state.ha.dashboard = m.dashboard;
         if (m.op === 'wifi.join' && state.online) { queueMicrotask(() => self.push({ id: m.id, ok: false, error: 'The panel is on a network already.' })); continue; }
         if (m.op === 'wifi.scan') { queueMicrotask(() => self.push({ id: m.id, ok: true, state, networks: [{ ssid: 'Example-WiFi', rssi: -50, secure: true }] })); continue; }
         if (m.op === 'set_online') { state.online = true; continue; }
@@ -79,6 +80,14 @@ describe('setup channel', () => {
     expect(validHaUrl('https://ha.example.com/dash')).toBe(true);
     expect(validHaUrl('homeassistant.local')).toBe(false);
     expect(validHaUrl("http://x'; reboot")).toBe(false);
+  });
+
+  it('ha.set_dashboard sends the chosen dashboard label and updates state', async () => {
+    const app = fakeApp();
+    const c = new SetupChannel(app);
+    const st = await c.setDashboard('Tablet');
+    expect(st.ha.dashboard).toBe('Tablet');
+    expect(app.sent).toEqual([{ id: 1, op: 'ha.set_dashboard', dashboard: 'Tablet' }]);
   });
 });
 

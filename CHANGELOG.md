@@ -9,6 +9,7 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Pick your Home Assistant dashboard anywhere.** Glassworks now fetches your Lovelace dashboards directly from Home Assistant as soon as the panel signs in. Choose which dashboard the panel shows right after signing in in Kiln or on the `/setup` page, anytime in **Home Assistant & dashboard** on the panel or the Manage page (reloading in place without restarting), or from the **Dashboard** select entity in Home Assistant, which is now enabled by default.
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
   with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel

@@ -42,6 +42,10 @@ class SettingsMockups {
         radioRunning: Boolean, deviceSettings: Boolean = true, facts: RadioFollowUp.Facts = off,
         extra: List<dev.glassworks.pane.PaneDefinition> = emptyList(), panelIp: String? = null,
         volume: dev.glassworks.audio.MasterVolume = MenuFixture.volume(),
+        dashboards: List<dev.glassworks.dashboard.Dashboard> = listOf(
+            dev.glassworks.dashboard.Dashboard("tablet", "Tablet"),
+            dev.glassworks.dashboard.Dashboard("energy", "Energy"),
+        ),
     ): KioskSettingsOverlay {
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         val app = RuntimeEnvironment.getApplication()
@@ -55,7 +59,7 @@ class SettingsMockups {
             ),
             radio,
         ) + MenuFixture.switchOnly(app) + extra
-        o.show(MenuFixture.model(app, radio, deviceSettings, status = "screen on · presence near · voice=idle", panes = panes, panelIp = { panelIp }, volume = volume))
+        o.show(MenuFixture.model(app, radio, deviceSettings, status = "screen on · presence near · voice=idle", panes = panes, panelIp = { panelIp }, volume = volume, dashboards = { dashboards }))
         Mockup.idle()
         return o
     }

@@ -85,6 +85,7 @@ function fakePanel({ open = true, online = undefined as boolean | undefined, rad
               else { panel.joined = { ssid: m.ssid, password: m.password }; r = { id: m.id, ok: true, state: st }; }
             } else {
               if (m.op === 'set_ha') st.ha.url = m.url;
+              if (m.op === 'ha.set_dashboard') st.ha.dashboard = m.dashboard;
               if (m.op === 'set_radio') { st.radio.mode = m.mode; st.radio.answered = true; }
               r = { id: m.id, ok: true, state: st };
             }
@@ -497,6 +498,19 @@ describe('the panel\'s setup page', () => {
       panel.st.ha = { ...panel.st.ha, url: 'http://192.0.2.20:8123', signedIn: true };
       const lan = new LanSession({ ...panel, backFromSignIn: true });
       await lan.start();
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+
+    it('back from it, signed in with custom dashboards: stays on Home Assistant to pick one, then advances on Continue', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      panel.st.ha = { ...panel.st.ha, url: 'http://192.0.2.20:8123', signedIn: true, dashboards: ['Default', 'Tablet', 'Energy'], dashboard: 'Default' };
+      const lan = new LanSession({ ...panel, backFromSignIn: true });
+      await lan.start();
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'ha', ha: { signedIn: true, dashboards: ['Default', 'Tablet', 'Energy'] } } });
+      await lan.saveHa('http://192.0.2.20:8123', 'Energy');
+      expect(panel.asked).toContain('ha.set_dashboard');
+      expect(panel.st.ha.dashboard).toBe('Energy');
       expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
     });
 

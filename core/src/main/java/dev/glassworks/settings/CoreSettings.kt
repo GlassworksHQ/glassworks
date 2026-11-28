@@ -8,6 +8,8 @@ import dev.glassworks.screen.ScreenHardware
 import dev.glassworks.theme.Themes
 import dev.glassworks.KioskPrefs
 import dev.glassworks.audio.MasterVolume
+import dev.glassworks.dashboard.Dashboard
+import dev.glassworks.dashboard.DashboardOptions
 import dev.glassworks.discovery.HaUrls
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -44,10 +46,14 @@ class CoreSettings(
     private val screenLock: () -> Boolean = { false },
     /** The master volume, for the Sound page; null leaves the page out. */
     private val volume: MasterVolume? = null,
+    /** The Lovelace dashboards known for the panel's Home Assistant, for the Dashboard picker. */
+    private val dashboards: () -> List<Dashboard> = { emptyList() },
 ) {
     class Live(
         /** Full screen: the page hides or shows HA's header and sidebar. */
         val fullScreen: () -> Unit = {},
+        /** The chosen dashboard changed to [url] (same origin): reload the dashboard in place without restarting. */
+        val dashboard: (url: String) -> Unit = {},
         /** The presence sensor takes the new range: null, or why it couldn't. */
         val presenceRange: () -> String? = { null },
         /** Brightness follows the light sensor, or stops. */
@@ -84,6 +90,7 @@ class CoreSettings(
                     }
                 }
             },
+            dashboard(),
             account()?.let { SettingsItem.Info(title = { ACCOUNT_TITLE }, detail = { account().orEmpty() }) },
             switch("Full screen", "Hide Home Assistant's header and sidebar", { prefs.hideHeader }) {
                 prefs.hideHeader = it
@@ -249,6 +256,36 @@ class CoreSettings(
         "${b.substringAfter("://").substringBefore("/").substringBefore(":")} · found automatically"
     } ?: "Found automatically"
 
+    /**
+     * Picks one of Home Assistant's Lovelace dashboards on the same host (reloads in place, no restart).
+     * Shown once Home Assistant is known and either custom dashboards exist or a custom URL is saved.
+     */
+    private fun dashboard(): SettingsItem.Choice? {
+        val base = prefs.settingBase ?: return null
+        val initial = dashboards()
+        val initialCurrent = DashboardOptions.currentOption(prefs.urlSetting, base, initial)
+        if (initial.isEmpty() && initialCurrent != DashboardOptions.CUSTOM) return null
+        return SettingsItem.Choice(
+            DASHBOARD_ROW_TITLE,
+            value = { DashboardOptions.currentOption(prefs.urlSetting, prefs.settingBase, dashboards()) },
+            options = {
+                val list = dashboards()
+                val cur = DashboardOptions.currentOption(prefs.urlSetting, prefs.settingBase, list)
+                DashboardOptions.pickerOptions(list, cur).map { it to it }
+            },
+            perPanel = true,
+        ) { option, done ->
+            val list = dashboards()
+            val cur = DashboardOptions.currentOption(prefs.urlSetting, prefs.settingBase, list)
+            if (option == DashboardOptions.CUSTOM || option == cur) return@Choice done(null)
+            val url = DashboardOptions.urlFor(option, prefs.urlSetting, prefs.settingBase, prefs.haUrl, list)
+                ?: return@Choice done("Home Assistant isn't known yet.")
+            prefs.urlSetting = url
+            live.dashboard(url)
+            done(null)
+        }
+    }
+
     /** " · up to 1.8 m", or nothing while the sensor keeps its own setting. */
     private fun range(): String = if (prefs.presenceRangeM > 0f) " · up to ${number(prefs.presenceRangeM)} m" else ""
 
@@ -335,6 +372,7 @@ class CoreSettings(
     companion object {
         /** The dashboard's page: where Home Assistant is and how its dashboard shows. */
         const val DASHBOARD_TITLE = "Home Assistant & dashboard"
+        const val DASHBOARD_ROW_TITLE = "Dashboard"
         const val HA_ADDRESS_HINT = "Found automatically (e.g. http://homeassistant.local:8123)"
         const val HA_ADDRESS_ERROR = "Enter a Home Assistant address like http://homeassistant.local:8123 or 192.0.2.10:8123, or leave blank to find it automatically."
         /** The Screen page's id, and its blueprints' `pane` in the app's blueprint list (core/src/main/java/dev/glassworks/screen/page.json). */

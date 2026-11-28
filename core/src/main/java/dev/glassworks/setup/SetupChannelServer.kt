@@ -8,6 +8,9 @@ import dev.glassworks.Glassworks
 import dev.glassworks.InstallerGlue
 import dev.glassworks.KioskPrefs
 import dev.glassworks.auth.HaAuth
+import dev.glassworks.dashboard.Dashboard
+import dev.glassworks.dashboard.DashboardOptions
+import dev.glassworks.dashboard.Dashboards
 import dev.glassworks.provisioning.ImprovController
 import dev.glassworks.provisioning.ImprovDone
 import dev.glassworks.improv.ScannedNetwork
@@ -68,9 +71,20 @@ object SetupChannelServer {
 
         init { HaAuth.init(ctx) }
 
+        private fun knownDashboards(): List<Dashboard> =
+            Dashboards.latest ?: DashboardOptions.parse(prefs.dashboardsJson).orEmpty()
+
         override fun state(): ChannelState {
             val ip = dev.glassworks.platform.PanelAddress.now(ctx)
             val haUrl = prefs.haBase.orEmpty()
+            val signedIn = HaAuth.signedIn
+            if (signedIn && Dashboards.latest == null) HaAuth.ensureDashboards()
+            val list = if (signedIn) knownDashboards() else emptyList()
+            val base = prefs.settingBase
+            val current = if (signedIn && base != null) DashboardOptions.currentOption(prefs.urlSetting, base, list) else null
+            val options = if (signedIn && base != null && (list.isNotEmpty() || current == DashboardOptions.CUSTOM)) {
+                DashboardOptions.pickerOptions(list, current!!)
+            } else null
             return ChannelState(
                 ip = ip,
                 online = dev.glassworks.platform.NetworkUp.now(ctx),
@@ -78,8 +92,10 @@ object SetupChannelServer {
                 ha = ChannelState.Ha(
                     discovered = ChannelState.discovered(prefs.haUrl, prefs.haUrlSource),
                     url = haUrl,
-                    signedIn = HaAuth.signedIn,
+                    signedIn = signedIn,
                     signinUrl = ChannelState.signinUrl(ip, haUrl),
+                    dashboards = options,
+                    dashboard = if (options != null) current else null,
                 ),
             )
         }
@@ -133,6 +149,28 @@ object SetupChannelServer {
                     val sink = runtime.commandSink
                     if (sink == null) Log.i(TAG, "dashboard not running; it loads the new address when it starts")
                     else sink(if (restart) Intent().putExtra("restart", true) else Intent().putExtra("url", url))
+                }
+            })
+        }
+
+        override fun setDashboard(dashboard: String): SetupChannel.Change {
+            val list = knownDashboards()
+            val base = prefs.settingBase ?: return SetupChannel.Change(error = "Home Assistant isn't known yet.")
+            val current = DashboardOptions.currentOption(prefs.urlSetting, base, list)
+            if (dashboard == current || dashboard == DashboardOptions.CUSTOM) return SetupChannel.Change()
+            val url = DashboardOptions.urlFor(dashboard, prefs.urlSetting, base, prefs.haUrl, list)
+                ?: return SetupChannel.Change(error = "Unknown dashboard '$dashboard'.")
+            val saved = InstallerGlue.onMain {
+                prefs.urlSetting = url
+                true
+            } ?: return SetupChannel.Change(error = "The panel didn't save the dashboard; try again.")
+            if (!saved) return SetupChannel.Change(error = "The panel didn't save the dashboard; try again.")
+            Log.i(TAG, "Dashboard set from setup: $dashboard ($url)")
+            return SetupChannel.Change(afterReply = {
+                InstallerGlue.post {
+                    val sink = runtime.commandSink
+                    if (sink == null) Log.i(TAG, "dashboard not running; it loads the chosen dashboard when it starts")
+                    else sink(Intent().putExtra("url", url))
                 }
             })
         }

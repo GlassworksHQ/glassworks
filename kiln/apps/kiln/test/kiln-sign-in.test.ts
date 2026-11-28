@@ -21,18 +21,25 @@ function panel() {
     setHaGate: undefined as Promise<void> | undefined,
     /** state answers only once this settles. */
     stateGate: undefined as Promise<void> | undefined,
-    signIn: () => { st.ha.signedIn = true; send({ event: 'state', state: st }); },
+    signIn: (dashboards?: string[]) => {
+      st.ha.signedIn = true;
+      if (dashboards) { st.ha.dashboards = dashboards; st.ha.dashboard = 'Default'; }
+      send({ event: 'state', state: st });
+    },
+    asked: [] as { op: string; dashboard?: string }[],
     stream: {
       onData: (f: (c: Uint8Array) => void) => { cb = f; },
       close: async () => {},
       write: async (d: Uint8Array) => {
         for (const line of new TextDecoder().decode(d).split('\n').filter(Boolean)) {
           const m = JSON.parse(line);
+          self.asked.push(m);
           if (m.op === 'state' && self.stateGate) { const r = { id: m.id, ok: true, state: st }; void self.stateGate.then(() => send(r)); continue; }
           if (m.op === 'set_ha') {
             st.ha.url = m.url;
             if (self.setHaGate) { const r = { id: m.id, ok: true, state: st }; void self.setHaGate.then(() => send(r)); continue; }
           }
+          if (m.op === 'ha.set_dashboard') st.ha.dashboard = m.dashboard;
           send({ id: m.id, ok: true, state: st });
         }
       },
@@ -81,6 +88,23 @@ describe('Kiln\'s sign-in', () => {
     await vi.waitFor(() => expect(k.win.location.href).toMatch(/then=kiln$/));
     p.signIn();
     await vi.waitFor(() => expect(k.phase()).toMatchObject({ phase: 'radio' }));
+    k.steps.close();
+  });
+
+  it('stays on Home Assistant after sign-in when custom dashboards exist, then saves the chosen dashboard on Continue', async () => {
+    const p = panel();
+    const k = kiln(p);
+    await k.steps.homeAssistant();
+    k.steps.signIn('http://192.0.2.20:8123');
+    await vi.waitFor(() => expect(k.win.location.href).toMatch(/then=kiln$/));
+    p.signIn(['Default', 'Tablet', 'Energy']);
+    await vi.waitFor(() => expect(k.phase()).toMatchObject({ phase: 'ha', ha: { signedIn: true, dashboards: ['Default', 'Tablet', 'Energy'] } }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(k.phase()).toMatchObject({ phase: 'ha' });
+    await k.steps.saveHa('http://192.0.2.20:8123', 'Tablet');
+    expect(p.asked.some((m) => m.op === 'ha.set_dashboard' && m.dashboard === 'Tablet')).toBe(true);
+    expect(p.st.ha.dashboard).toBe('Tablet');
+    expect(k.phase()).toMatchObject({ phase: 'radio' });
     k.steps.close();
   });
 

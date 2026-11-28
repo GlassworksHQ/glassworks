@@ -35,11 +35,12 @@ object DashboardOptions {
         null
     }
 
-    fun fromJson(a: JSONArray): List<Dashboard> {
+    fun fromJson(a: JSONArray, includeAdmin: Boolean = true): List<Dashboard> {
         val out = ArrayList<Dashboard>()
         val seen = HashSet<String>()
         for (i in 0 until a.length()) {
             val o = a.optJSONObject(i) ?: continue
+            if (!includeAdmin && o.optBoolean("require_admin", false)) continue
             val path = o.optString("url_path").trim().trim('/')
             if (path.isEmpty() || '/' in path || path.length > 100 || !seen.add(path)) continue
             out += Dashboard(path, o.optString("title").trim())
@@ -92,6 +93,16 @@ object DashboardOptions {
         out += labels(list).keys
         out += CUSTOM
         return out
+    }
+
+    /**
+     * Options for interactive dashboard pickers (settings, Manage, setup): [DEFAULT], each dashboard,
+     * and [CUSTOM] only while [current] is [CUSTOM] so users aren't offered a no-op Custom choice.
+     */
+    fun pickerOptions(list: List<Dashboard>, current: String): List<String> = buildList {
+        add(DEFAULT)
+        addAll(labels(list).keys)
+        if (current == CUSTOM) add(CUSTOM)
     }
 
     /**

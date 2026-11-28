@@ -11,6 +11,9 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **Pick your Home Assistant dashboard anywhere.** Glassworks now fetches your Lovelace dashboards directly from Home Assistant as soon as the panel signs in. Choose which dashboard the panel shows right after signing in in Kiln or on the `/setup` page, anytime in **Home Assistant & dashboard** on the panel or the Manage page (reloading in place without restarting), or from the **Dashboard** select entity in Home Assistant, which is now enabled by default.
+
 ### Changed
 - **Softer voice chimes.** The wake word and finished timers now play a soft, rounded chime that swells in and
   rings out, instead of electronic beeps. The timer chime is the wake chime followed by a higher one, so it still

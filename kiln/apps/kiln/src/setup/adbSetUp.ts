@@ -285,7 +285,7 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     return Number.parseInt(r.out.trim(), 10) > 0;
   }
   signIn(url: string): void { this.steps.signIn(url); }
-  saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
+  saveHa(url: string, dashboard?: string): Promise<void> { return this.steps.saveHa(url, dashboard); }
   skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }
   panes(): Promise<void> { return this.steps.panes(); }
   applyPanes(on: readonly string[]): Promise<void> { return this.steps.applyPanes(on); }

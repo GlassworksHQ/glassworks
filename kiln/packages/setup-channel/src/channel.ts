@@ -9,6 +9,8 @@
 //     ← {"id":1,"ok":true,"state":SetupState}
 //     → {"id":2,"op":"set_ha","url":"http://homeassistant.local:8123"}
 //     ← {"id":2,"ok":true,"state":SetupState}            or {"id":2,"ok":false,"error":"…"}
+//     → {"id":10,"op":"ha.set_dashboard","dashboard":"Tablet"}   (apps with dashboard picker; reloads in place)
+//     ← {"id":10,"ok":true,"state":SetupState}           or {"id":10,"ok":false,"error":"…"}
 //     → {"id":3,"op":"set_radio","mode":"zigbee_tcp"}
 //     ← {"id":3,"ok":true,"state":SetupState}            or {"id":3,"ok":false,"error":"…"}
 //     → {"id":4,"op":"set_radio_allow","allow":"192.0.2.10 198.51.100.0/24"}   ("" = Home Assistant only, "any")
@@ -90,6 +92,10 @@ export interface SetupState {
     signedIn: boolean;
     /** The panel's sign-in page (`http://<ip>:8099/signin`): the same link as its QR code. */
     signinUrl?: string;
+    /** Selectable Lovelace dashboards (`Default`, then named dashboards), once signed in and custom dashboards exist. */
+    dashboards?: string[];
+    /** Currently selected dashboard label from `dashboards` (e.g. `Default`, `Tablet`). */
+    dashboard?: string;
   };
   /**
    * The panel's Zigbee/Thread radio. A frame without one (most Android devices) leaves it out; Kiln's phone setup
@@ -181,6 +187,8 @@ export class SetupChannel {
 
   getState(): Promise<SetupState> { return this.request('state'); }
   setHa(url: string): Promise<SetupState> { return this.request('set_ha', { url }, 15_000); }
+  /** Picks a Lovelace dashboard by its label from `state.ha.dashboards` (same origin; reloads in place). */
+  setDashboard(dashboard: string): Promise<SetupState> { return this.request('ha.set_dashboard', { dashboard }, 15_000); }
   setRadio(mode: string): Promise<SetupState> { return this.request('set_radio', { mode }, 30_000); }
   // TODO(#166): once a release has radio.thread_join, use it in Kiln's Thread step instead of sending the
   // person to Home Assistant: start it, then follow state.radio.threadJoin. Older apps answer "Unknown request".

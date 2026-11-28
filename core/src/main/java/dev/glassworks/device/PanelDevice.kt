@@ -401,7 +401,7 @@ class PanelDevice(
 
     /** Fixed object_id (so the key never changes); only the options change between rebuilds. */
     private fun dashboardSelect(options: List<String>) = SelectEntity(
-        "dashboard", "Dashboard", "mdi:view-dashboard", disabledByDefault = true, options = options,
+        "dashboard", "Dashboard", "mdi:view-dashboard", disabledByDefault = false, options = options,
         get = { currentDashboardOption(appliedDashboards) },
         set = { option ->
             val url = DashboardOptions.urlFor(option, prefs.urlSetting, prefs.settingBase, prefs.haUrl, appliedDashboards)

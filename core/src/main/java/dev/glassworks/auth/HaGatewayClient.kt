@@ -1,5 +1,7 @@
 package dev.glassworks.auth
 
+import dev.glassworks.dashboard.Dashboard
+import dev.glassworks.dashboard.DashboardOptions
 import dev.glassworks.manage.HaGateway
 import dev.glassworks.manage.HaUser
 import org.json.JSONObject
@@ -64,6 +66,21 @@ class HaGatewayClient(private val tokens: HaTokenClient, private val connect: (S
                 ?.optString("id")?.takeIf { it.isNotEmpty() } ?: return@signedIn false
             ask(ws, 2, JSONObject().put("type", "auth/delete_refresh_token").put("refresh_token_id", id))?.optBoolean("success", false) == true
         } ?: false
+
+    /**
+     * Fetches the Lovelace dashboards visible to [accessToken]'s user (`auth/current_user` + `lovelace/dashboards/list`),
+     * leaving out `require_admin` dashboards for non-administrators just like the kiosk web extension does.
+     * Null when Home Assistant didn't answer or refused the request.
+     */
+    fun dashboards(haBase: String, accessToken: String): List<Dashboard>? =
+        signedIn(haBase, accessToken) { ws, _ ->
+            val user = ask(ws, 1, JSONObject().put("type", "auth/current_user")) ?: return@signedIn null
+            val isAdmin = user.takeIf { it.optBoolean("success", false) }?.optJSONObject("result")?.optBoolean("is_admin", false) == true
+            val res = ask(ws, 2, JSONObject().put("type", "lovelace/dashboards/list")) ?: return@signedIn null
+            if (!res.optBoolean("success", false)) return@signedIn null
+            val list = res.optJSONArray("result") ?: return@signedIn null
+            DashboardOptions.fromJson(list, includeAdmin = isAdmin)
+        }
 
     /**
      * [body] on a websocket signed in with [token]; null when HA didn't answer. When HA refuses the token itself, the

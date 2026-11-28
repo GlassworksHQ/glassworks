@@ -21,6 +21,8 @@ const port = Number(args[args.indexOf('--port') + 1]) || 8099;
 const closed = args.includes('--closed');
 const offline = args.includes('--offline');
 const noRadio = args.includes('--no-radio');
+const withDashboards = args.includes('--dashboards');
+const preSignedIn = args.includes('--signed-in');
 const NETWORKS = [
   { ssid: 'Example-Home', rssi: -48, secure: true },
   { ssid: 'Example-Upstairs', rssi: -63, secure: true },
@@ -39,7 +41,13 @@ const state = {
   ip: '192.0.2.10',
   online: !offline,
   // the sign-in link is this fake's own /signin, which signs the "panel" in at once
-  ha: { discovered: 'http://homeassistant.local:8123', url: '', signedIn: false, signinUrl: `http://localhost:${port}/signin` },
+  ha: {
+    discovered: 'http://homeassistant.local:8123',
+    url: preSignedIn ? 'http://homeassistant.local:8123' : '',
+    signedIn: preSignedIn,
+    signinUrl: `http://localhost:${port}/signin`,
+    ...(preSignedIn && withDashboards ? { dashboards: ['Default', 'Tablet', 'Energy'], dashboard: 'Default' } : {}),
+  },
   radio: {
     mode: 'off', status: 'Off', helper: true, answered: false, allowed: '',
     options: [
@@ -83,11 +91,13 @@ const server = createServer((req, res) => {
     }
     if (path === '/signin/continue' && new URLSearchParams(req.url.split('?')[1]).get('then') === 'setup') {
       state.ha.signedIn = true;
+      if (withDashboards) { state.ha.dashboards = ['Default', 'Tablet', 'Energy']; state.ha.dashboard = 'Default'; }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end('<!doctype html><meta http-equiv="refresh" content="0;url=/setup#signed-in"><title>Signed in</title>');
     }
     if (path === '/signin') {
       state.ha.signedIn = true;
+      if (withDashboards) { state.ha.dashboards = ['Default', 'Tablet', 'Energy']; state.ha.dashboard = 'Default'; }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end('<!doctype html><title>Signed in</title><p>The fake panel is signed in to Home Assistant. Close this tab: the setup page notices within 3 seconds.</p>');
     }
@@ -124,6 +134,7 @@ server.on('upgrade', (req, sock) => {
         const m = JSON.parse(line);
         if (m.op !== 'state' && !paired) { send({ id: m.id, ok: false, error: 'Pair with the panel first: enter the code it shows.' }); continue; }
         if (m.op === 'set_ha' || m.op === 'ha.set_url') state.ha.url = m.url;
+        if (m.op === 'ha.set_dashboard' && m.dashboard) state.ha.dashboard = m.dashboard;
         if (m.op === 'set_radio' || m.op === 'radio.set_mode') Object.assign(state.radio, { mode: m.mode, answered: true, status: m.mode === 'off' ? 'Off' : 'Running' });
         if (m.op === 'wifi.scan') { setTimeout(() => send({ id: m.id, ok: true, state, networks: NETWORKS }), 1200); continue; }
         if (m.op === 'wifi.join') {

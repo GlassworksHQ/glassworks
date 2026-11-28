@@ -59,6 +59,8 @@ class HaAuthMovedTest {
     }
 
     @After fun stop() {
+        runCatching { prefs.auth = null }
+        dev.glassworks.dashboard.Dashboards.clear()
         signedInHa.stop(0)
         dashboardHa.stop(0)
         FakeAndroidKeyStore.uninstall()
@@ -149,5 +151,49 @@ class HaAuthMovedTest {
         assertTrue(signOut())
         assertEquals(listOf("dashboard POST /auth/revoke"), requests.toList())
         assertFalse(prefs.hasAuth)
+    }
+
+    @Test fun signingInFetchesDashboardsImmediatelyAndSignOutClearsThem() {
+        val prevClient = HaAuth.dashboardClient
+        val fetched = mutableListOf<String>()
+        try {
+            dev.glassworks.dashboard.Dashboards.clear()
+            HaAuth.dashboardClient = { base, _ ->
+                fetched += base
+                listOf(dev.glassworks.dashboard.Dashboard("tablet", "Tablet"))
+            }
+            val auth = StoredAuth(dashboardHa.base(), "http://192.0.2.10:8099/", "made-up-refresh-token")
+            val onSignedIn = HaAuth::class.java.getDeclaredMethod("onSignedIn", StoredAuth::class.java, TokenResult.Ok::class.java)
+            onSignedIn.isAccessible = true
+            onSignedIn.invoke(HaAuth, auth, TokenResult.Ok("made-up-access", 1800L, "made-up-refresh-token"))
+
+            assertEquals(listOf(dashboardHa.base()), fetched)
+            assertEquals(listOf(dev.glassworks.dashboard.Dashboard("tablet", "Tablet")), dev.glassworks.dashboard.Dashboards.latest)
+            assertEquals(listOf(dev.glassworks.dashboard.Dashboard("tablet", "Tablet")), dev.glassworks.dashboard.DashboardOptions.parse(prefs.dashboardsJson))
+
+            assertTrue(signOut())
+            assertEquals(null, dev.glassworks.dashboard.Dashboards.latest)
+        } finally {
+            HaAuth.dashboardClient = prevClient
+            dev.glassworks.dashboard.Dashboards.clear()
+        }
+    }
+
+    @Test fun dashboardFetchFailureIsNonFatalDuringSignIn() {
+        val prevClient = HaAuth.dashboardClient
+        try {
+            dev.glassworks.dashboard.Dashboards.clear()
+            HaAuth.dashboardClient = { _, _ -> throw RuntimeException("network down") }
+            val auth = StoredAuth(dashboardHa.base(), "http://192.0.2.10:8099/", "made-up-refresh-token")
+            val onSignedIn = HaAuth::class.java.getDeclaredMethod("onSignedIn", StoredAuth::class.java, TokenResult.Ok::class.java)
+            onSignedIn.isAccessible = true
+            onSignedIn.invoke(HaAuth, auth, TokenResult.Ok("made-up-access", 1800L, "made-up-refresh-token"))
+
+            assertTrue("sign-in still completes", HaAuth.signedIn)
+            assertEquals(null, dev.glassworks.dashboard.Dashboards.latest)
+        } finally {
+            HaAuth.dashboardClient = prevClient
+            dev.glassworks.dashboard.Dashboards.clear()
+        }
     }
 }
