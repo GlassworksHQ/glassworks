@@ -472,8 +472,11 @@ this way is in [adb-keys.md](../research/adb-keys.md).
 - `allow` takes only the computer asking now, by its fingerprint, so the app can never name a key of its own. The
   agent answers Android with `IAdbManager.allowDebugging(true, key)` (`service call adb 1 i32 1 s16 <key>`, as root),
   which lets the computer in at once, and then makes sure the key is in `adb_keys`.
-- `remove` takes a key out of `adb_keys`, keeping the file's owner, mode and label. It never removes the installer's
-  key, and a computer that is connected stays connected until it disconnects.
+- `remove` takes a key out of `adb_keys`, keeping the file's owner, mode and label. A computer that is connected stays
+  connected until it disconnects. The installer's key (Kiln's, or the command-line installer's computer) can be
+  removed too. Its fingerprint then goes to `$DIR/adb-revoked` (root 0600), so it stays out.
+- At every start the agent puts back any boot image key that's missing from `adb_keys` (Android dropped it, see
+  below), unless it's in `$DIR/adb-revoked`. Allowing that computer again takes it off `adb-revoked`.
 - At every start the agent sets `adb_allowed_connection_time` to `0`. Android 10 would otherwise drop a key from
   `adb_keys` 7 days after its computer last connected, the installer's key included. `tools/install.sh --undo`
   deletes the setting again.

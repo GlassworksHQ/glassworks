@@ -13,7 +13,8 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   debugging, the **Security** page shows its fingerprint with **Allow this computer**, and lists the computers
   already allowed with **Remove**. You need to be signed in with a Home Assistant administrator account. Allowed
   computers now stay allowed until you remove them, instead of Android forgetting them after a week without a
-  connection. Needs the next S1 frame update.
+  connection. Kiln is on the list too, and comes back if Android had already forgotten it, unless you remove it.
+  Needs the next S1 frame update.
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
   with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel

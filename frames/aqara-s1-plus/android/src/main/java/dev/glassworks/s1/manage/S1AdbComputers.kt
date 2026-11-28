@@ -14,7 +14,9 @@ import java.security.SecureRandom
  * The computers the S1 lets in over USB adb, kept by its frame agent in `adb_keys` (glassworks_agent.sh, "computers
  * allowed over USB adb"). The app only reads what the agent publishes and hands it requests: it never names a key.
  * - [pub]`/adb-asking`: `<epoch> <fingerprint> <key line>`, the computer system_server logged asking.
- * - [pub]`/adb-keys`: `<installer|added> <fingerprint> <key line>` per key in `adb_keys`.
+ * - [pub]`/adb-keys`: `<installer|added> <fingerprint> <key line>` per key in `adb_keys`. `installer` is the boot
+ *   image's key (Kiln's, or the command-line installer's computer). It's listed and can be removed: the agent puts it
+ *   back after Android drops it, but not after an administrator removed it here.
  * - [request]: `<id> allow|remove <fingerprint>`, which the agent takes within a loop (3 s) and answers in
  *   [pub]`/adb-result` as `<id> <ok|error> <detail>`.
  * Android forgets no key by itself here (the agent turns its 7-day timeout off), so every computer allowed stays
@@ -33,6 +35,7 @@ class S1AdbComputers(
     private val pollMs: Long = 200L,
 ) : UsbComputers {
     override val alwaysRemembers get() = true
+    override val listsInstaller get() = true
 
     override fun asking(): AdbKey? {
         val line = read("adb-asking")?.lineSequence()?.firstOrNull()?.trim().orEmpty()
@@ -44,12 +47,12 @@ class S1AdbComputers(
         return key.takeIf { clock() - at * 1000 in 0..askingMs }
     }
 
-    /** The agent's list, without the installer's key: [Listed.addedMs] is 0 for a computer let in elsewhere. */
+    /** The agent's list, the installer's key first: [Listed.addedMs] is 0 for a computer let in elsewhere. */
     override fun list(): List<Listed> {
         val noted = notes()
-        return keys().filter { !it.first }.map { (_, key) ->
+        return keys().sortedByDescending { it.first }.map { (installer, key) ->
             val n = noted.optJSONObject(key.fingerprint)
-            Listed(key, n?.optLong("added") ?: 0L, n?.optString("by").orEmpty())
+            Listed(key, n?.optLong("added") ?: 0L, n?.optString("by").orEmpty(), installer)
         }
     }
 
@@ -90,9 +93,7 @@ class S1AdbComputers(
 
     @Synchronized
     override fun remove(fingerprint: String, who: String): Removed {
-        val listed = keys().firstOrNull { it.second.fingerprint == fingerprint }
-        // The installer's key isn't on the page's list, and the agent refuses it too.
-        if (listed == null || listed.first) return Removed.NOT_LISTED
+        val listed = keys().firstOrNull { it.second.fingerprint == fingerprint } ?: return Removed.NOT_LISTED
         val label = AdbComputers.label(listed.second)
         val (ok, detail) = ask("remove", fingerprint) ?: run {
             event("$who tried to remove $label from the allowed list: the panel's root side didn't answer")
@@ -100,7 +101,7 @@ class S1AdbComputers(
         }
         if (!ok) {
             event("$who tried to remove $label from the allowed list: refused, $detail")
-            return if (detail == "not-listed" || detail == "installer") Removed.NOT_LISTED else Removed.NOT_SAVED
+            return if (detail == "not-listed") Removed.NOT_LISTED else Removed.NOT_SAVED
         }
         note(fingerprint, null)
         event("$who removed $label from the allowed list")

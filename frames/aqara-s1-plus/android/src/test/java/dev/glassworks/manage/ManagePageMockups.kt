@@ -155,12 +155,13 @@ class ManagePageMockups {
         save("13e-security-refused", ub.get("/security?usb=refused"))
         save("13f-security-not-waiting", ub.get("/security?usb=notwaiting"))
 
-        // The S1: its frame agent keeps adb_keys, so there's no "each time" switch. A fake agent's files, made-up keys.
+        // The S1: its frame agent keeps adb_keys, so there's no "each time" switch, and Kiln's key is listed. A fake
+        // agent's files, made-up keys.
         val pub = File(f.dir, "s1-adb-pub").apply { mkdirs() }
         fun line(kind: String, k: dev.glassworks.manage.AdbKey) = "$kind ${k.fingerprint} ${k.base64} ${k.name}\n"
         val asking = key(10, "alex@laptop")
         File(pub, "adb-asking").writeText("${t / 1000} ${asking.fingerprint} ${asking.base64} ${asking.name}\n")
-        File(pub, "adb-keys").writeText(line("installer", key(11, "installer@example")) + line("added", key(12, "sam@desktop")))
+        File(pub, "adb-keys").writeText(line("installer", key(11, "kiln@glassworks")) + line("added", key(12, "sam@desktop")))
         val s1 = dev.glassworks.s1.manage.S1AdbComputers(pub, File(f.dir, "s1-adb/request"), File(f.dir, "s1-adb/notes.json"), {}, clock = { t })
         val s = ManageFixture(usb = dev.glassworks.manage.ManageUsbDebugging(s1, dev.glassworks.manage.ManagePages(clock = { t })::time, {}))
         s.now = t

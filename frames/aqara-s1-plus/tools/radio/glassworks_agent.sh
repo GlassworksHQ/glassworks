@@ -1659,7 +1659,10 @@ bt_publish() {
 #   --move, at most 2 minutes old). allow takes only the computer asking now, by its fingerprint: the app can't
 #   name a key of its own. It answers Android's question with IAdbManager.allowDebugging(true, key) (`service call
 #   adb 1`, as root), which lets the computer in at once, and makes sure the key is in $ADB_KEYS. remove takes a
-#   key out of $ADB_KEYS, never the installer's. The answer goes to $PUB_DIR/adb-result = "<id> <ok|error> <detail>".
+#   key out of $ADB_KEYS, the installer's too. The answer goes to $PUB_DIR/adb-result = "<id> <ok|error> <detail>".
+# - The installer's key comes back: at every start, a boot image key missing from $ADB_KEYS (Android dropped it, see
+#   below) is put back, unless an administrator removed it on Manage. That removal is kept in $ADB_REVOKED (root
+#   0600, one fingerprint a line) until the same computer is allowed again.
 # - Android 10 forgets a key 7 days after its computer last connected (adb_allowed_connection_time, rewriting
 #   $ADB_KEYS without it). The list on Manage is the record, so the loop sets that to 0 (never), as Android 11's
 #   "Disable adb authorization timeout" does. tools/install.sh --undo deletes the setting.
@@ -1668,6 +1671,7 @@ ADB_KEYS=${GWA_ADB_KEYS:-/data/misc/adb/adb_keys}
 ADB_STATUS=sys.glassworks.adb.status
 APP_ADB_REQ=adb/request                 # app -> agent, relative to the app's files/
 ADB_ASK=$DIR/adb-asking                 # root 0600: the computer asking, as the follower saw it
+ADB_REVOKED=$DIR/adb-revoked            # root 0600: installer keys an administrator removed on Manage
 ADB_TTL=${GWA_ADB_TTL:-600}             # how long a question counts (Android keeps it until the next one)
 ADB_PID=""; ADB_LISTED=""; ADB_WHY=""
 adb_say() { [ "$1" = "$(getprop $ADB_STATUS)" ] && return 0; setp $ADB_STATUS "$1"; say "adb: $1"; }
@@ -1719,6 +1723,24 @@ adb_write() { # file: replaces $ADB_KEYS with it, keeping the owner, mode and la
   own_=$(stat -c %u:%g "$ADB_KEYS" 2>/dev/null); mode_=$(stat -c %a "$ADB_KEYS" 2>/dev/null)
   chown "${own_:-1000:2000}" "$1" && chmod "${mode_:-640}" "$1" && mv -f "$1" "$ADB_KEYS" || { rm -f "$1"; return 1; }
   restorecon "$ADB_KEYS" 2>/dev/null; return 0
+}
+adb_revoked() { [ -n "$1" ] && grep -qxF "$1" "$ADB_REVOKED" 2>/dev/null; }
+adb_revoke() { # fingerprint add|drop: the record of installer keys removed on Manage
+  { grep -vxF "$1" "$ADB_REVOKED" 2>/dev/null; [ "$2" = add ] && echo "$1"; } > "$ADB_REVOKED.tmp"
+  chmod 600 "$ADB_REVOKED.tmp" && mv -f "$ADB_REVOKED.tmp" "$ADB_REVOKED"
+}
+adb_restore() { # once per start: boot image keys Android dropped from $ADB_KEYS go back, unless removed on Manage
+  [ -s "$BUNDLE/glassworks_adb_keys" ] || return 0
+  rs_=""
+  while IFS= read -r bk_ || [ -n "$bk_" ]; do
+    adb_line_ok "$bk_" || continue
+    bf_=$(adb_fp "$bk_") || continue
+    adb_has "$bf_" || adb_revoked "$bf_" || rs_="$rs_$bk_
+"
+  done < "$BUNDLE/glassworks_adb_keys"
+  [ -n "$rs_" ] || return 0
+  mkdir -p "${ADB_KEYS%/*}" && { [ -f "$ADB_KEYS" ] && while IFS= read -r ck_ || [ -n "$ck_" ]; do printf '%s\n' "$ck_"; done < "$ADB_KEYS"; printf '%s' "$rs_"; } > "$ADB_KEYS.gw.tmp" &&
+    adb_write "$ADB_KEYS.gw.tmp" && say "adb: the installer's key is back in the adb key list" || say "adb: couldn't put the installer's key back"
 }
 adb_heard() { # one line of the follower's logcat (-v epoch): "<epoch>.<ms> <pid> <tid> <level> <tag>: <message>"
   case "$1" in *"Received public key: "*|*"Received connected key message: "*) ;; *) return 0 ;; esac
@@ -1797,6 +1819,7 @@ adb_allow() { # id fingerprint
   case "$at_" in ''|*[!0-9]*) adb_answer "$1" error "none-asking"; return 0 ;; esac
   [ $(( $(date +%s) - at_ )) -le "$ADB_TTL" ] || { adb_answer "$1" error "none-asking"; return 0; }
   [ "$af_" = "$2" ] || { adb_answer "$1" error "changed"; return 0; }
+  adb_revoked "$2" && adb_revoke "$2" drop   # allowed again: the installer's key may come back again
   if adb_has "$2"; then rm -f "$ADB_ASK"; : | adb_put adb-asking; adb_answer "$1" ok "already"; return 0; fi
   # Android's own "Always allow": it answers adbd now (if the computer still waits) and writes the key the first time
   # it sees one. Root holds every permission, MANAGE_DEBUGGING too. Its refusal (another computer asked) is silent.
@@ -1811,8 +1834,9 @@ adb_allow() { # id fingerprint
   adb_answer "$1" ok "allowed"
 }
 adb_remove() { # id fingerprint
-  if adb_installer "$2"; then adb_answer "$1" error "installer"; return 0; fi
   adb_has "$2" || { adb_answer "$1" error "not-listed"; return 0; }
+  # The installer's key stays out at later starts: recorded before the write, so a failed write can't lose it.
+  if adb_installer "$2"; then adb_revoke "$2" add || { adb_answer "$1" error "couldn't record the removal"; return 0; }; fi
   while IFS= read -r rk_ || [ -n "$rk_" ]; do [ "$(adb_fp "$rk_")" = "$2" ] || printf '%s\n' "$rk_"; done < "$ADB_KEYS" > "$ADB_KEYS.gw.tmp" &&
     adb_write "$ADB_KEYS.gw.tmp" || { adb_answer "$1" error "couldn't write the adb key list"; return 0; }
   if adb_has "$2"; then adb_answer "$1" error "the key is still in the adb key list"; return 0; fi
@@ -1825,6 +1849,7 @@ zstate
 fw_init
 portal_start
 hn_apply
+adb_restore  # the installer's key, if Android dropped it and nobody removed it on Manage
 adb_start    # the computers allowed over USB adb: the follower, and Android's key timeout off
 bw_check     # once, on the first boot after the boot writer's restart
 [ -n "$GWA_ONCE" ] && LOOPS=$GWA_ONCE   # tests: run this many loops, then exit

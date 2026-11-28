@@ -35,10 +35,16 @@ class ManageUsbDebugging(
                 """<button class="pill sm primary" type="submit">Allow this computer</button></form>"""
         }
         val list = computers.list()
-        val rows = if (list.isEmpty()) """<div class="row static note"><span>${esc(NONE_LISTED)}</span></div>""" else list.joinToString("") { l ->
+        val none = if (computers.listsInstaller) NONE_ALLOWED else NONE_LISTED
+        val rows = if (list.isEmpty()) """<div class="row static note"><span>${esc(none)}</span></div>""" else list.joinToString("") { l ->
             val remove = if (v.homeAssistant) """<form method="post" action="$REMOVE">${csrf(v)}<input type="hidden" name="fingerprint" value="${esc(l.key.fingerprint)}"><button class="pill sm" type="submit">Remove</button></form>""" else ""
-            val added = if (l.addedMs > 0) "Added ${time(l.addedMs)}${if (l.by.isNotEmpty()) " by ${l.by}" else ""}" else ALLOWED_ELSEWHERE
-            """<div class="row static usb"><div><b>${esc(l.key.name ?: "A computer")}</b>${about(l.key, added)}</div>$remove</div>"""
+            val added = when {
+                l.installer -> INSTALLED
+                l.addedMs > 0 -> "Added ${time(l.addedMs)}${if (l.by.isNotEmpty()) " by ${l.by}" else ""}"
+                else -> ALLOWED_ELSEWHERE
+            }
+            val title = if (l.installer && l.key.name == KILN_KEY) "Kiln" else l.key.name ?: "A computer"
+            """<div class="row static usb"><div><b>${esc(title)}</b>${about(l.key, added)}</div>$remove</div>"""
         }
         return """<section class="card list"><div class="lh"><b>Allow a new computer</b><span>USB debugging</span></div>$status$ask</section>""" +
             """<section class="card list"><div class="lh"><b>Allowed computers</b><span>${list.size}</span></div>$rows</section>$CSS"""
@@ -118,6 +124,12 @@ class ManageUsbDebugging(
         const val NEEDS_HA = "Allowing or removing a computer needs a Home Assistant administrator. Sign out, then sign in with Home Assistant."
         const val NONE_ASKING = "No computer is asking. Plug one in with USB debugging on and run adb devices: it shows as unauthorized there, and here."
         const val NONE_LISTED = "None yet. The computer that installed Glassworks always gets in."
+        /** The list's note where it holds the installer's computer too ([UsbComputers.listsInstaller]): truly empty. */
+        const val NONE_ALLOWED = "None. Plug a computer in with USB debugging on, then allow it above."
+        /** The computer that installed Glassworks, where the list holds it. */
+        const val INSTALLED = "Installed Glassworks on this panel"
+        /** The name Kiln gives its browser key (kiln/packages/adb, KEY_NAME). */
+        const val KILN_KEY = "kiln@glassworks"
         /** A listed computer nobody recorded adding on this page: let in on the panel's own screen. */
         const val ALLOWED_ELSEWHERE = "Allowed on the panel itself"
         private const val CSS = """<style>.row .fp{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}

@@ -6,7 +6,8 @@ evidence: read
 # adb keys on the S1: how does a new computer get in, and why does Android 10 forget keys?
 
 **Status (2026-11-28): built, untested on a panel.** The frame agent answers Android's "Allow USB debugging?" for
-Manage's Security page, keeps `adb_keys`, and turns off Android 10's 7-day key timeout. Everything below is read
+Manage's Security page, keeps `adb_keys`, turns off Android 10's 7-day key timeout, and puts the installer's key back
+when Android has dropped it. Everything below is read
 from AOSP `android10-release`, or tested off-device in `frames/aqara-s1-plus/tools/radio/test/`. Nothing here has
 run on a panel yet, and the panel checks are listed at the end.
 
@@ -44,6 +45,11 @@ taken out of the file can come back the next time a key expires. We asked the ma
 timeout off (`adb_allowed_connection_time = 0`). That's the same as Android 11's developer option "Disable adb
 authorization timeout". With the timeout off, the file is the record, and Manage's list can be trusted.
 
+Turning the timeout off stops future drops, but it doesn't bring back a key Android already dropped, and first boot
+runs only once. So the agent also puts the boot image's key back at every start. The maintainer's call (2026-11-28) was
+to show that key on Manage as Kiln, or as the computer that ran the command-line installer, and let an administrator
+remove it like any other key. The agent records that removal and doesn't undo it.
+
 ## What we tried
 
 1. **Read Android 10's adb framework** (2026-11-28, read). The files:
@@ -75,8 +81,9 @@ authorization timeout". With the timeout off, the file is the record, and Manage
    over USB adb", and the contract in [radio.md](../docs/radio.md#computers-over-usb-adb). The tests are in
    `tools/radio/test/shell-tests.sh`, "computers over USB adb". They use made-up keys and mock `logcat`, `service`,
    `settings` and system_server's pid. They cover log lines from another pid or older than 10 minutes, Allow for a
-   computer other than the one asking, Android writing the key itself or not, keeping the owner and mode, refusing to
-   remove the installer's key, and stale or malformed requests.
+   computer other than the one asking, Android writing the key itself or not, keeping the owner and mode, putting the
+   installer's key back after Android drops it, keeping it out once it's removed on Manage, and stale or malformed
+   requests.
 
 ## Result
 
@@ -85,6 +92,7 @@ authorization timeout". With the timeout off, the file is the record, and Manage
 | Does the S1 let in any key? | No. adbd lets in only keys in `adb_keys`, and the installer's key is put there at first boot | `ro.adb.secure=1` ([findings.md](findings.md#usb--adb)), `glassworks_firstboot.sh` |
 | Can root answer "Allow USB debugging?" | Yes, through `service call adb 1 i32 1 s16 <key>`, only for the computer asking | `IAdbManager.aidl`, `AdbService.java:238`, `AdbDebuggingManager.java:358` |
 | Does Android 10 forget keys? | Yes, 7 days after the last connection, and the installer's key with them | `AdbDebuggingManager.java:943`–`1028`, `Settings.java:12393` |
+| Does a dropped installer key come back? | Not by itself: first boot runs once. The agent puts it back at every start, unless it was removed on Manage | `glassworks_firstboot.sh` (its marker), `glassworks_agent.sh` (`adb_restore`) |
 | Who's asking? | `Received public key:` from system_server's pid, in the system log | `AdbDebuggingManager.java:196` |
 
 ## How to reproduce

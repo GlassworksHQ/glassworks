@@ -25,7 +25,7 @@ class S1AdbComputersTest {
         return AdbKey.parse(Base64.getEncoder().encodeToString(b) + " " + name)!!
     }
 
-    private val installer = key(1, "installer@example")
+    private val installer = key(1, "kiln@glassworks")
     private val laptop = key(2, "me@laptop")
     private val desk = key(3, "old@desk")
     private val root = Files.createTempDirectory("s1adb").toFile()
@@ -73,10 +73,10 @@ class S1AdbComputersTest {
         assertNull("nobody asking", computers.asking())
     }
 
-    @Test fun `the list leaves out the installer's key and shows who added the rest here`() {
-        lists("installer" to installer, "added" to desk)
-        assertEquals(listOf(desk), computers.list().map { it.key })
-        assertEquals("allowed on the panel itself: nobody recorded it", 0L, computers.list().single().addedMs)
+    @Test fun `the list holds the installer's key first, marked, and shows who added the rest here`() {
+        lists("added" to desk, "installer" to installer)
+        assertEquals(listOf(installer to true, desk to false), computers.list().map { it.key to it.installer })
+        assertEquals("allowed on the panel itself: nobody recorded it", 0L, computers.list().single { it.key == desk }.addedMs)
         asks(laptop)
         assertEquals(Allowed.FROM_NOW_ON, computers.allowAsking(laptop.fingerprint, remember = false, who = "Alex"))
         lists("installer" to installer, "added" to desk, "added" to laptop)
@@ -112,14 +112,14 @@ class S1AdbComputersTest {
         assertFalse("not left to act later than the page says", request.exists())
     }
 
-    @Test fun `remove takes an added computer off, never the installer's`() {
+    @Test fun `remove takes any listed computer off, the installer's too`() {
         lists("installer" to installer, "added" to desk)
         answer = { _, _ -> "ok removed" }
-        assertEquals(Removed.NOT_LISTED, computers.remove(installer.fingerprint, "Alex"))
         assertEquals(Removed.NOT_LISTED, computers.remove(laptop.fingerprint, "Alex"))
-        assertTrue("neither reached the agent", requests.isEmpty())
+        assertTrue("one not on the list never reaches the agent", requests.isEmpty())
         assertEquals(Removed.DONE, computers.remove(desk.fingerprint, "Alex"))
-        assertEquals(listOf("remove ${desk.fingerprint}"), requests.toList())
+        assertEquals(Removed.DONE, computers.remove(installer.fingerprint, "Alex"))
+        assertEquals(listOf("remove ${desk.fingerprint}", "remove ${installer.fingerprint}"), requests.toList())
         answer = { _, _ -> "error couldn't write the adb key list" }
         assertEquals(Removed.NOT_SAVED, computers.remove(desk.fingerprint, "Alex"))
     }
@@ -132,6 +132,10 @@ class S1AdbComputersTest {
         assertTrue(page.contains(">Allow this computer</button>"))
         assertFalse(page.contains("Let it in each time it connects"))
         assertTrue(page.contains(ManageUsbDebugging.ALLOWED_ELSEWHERE))
-        assertFalse("the installer's key isn't on the list", page.contains(installer.fingerprint.replace(":", ":<wbr>")))
+        assertTrue("Kiln's key, named and removable", page.contains("<b>Kiln</b><span>${ManageUsbDebugging.INSTALLED}</span>"))
+        assertTrue(page.contains("""name="fingerprint" value="${installer.fingerprint}"><button class="pill sm" type="submit">Remove</button>"""))
+        lists()
+        val empty = f.Browser().apply { signInWithHa() }.get("/security").text()
+        assertTrue("nothing listed: no promise that the installer always gets in", empty.contains(ManageUsbDebugging.NONE_ALLOWED))
     }
 }

@@ -92,8 +92,11 @@ class AdbComputers(
     /** A computer was let in, from the page or from the list: the screen can put Android's own question away. */
     private val letIn: () -> Unit = {},
 ) : UsbComputers {
-    /** A computer on the list: its key, who added it ([by], may be empty) and when ([addedMs], 0 when nobody recorded it). */
-    data class Listed(val key: AdbKey, val addedMs: Long, val by: String)
+    /**
+     * A computer on the list: its key, who added it ([by], may be empty) and when ([addedMs], 0 when nobody recorded it).
+     * [installer]: the computer that installed Glassworks (Kiln, or the command-line installer), where a frame lists it.
+     */
+    data class Listed(val key: AdbKey, val addedMs: Long, val by: String, val installer: Boolean = false)
 
     /** The last computer that asked, and how it was answered, if it was. [retried]: its automatic approval was sent twice. */
     private data class Request(val key: AdbKey, val atMs: Long, val answered: Boolean, val retried: Boolean = false)

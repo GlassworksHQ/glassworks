@@ -1363,7 +1363,8 @@ kfp() { printf '%s' "${1%% *}" | base64 -d | md5sum | cut -c1-32 | tr a-f A-F | 
 K1=$(mkkey installer@example); K2=$(mkkey me@laptop); K3=$(mkkey old@desk); K4=$(mkkey forged@app); K5=$(mkkey new@desk)
 F1=$(kfp "$K1"); F2=$(kfp "$K2"); F3=$(kfp "$K3"); F4=$(kfp "$K4"); F5=$(kfp "$K5")
 cp "$TB/glassworks_adb_keys" "$T/boot-adb-keys.bak"; echo "$K1" > "$TB/glassworks_adb_keys"
-printf '%s\n%s\n' "$K1" "$K3" > "$AK"; chown 1000:2000 "$AK"; chmod 640 "$AK"
+# Android dropped the installer's key (7 days without a connection): only K3 is left.
+printf '%s\n' "$K3" > "$AK"; chown 1000:2000 "$AK"; chmod 640 "$AK"
 pkill -x system_server 2>/dev/null; sleep 0.2; system_server 1000 & SSP=$!
 now=$(date +%s)
 { echo "$((now - 2000)).100  $SSP  900 D AdbDebuggingManager: Received public key: $K5"
@@ -1379,6 +1380,8 @@ adbreq() { # content [age-seconds]
 asking() { cut -d' ' -f2 "$AP/adb-asking" 2>/dev/null; }
 result() { cat "$AP/adb-result" 2>/dev/null; }
 adbrun
+check "the installer's key Android dropped is back in adb_keys" test "$(grep -cxF "$K1" "$AK")/$(grep -cxF "$K3" "$AK")" = 1/1
+check "...owner and mode kept" test "$(stat -c %u:%g:%a "$AK")" = 1000:2000:640
 check "Android's 7-day key timeout is turned off" test "$(cat "$T/settings.global.adb_allowed_connection_time" 2>/dev/null)" = 0
 check "...and the card's status is ok" test "$(prop sys.glassworks.adb.status)" = ok
 check "the computer asking is the one system_server logged: not a line any app could write, not one too old" test "$(asking)" = "$F2"
@@ -1413,18 +1416,27 @@ check "a request over 2 minutes old: ignored" has "$(result)" "r4 error too old 
 adbreq "r5 allow $F3"; adbrun 1
 check "allow with no computer asking: refused" test "$(result)" = "r5 error none-asking"
 adbreq "r6 remove $F1"; adbrun 1
-check "remove the installer's key: refused, kept" test "$(result)/$(grep -cxF "$K1" "$AK")" = "r6 error installer/1"
+check "remove the installer's key on Manage: removed" test "$(result)/$(grep -cxF "$K1" "$AK")" = "r6 ok removed/0"
+check "...recorded, root 0600" test "$(cat /data/s1kiosk/radio/adb-revoked)/$(stat -c %a:%u /data/s1kiosk/radio/adb-revoked)" = "$F1/600:0"
+adbrun 1
+check "...and not put back at the next start" test "$(grep -cxF "$K1" "$AK")" = 0
 adbreq "r7 remove $F3"; adbrun 1
 check "remove an added key: gone from adb_keys" test "$(result)/$(grep -cxF "$K3" "$AK")" = "r7 ok removed/0"
-check "...the others kept, owner and mode too" test "$(grep -c . "$AK")/$(stat -c %u:%g:%a "$AK")" = "3/1000:2000:640"
+check "...the others kept, owner and mode too" test "$(grep -c . "$AK")/$(stat -c %u:%g:%a "$AK")" = "2/1000:2000:640"
 check "...and off the list" sh -c "! grep -q '$F3' '$AP/adb-keys'"
 adbreq "r8 remove $F3"; adbrun 1
 check "remove one that isn't there: says so" test "$(result)" = "r8 error not-listed"
 for bad in "R9 allow $F5" "r9; allow $F5" "r10 allow ${F5%:*}" "r11 allow $(echo "$F5" | tr A-F a-f)" "r12 open $F5"; do
   adbreq "$bad"; adbrun 1
-  check "a bad request '${bad%% *} ...': nothing done" sh -c "test \"\$(cut -d' ' -f1-2 '$AP/adb-result')\" != 'r9 ok' && test \$(grep -c . '$AK') = 3"
+  check "a bad request '${bad%% *} ...': nothing done" sh -c "test \"\$(cut -d' ' -f1-2 '$AP/adb-result')\" != 'r9 ok' && test \$(grep -c . '$AK') = 2"
 done
 check "...a bad fingerprint is answered, a bad id isn't" test "$(result)" = "r12 error unknown request"
+echo "$(($(date +%s) - 1)).100  $SSP   900 D AdbDebuggingManager: Received public key: $K1" >> /t/logcat.out; adbrun
+adbreq "r13 allow $F1"; adbrun
+check "the installer's computer allowed again: in, and no longer recorded as removed" \
+  test "$(result)/$(grep -cxF "$K1" "$AK")/$(grep -c . /data/s1kiosk/radio/adb-revoked)" = "r13 ok allowed/1/0"
+grep -vxF "$K1" "$AK" > "$AK.t"; cat "$AK.t" > "$AK"; rm -f "$AK.t"; adbrun 1
+check "...so it comes back the next time Android drops it" test "$(grep -cxF "$K1" "$AK")" = 1
 pkill -x system_server 2>/dev/null; mv "$T/boot-adb-keys.bak" "$TB/glassworks_adb_keys"
 rm -rf "$AP" "$T/adb" "$APP/files/adb" /t/logcat.out /t/logcat.args /t/adb-calls "$T/bin/logcat" "$T/settings.global.adb_allowed_connection_time"
 

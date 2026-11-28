@@ -14,7 +14,10 @@ interface UsbComputers {
     /** The computer asking now, unanswered, or null. */
     fun asking(): AdbKey?
 
-    /** The computers on the allowed list. The one that installed Glassworks isn't on it: it always gets in. */
+    /**
+     * The computers on the allowed list. Where the frame keeps `adb_keys` ([listsInstaller]), the computer that installed
+     * Glassworks is on it too ([AdbComputers.Listed.installer]); elsewhere it isn't, and always gets in.
+     */
     fun list(): List<AdbComputers.Listed>
 
     /**
@@ -28,4 +31,7 @@ interface UsbComputers {
 
     /** True when every computer allowed stays on the list: the card then has no "each time it connects" switch. */
     val alwaysRemembers: Boolean get() = false
+
+    /** True when [list] holds the computer that installed Glassworks, which Remove can take off like any other. */
+    val listsInstaller: Boolean get() = false
 }
