@@ -18,6 +18,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   when the panel is turned down or muted, and the volume goes back to where it was after each tone.
 
 ### Changed
+- **Softer voice chimes.** The wake word and finished timers now play a soft, rounded chime that swells in and
+  rings out, instead of electronic beeps. The timer chime is the wake chime followed by a higher one, so it still
+  stands out as an alert.
 - **Kiln is easier to move around in.** Every installer screen has a Back button in the same place when going back is
   safe, and says why when it isn't. Done steps on the side rail are links back to them. Reopening Kiln partway through
   an install shows where you stopped and what's already on the device, with Continue and a way out. Start over asks
