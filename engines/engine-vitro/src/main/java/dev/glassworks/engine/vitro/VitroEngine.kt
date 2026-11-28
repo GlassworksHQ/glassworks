@@ -72,7 +72,7 @@ class VitroEngine(
     private val socketFactory: (String) -> HaSocket = HaDashboardClient::connectLongLived,
     private val logTag: String = "Glassworks.Vitro",
     /**
-     * The test hold's dashboard (ScreenPolicy.testDashboard: a loopback page, only while a test holds the screen), or
+     * The test hold's dashboard (ScreenPolicy.testDashboard: a loopback or local network page, only while a test holds the screen), or
      * null. Clarity's native harness runs only while it is Clarity's reference dashboard ([VitroClarity]).
      */
     private val testDashboard: (Context) -> String? = { c ->
@@ -467,7 +467,7 @@ class VitroEngine(
 
         /**
          * Starts Clarity's harness when the page shows the reference dashboard (`/clarity-ref/…`) on the origin of the
-         * test hold's dashboard, a loopback fake Home Assistant; stops it on anything else. Outside a Clarity run this
+         * test hold's dashboard, Clarity's fake (loopback or LAN); stops it on anything else. Outside a Clarity run this
          * is one lookup per load.
          */
         private fun followClarity(origin: String, dashPath: String?, viewPath: String?) {

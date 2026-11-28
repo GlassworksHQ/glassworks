@@ -900,7 +900,7 @@ open class MainActivity : Activity() {
     // ---- intents (see app/README.md):
     //   --es url <url>          set + persist the dashboard URL
     //   --es open <url>         navigate once, without persisting
-    //   --ez test_hold true [--ei test_hold_s 1800] [--es test_dashboard http://127.0.0.1:<port>/…]
+    //   --ez test_hold true [--ei test_hold_s 1800] [--es test_dashboard http://127.0.0.1:<port>/… or a LAN IP]
     //                           a test's hold (ScreenPolicy.testHold), and its own dashboard while it lasts
     //   --ef zoom 1.25          CSS px ratio (0 = auto); restarts the process
     //   --es secure_hosts a,b   extra secure-context hosts; restarts the process

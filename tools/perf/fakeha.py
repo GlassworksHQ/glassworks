@@ -13,9 +13,11 @@ camera_proxy_stream, which every camera has). /clarity/cameras reports what each
 serving right now, for the camera end-to-end test (tools/vitro-camera-e2e).
 
 Only for the perf test: it listens on 127.0.0.1 (the panel reaches both ports through `adb reverse`),
-and its sign-in accepts anyone, because there is nothing behind it.
+and its sign-in accepts anyone, because there is nothing behind it. With --bind (run.sh --ha-transport lan, for a
+device whose `adb reverse` doesn't work) it listens on that one address instead, this computer's LAN address, for
+the run only: never on every address.
 
-  tools/perf/fakeha.py --port 8089 [--log traffic.jsonl] [--turn-port 8090]
+  tools/perf/fakeha.py --port 8089 [--log traffic.jsonl] [--turn-port 8090] [--bind 127.0.0.1]
 """
 import argparse
 import base64
@@ -909,10 +911,11 @@ def harness_url():
     return f"/clarity/harness-{hashlib.sha256(D.asset('harness.js')[1]).hexdigest()[:16]}.js"
 
 
-def serve(port, log_path=None, harness=True, turn_port=None, transport="adb", home=None):
+def serve(port, log_path=None, harness=True, turn_port=None, transport="adb", home=None, bind="127.0.0.1"):
     """turn_port: where the WebRTC relay listens (0: any free port; None: port + 1). The panel reaches
     it through adb reverse, as it reaches `port`. `home`: a module like dashboards.py to serve instead
-    of Clarity's (tools/showcase/home.py); the WebRTC peer serves Clarity's cameras only."""
+    of Clarity's (tools/showcase/home.py); the WebRTC peer serves Clarity's cameras only. `bind`: the one
+    address the HTTP server listens on, loopback unless the panel reaches it over the LAN (run.sh --ha-transport)."""
     global D
     D = home or CLARITY
     front = hafrontend.root()
@@ -929,7 +932,7 @@ def serve(port, log_path=None, harness=True, turn_port=None, transport="adb", ho
         hub.record({"t": time.time(), "webrtc_transport": transport, "media": hub.webrtc.addr})
     # The frontend fetches dozens of modules at once; the default backlog (5) resets connections.
     ThreadingHTTPServer.request_queue_size = 256
-    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    srv = ThreadingHTTPServer((bind, port), Handler)
     srv.daemon_threads = True
     return srv
 
@@ -942,13 +945,18 @@ def main():
     ap.add_argument("--turn-port", type=int, help="the WebRTC relay's port (default: --port + 1)")
     ap.add_argument("--webrtc-transport", default="adb", choices=webrtc.TRANSPORTS,
                     help="adb (the test's); lan-turn and lan-udp are diagnostics for a panel on this network")
+    ap.add_argument("--bind", default="127.0.0.1",
+                    help="the one address to listen on: 127.0.0.1 (adb reverse), or this computer's LAN address "
+                         "(run.sh --ha-transport lan); never every address")
     a = ap.parse_args()
-    srv = serve(a.port, a.log, not a.no_harness, a.turn_port, a.webrtc_transport)
+    if a.bind in ("", "0.0.0.0", "::"):
+        ap.error("--bind takes one address, never every address")
+    srv = serve(a.port, a.log, not a.no_harness, a.turn_port, a.webrtc_transport, bind=a.bind)
     w = Handler.hub.webrtc
     turn = (f"WebRTC over {w.transport}, relay on {w.addr if w.transport == 'lan-turn' else '127.0.0.1'}:{Handler.hub.turn_port}, "
             f"media on {w.addr}" if w
             else "no WebRTC (aiortc isn't here: tools/perf/webrtc-requirements.txt)")
-    print(f"fake Home Assistant {HA_VERSION}, frontend {hafrontend.VERSION}, on http://127.0.0.1:{a.port}; {turn}", flush=True)
+    print(f"fake Home Assistant {HA_VERSION}, frontend {hafrontend.VERSION}, on http://{a.bind}:{a.port}; {turn}", flush=True)
     srv.serve_forever()
 
 

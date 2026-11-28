@@ -220,6 +220,9 @@ def measurements(rep, report_url="report.json"):
         # who chose it, and whether heavy's camera result may be the test's link's (adb). Results over
         # different transports aren't comparable; grade_summary passes it on. None before protocol 7.
         "webrtc_transport": transport_summary(rep.get("webrtc_transport")),
+        # The fake Home Assistant over the LAN (run.sh --ha-transport lan), not adb reverse: said, so the grade says how
+        # it was taken. Only then, so every other summary stays as it was.
+        **({"ha_transport": "lan"} if (rep.get("ha_transport") or {}).get("transport") == "lan" else {}),
     }
 
 

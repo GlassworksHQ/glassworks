@@ -11,7 +11,9 @@ draws: Vitro's start line instead of GeckoView's pages, the native harness's lin
 clock; no camera line, as a build whose cameras don't report to Clarity), the frames on the app's window layer; `--ez
 vitro` switches it and restarts the app. FAKE_VITRO_CAMERAS: Vitro's cameras report (ClarityCameras), and its camera
 lines say they played over `web_rtc` (HLS on the fallback copies), or fell back to `mjpeg`.
-FAKE_NO_ENGINE_LINE: a kiosk that doesn't say its engine with the test hold. FAKE_VITRO_STUCK: one that saves the
+FAKE_REVERSE_FAILS: `adb reverse` fails as on the lululemon Mirror's Android 6 over network adb ("more than one
+device/emulator"); FAKE_TEST_DASH_LOOPBACK_ONLY: a kiosk that takes a test dashboard on loopback only, as before it took
+one on the local network. FAKE_NO_ENGINE_LINE: a kiosk that doesn't say its engine with the test hold. FAKE_VITRO_STUCK: one that saves the
 setting but keeps drawing with GeckoView. FAKE_VITRO_NO_RESTORE: one that won't turn Vitro off again.
 
 State lives in $FAKE_ADB_STATE (a directory): the nonce of the page the runner opened, the taps it
@@ -163,7 +165,9 @@ def test_dashboard(value):
     if os.environ.get("FAKE_NO_TEST_DASHBOARD"):
         return
     save("test_dashes_set.json", state("test_dashes_set.json", []) + [value])
-    if value and not held():
+    if value and not test_dashboard_ok(value):
+        said = "test dashboard refused: only http on 127.0.0.1, localhost or a local network address"
+    elif value and not held():
         said = "test dashboard refused: no test hold"
     elif value:
         again = state("test_dash.json") == value
@@ -175,6 +179,25 @@ def test_dashboard(value):
     else:
         return
     save("hold_log.json", state("hold_log.json", []) + [[now(), said]])
+
+
+def test_dashboard_ok(url):
+    """As the kiosk's TestHoldFile.isTestDashboard: http(s) on loopback, or on an IP address of the local network (a
+    test whose adb reverse doesn't work, run.sh --ha-transport lan). Python's is_private takes the test's own
+    addresses too (TEST-NET, loopback), which a real panel never sees. FAKE_TEST_DASH_LOOPBACK_ONLY: loopback only."""
+    import ipaddress
+    import urllib.parse
+    u = urllib.parse.urlsplit(url)
+    if u.scheme not in ("http", "https") or " " in url:
+        return False
+    if u.hostname in ("127.0.0.1", "localhost", "::1"):
+        return True
+    if os.environ.get("FAKE_TEST_DASH_LOOPBACK_ONLY"):
+        return False
+    try:
+        return ipaddress.ip_address(u.hostname or "").is_private
+    except ValueError:
+        return False
 
 
 def shell(cmd):
@@ -1040,7 +1063,11 @@ def main():
     if args[:1] == ["get-state"]:
         print("device")
     elif args[:1] == ["reverse"]:
-        pass
+        if os.environ.get("FAKE_REVERSE_FAILS"):
+            # The Mirror's Android 6 adbd over network adb (2026-11-28): its USB transport stays registered next to the
+            # TCP one, and its reverse service can't pick one, with -s or -t too.
+            print("adb: error: more than one device/emulator", file=sys.stderr)
+            sys.exit(1)
     elif args[:1] == ["devices"]:
         # netcheck.py (#649): the S1 on USB, or FAKE_ADB_WIFI: a panel on wireless debugging (an mDNS name).
         serial = "adb-FAKE0001-x1._adb-tls-connect._tcp" if os.environ.get("FAKE_ADB_WIFI") else "FAKE0001"

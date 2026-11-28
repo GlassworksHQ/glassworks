@@ -2534,10 +2534,11 @@ class TestNetwork(unittest.TestCase):
     NOISY = {"sent": 40, "received": 40, "min_ms": 2.3, "median_ms": 3.7, "p95_ms": 68.6, "max_ms": 89.8}
     QUIET = {"sent": 40, "received": 40, "min_ms": 0.4, "median_ms": 0.6, "p95_ms": 1.1, "max_ms": 2.0}
 
-    def net(self, gateway, adb_over_network, transport=None, link="wifi"):
+    def net(self, gateway, adb_over_network, transport=None, link="wifi", ha_over_lan=False):
         quiet = gateway["p95_ms"] <= 20 and gateway["max_ms"] <= 20
         self.write("netcheck.json", {"gateway": gateway, "panel": dict(gateway, max_ms=97.0), "link": link,
-                                     "adb_over_network": adb_over_network, "tail_ms": 20, "quiet": quiet})
+                                     "adb_over_network": adb_over_network, "tail_ms": 20, "quiet": quiet,
+                                     **({"ha_over_lan": True} if ha_over_lan else {})})
         if transport:
             self.write("transport.json", {"transport": transport, "chosen_by": "auto", "reason": "r", "checks": {}})
         return R.build(self.dir)
@@ -2560,6 +2561,32 @@ class TestNetwork(unittest.TestCase):
         rep = self.net(self.NOISY, False, "lan-udp")
         self.assertEqual(rep["test_network"]["carried"], ["camera video"])
         self.assertIn("carried the camera video", rep["grade"]["provisional_reasons"][-1])
+
+    def test_the_fake_over_the_lan_carries_the_live_updates_on_usb_adb_too(self):
+        """run.sh --ha-transport lan: adb on USB, but the fake's stream crossed this computer's network, so a noisy link
+        makes the grade provisional, and the report says how the grade was taken."""
+        self.write("ha_transport.json", {"transport": "lan", "chosen_by": "auto",
+                                         "reason": "adb reverse failed on this device (\"more than one device/emulator\")"})
+        rep = self.net(self.NOISY, False, "lan-turn", ha_over_lan=True)
+        n = rep["test_network"]
+        self.assertIs(n["ha_over_lan"], True)
+        self.assertEqual(n["carried"][0], "live updates")
+        self.assertTrue(rep["grade"]["provisional"])
+        self.assertIn("carried the live updates", rep["grade"]["provisional_reasons"][-1])
+        self.assertEqual(rep["ha_transport"]["transport"], "lan")
+        md = R.markdown(rep)
+        self.assertIn("**Home Assistant over the LAN:** the fake Home Assistant reached the panel over this computer's "
+                      "network, not through adb reverse (with --ha-transport auto: adb reverse failed", md)
+        self.assertEqual(S.measurements(rep)["ha_transport"], "lan")
+        # On a quiet link: said, not provisional.
+        before = self.rep["grade"]
+        rep = self.net(self.QUIET, False, "lan-turn", link="wired", ha_over_lan=True)
+        self.assertIsNone(rep["test_network"]["limited"])
+        self.assertEqual(rep["grade"].get("provisional_reasons"), before.get("provisional_reasons"))
+
+    def test_without_the_lan_the_summary_says_nothing_of_it(self):
+        self.assertNotIn("ha_transport", self.rep)
+        self.assertNotIn("ha_transport", S.measurements(self.rep))
 
     def test_a_noisy_link_that_carried_nothing_graded(self):
         # The S1 on USB with its video through adb: the computer's Wi-Fi is on no graded path.

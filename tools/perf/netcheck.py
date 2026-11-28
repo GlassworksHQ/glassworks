@@ -12,12 +12,16 @@ What it does: 40 pings from this computer to its default gateway and 40 to the p
 and reads how adb reaches the panel (`adb devices -l`) and the panel's address (`ip -4 -o addr show` over adb
 shell, read-only). Nothing on the panel changes. It records numbers only, never an address or the serial.
 
-  tools/perf/netcheck.py --out DIR [--count 40]
+  tools/perf/netcheck.py --out DIR [--count 40] [--ha-over-lan]
+
+--ha-over-lan (run.sh --ha-transport lan): the fake Home Assistant reaches the panel over the LAN, not adb reverse, so
+its live updates cross this computer's network whatever adb goes over.
 
 Writes DIR/netcheck.json:
   gateway, panel     the pings' sent, received, min, median, p95 and max (ms); null when not measured
   link               this computer's link to the gateway: "wifi", "wired" or null (unknown)
   adb_over_network   whether adb reaches the panel over the network (wireless debugging), not USB
+  ha_over_lan        whether the fake Home Assistant went over the LAN (--ha-over-lan), not through adb reverse
   quiet              whether this computer's own link (the gateway's pings) stays at or under NET_TAIL_MS at
                      p95 and at most; null when the gateway didn't answer
 report.py marks the grade provisional when it isn't quiet and it carried graded traffic. It never fails the run.
@@ -159,6 +163,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", required=True)
     ap.add_argument("--count", type=int, default=40)
+    ap.add_argument("--ha-over-lan", action="store_true", help="the fake Home Assistant goes over the LAN, not adb reverse")
     a = ap.parse_args()
     gw, iface = default_route()
     panel = parse_panel_address(adb("shell", "ip -4 -o addr show"))
@@ -175,6 +180,8 @@ def main():
            "link": link_kind(iface),
            "adb_over_network": parse_adb_devices(adb("devices", "-l"), os.environ.get("ANDROID_SERIAL")),
            "tail_ms": NET_TAIL_MS}
+    if a.ha_over_lan:
+        out["ha_over_lan"] = True       # only then, so a run through adb reverse writes the file as before
     out["quiet"] = quiet(results.get("gateway"))
     with open(os.path.join(a.out, "netcheck.json"), "w") as f:
         json.dump(out, f, indent=1)

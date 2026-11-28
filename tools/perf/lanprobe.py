@@ -18,7 +18,11 @@ connection there and sends the token. **These are connections from the panel**, 
 only; nothing on the panel is written or changed. On this computer it listens on that address and
 port for a few seconds, before the fake starts. It records no addresses.
 
-  tools/perf/lanprobe.py --port 8090 --out DIR [--transport auto|adb|lan-turn|lan-udp]
+With --ha-over-lan (run.sh --ha-transport lan: the panel reaches the fake Home Assistant over the LAN, for a device
+whose `adb reverse` doesn't work) there is no adb path: auto picks `lan-udp` when the datagram arrived, else
+`lan-turn`, the relay over TCP as the fake's own pages go (Android 6 has no `toybox nc`, so it can't be asked).
+
+  tools/perf/lanprobe.py --port 8090 --out DIR [--transport auto|adb|lan-turn|lan-udp] [--ha-over-lan]
 
 Writes DIR/transport.json ({transport, chosen_by, reason, checks}) and prints the transport.
 Run it with the Python the fake runs under (the computer's firewall decides per program).
@@ -94,10 +98,21 @@ def tcp_check(addr, port, wait=4.0):
         return token.encode() in got.get("data", b""), status, out
 
 
-def choose(port, transport="auto"):
-    """{transport, chosen_by, reason, checks}; never raises."""
+# With the fake Home Assistant over the LAN: why the relay over TCP, when the panel's datagram didn't arrive.
+HA_LAN_TURN = ("UDP from the panel didn't arrive (or it has no toybox nc to send it), and adb reverse isn't used: "
+               "the relay over TCP on the LAN, as the fake Home Assistant's pages go")
+
+
+def choose(port, transport="auto", ha_over_lan=False):
+    """{transport, chosen_by, reason, checks}; never raises. ha_over_lan: no adb path, so never `adb`."""
     if transport != "auto":
         return {"transport": transport, "chosen_by": "flag", "reason": "set with --webrtc-transport", "checks": {}}
+    if ha_over_lan:
+        got = choose(port)
+        if got["transport"] == "lan-udp":
+            return got
+        # The TCP check needs toybox nc too; the fake's own pages over the LAN show TCP gets through.
+        return dict(got, transport="lan-turn", reason=HA_LAN_TURN)
     try:
         addr = webrtc.media_address()
     except Exception as e:     # no usable IPv4 address here: nothing to reach over the LAN
@@ -131,9 +146,12 @@ def main():
     ap.add_argument("--port", type=int, required=True, help="the relay's port (--port + 1 in run.sh)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--transport", default="auto", choices=("auto",) + webrtc.TRANSPORTS)
+    ap.add_argument("--ha-over-lan", action="store_true", help="the fake Home Assistant goes over the LAN: no adb path")
     a = ap.parse_args()
+    if a.ha_over_lan and a.transport == "adb":
+        ap.error("--transport adb goes through adb reverse, which --ha-over-lan doesn't use: lan-turn, lan-udp or auto")
     C.check_device(lambda name: panel(f"getprop {name}")[1])
-    got = choose(a.port, a.transport)
+    got = choose(a.port, a.transport, a.ha_over_lan)
     with open(os.path.join(a.out, "transport.json"), "w") as f:
         json.dump(got, f, indent=1)
         f.write("\n")

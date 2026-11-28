@@ -4,7 +4,9 @@
 
 package dev.glassworks.screen
 
+import dev.glassworks.manage.HaSignIn
 import java.io.File
+import java.net.InetAddress
 import java.net.URI
 
 /**
@@ -43,12 +45,30 @@ internal class TestHoldFile(private val file: File) {
 
     companion object {
         /**
-         * A test's dashboard is on this device only: http(s) on a loopback address, where Clarity serves its fake
-         * Home Assistant through `adb reverse`. Nothing else, so the extra can't point a panel at another site.
+         * A test's dashboard is on this device or the local network: http(s) on a loopback address, where Clarity
+         * serves its fake Home Assistant through `adb reverse`, or on a local network IP address (private, link-local
+         * or unique local, as [HaSignIn.isLocalAddress] reads one), where Clarity serves it on a device whose
+         * `adb reverse` doesn't work (the lululemon Mirror's Android 6 over network adb, `run.sh --ha-transport lan`).
+         * An address, never a name, so nothing is resolved; nothing on the internet, so the extra can't point a panel
+         * at another site. It lasts only while a test holds the screen ([ScreenPolicy.setTestDashboard]).
          */
         fun isTestDashboard(url: String): Boolean {
             val u = runCatching { URI(url.trim()) }.getOrNull() ?: return false
-            return u.scheme in setOf("http", "https") && u.host in setOf("127.0.0.1", "localhost", "[::1]") && ' ' !in url
+            if (u.scheme !in setOf("http", "https") || ' ' in url) return false
+            val host = u.host ?: return false
+            return host in setOf("127.0.0.1", "localhost", "[::1]") || localAddress(host)
         }
+
+        /** [host] (a URI's: IPv6 in brackets) is an IP address literal on the local network. Never resolves a name. */
+        private fun localAddress(host: String): Boolean {
+            val ipv4 = IPV4.matches(host)
+            val ipv6 = host.startsWith("[") && host.endsWith("]") && IPV6.matches(host.substring(1, host.length - 1))
+            if (!ipv4 && !ipv6) return false
+            val a = runCatching { InetAddress.getByName(host.trim('[', ']')) }.getOrNull() ?: return false
+            return HaSignIn.isLocalAddress(a)
+        }
+
+        private val IPV4 = Regex("""(\d{1,3}\.){3}\d{1,3}""")
+        private val IPV6 = Regex("""[0-9a-fA-F:.]+""")
     }
 }
