@@ -1,6 +1,6 @@
 # Vitro Native Card, Feature, and Theme Migration Reference
 
-Every card below renders 100% natively in Vitro with **zero GeckoView**, except `iframe`: its view stays native, but the frame's own page runs in a GeckoView island, so leave it out of a dashboard that must run with no browser at all. The engine's own list is `engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt`; this page follows it.
+Vitro draws every card below natively, without GeckoView, when its config stays within the options listed (Vitro is experimental, so check the result on the panel). The exception is `iframe`: its view stays native, but the frame's own page runs in a GeckoView island, so leave it out of a dashboard that must run with no browser at all. The engine's own list is `engines/engine-vitro/src/main/java/dev/glassworks/engine/vitro/compat/VitroSupport.kt`; this page follows it.
 
 Cards marked *(not yet compared with HA)* draw natively but haven't been checked against Home Assistant's own render in the parity harness. Prefer a compared card when either would do.
 
@@ -72,7 +72,7 @@ Cards marked *(not yet compared with HA)* draw natively but haven't been checked
 
 | Tier 3 card (triggers GeckoView) | Vitro-native replacement | Notes |
 |---|---|---|
-| Full-screen custom JS panel (`custom:mirror-home-card`, `custom:tablet-home-card`) | `type: sections` + `clock`, `weather-forecast`, `tile`, `media-control`, `calendar`, `todo-list`, `markdown`, `custom:mushroom-chips-card` + YAML theme | Use `visibility:` conditions for presence-driven layout switching |
+| Full-screen custom JS panel (a `custom:*` card that draws the whole view) | `type: sections` + `clock`, `weather-forecast`, `tile`, `media-control`, `calendar`, `todo-list`, `markdown`, `custom:mushroom-chips-card` + YAML theme | Use `visibility:` conditions for presence-driven layout switching |
 | `custom:button-card` with JavaScript templates (`[[[ ]]]`) | The same button-card without JavaScript (drawn natively), or `tile`, `button`, `custom:mushroom-template-card` | Move `[[[ ]]]` logic to `state:` rules, or to `custom:mushroom-template-card` / `markdown` for Jinja2 labels and icons |
 | `custom:apexcharts-card` | `custom:mini-graph-card`, `history-graph`, or `statistics-graph` | All three render natively on Android Canvas |
 | `custom:mod-card` / Shadow-DOM `card-mod` | HA YAML theme + card-level `card-mod` | Vitro natively applies backgrounds (colors, linear gradients), solid borders, `border-radius`, `box-shadow`, `opacity`, `padding`, `margin`, `font-family` and a pinned `position: fixed` on `ha-card`; `font-size` on tile and Mushroom cards |
@@ -89,12 +89,14 @@ Vitro resolves `modes.light` / `modes.dark` and `var(--...)` chains for:
 - `lovelace-background` (solid color, `linear-gradient(...)`, `radial-gradient(...)`, `url(...)`)
 - `state-<domain>-active-color`, `state-<domain>-on-color`, `state-active-color`, `state-icon-color`, `state-inactive-color`
 
-## Example: Two-Way Smart Mirror Theme + Presence-Aware Sections Dashboard
+## Example: Two-Way Mirror Theme + Presence-Aware Sections Dashboard
 
-### 1. Pure-Black Glass Mirror Theme (`themes/vitro_mirror.yaml`)
+A two-way mirror is one example layout. The entity IDs below are placeholders: swap in the user's own entities and keep everything else the same.
+
+### 1. Pure-Black Glass Mirror Theme (`themes/example_mirror.yaml`)
 
 ```yaml
-Vitro Mirror:
+Example Mirror:
   primary-background-color: "#000000"
   secondary-background-color: "#000000"
   lovelace-background: "#000000"
@@ -111,14 +113,14 @@ Vitro Mirror:
   state-light-active-color: "#FBBF24"
 ```
 
-### 2. Presence-Aware Portrait View (Zero GeckoView)
+### 2. Presence-Aware Portrait View (Every Card Native)
 
 ```yaml
 views:
   - path: mirror
     title: Mirror
     type: sections
-    theme: Vitro Mirror
+    theme: Example Mirror
     max_columns: 2
     sections:
       # Full dashboard when no one is standing in front of the mirror
@@ -126,7 +128,7 @@ views:
         column_span: 2
         visibility:
           - condition: state
-            entity: binary_sensor.mirror_occupied
+            entity: binary_sensor.example_presence
             state: "off"
         cards:
           - type: clock
@@ -158,7 +160,7 @@ views:
         column_span: 2
         visibility:
           - condition: state
-            entity: binary_sensor.mirror_occupied
+            entity: binary_sensor.example_presence
             state: "on"
         cards:
           - type: custom:mushroom-chips-card
