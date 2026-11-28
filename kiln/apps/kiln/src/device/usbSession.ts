@@ -170,7 +170,8 @@ export class UsbSession {
     const r = this.state.release;
     if (!this.d.release || !r || !['waiting', 'none', 'error'].includes(r.state)) return;
     try {
-      const { bytes, ready, release } = await releaseApk(this.d.frame.apk as ReleaseLine, this.d.release, (release) => this.set({ release }));
+      // only GitHub's own SHA-256 of the APK, never the .sha256 Refract serves beside it, as the wizard's (wizard/assets.ts)
+      const { bytes, ready, release } = await releaseApk(this.d.frame.apk as ReleaseLine, this.d.release, (release) => this.set({ release }), { requireDigest: true });
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);
       this.releaseAbi = this.apk ? this.d.frame.apk.abi : undefined;
@@ -312,7 +313,7 @@ export class UsbSession {
     }
     if (abi === this.releaseAbi && this.apk) return;
     this.log(`${cap(this.d.frame.the)} runs ${abis.join(', ')}: the release's ${abi} build`);
-    const got = await releaseApk({ line: this.d.frame.apk.line, abi, ...(this.listed ? { from: this.listed } : {}) }, this.d.release!, (release) => this.set({ release })).catch((e: unknown) => {
+    const got = await releaseApk({ line: this.d.frame.apk.line, abi, ...(this.listed ? { from: this.listed } : {}) }, this.d.release!, (release) => this.set({ release }), { requireDigest: true }).catch((e: unknown) => {
       if (!(e instanceof NoRelease)) throw e;
       this.set({ release: { state: 'none' } });
       throw new Refused(`${this.d.frame.app} ${this.listed?.version ?? ''} has no ${abi} build, which this ${this.d.frame.short} needs.`.replace('  ', ' '));

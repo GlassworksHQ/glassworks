@@ -290,11 +290,12 @@ outside the repository.
 
    The module that image embeds is not in this repo. A built `.ko` is a GPL payload (Hard Rule 4), so
    its source and the build recipe for the hash-pinned binary live in `GlassworksHQ/glassworks-device-bins`
-   (`frames/lululemon-mirror/selinux-permissive/`, GPL-2.0-only). The `v1` release that serves that
-   binary with its Corresponding Source is pending: it is gated on a real-Mirror load test of the
-   CI-built `.ko` and is not published yet. Once it is, this tool consumes it by pinned release URL +
-   SHA-256 (#817); `device-bins.json` already records the canonical CI SHA-256 so the pin resolves
-   the moment the release goes public. Stock `1.24.0` only loads one
+   (`frames/lululemon-mirror/selinux-permissive/`, GPL-2.0-only). The `v1` release serves that
+   binary with its Corresponding Source, and this tool consumes it by pinned release URL + SHA-256
+   (#817). **Published 2026-11-27** from device-bins `main` (run 46086813279): the CI-built `.ko`
+   matched the pin byte for byte (2512 B, `ee7b39cf…`), and `tools/check-device-bins.py
+   --verify-release` passed. A real-Mirror load test of that exact build is still **untested**; the
+   backup path itself was verified 2026-11-25 with a module built the same way. Stock `1.24.0` only loads one
    whose ABI matches its own `pronto_wlan.ko` (**verified** 2026-11-24, pulled file, not committed):
    ```
    vermagic=3.10.49-perf-g4869d64961b SMP preempt mod_unload modversions aarch64

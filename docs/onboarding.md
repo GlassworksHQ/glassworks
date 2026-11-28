@@ -353,7 +353,7 @@ learns HA's URL without asking, in order:
    `external_url`, `internal_url` and `base_url` (= external or internal, "for backward
    compatibility"). Candidates are tried in order: `internal_url`, `base_url`, then the resolved
    `http://<ip>:<port>` (Android 10 can't resolve `.local` names). Verified: HA here advertises
-   `internal_url=http://192.168.1.100:8123`, and the panel found it over mDNS.
+   `internal_url=http://<HA's LAN address>:8123` (redacted here), and the panel found it over mDNS.
 2. ✅ The address of the first ESPHome API client whose Hello `client_info` starts with
    "Home Assistant" (HA's `CLIENT_INFO`), with port 8123.
 3. ✅ Manual entry on the sign-in screen when nothing was found.
@@ -455,7 +455,12 @@ The original design notes:
   `/signin/continue?then=setup`; its callback goes back to `/setup` instead (#453). Kiln over USB opens
   `/signin/continue?then=kiln` in a pop-up; its callback closes that window, and Kiln moves on when the
   panel reports the sign-in. The pages are one template in `SignInServer.kt` (system font, inline mark, dark
-  or light as the phone is).
+  or light as the phone is). Once the panel is signed in, `/signin`, `/signin/continue` and `/callback` no
+  longer replace that sign-in for anyone on the network: only a browser signed in to the Manage page may,
+  and only when that sign-in started from it. After a sign-out, a revoked token or a move of Home
+  Assistant the panel isn't signed in, and the pages work for anyone again. Like the Manage page, they answer
+  only to the panel's own names (its addresses, `localhost`, its `.local` names), so a page on another site
+  can't reach them by DNS rebinding.
 - **PKCE.** The callback is plain HTTP on the LAN, so both sign-ins (this one and the Thread join's
   admin sign-in) use PKCE (RFC 7636, S256). Each attempt gets a fresh secret that stays on the panel.
   HA gets its hash at `/auth/authorize` and the secret itself at `/auth/token`, so a code read off the

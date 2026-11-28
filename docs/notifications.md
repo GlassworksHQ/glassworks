@@ -5,7 +5,7 @@ Glassworks lets Home Assistant display rich notifications directly over your pan
 Everything runs over the panel's native ESPHome connection, with nothing extra to install in Home Assistant.
 
 > [!NOTE]
-> **Feature status:** Notifications are currently in alpha. Core cards, camera snapshots, action buttons, Do not disturb, and full-screen and half-screen views have been tested on hardware, with ongoing polish for edge cases.
+> **Feature status:** Notifications are stable. Core cards, camera snapshots, action buttons, Do not disturb, and full-screen and half-screen views have been tested on hardware.
 
 ## Turn it on or off
 

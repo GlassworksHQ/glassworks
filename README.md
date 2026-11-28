@@ -72,8 +72,8 @@ Glassworks is built around three core concepts, guided by our [Principles](docs/
 | Frame | Status | Overview |
 |---|---|---|
 | [Aqara S1 Plus](frames/aqara-s1-plus/README.md) | Stable | Rooted Allwinner A133 wall panel and Glassworks' reference device. Runs every pane, including Zigbee/Thread radio and wall base relays. |
-| [Generic Android](frames/generic-android/README.md) | Beta | Standard Android app for Android 8+ tablets and phones (plus a legacy build for Android 6–7), with no root required. Includes tested devices like the [Google Pixel Tablet](frames/google-pixel-tablet/README.md) and the [Samsung Galaxy Tab A 10.1 (2016)](frames/samsung-galaxy-tab-a-10-1-2016/README.md). |
-| [lululemon Studio Mirror](frames/lululemon-mirror/README.md) | Beta | 40-inch smart mirror running Android behind the glass. |
+| [Generic Android](frames/generic-android/README.md) | Stable | Standard Android app for Android 8+ tablets and phones (plus a legacy build for Android 6–7), with no root required. Includes tested devices like the [Google Pixel Tablet](frames/google-pixel-tablet/README.md) and the [Samsung Galaxy Tab A 10.1 (2016)](frames/samsung-galaxy-tab-a-10-1-2016/README.md). |
+| [lululemon Studio Mirror](frames/lululemon-mirror/README.md) | Stable | 40-inch smart mirror running Android behind the glass. |
 
 Each device definition lives in `frames/<id>/design/frame.json` (see [the frame format](frames/README.md)) and is showcased with interactive 3D models at [glassworks.dev/frames](https://www.glassworks.dev/frames).
 
@@ -98,7 +98,7 @@ Each frame's README lists which panes it supports. If you want to build a new pa
 
 ## Kiln installer
 
-Kiln installs Glassworks straight from Chrome or Edge over WebUSB, backing up original partitions first wherever the device allows it and giving every install a built-in way back. On the lululemon Studio Mirror, whose bootloader can't read lululemon's software back, the way back is the community Glass Panes image ([details](docs/updates.md#lululemon-studio-mirror)). Launch it at [kiln.glassworks.dev](https://kiln.glassworks.dev), or browse its code and architecture in [`kiln/`](kiln/apps/kiln/README.md). If you prefer working from a terminal, the Aqara S1 Plus also includes a [command-line installer](frames/aqara-s1-plus/README.md#the-command-line).
+Kiln installs Glassworks straight from Chrome or Edge over WebUSB, backing up original partitions first wherever the device allows it and giving every install a built-in way back. On the lululemon Studio Mirror, whose bootloader can't read lululemon's software back, the Glassworks image's way back is the community Glass Panes image, and the experimental install that keeps lululemon's system saves a restore point that puts it back ([details](docs/updates.md#lululemon-studio-mirror)). Launch it at [kiln.glassworks.dev](https://kiln.glassworks.dev), or browse its code and architecture in [`kiln/`](kiln/apps/kiln/README.md). If you prefer working from a terminal, the Aqara S1 Plus also includes a [command-line installer](frames/aqara-s1-plus/README.md#the-command-line).
 
 ## Clarity performance grades
 
@@ -145,7 +145,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [Glassworks Principles](docs/princip
 
 Built by [@aguilaair](https://github.com/aguilaair), standing on the open-source work of [linux-sunxi](https://linux-sunxi.org/) (sunxi-tools, U-Boot), [Magisk](https://github.com/topjohnwu/Magisk), [Home Assistant](https://www.home-assistant.io/), [ESPHome](https://esphome.io/), [Music Assistant](https://music-assistant.io/), [OpenThread](https://openthread.io/), [microWakeWord](https://github.com/kahrendt/microWakeWord), [openWakeWord](https://github.com/dscripka/openWakeWord), and [Tango / ya-webadb](https://github.com/yume-chan/ya-webadb).
 
-Code in this repository is licensed under **MIT** ([LICENSE](LICENSE)), except for Glassworks Core (`dev.glassworks`), which is licensed under **MPL-2.0** ([details](pane-api/src/main/java/dev/glassworks/README.md#licence)). Standalone libraries in `libs/`—including `dev.glassworks.esphome` and `dev.glassworks.improv`—are MIT licensed. Third-party dependencies keep their original licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the complete list with versions and sources, or open *Open source licenses* in the panel's hidden settings menu (tap the top-left corner five times).
+Code in this repository is licensed under **MIT** ([LICENSE](LICENSE)), except for Glassworks Core (`core/`, `pane-api/`, `engines/` and `panes/`), which is licensed under **MPL-2.0** ([details](pane-api/src/main/java/dev/glassworks/README.md#licence)). The libraries in `libs/`, such as `dev.glassworks.esphome` and `dev.glassworks.improv`, and the apps built on the core are MIT. Third-party dependencies keep their original licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the complete list with versions and sources, or open *Open source licenses* in the panel's hidden settings menu (tap the top-left corner five times).
 
 | Component | License | How it is used |
 |---|---|---|

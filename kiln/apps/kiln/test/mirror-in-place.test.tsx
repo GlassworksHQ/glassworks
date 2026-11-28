@@ -48,7 +48,9 @@ function tab(): DeviceProgress & { mark?: ProgressMark } {
   return t;
 }
 
-interface Rig { image: ImageSession; dev: InPlaceSimDevice; store: InPlaceStore; progress: ReturnType<typeof tab>; flashed: string[]; adb: () => PanelShell }
+interface Rig { image: ImageSession; dev: InPlaceSimDevice; store: InPlaceStore; progress: ReturnType<typeof tab>; flashed: string[]; adb: () => PanelShell;
+  /** how many fastboot connections Kiln let go of (FastbootLike `close`) */
+  closes: () => number }
 
 /** A session on a simulated stock Mirror; `store` and `progress` carry over to a second browser load or a second run. */
 function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampered?: boolean; refusedBuild?: boolean; systemNotTaken?: boolean; unreadable?: boolean; store?: InPlaceStore; progress?: ReturnType<typeof tab>;
@@ -64,12 +66,14 @@ function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampere
   const progress = o.progress ?? tab();
   const flashed: string[] = [];
   const calls = new Map<string, number>();
+  let closes = 0;
   const failing = (what: string) => { const n = calls.get(what) ?? 0; calls.set(what, n + 1); if (o.fail?.(what, n)) throw new Error(`the bootloader stopped answering (${what})`); };
   const fastboot = () => {
     const fb = dev.fastboot();
     return { ...fb,
       flashBlob: async (p: string, b: Blob, on?: (x: number) => void) => { failing(`flash ${p}`); await fb.flashBlob(p, b, on); flashed.push(p); },
-      reboot: async () => { failing('reboot'); await fb.reboot(); } };
+      reboot: async () => { failing('reboot'); await fb.reboot(); },
+      close: async () => { closes++; } };
   };
   const withCode = o.code ? { ...frame, imageFlow: { ...frame.imageFlow, inPlace: { ...sim.code, ...o.code } } } : frame;
   const frame_ = o.readMs ? { ...withCode, timings: { ...withCode.timings, readMs: o.readMs } } : withCode;
@@ -100,7 +104,7 @@ function rig(o: { lan?: 'ok' | 'drop-midway' | 'offline' | 'lna-denied'; tampere
     ...o.deps,
   });
   void app;
-  return { image, dev, store, progress, flashed, adb };
+  return { image, dev, store, progress, flashed, adb, closes: () => closes };
 }
 
 /** Choose the in-place install, the first fastboot session, the warning, and the stage written and restarted. */
@@ -641,6 +645,22 @@ describe('a reload', () => {
     await swapped.image.connectFastboot();
     expect(swapped.image.state.connectError).toMatch(/another device/);
     expect(swapped.image.state.screen).toBe('fastboot');
+    // nothing goes on with that connection: Kiln lets go of it, so Connect again opens the right Mirror fresh
+    expect(swapped.closes()).toBe(1);
+  });
+
+  it('keeps the fastboot connection a later step goes on with, and lets go of it on no other success', async () => {
+    const r = rig();
+    r.image.pick(RECIPE.id);
+    r.image.choose();
+    r.image.toFastboot();
+    await r.image.connectFastboot();
+    expect(r.image.state.screen).toBe('confirm');
+    expect(r.closes()).toBe(0); // the warning's Continue writes over it
+    r.image.understand(true);
+    await r.image.flash();
+    expect(r.image.state.screen).toBe('receive');
+    expect(r.closes()).toBe(0); // its restart let go of it
   });
 });
 
@@ -690,6 +710,7 @@ describe('the way back (restore-blocks)', () => {
     await b.image.undoFlash();
     expect(b.flashed).toEqual(['system']);
     expect(b.image.state.undo?.at).toBe('error');
+    expect(b.closes()).toBe(1); // a failed write lets go of fastboot: Try again opens it fresh
     expect(progress.mark).toMatchObject({ at: 'undo', wrote: ['system'] });
     // the page reloads: the way back, on the restore point kept here, with its system write done
     const c = rig({ dev, store, progress });
@@ -861,6 +882,7 @@ describe('the way back checks everything it can before it writes', () => {
     await r.image.undoFlash();
     expect(r.image.state.undo?.refused).toBe('services.jar.orig isn\'t the file Kiln saved in this restore point. Nothing was written.');
     expect(r.flashed.length).toBe(before);
+    expect(r.closes()).toBe(1); // the refusal lets go of fastboot: Pick another restore point connects again
     expect(r.progress.mark?.at).not.toBe('undo'); // no checkpoint: the way back didn't begin
     render(<ImageFlow image={r.image} app={new AppSession({ frame, connect: async () => { throw new Error('not here'); } }, true)} />);
     expect(screen.getByRole('heading', { name: 'Kiln won’t write this restore point' })).toBeTruthy();

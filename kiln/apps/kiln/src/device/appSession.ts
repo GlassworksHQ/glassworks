@@ -162,7 +162,9 @@ export class AppSession {
     const source = this.sources;
     const current = () => this.sources === source;
     try {
-      const { bytes, ready } = await releaseApk(releaseLine(this.d.frame), get, (release) => { if (current()) this.set({ release }); }, this.d.releaseFetch);
+      // only GitHub's own SHA-256 of the APK, never the .sha256 Refract serves beside it, as the wizard's (wizard/assets.ts):
+      // the bytes and their checksum don't come from one place
+      const { bytes, ready } = await releaseApk(releaseLine(this.d.frame), get, (release) => { if (current()) this.set({ release }); }, { ...this.d.releaseFetch, requireDigest: true });
       if (!current()) return;
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);

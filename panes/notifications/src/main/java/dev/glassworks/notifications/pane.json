@@ -3,7 +3,7 @@
   "name": "Notifications",
   "does": "Home Assistant's notifications over the dashboard, with a picture, buttons and a sound.",
   "requires": [],
-  "status": "beta",
+  "status": "stable",
   "docs": "docs/notifications.md",
   "blueprints": [
     {

@@ -12,11 +12,49 @@ interface Rule {
 
 const named = (name: string) => (e: unknown) => e instanceof DOMException && e.name === name;
 
+/**
+ * WebUSB refusing a device the browser listed: `denied`, this computer didn't let the browser open it (Chrome's
+ * SecurityError "Access denied": on Linux a missing udev rule, on Windows the wrong driver); `claimed`, it opened but
+ * another program holds its interface (Chrome's NetworkError "Unable to claim interface": often adb, or on Windows the
+ * wrong driver). Neither is a disconnect.
+ */
+export type UsbRefusal = 'denied' | 'claimed';
+
+export function usbRefusal(e: unknown): UsbRefusal | undefined {
+  const m = e instanceof Error ? e.message : String(e);
+  if (named('SecurityError')(e) || /access denied/i.test(m)) return 'denied';
+  if (/unable to claim interface/i.test(m)) return 'claimed';
+  return undefined;
+}
+
+/** This computer's system, for a frame's one-time USB setup: Windows, Linux, or another that needs none (macOS, Android). */
+export function hostOs(): 'win' | 'linux' | 'other' {
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+  return /Android/.test(ua) ? 'other' : /Windows/.test(ua) ? 'win' : /Linux/.test(ua) ? 'linux' : 'other';
+}
+
+/**
+ * A refusal in calm words, for a device screen's connect error (`the`: the frame's `the`). `shown`: the screen shows the
+ * frame's one-time USB setup for this computer above it (installer.json `device.drivers`, on Windows or Linux). It says
+ * only that this connection wrote nothing: an earlier step of the same install (a stage, a partial restore) may have.
+ */
+export function usbRefusalText(r: UsbRefusal, the: string, shown = false): string {
+  return r === 'denied'
+    ? `This computer didn’t let the browser open ${the} over USB, so Kiln couldn’t write anything this time. ${shown ? 'Do the one-time USB setup above' : 'On Windows or Linux, set up its USB driver or permission once'}, then unplug ${the}, plug it back in and click Connect again.`
+    : `Another program is using ${the}’s USB connection, often adb, so Kiln couldn’t write anything this time. Close it (or run "adb kill-server") and any other Kiln tab, then click Connect again.`;
+}
+
 const RULES: Rule[] = [
   // undo's checkRestorable, before any write; the reason is in `raw`, under More help. First, because
   // its words ("install") match the disconnect rule's /stall/.
   { test: (e) => e instanceof BackupRefused, title: 'This backup can\'t undo the install',
     fix: 'Choose the backup from your first install, or follow the manual restore guide.' },
+  // the browser listed the panel but couldn't open it, or something else holds it: before the disconnect rule, which
+  // a NetworkError would otherwise match
+  { test: (e) => usbRefusal(e) === 'denied', title: 'This computer didn\'t let Kiln open the panel',
+    fix: 'Set up the one-time USB driver step from the first screen (on Linux a udev rule, on Windows the WinUSB driver), then unplug the panel, plug it back in and try again.' },
+  { test: (e) => usbRefusal(e) === 'claimed', title: 'Another program is using the panel',
+    fix: 'Close any other browser tab or Android tool using the panel (or run "adb kill-server"), then try again. On Windows, check the panel has the WinUSB driver.' },
   { test: named('NotFoundError'), title: 'No panel in recovery mode',
     fix: 'Unplug it, hold the recovery button on the board first, then plug it in and keep holding for 10 seconds.' },
   { test: (_, m) => /secure boot is enabled/.test(m), title: 'This panel only runs signed software',

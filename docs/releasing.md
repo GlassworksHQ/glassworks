@@ -67,10 +67,9 @@ means changing that file in the same PR as the secrets.
 - Never commit it. `.gitignore` ignores `*.jks` and `*.keystore`, but keep it outside the repo anyway.
 - If it leaks, someone can sign updates your panels would accept, if they can also get them onto a
   panel. Rotate: make a new key, reinstall the panels by hand, and replace the secrets.
-- A copy is in Bitwarden as the secure note "S1 Unleashed signing keys" (keystore, its password,
-  and the radio bundle key), saved and checked byte for byte on 2026-11-11. Since 2026-11-17 the
-  vault's Glassworks folder also holds "S1 Kiosk release key" and "Glassworks Android release key"
-  (each keystore attached, with its password).
+- The maintainer's password manager holds every release key (the S1 app's keystore, the generic
+  app's keystore and the radio bundle key), each with its password, and an offline backup holds a
+  copy. Check a saved copy byte for byte against the original before you rely on it.
 
 ## 3. Add the four secrets to GitHub (once)
 

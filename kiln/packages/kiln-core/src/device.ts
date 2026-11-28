@@ -51,6 +51,11 @@ export interface FastbootLike {
   partitionSize(name: string): Promise<number>;
   flashBlob(partition: string, blob: Blob, onProgress?: (x: number) => void): Promise<void>;
   reboot(): Promise<void>;
+  /**
+   * Lets go of the USB device (@glassworks/fastboot's close), on a connection the engine stops using without a reboot,
+   * so Connect or Try again opens it fresh. Optional: a fake may have nothing to let go of.
+   */
+  close?(): Promise<void>;
 }
 
 /** The device's fastboot, read-only. `deviceMac`: its id in Home Assistant, the same on every reflash. */
@@ -274,6 +279,12 @@ export interface DeviceFrame {
   connect: AskCopy;
   /** The name the browser's USB list shows the device by, when it isn't the one Kiln calls it: `Android`. */
   listed?: string;
+  /**
+   * The one-time USB setup its fastboot mode needs on this computer, one line each (installer.json `device.drivers`):
+   * `win`, the driver WebUSB can open it with; `linux`, the udev rule; `guide`, the page with the steps. The fastboot
+   * screens show the line for this computer's system, and a refused connection points to it. None: they say nothing.
+   */
+  drivers?: { win: string; linux: string; guide?: string };
   /** Whether updates install with nobody at the device, read back: one of `silent`'s states, and a line for the log. */
   updates(p: PanelShell, signal?: AbortSignal): Promise<{ state: string; log: string }>;
   /** The board `getprop ro.board.platform` gives: anything else isn't this device. */

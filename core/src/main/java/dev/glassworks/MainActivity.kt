@@ -1495,6 +1495,10 @@ open class MainActivity : Activity() {
         glassworks.screen.stayOn(SETUP_NO_TOUCH, false)
         glassworks.commandSink = null
         handler.removeCallbacksAndMessages(null)
+        // The page's session goes with this activity: a recreate (Kiln's set_locale, a font scale change) opens its own,
+        // and a session left open would keep the destroyed activity and its view alive.
+        page?.close()
+        page = null
         super.onDestroy()
     }
 

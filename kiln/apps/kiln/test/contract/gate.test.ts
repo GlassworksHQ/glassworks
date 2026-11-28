@@ -48,7 +48,7 @@ describe('the gate', () => {
 
   it('passes: every frame public in Kiln today has its contract, and a stable one passes all of it', () => {
     expect(FRAMES.filter(isPublic).map((f) => `${f.id} ${f.status}`).sort())
-      .toEqual(['aqara-s1-plus stable', 'generic-android beta', 'google-pixel-tablet beta', 'lululemon-mirror beta', 'samsung-galaxy-tab-a-10-1-2016 beta']);
+      .toEqual(['aqara-s1-plus stable', 'generic-android stable', 'google-pixel-tablet stable', 'lululemon-mirror stable', 'samsung-galaxy-tab-a-10-1-2016 stable']);
     expect(gate(FRAMES, installers(), DRIVERS, MARKS)).toEqual([]);
   });
 

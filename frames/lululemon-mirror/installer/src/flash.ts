@@ -29,6 +29,11 @@ export interface FastbootLike {
   partitionSize(name: string): Promise<number>;
   flashBlob(partition: string, blob: Blob, onProgress?: (x: number) => void): Promise<void>;
   reboot(): Promise<void>;
+  /**
+   * Lets go of the USB device (@glassworks/fastboot's close): on a connection Kiln stops using without a reboot, so
+   * Connect or Try again opens it fresh. Optional: a fake or another transport may have nothing to let go of.
+   */
+  close?(): Promise<void>;
 }
 
 export interface FastbootReport { checks: Check[]; ok: boolean; userdataBytes: number; info: string[];

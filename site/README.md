@@ -48,7 +48,7 @@ for unknown hosts, so the page renders but nothing interactive works. List the h
 `.env.local` and restart the dev server:
 
 ```sh
-DEV_ORIGINS=my-mac.tailnet.example,192.168.1.20
+DEV_ORIGINS=my-mac.tailnet.example,192.0.2.20
 ```
 
 Next.js 16 (App Router) with plain CSS: design tokens in `src/app/globals.css`, CSS modules per
