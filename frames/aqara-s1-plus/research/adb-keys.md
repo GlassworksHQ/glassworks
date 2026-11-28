@@ -158,8 +158,37 @@ the panel, from the panel's own adbd:
 
 Magisk mounts it over `/system/bin/adbd` at the next boot, before init starts adbd. The undo, the watch that takes the
 module out if adbd doesn't run, and the status are described in [radio.md](../docs/radio.md#computers-over-usb-adb).
-Tested off-device in `shell-tests.sh` ("adbd checks keys"), with a made-up file. **Untested on a panel.** That needs
-a restart, or a bind mount over `/system/bin/adbd` plus an adbd restart for a test that doesn't persist.
+Tested off-device in `shell-tests.sh` ("adbd checks keys"), with a made-up file.
+
+**Attempt 5: run 20c, the patched adbd on the panel** (2026-11-28, verified; driven from METIS with the agent and
+[`trial.sh`](../tools/radio/adbd-auth/trial.sh) pinned at `19e097df`, no reboot).
+- **The agent built the module as designed.** Status `on after a restart`, the module's adbd `a5648f6c…`,
+  `-rwxr-xr-x root shell`, `u:object_r:adbd_exec:s0`, 30,336 bytes, and `/system/bin/adbd` untouched. Against the
+  panel's own adbd, `cmp -l` shows exactly the two bytes:
+  ```
+  8401  40   0
+  8402 160 277
+  ```
+- **The patched adbd never ran.** `trial.sh` bind-mounted the module's file straight over `/system/bin/adbd` and
+  restarted adbd. init could not start it, at any try:
+  ```
+  init: cannot execve('/system/bin/adbd'): Permission denied
+  type=1401 audit: op=security_bounded_transition seresult=denied oldcontext=u:r:init:s0 newcontext=u:r:adbd:s0
+  init: Service 'adbd' (pid …) exited with status 127
+  ```
+  The trial log showed `adbd restarting` at 10, 30 and 60 s. The panel had no adb at all, over USB or TCP, until the
+  script's 900 s ran out and put Aqara's adbd back (`exe f1226080`). The panel was restored as found.
+- **Why.** This denial isn't a policy rule: the kernel refuses it even with the rest of SELinux permissive on this
+  panel. A bind mount keeps the flags of its source's mount, and `/data` is mounted `nosuid`. On a `nosuid` mount the
+  kernel allows only a "bounded" domain change, and `init → adbd` isn't one. So the file is fine; where it's mounted
+  from is the problem.
+- **What it rules out and changes.** A plain bind mount from `/data` can't replace a binary that init starts in its own
+  domain. Whether Magisk's boot-time mount of the module hits the same wall is **untested**: it depends on how Magisk
+  v31.1 mounts module files. `trial.sh` now copies the file to its own tmpfs (no `nosuid`) and binds from there, and it
+  puts Aqara's adbd back after 60 s instead of 900 if adbd isn't running.
+- **Also seen.** Aqara's `AqaraSensorsData` app logged "native restart : adbd" and queued an analytics event for it,
+  with the panel's model and an id derived from its MAC. Aqara's telemetry hears about adbd restarts.
+- **Still open:** whether the patched adbd checks keys (3b to 3g of the run didn't happen).
 
 ## Result
 
@@ -188,7 +217,10 @@ out of `adb_keys`.
 
 ## Open questions
 
-- **Does the patched adbd check keys on a panel?** Expected: a fresh key shows `unauthorized`, the agent sees it asking,
+- **Does Magisk's boot-time mount of the module run adbd?** A bind mount from `/data` can't (attempt 5): `nosuid`
+  blocks init's switch into adbd's domain. If Magisk v31.1 mounts module files the same way, the module needs another
+  route, such as the agent binding a tmpfs copy at each start.
+- **Does the patched adbd check keys on a panel?** Not reached in attempt 5. Expected: a fresh key shows `unauthorized`, the agent sees it asking,
   and Allow lets it in. The installer's key (restored by the agent) and any key in `adb_keys` get in.
 - **USB:** is it the same as TCP? Plug in a computer with a fresh key over USB. The expected answer is yes.
 - **Stock firmware:** stock ships with adb off (`persist.sys.usb.config=none`), so only panels where adb is on are open.
