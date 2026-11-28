@@ -12,7 +12,6 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import dev.glassworks.esphome.EspHomeLog
 import dev.glassworks.esphome.GattCharacteristic
 import dev.glassworks.esphome.GattDescriptor
@@ -83,7 +82,7 @@ class AndroidGattRadio(context: Context, private val recent: RecentDevices) : Ga
  */
 internal class GattTable(
     services: List<BluetoothGattService>,
-    numbered: Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.N,
+    numbered: Boolean = !Compat.gattInstanceIdsAreHandles,
 ) {
     val characteristics = HashMap<Int, BluetoothGattCharacteristic>()
     val characteristicHandles = IdentityHashMap<BluetoothGattCharacteristic, Int>()
@@ -112,7 +111,7 @@ internal class GattTable(
 @Suppress("DEPRECATION") // the pre-Android 13 calls; still there on 13+, and the only ones below it
 internal class AndroidGattLink(private val listener: GattLink.Listener) : GattLink {
     @Volatile var gatt: BluetoothGatt? = null
-    @Volatile private var table = GattTable(emptyList())
+    @Volatile internal var table = GattTable(emptyList()) // internal: a test gives it a table without a discovery
 
     val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) =

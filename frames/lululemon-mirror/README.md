@@ -168,7 +168,7 @@ If your Mirror already runs the Glass Panes image and you only want to install t
 | **Sendspin** | Stable | Synced Music Assistant playback over the Mirror's stereo speakers. |
 | **Notifications** | Stable | Because the Mirror has no touchscreen, high/critical alerts without a tag or timeout dismiss automatically after 2 minutes. |
 | **Camera** | Stable | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. The live video stream costs memory and can make the dashboard reload ([Known issues](#known-issues)). |
-| **Bluetooth proxy** | Stable | Uses the built-in Bluetooth LE radio once location permission is granted. |
+| **Bluetooth proxy** | Stable | Uses the built-in Bluetooth LE radio once location permission is granted. *Listen and connect* needs the Android 6 handle numbering (#987): before it, Home Assistant sees one service per device. |
 | **Diagnostics** | Stable | Reports uptime and memory (no CPU temperature sensor on this board). |
 | **Zigbee / Thread radio** | Not supported | No 802.15.4 radio hardware. |
 | **Time zone** | Not supported | Aqara S1 Plus only. |
@@ -193,6 +193,7 @@ Deep engineering notes from bringing up the Mirror (see [all research notes](../
 - [community-root-and-network-adb.md](research/community-root-and-network-adb.md) — Review of community root and network-adb methods
 - [display-sleep-lines.md](research/display-sleep-lines.md) — Why Android's screen off leaves lines across the display, and the backlight-only sleep that avoids it
 - [improv-ble-disconnect.md](research/improv-ble-disconnect.md) — Why Wi-Fi setup over Bluetooth never finished in Home Assistant, and the advertising fix
+- [gatt-handles-android6.md](research/gatt-handles-android6.md) — Why Home Assistant saw one service with one characteristic through *Listen and connect*: Android 6's instance ids aren't handles
 - [stock-firmware-probe.md](research/stock-firmware-probe.md) — Live probe of untouched stock 1.24.0 firmware via userdata-only HTTP app, `FS_IOC_FIEMAP`, and reversible surgical USB ADB
 - [stock-softap.md](research/stock-softap.md) — Why stock software keeps opening its `mirror-<serial>` hotspot, and the `services.jar` edit that turns it off
 - [camera-stock.md](research/camera-stock.md) — Why the stock camera sent green stills and a stream with no pictures, then upside-down stills and a sideways stream, and what the camera pane does about it

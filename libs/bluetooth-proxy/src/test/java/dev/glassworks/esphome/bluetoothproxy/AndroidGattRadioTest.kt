@@ -2,6 +2,7 @@ package dev.glassworks.esphome.bluetoothproxy
 
 import android.app.Application
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
@@ -101,6 +102,28 @@ class AndroidGattRadioTest {
         assertSame(place, t.characteristics[9])
         assertSame(cccd, t.descriptors[7])
         assertEquals("a callback finds its handle by the object Android hands back", 6, t.characteristicHandles[rate])
+    }
+
+    /** What Home Assistant is told: a callback reports the table's number, not Android 6's instance id (0). */
+    @Suppress("DEPRECATION") // the pre-Android 13 callbacks, the ones the link overrides
+    @Test fun callbacksReportTheNumberedHandle() {
+        val service = BluetoothGattService(UUID(2, 1), BluetoothGattService.SERVICE_TYPE_PRIMARY)
+        val place = BluetoothGattCharacteristic(UUID(2, 2), 0x0a, 0)
+        val rate = BluetoothGattCharacteristic(UUID(2, 3), 0x10, 0)
+        service.addCharacteristic(place); service.addCharacteristic(rate)
+        val seen = ArrayList<String>()
+        val link = AndroidGattLink(object : GattLink.Listener by quiet {
+            override fun onRead(handle: Int, data: ByteArray, status: Int) { seen += "read $handle" }
+            override fun onWritten(handle: Int, status: Int) { seen += "written $handle" }
+            override fun onNotification(handle: Int, data: ByteArray) { seen += "notified $handle" }
+        })
+        link.table = GattTable(listOf(service), numbered = true)
+        val gatt = adapter.getRemoteDevice("02:C0:FF:EE:00:01").connectGatt(app, false, link.callback, BluetoothDevice.TRANSPORT_LE)
+
+        link.callback.onCharacteristicChanged(gatt, rate)
+        link.callback.onCharacteristicRead(gatt, rate, 0)
+        link.callback.onCharacteristicWrite(gatt, place, 0)
+        assertEquals("both instance ids are 0; the numbers are the table's", listOf("notified 5", "read 5", "written 3"), seen)
     }
 
     @Test fun itConnectsToTheDeviceTheScannerHeard() {
