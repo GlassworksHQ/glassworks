@@ -262,7 +262,9 @@ abstract class LicenceResources : DefaultTask() {
         val metaInf = outputDir.dir("META-INF").get().asFile
         metaInf.deleteRecursively()
         licence.get().asFile.copyTo(File(metaInf, "LICENSE"))
-        val own = File(metaInf, "dev.glassworks/${artifact.get()}").apply { mkdirs() }
+        // Made only when a file goes in it: a library without extraLicenses or a NOTICE ships no empty folder.
+        val own = File(metaInf, "dev.glassworks/${artifact.get()}")
+        if (extras.get().isNotEmpty() || notice.isPresent) own.mkdirs()
         for (entry in extras.get()) {
             val (id, copyright) = entry.split('|', limit = 2)
             val text = licenceTexts.file("$id.txt").get().asFile.readText()

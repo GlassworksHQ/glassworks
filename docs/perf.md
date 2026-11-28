@@ -2309,8 +2309,9 @@ Vitro's lines (`VitroClarity`, see [Vitro](#vitro)) have the same types and fiel
 Their `frontend` and `video_caps` are `null`, and their `input` line adds `incomplete` (taps
 counted that got no frame in time; then `inp_ms` is `null`). Their `camera` line's streams add `entity`,
 `transport` (the kind the camera showed at the window's end: `web_rtc`, `hls` or `mjpeg`), `errors`,
-`first_frame_since_start_ms` (the stream's own time from its start), `opened_ms` and `started_ms` (when that
-stream was made and started, from the view's navigation), `sessions` (its streams on the path) and, on
+`first_frame_since_start_ms` (the stream's own time from its start; a WebRTC stream's includes its player's set-up,
+libwebrtc's shared parts and the renderer, since #989, so compare `first_frame_ms` and `started_ms` across that
+change instead), `opened_ms` and `started_ms` (when that stream was made and started, from the view's navigation), `sessions` (its streams on the path) and, on
 WebRTC, `freezes`; `gaps_source` is `vitro-frames (freeze rule)` or `vitro-frames (gaps over 500 ms)`, and
 `others` lists `mjpeg` too. A build whose cameras don't report logs no `camera` line. They go to logcat with the tag
 `Glassworks.Clarity`.

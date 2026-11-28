@@ -7,10 +7,10 @@ publish the matching section below as the release notes.
 
 ## [Unreleased]
 
-### Fixed
-- **Works beside other libraries that carry the same licence.** The AAR's extra licence texts and its NOTICE moved
-  from `META-INF/` to a folder of their own, `META-INF/dev.glassworks/voice/`. An app that also used another library
-  with a `META-INF/LICENSE-BSD-3-CLAUSE` (`dev.glassworks:ha-webrtc`, for one) failed to build on the duplicate file.
+### Changed
+- **The licence texts moved to a folder of their own.** The AAR's Apache-2.0 and BSD-3-Clause texts and its NOTICE
+  are now in `META-INF/dev.glassworks/voice/` instead of at the top of `META-INF/`, as every Glassworks library's are,
+  so an app can use it beside another library that carries the same licence without a duplicate-file error.
 
 ## [0.2.0] - 2026-11-26
 

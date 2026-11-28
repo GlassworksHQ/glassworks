@@ -15,7 +15,6 @@ import livekit.org.webrtc.RendererCommon
 import livekit.org.webrtc.VideoFrame
 import livekit.org.webrtc.VideoFrameDrawer
 import kotlin.math.hypot
-import kotlin.math.roundToLong
 
 /**
  * libwebrtc's [VideoFrameDrawer], drawing a texture frame (what the hardware decoder gives) with nothing allocated.
@@ -88,8 +87,12 @@ internal class TextureFrameDrawer : VideoFrameDrawer() {
         /** `VideoFrameDrawer.srcPoints`: the corners the extra matrix maps to find the drawn size. */
         private val SRC_POINTS = floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f)
 
+        /**
+         * libwebrtc's `distance`: `Math.round`, which makes a NaN 0 (a 0 × 0 frame's aspect ratio in EglRenderer's draw
+         * matrix), so that frame is skipped as libwebrtc skips it, where `roundToLong` would throw on the render thread.
+         */
         private fun distance(x0: Float, y0: Float, x1: Float, y1: Float): Int =
-            hypot((x1 - x0).toDouble(), (y1 - y0).toDouble()).roundToLong().toInt()
+            Math.round(hypot((x1 - x0).toDouble(), (y1 - y0).toDouble())).toInt()
 
         /**
          * `RendererCommon.convertMatrixFromAndroidGraphicsMatrix`, into [out] (16) through [values] (9): the 3 × 3

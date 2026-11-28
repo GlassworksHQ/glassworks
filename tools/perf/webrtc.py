@@ -436,11 +436,13 @@ class WebRTC:
 
     def _access_units(self, profile):
         """The profile's access units, read once (on the loop's thread): offers that come at once
-        (a view's cameras) wait for the same read. A read that failed is tried again."""
+        (a view's cameras) wait for the same read. A read that failed is tried again. Each waiter
+        gets it shielded: one that is cancelled (an offer whose task goes) leaves the read running
+        for the others."""
         fut = self.aus.get(profile)
         if fut is None or (fut.done() and (fut.cancelled() or fut.exception() is not None)):
             fut = self.aus[profile] = self.loop.run_in_executor(None, lambda: camera.access_units(self.streams(profile)))
-        return fut
+        return asyncio.shield(fut)
 
     def call(self, coro, timeout=30):
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)

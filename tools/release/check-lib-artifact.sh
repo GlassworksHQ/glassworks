@@ -48,6 +48,8 @@ if [ -n "$extra" ]; then
 fi
 if [ -f "$repo/libs/$name/NOTICE" ]; then
   has "$classes_list" "META-INF/dev.glassworks/$name/NOTICE" || fail "no META-INF/dev.glassworks/$name/NOTICE in the classes jar (libs/$name/NOTICE exists)"
+elif [ ${#extra_ids[@]} -eq 0 ] && grep -q '^META-INF/dev\.glassworks/' <<<"$classes_list"; then
+  fail "META-INF/dev.glassworks/ in the classes jar, with no extraLicenses or NOTICE to put there"
 fi
 has "$javadoc_list" 'index.html' || fail "the KDoc jar has no index.html"
 grep -q '\.kt$' <<<"$sources_list" || fail "the sources jar has no Kotlin sources"
