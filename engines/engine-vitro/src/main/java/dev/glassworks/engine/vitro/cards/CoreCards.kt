@@ -2286,7 +2286,7 @@ internal class HaHorizontalSliderView(
         val r = 3f * ctx.dp
         // The box shadow: a blurred shadow layer (a 3 px CSS blur) where the canvas draws one (a hardware canvas from
         // API 28, any software one), else a 1 px band under the pill.
-        if (android.os.Build.VERSION.SDK_INT >= 28 || !canvas.isHardwareAccelerated) {
+        if (dev.glassworks.platform.Platform.hasHardwareShapeShadows || !canvas.isHardwareAccelerated) {
             pillPaint.setShadowLayer(1.73f * ctx.dp, 0f, 1f * ctx.dp, SHADOW)
         } else {
             pillPaint.clearShadowLayer()
