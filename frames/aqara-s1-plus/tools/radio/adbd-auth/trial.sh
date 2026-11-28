@@ -16,10 +16,12 @@ W=${1:-900}
 log() { echo "$(date +%s) $*" >> $D/log; }
 h() { sha256sum "$1" 2>/dev/null | cut -c1-12; }
 restart() { stop adbd; sleep 1; start adbd; }
-back() {
-  umount /system/bin/adbd 2>/dev/null; umount $T 2>/dev/null; rmdir $T 2>/dev/null
+back() { # adbd stopped first: the kernel won't unmount a file that a running adbd executes from (run 20d)
+  stop adbd; sleep 2
+  umount /system/bin/adbd 2>/dev/null || { sleep 2; umount /system/bin/adbd 2>/dev/null; }
+  umount $T 2>/dev/null; rmdir $T 2>/dev/null
   log "unmounted: /system/bin/adbd $(h /system/bin/adbd)"
-  restart; sleep 5
+  start adbd; sleep 5
   log "Aqara's adbd again: $(getprop init.svc.adbd), exe $(h /proc/$(pidof adbd)/exe)"
 }
 rm -f $D/done

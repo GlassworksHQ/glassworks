@@ -190,6 +190,33 @@ Tested off-device in `shell-tests.sh` ("adbd checks keys"), with a made-up file.
   with the panel's model and an id derived from its MAC. Aqara's telemetry hears about adbd restarts.
 - **Still open:** whether the patched adbd checks keys (3b to 3g of the run didn't happen).
 
+**Attempt 6: run 20d, the patched adbd from a tmpfs copy** (2026-11-28, verified; driven from METIS, `trial.sh`
+pinned at `e9087d59`, no reboot).
+- **The patched adbd starts.** The trial's log shows the change of mount working, with no `nosuid`:
+  ```
+  mounted: /system/bin/adbd a5648f6c772c, u:object_r:adbd_exec:s0, rw,seclabel,relatime,mode=755
+  at 10s: adbd running, pid 23766, exe a5648f6c772c      (also at 30 s and 60 s)
+  ```
+  It enabled USB (`FUNCTIONFS_BIND`, `FUNCTIONFS_ENABLE`) and listened on tcp 5555.
+- **It checks keys, and a key in `adb_keys` passes.** After the trial's own restart of the same binary, METIS came
+  back over USB, and system_server logged what Aqara's adbd never sends (attempt 4 had none):
+  ```
+  AdbDebuggingManager: Received connected key message: <MF> <user>@<host>
+  AdbDebuggingManager: Logging key <MF> …, state = 4, alwaysAllow = true, …
+  ```
+  So adbd now goes through the key exchange, and METIS's key (MF, in `adb_keys` since run 20b) let it in.
+- **Not yet seen: a key that isn't listed being refused.** At the first start of the patched adbd, METIS didn't
+  see the panel over USB at all for 15 minutes, not even as `unauthorized`, so the throwaway key was never tried.
+  The same binary came up on USB at once after the second restart. The cause is **unconfirmed**: dmesg had rolled
+  past the first start, and the Windows host may not have re-enumerated the device.
+- **`trial.sh` couldn't put Aqara's adbd back while the patched one ran.** `back()` unmounted before it stopped adbd,
+  and the kernel refuses to unmount a file a running process executes from. So the restart brought the patched adbd
+  back. METIS put Aqara's back by hand (`stop adbd; umount; start adbd`), and `trial.sh` now stops adbd first.
+- **`adb_keys` held MF twice afterwards,** byte for byte, written while the framework logged MF with
+  `alwaysAllow = true`. Which component wrote the second copy is unknown. It's harmless, and the agent now lists a
+  computer once however many copies the file holds. The panel was otherwise restored as found, and
+  `adb_temp_keys.xml` now exists (Android's record of MF's connection).
+
 ## Result
 
 | Question | Answer | Evidence |
@@ -220,7 +247,8 @@ out of `adb_keys`.
 - **Does Magisk's boot-time mount of the module run adbd?** A bind mount from `/data` can't (attempt 5): `nosuid`
   blocks init's switch into adbd's domain. If Magisk v31.1 mounts module files the same way, the module needs another
   route, such as the agent binding a tmpfs copy at each start.
-- **Does the patched adbd check keys on a panel?** Not reached in attempt 5. Expected: a fresh key shows `unauthorized`, the agent sees it asking,
+- **Does the patched adbd refuse a key that isn't listed?** It checks keys and lets a listed one in (attempt 6).
+  The refusal itself is still to see. Expected: a fresh key shows `unauthorized`, the agent sees it asking,
   and Allow lets it in. The installer's key (restored by the agent) and any key in `adb_keys` get in.
 - **USB:** is it the same as TCP? Plug in a computer with a fresh key over USB. The expected answer is yes.
 - **Stock firmware:** stock ships with adb off (`persist.sys.usb.config=none`), so only panels where adb is on are open.

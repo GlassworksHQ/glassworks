@@ -1407,6 +1407,9 @@ check "allow the computer asking: Android answers it (allowDebugging, always)" t
 check "...ok" test "$(result)" = "r2 ok allowed"
 check "...its key in adb_keys once (Android wrote it)" test "$(grep -cxF "$K2" "$AK")" = 1
 check "...on the list" grep -qxF "added $F2 $K2" "$AP/adb-keys"
+cp "$AK" "$AK.one"; echo "$K2" >> "$AK"; touch -d '@1' "$AK"; adbrun 1
+check "a key twice in adb_keys (Android wrote it again): listed once" test "$(grep -c " $F2 " "$AP/adb-keys")" = 1
+cat "$AK.one" > "$AK"; rm -f "$AK.one"
 check "...no longer asking, also with its old log line read again" test -z "$(asking)"
 rm -f /t/adb-android-writes /t/adb-calls
 echo "$((now - 2)).100  $SSP   900 D AdbDebuggingManager: Received public key: $K5" >> /t/logcat.out; adbrun

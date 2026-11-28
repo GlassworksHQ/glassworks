@@ -1796,9 +1796,11 @@ adb_installer() { # fingerprint -> 0 when it is the boot image's key
 adb_list() { # publishes $PUB_DIR/adb-keys when $ADB_KEYS changed (or [force])
   s_=$(stat -c %Y:%s:%i "$ADB_KEYS" 2>/dev/null)
   [ -z "$1" ] && [ "$s_" = "$ADB_LISTED" ] && [ -f "$PUB_DIR/adb-keys" ] && return 0
-  { [ -f "$ADB_KEYS" ] && while IFS= read -r lk_ || [ -n "$lk_" ]; do
+  # One line a computer: Android may write a key that's already there again (run 20d saw it twice).
+  { [ -f "$ADB_KEYS" ] && sn_=" " && while IFS= read -r lk_ || [ -n "$lk_" ]; do
       adb_line_ok "$lk_" || continue
       f_=$(adb_fp "$lk_") || continue
+      case "$sn_" in *" $f_ "*) continue ;; esac; sn_="$sn_$f_ "
       if adb_installer "$f_"; then echo "installer $f_ $lk_"; else echo "added $f_ $lk_"; fi
     done < "$ADB_KEYS"; } | adb_put adb-keys && ADB_LISTED=$s_
   # The computer asking got in some other way (Android's own dialog on the screen): it isn't asking any more.
