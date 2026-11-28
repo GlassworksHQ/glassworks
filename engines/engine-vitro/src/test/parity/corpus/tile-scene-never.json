@@ -1,0 +1,20 @@
+{
+ "title": "Tile: a scene never activated (state unknown)",
+ "card": {
+  "type": "tile",
+  "entity": "scene.reading_corner"
+ },
+ "fixture": {
+  "states": {
+   "scene.reading_corner": {
+    "state": "unknown",
+    "last_changed": "-9h",
+    "attributes": {
+     "entity_id": [],
+     "id": "1700000000002",
+     "friendly_name": "Reading corner"
+    }
+   }
+  }
+ }
+}

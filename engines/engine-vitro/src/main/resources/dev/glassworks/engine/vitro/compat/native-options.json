@@ -1182,13 +1182,14 @@
       "keys": {
         "entity": {
           "entity": [
-            "alarm_control_panel", "alert", "automation", "binary_sensor", "calendar", "climate", "counter", "cover",
-            "fan", "group", "input_boolean", "input_number", "input_select", "input_text", "lawn_mower", "light", "lock",
-            "media_player", "number", "person", "plant", "remote", "schedule", "script", "select", "sensor", "siren",
-            "sun", "switch", "text", "timer", "todo", "update", "vacuum", "water_heater", "weather", "zone"
+            "alarm_control_panel", "alert", "automation", "binary_sensor", "button", "calendar", "climate", "counter",
+            "cover", "fan", "group", "input_boolean", "input_button", "input_number", "input_select", "input_text",
+            "lawn_mower", "light", "lock", "media_player", "number", "person", "plant", "remote", "scene", "schedule",
+            "script", "select", "sensor", "siren", "sun", "switch", "text", "timer", "todo", "update", "vacuum",
+            "water_heater", "weather", "zone"
           ],
           "why": "HA's tile adds a badge, a countdown, a position or a date Vitro doesn't draw for this domain",
-          "note": "Compared with HA: climate (its action badge), person (its zone badge), timer (the live countdown) and update (its install status) in tile-climate, tile-person*, tile-timer* and tile-update*. Still left out: device_tracker and humidifier (badges not compared yet), valve, and the timestamp domains (button, scene, event, image, ...), whose state HA shows as a relative time"
+          "note": "Compared with HA: climate (its action badge), person (its zone badge), timer (the live countdown), update (its install status), and button, input_button and scene (their state as a relative time, as HA's state-display draws a timestamp domain) in tile-climate, tile-person*, tile-timer*, tile-update*, tile-button-relative, tile-input-button-relative and tile-scene-*. Still left out: device_tracker and humidifier (badges not compared yet), valve, and the other timestamp domains (event, image, ...)"
         },
         "color": "@cssColor",
         "state_content": {"list": "@stateContent"},

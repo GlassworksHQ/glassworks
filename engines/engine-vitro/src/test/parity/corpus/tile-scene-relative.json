@@ -1,0 +1,21 @@
+{
+ "title": "Tile: a scene activated 2 hours ago (relative time), vertical in a sections grid",
+ "card": {
+  "type": "tile",
+  "entity": "scene.movie_night",
+  "vertical": true
+ },
+ "fixture": {
+  "states": {
+   "scene.movie_night": {
+    "state": "@-2h",
+    "last_changed": "-2h",
+    "attributes": {
+     "entity_id": [],
+     "id": "1700000000001",
+     "friendly_name": "Movie night"
+    }
+   }
+  }
+ }
+}

@@ -324,6 +324,9 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     internal var missingWarning: View? = null
         private set
 
+    /** The tile's primary sits in HA's 32 px fixed-info-height box ([buildTile]). */
+    private var fixedInfoTitle = false
+
     /** The features slot beside the info (`features_position: inline`), sized to HA's half-card width. */
     private var inlineFeatures: View? = null
 
@@ -381,7 +384,12 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             stateView.textSize = sub
             stateView.typeface = VitroFonts.typeface(ctx.context, Inter.REGULAR, sub)
             // The line boxes grow with the text (line-height 1.6 and 1.2).
-            titleView.layoutParams?.let { it.height = (scaled * 1.6f * ctx.dp).roundToInt(); titleView.layoutParams = it }
+            titleView.layoutParams?.let {
+                // A fixed info height keeps its 32 px primary box (`min-height`) unless the line outgrows it.
+                val line = (scaled * 1.6f * ctx.dp).roundToInt()
+                it.height = if (fixedInfoTitle) maxOf(line, ctx.px(32f)) else line
+                titleView.layoutParams = it
+            }
             stateView.layoutParams?.let { it.height = (sub * 1.2f * ctx.dp).roundToInt(); stateView.layoutParams = it }
         }
     }
@@ -389,12 +397,24 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     private fun buildTile() {
         val pad = ctx.px(10f)
         val vertical = config.raw.optBoolean("vertical", false) || config.raw.optString("layout") == "vertical"
+        // HA's own vertical tile (ha-tile-container `.vertical`), not a Mushroom card drawn with the tile's parts.
+        val tileVertical = vertical && isTile
+        // hui-tile-card's `fixedInfoHeight` (`layout === "grid" && grid_options.rows !== "auto"`, HA 2026.8+): a vertical
+        // tile in a sections grid reserves its info block (`.vertical.fixed-info-height`): a 2 px gap, a 48 px info
+        // block (`--ha-space-12`) and a 32 px primary line box (`--ha-space-8`), so sibling tiles line up.
+        val fixedInfo = tileVertical && ctx.cardLayout == "grid" && haAtLeast(2026, 8) &&
+            config.raw.optJSONObject("grid_options")?.opt("rows") != "auto"
         val row = LinearLayout(ctx.context).apply {
             orientation = if (vertical) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
             gravity = if (vertical) Gravity.CENTER else Gravity.CENTER_VERTICAL
             // hui-tile-card's `.content`: `min-height: 56px; padding: 0 10px`, children centred, so the 36.8 px info
-            // column fits in 56 px (a 10 px top and bottom padding would make the tile 56.8).
-            if (vertical) setPadding(pad, pad, pad, pad) else setPadding(pad, 0, pad, 0)
+            // column fits in 56 px (a 10 px top and bottom padding would make the tile 56.8). `.vertical`:
+            // `padding: 10px var(--ha-space-2)`.
+            when {
+                tileVertical -> setPadding(ctx.px(8f), pad, ctx.px(8f), pad)
+                vertical -> setPadding(pad, pad, pad, pad)
+                else -> setPadding(pad, 0, pad, 0)
+            }
             minimumHeight = ctx.px(56f)
         }
 
@@ -416,7 +436,12 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         row.clipChildren = false
         row.clipToPadding = false
         row.addView(iconFrame, LinearLayout.LayoutParams(badgeSize, badgeSize).apply {
-            if (vertical) bottomMargin = ctx.px(8f) else marginEnd = ctx.px(10f)
+            // The content's `gap`: 10 px, or 2 px with a fixed info height.
+            when {
+                tileVertical -> bottomMargin = ctx.px(if (fixedInfo) 2f else 10f)
+                vertical -> bottomMargin = ctx.px(8f)
+                else -> marginEnd = ctx.px(10f)
+            }
         })
 
         val labels = LinearLayout(ctx.context).apply {
@@ -431,9 +456,19 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             stateView.gravity = titleView.gravity
             titleView.letterSpacing = 0.1f / 14f
             stateView.letterSpacing = 0.4f / 12f
-            addView(titleView, LinearLayout.LayoutParams(if (vertical) WRAP_CONTENT else MATCH_PARENT, (22.4f * ctx.dp).roundToInt()))
-            addView(stateView, LinearLayout.LayoutParams(if (vertical) WRAP_CONTENT else MATCH_PARENT, (14.4f * ctx.dp).roundToInt()))
+            // ha-tile-info's fixed-height cell: the primary centred in its 32 px box, 2 px over the secondary, the
+            // block at least 48 px tall and centred (`justify-content: center`), so a hidden state keeps the height.
+            if (fixedInfo) {
+                gravity = Gravity.CENTER
+                minimumHeight = ctx.px(48f)
+            }
+            addView(titleView, LinearLayout.LayoutParams(if (vertical) WRAP_CONTENT else MATCH_PARENT,
+                if (fixedInfo) ctx.px(32f) else (22.4f * ctx.dp).roundToInt()))
+            addView(stateView, LinearLayout.LayoutParams(if (vertical) WRAP_CONTENT else MATCH_PARENT, (14.4f * ctx.dp).roundToInt()).apply {
+                if (fixedInfo) topMargin = ctx.px(2f)
+            })
         }
+        fixedInfoTitle = fixedInfo
         row.addView(labels, LinearLayout.LayoutParams(if (vertical) WRAP_CONTENT else 0, WRAP_CONTENT, if (vertical) 0f else 1f))
 
         val featuresArr = config.raw.optJSONArray("features")
@@ -597,19 +632,28 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         // toggle / press for the domains that have one. Otherwise a tap on it is a tap on the card.
         val iconDefault = if (entityId?.substringBefore('.') in ICON_TOGGLE_DOMAINS || entityId?.substringBefore('.') in PRESS_DOMAINS) "toggle" else "none"
         val iconTapAction = ActionConfig.parse(config.raw.optJSONObject("icon_tap_action"), iconDefault)
+        // hasTileIconAction: icon_hold_action and icon_double_tap_action are only ever `none` here (native-options.json).
         iconInteractive = iconTapAction.action != "none"
         iconToggles = iconTapAction.action == "toggle"
-        val holdAction = holdActionFor(config.raw, entityId)
+        // getTileActionDefaults gives the tile no hold action (a Mushroom card drawn here keeps Vitro's more-info). With
+        // none, HA's action handler takes a long press as a tap, as a click without a long-click listener does here.
+        val holdAction = if (isTile) ActionConfig.parse(config.raw.optJSONObject("hold_action"), "none") else holdActionFor(config.raw, entityId)
+        // hasTileCardAction: with no tap or hold action, ha-tile-container has no button role and its ripple is off.
+        val cardInteractive = !isTile || tapAction.action != "none" || holdAction.action != "none"
 
-        isClickable = true
-        setOnClickListener { ctx.performAction(tapAction, entityId) }
+        isClickable = cardInteractive
+        if (cardInteractive) {
+            setOnClickListener { ctx.performAction(tapAction, entityId) }
+            applyHaRipple(this, ctx.theme.cardBorderRadiusDp * ctx.dp, ctx.theme.dark)
+        }
         bindHoldAction(holdAction, entityId)
-        applyHaRipple(this, ctx.theme.cardBorderRadiusDp * ctx.dp, ctx.theme.dark)
         if (iconInteractive) {
             iconWrap.isClickable = true
             applyHaRipple(iconWrap, 999f, ctx.theme.dark)
             iconWrap.setOnClickListener { ctx.performAction(iconTapAction, entityId) }
-            iconWrap.bindHoldAction(ctx, holdAction, entityId)
+            // The tile's icon has no hold action (icon_hold_action is `none`), so its long press is its tap. A Mushroom
+            // card drawn here keeps the card's hold on the icon.
+            if (!isTile) iconWrap.bindHoldAction(ctx, holdAction, entityId)
         }
 
         if (entityId != null) {
@@ -617,6 +661,12 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
                 showMissing(s == null && ctx.store.isMissing(entityId))
                 renderTileBadge(s)
                 renderState(s)
+                if (isTile) {
+                    updatePulse(s)
+                    // hui-tile-card's willUpdate: a timer that just finished blinks its icon.
+                    if (s != null && timerJustFinished(lastTileState, s)) blinkTimerFinished()
+                    lastTileState = s
+                }
                 brightnessSlider?.let { sb ->
                     // HA draws the feature only for a light that can dim (supportsLightBrightnessCardFeature); without
                     // it the info row takes the whole card, centred.
@@ -1538,8 +1588,106 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
         }
         if (isTile) renderPicture(s)
         updateBadge(s, active = s?.isActive == true)
-        // The icon's own action, named for TalkBack: "Toggle Desk lamp" for HA's default toggle, else the entity.
-        if (iconInteractive) iconWrap.contentDescription = if (iconToggles) "Toggle ${titleView.text}" else titleView.text
+        // The icon's own action, named for TalkBack as hui-tile-card's _computeIconLabel names it: "Toggle Desk lamp",
+        // "Press Doorbell" or "Activate Movie night" for a toggle, else the name.
+        if (iconInteractive) iconWrap.contentDescription = if (iconToggles) iconToggleLabel(titleView.text) else titleView.text
+    }
+
+    /** The state this tile last drew, for [timerJustFinished]. */
+    private var lastTileState: EntityState? = null
+
+    /** The icon pulses ([updatePulse]), started while on screen. */
+    private var pulsing = false
+    internal val isPulsing: Boolean get() = pulsing
+    private var pulseAnimator: ValueAnimator? = null
+    private var timerBlink: ValueAnimator? = null
+
+    /**
+     * hui-tile-card's `ha-tile-icon[data-domain="alarm_control_panel"][data-state="pending" | "arming" | "triggered"]`
+     * and `[data-domain="lock"][data-state="jammed"]`: `animation: pulse 1s infinite`, the icon and its badge fading
+     * out and back in each second. HA keeps it under reduced motion too (only the timer's blink has a reduced-motion rule).
+     */
+    private fun updatePulse(s: EntityState?) {
+        val want = s != null && ((s.domain == "alarm_control_panel" && s.state in PULSE_ALARM_STATES) ||
+            (s.domain == "lock" && s.state == "jammed"))
+        if (want == pulsing) return
+        pulsing = want
+        if (want) startPulse() else stopPulse()
+    }
+
+    private fun startPulse() {
+        if (!pulsing || pulseAnimator != null || !isAttachedToWindow) return
+        val frame = iconFrame ?: return
+        // `@keyframes pulse { 0% { opacity: 1 } 50% { opacity: 0 } 100% { opacity: 1 } }`, each half on CSS's `ease`.
+        val ease = PathInterpolator(0.25f, 0.1f, 0.25f, 1f)
+        pulseAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 1000L
+            interpolator = android.view.animation.LinearInterpolator()
+            repeatCount = ValueAnimator.INFINITE
+            addUpdateListener {
+                val t = it.animatedValue as Float
+                frame.alpha = if (t < 0.5f) 1f - ease.getInterpolation(t * 2f) else ease.getInterpolation((t - 0.5f) * 2f)
+            }
+            start()
+        }
+    }
+
+    private fun stopPulse() {
+        pulseAnimator?.cancel()
+        pulseAnimator = null
+        iconFrame?.alpha = 1f
+    }
+
+    /**
+     * `ha-tile-icon.timer-finished { animation: timer-finished-pulse 0.5s ease-in-out 2 }` with `50% { --tile-icon-color:
+     * var(--error-color) }`. `--tile-icon-color` isn't a registered property, so it doesn't blend: it flips halfway
+     * through each half of the keyframes, which ease-in-out leaves at 125 ms and 375 ms of each 500 ms run. The icon and
+     * its shape are in the error color for those 250 ms, twice. Reduced motion (`--ha-animation-duration-none`) and an
+     * animator scale of 0 skip it.
+     */
+    private fun blinkTimerFinished() {
+        if (!isAttachedToWindow) return
+        timerBlink?.cancel()
+        val error = ThemeResolver.parseColor(ctx.theme.vars["error-color"]?.let { ThemeResolver.resolveValue(it, ctx.theme.vars, 0) })
+            ?: 0xFFDB4437.toInt()
+        var showingError = false
+        timerBlink = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 1000L
+            interpolator = android.view.animation.LinearInterpolator()
+            addUpdateListener {
+                val ms = (it.animatedValue as Float) * 1000f % 500f
+                val on = it.animatedFraction < 1f && ms >= 125f && ms < 375f
+                if (on == showingError) return@addUpdateListener
+                showingError = on
+                paintTileIcon(if (on) error else null)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (showingError) paintTileIcon(null)
+                    showingError = false
+                    if (timerBlink === animation) timerBlink = null
+                }
+            })
+            start()
+        }
+    }
+
+    /** The tile icon and its shape in [color] for the timer's blink, or back in `--tile-color` (null). */
+    private fun paintTileIcon(color: Int?) {
+        val c = color ?: badgeColor ?: config.entity?.let { tileColor(ctx.store[it]) } ?: return
+        iconBadge.tintColor = c
+        if (iconWrap.background === badgeOval) badgeOval.setColor(withAlpha(c, 0.2f))
+    }
+
+    /** hui-tile-card's `_computeIconLabel` for an icon whose action is `toggle`. */
+    private fun iconToggleLabel(name: CharSequence): String {
+        if (!isTile) return "Toggle $name"
+        val key = when (config.entity?.substringBefore('.')) {
+            "button", "input_button" -> "ui.card.tile.icon_press"
+            "scene" -> "ui.card.tile.icon_activate"
+            else -> "ui.card.tile.icon_toggle"
+        }
+        return HaText.ui(key, "name" to name.toString()).ifEmpty { "Toggle $name" }
     }
 
     /** This view draws HA's `tile` card (not a Mushroom card drawn with the tile's parts). */
@@ -1682,6 +1830,7 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        startPulse()
         val first = !attachedBefore
         attachedBefore = true
         // The first time, only a line that counts on its own ("5 minutes ago") is drawn again, at the time it shows.
@@ -1791,6 +1940,11 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
     }
 
     override fun onDetachedFromWindow() {
+        // Off screen the pulse stops (the icon shown whole) and starts again on attach; a blink just ends.
+        pulseAnimator?.cancel()
+        pulseAnimator = null
+        iconFrame?.alpha = 1f
+        timerBlink?.cancel()
         badgeAnimator?.cancel()
         badgeAnimator = null
         badgeColor?.let { c ->
@@ -1857,6 +2011,13 @@ class TileCardView(ctx: VitroCardContext, private val config: CardConfig) : Card
             "lock" -> if (on) "mdi:lock-open-variant" else "mdi:lock"
             else -> if (on) "mdi:power" else "mdi:power-off"
         }
+
+        /** The alarm states whose tile icon pulses (hui-tile-card's styles). */
+        private val PULSE_ALARM_STATES = setOf("pending", "arming", "triggered")
+
+        /** HA's `timerJustFinished` (`data/timer.ts`). */
+        internal fun timerJustFinished(old: EntityState?, s: EntityState): Boolean =
+            old != null && old.state != "idle" && s.state == "idle" && s.attributes["last_transition"] == "finished"
 
         /** HA's `CLIMATE_HVAC_ACTION_TO_MODE`. */
         private val CLIMATE_ACTION_MODE = mapOf(

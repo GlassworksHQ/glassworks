@@ -1,0 +1,20 @@
+{
+ "title": "Tile: an input_button pressed 3 days ago (relative time)",
+ "card": {
+  "type": "tile",
+  "entity": "input_button.reset_filter_reminder",
+  "name": "Filter reminder"
+ },
+ "fixture": {
+  "states": {
+   "input_button.reset_filter_reminder": {
+    "state": "@-3d",
+    "last_changed": "-3d",
+    "attributes": {
+     "editable": true,
+     "friendly_name": "Reset filter reminder"
+    }
+   }
+  }
+ }
+}

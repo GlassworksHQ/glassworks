@@ -2676,7 +2676,8 @@ class VitroView(
                 if (child == null) View(context) else buildCard(child, ctx, fillViewport, layout = ctx.cardLayout)
             }
             // Tier 1: Built-in HA cards
-            "tile" -> TileCardView(ctx, card)
+            // hui-tile-card's setConfig throws without an entity, and HA shows its error card in the tile's place.
+            "tile" -> if (card.entity != null) TileCardView(ctx, card) else HaErrorCardView(ctx, "Specify an entity")
             "entities" -> EntitiesCardView(ctx, card)
             // HA wraps the passing entities in its inner card (an entities card by default): its title and toggle.
             "entity-filter" -> EntitiesCardView(ctx, EntityFilterConfig.innerCard(card))

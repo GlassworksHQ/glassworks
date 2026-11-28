@@ -307,6 +307,13 @@
   "missingText": 0,
   "reason": "sub-pixel text: the name and state are the same text, size and place, and differ only in Chromium's and Skia's glyph antialiasing over a long name (2026-11-26, fake HA, state matrix)"
  },
+ "s1/m-tile-sensor-battery-low": {
+  "pixel": 0.0242,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "sub-pixel text: the icon is HA's stateColorCss color and the name and state are the same text, size and place; they differ only in Chromium's and Skia's glyph antialiasing over a long name (2026-11-28, fake HA, state matrix)"
+ },
  "s1/m-tile-sensor-no-unit": {
   "pixel": 0.0254,
   "bounds": 0,
@@ -327,6 +334,20 @@
   "font": 0,
   "missingText": 0,
   "reason": "sub-pixel text: the name and state are the same text, size and place, and differ only in Chromium's and Skia's glyph antialiasing over a long name (2026-11-26, fake HA, state matrix)"
+ },
+ "s1/m-tile-sensor-unavailable": {
+  "pixel": 0.0304,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "sub-pixel text: the icon is HA's stateColorCss color and the name and state are the same text, size and place; they differ only in Chromium's and Skia's glyph antialiasing over a long name (2026-11-28, fake HA, state matrix)"
+ },
+ "s1/m-tile-sensor-unknown": {
+  "pixel": 0.0267,
+  "bounds": 0,
+  "font": 0,
+  "missingText": 0,
+  "reason": "sub-pixel text: the icon is HA's stateColorCss color and the name and state are the same text, size and place; they differ only in Chromium's and Skia's glyph antialiasing over a long name (2026-11-28, fake HA, state matrix)"
  },
  "s1/m-tile-vacuum-returning": {
   "pixel": 0.0201,

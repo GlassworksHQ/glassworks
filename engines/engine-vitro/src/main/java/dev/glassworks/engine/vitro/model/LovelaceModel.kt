@@ -1388,11 +1388,9 @@ object HaCardSize {
                 val rows = raw.optJSONArray("entities")?.length() ?: 0
                 (if (titled() || raw.optBoolean("show_header_toggle", false)) 2 else 0) + rows.coerceAtLeast(1) + headerFooter()
             }
-            "tile" -> {
-                val features = raw.optJSONArray("features")?.length() ?: 0
-                val inline = features > 0 && raw.optString("features_position") == "inline"
-                1 + (if (raw.optBoolean("vertical", false)) 1 else 0) + (if (inline) 0 else features)
-            }
+            // hui-tile-card's getCardSize: 1, one more when vertical, and the feature rows below the info.
+            "tile" -> 1 + (if (raw.optBoolean("vertical", false)) 1 else 0) +
+                dev.glassworks.engine.vitro.ui.HaGridSize.tileFeatureLayout(raw).second
             "area" -> {
                 val compact = raw.optString("display_type", "picture") == "compact"
                 val features = raw.optJSONArray("features")?.length() ?: 0

@@ -12,6 +12,11 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Fixed
+- **Vitro draws more tiles exactly as Home Assistant does.** With Vitro on, a vertical tile in a sections view
+  lines its name and state up with Home Assistant's, button, scene and input button tiles show when they were last
+  pressed or activated ("5 minutes ago") instead of opening the view in Home Assistant's frontend, a tile without an
+  entity shows Home Assistant's error card, and a long press on a tile without a hold action does what a tap does.
+  A triggered alarm's or jammed lock's tile icon pulses, and a timer's icon blinks when it finishes.
 - **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
   saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing
   the panel to refuse dashboard authentication tokens, dashboard lists, theme updates, and permissions. Default ports

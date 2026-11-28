@@ -140,34 +140,6 @@
   "owner": "#799",
   "reason": "Mushroom card, unavailable: HA draws Mushroom's orange '?' badge on the icon (and keeps the alarm's disabled button); Vitro draws neither"
  },
- "s1/m-tile-sensor-battery-low": {
-  "owner": "#799",
-  "reason": "Tile icon color: HA's stateColorCss (an unlocked or jammed lock red, a triggered alarm and a vacuum in error red, sunny weather yellow, a low battery red, an unknown or unavailable sensor grey); Vitro draws the domain's default color"
- },
- "s1/m-tile-sensor-unavailable": {
-  "owner": "#799",
-  "reason": "Tile icon color: HA's stateColorCss (an unlocked or jammed lock red, a triggered alarm and a vacuum in error red, sunny weather yellow, a low battery red, an unknown or unavailable sensor grey); Vitro draws the domain's default color"
- },
- "s1/m-tile-sensor-unknown": {
-  "owner": "#799",
-  "reason": "Tile icon color: HA's stateColorCss (an unlocked or jammed lock red, a triggered alarm and a vacuum in error red, sunny weather yellow, a low battery red, an unknown or unavailable sensor grey); Vitro draws the domain's default color"
- },
- "s1/m-tile-vertical-cover-open-position": {
-  "owner": "#799",
-  "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
- },
- "s1/m-tile-vertical-light-long-name": {
-  "owner": "#799",
-  "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
- },
- "s1/m-tile-vertical-light-on-dimmed": {
-  "owner": "#799",
-  "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
- },
- "s1/m-tile-vertical-sensor-temperature": {
-  "owner": "#799",
-  "reason": "Tile, vertical: the name and state sit ~4 px lower than HA's"
- },
  "s1/mushroom-light-horizontal": {
   "owner": "#799",
   "reason": "Mushroom light card, horizontal: the brightness slider is a few px narrower than Mushroom's and its fill ends about 2 px early (found by the region check; #928 fixed the square slider)"

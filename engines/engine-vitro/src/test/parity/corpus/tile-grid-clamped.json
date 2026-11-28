@@ -1,0 +1,32 @@
+{
+ "title": "Tile with a feature and grid_options smaller than its getGridOptions minimum: clamped up to 6 columns and 2 rows",
+ "card": {
+  "type": "tile",
+  "entity": "light.reading_lamp",
+  "features": [
+   {
+    "type": "light-brightness"
+   }
+  ],
+  "grid_options": {
+   "columns": 3,
+   "rows": 1
+  }
+ },
+ "fixture": {
+  "states": {
+   "light.reading_lamp": {
+    "state": "on",
+    "last_changed": "-12m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 128,
+     "friendly_name": "Reading lamp"
+    }
+   }
+  }
+ }
+}

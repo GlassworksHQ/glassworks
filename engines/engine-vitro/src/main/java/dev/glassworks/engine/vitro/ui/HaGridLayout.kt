@@ -221,11 +221,32 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
             return HaGridSize(c, r?.takeIf { it > 0 })
         }
 
+        /**
+         * hui-tile-card's `_featurePosition` and `computeCardFeatureRows`: whether the features sit inline (never on a
+         * vertical tile, and only with at least one feature), and how many rows the ones below take: one per feature at the
+         * bottom, else `ceil(below / min(below, 2))` for the features after the inline one.
+         */
+        internal fun tileFeatureLayout(raw: org.json.JSONObject): Pair<Boolean, Int> {
+            val features = raw.optJSONArray("features")?.length() ?: 0
+            val inline = features > 0 && !raw.optBoolean("vertical", false) && raw.optString("features_position") == "inline"
+            if (!inline) return false to features
+            val below = features - 1
+            val columns = minOf(below, 2).coerceAtLeast(1)
+            return true to (below + columns - 1) / columns
+        }
+
         /** A state-control card's rows for its `features`: `Math.ceil(features.length * 2 / 3)`. */
         private fun featureRows(raw: org.json.JSONObject): Int = ((raw.optJSONArray("features")?.length() ?: 0) * 2 + 2) / 3
 
         /** The minimum size a card type reports from `getGridOptions()`: entity and sensor 6 x 2, the graphs 6 wide. */
         fun minimums(card: CardConfig): HaGridSize = when (card.type) {
+            // hui-tile-card's getGridOptions: `min_columns` 6 (12 with inline features, 3 when vertical) and `min_rows`
+            // its own rows, so a smaller `grid_options` is clamped up to them.
+            "tile" -> {
+                val (inline, rows) = tileFeatureLayout(card.raw)
+                val vertical = card.raw.optBoolean("vertical", false)
+                HaGridSize(if (vertical) 3 else if (inline) 12 else 6, 1 + rows + if (vertical) 1 else 0)
+            }
             "entity", "sensor", "history-graph" -> HaGridSize(6, 2)
             "statistics-graph" -> HaGridSize(6, 3)
             "thermostat", "humidifier" -> HaGridSize(6, 2 + featureRows(card.raw))
@@ -290,12 +311,10 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                     }
                 }
                 "tile" -> {
-                    val features = raw.optJSONArray("features")?.length() ?: 0
                     val vertical = raw.optBoolean("vertical", false)
-                    // Inline, the first feature sits beside the info; the others go below in up to two columns.
-                    val inline = features > 0 && !vertical && raw.optString("features_position") == "inline"
-                    val below = if (inline) features - 1 else features
-                    val featureRows = if (inline) (below + 1) / 2 else features
+                    // Inline, the first feature sits beside the info; the others go below in up to two columns. HA's
+                    // `columns` is 6 then, clamped up to its `min_columns` of 12 ([minimums]).
+                    val (inline, featureRows) = tileFeatureLayout(raw)
                     HaGridSize(if (inline) 12 else 6, 1 + featureRows + if (vertical) 1 else 0)
                 }
                 // hui-error-card's getGridOptions: 6 columns, 1 row.

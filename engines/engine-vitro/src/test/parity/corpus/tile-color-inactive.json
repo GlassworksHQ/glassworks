@@ -1,0 +1,24 @@
+{
+ "title": "Tile with color: red on a light that is off: --tile-color stays --state-inactive-color",
+ "card": {
+  "type": "tile",
+  "entity": "light.reading_lamp",
+  "color": "red"
+ },
+ "fixture": {
+  "states": {
+   "light.reading_lamp": {
+    "state": "off",
+    "last_changed": "-40m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": null,
+     "brightness": null,
+     "friendly_name": "Reading lamp"
+    }
+   }
+  }
+ }
+}

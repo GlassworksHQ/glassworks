@@ -1,0 +1,15 @@
+{
+ "title": "Tile without an entity, in a vertical stack: hui-tile-card's setConfig throws \"Specify an entity\" and HA shows its error card in the tile's place (the stack lets the capture find the card's slot)",
+ "card": {
+  "type": "vertical-stack",
+  "cards": [
+   {
+    "type": "tile",
+    "name": "Nothing here"
+   }
+  ]
+ },
+ "fixture": {
+  "states": {}
+ }
+}

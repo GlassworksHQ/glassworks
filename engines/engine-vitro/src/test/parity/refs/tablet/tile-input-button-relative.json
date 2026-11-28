@@ -1,0 +1,81 @@
+{
+ "case": "tile-input-button-relative",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Filter reminder",
+   "x": 56,
+   "y": 12.61,
+   "w": 93.11,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "input_button.reset_filter_reminder": {
+   "s": "2026-11-09T16:08:00+00:00",
+   "a": {
+    "editable": true,
+    "friendly_name": "Reset filter reminder"
+   },
+   "lc": 1794240480,
+   "lu": 1794240480
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "input_button"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {},
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {
+    "component.input_button.entity_component._.state_attributes.editable.name": "Managed via UI",
+    "component.input_button.entity_component._.state_attributes.editable.state.false": "No",
+    "component.input_button.entity_component._.state_attributes.editable.state.true": "Yes"
+   },
+   "entity": {}
+  }
+ }
+}

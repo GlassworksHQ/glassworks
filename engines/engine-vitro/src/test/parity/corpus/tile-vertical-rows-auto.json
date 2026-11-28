@@ -1,0 +1,27 @@
+{
+ "title": "Tile, vertical, grid_options rows auto: no fixed info height in the sections grid",
+ "card": {
+  "type": "tile",
+  "entity": "light.reading_lamp",
+  "vertical": true,
+  "grid_options": {
+   "rows": "auto"
+  }
+ },
+ "fixture": {
+  "states": {
+   "light.reading_lamp": {
+    "state": "on",
+    "last_changed": "-12m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 200,
+     "friendly_name": "Reading lamp"
+    }
+   }
+  }
+ }
+}

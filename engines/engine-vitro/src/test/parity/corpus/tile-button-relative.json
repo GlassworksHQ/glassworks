@@ -1,0 +1,18 @@
+{
+ "title": "Tile: a button, whose state HA's state-display shows as a relative time (\"5 minutes ago\"), its icon a press",
+ "card": {
+  "type": "tile",
+  "entity": "button.hallway_chime"
+ },
+ "fixture": {
+  "states": {
+   "button.hallway_chime": {
+    "state": "@-5m",
+    "last_changed": "-5m",
+    "attributes": {
+     "friendly_name": "Hallway chime"
+    }
+   }
+  }
+ }
+}

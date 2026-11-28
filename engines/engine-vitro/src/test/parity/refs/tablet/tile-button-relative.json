@@ -1,0 +1,82 @@
+{
+ "case": "tile-button-relative",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1794499680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2,
+  "touch": true
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 72
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 56,
+   "type": "hui-tile-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "clipped": false,
+   "text": "Hallway chime",
+   "x": 56,
+   "y": 12.61,
+   "w": 92.53,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "button.hallway_chime": {
+   "s": "2026-11-12T16:03:00+00:00",
+   "a": {
+    "friendly_name": "Hallway chime"
+   },
+   "lc": 1794499380,
+   "lu": 1794499380
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [],
+  "devices": [],
+  "requested": {
+   "domains": [
+    "button"
+   ],
+   "platforms": []
+  },
+  "icons": {
+   "entity_component": {
+    "button": {
+     "_": {
+      "default": "mdi:button-pointer"
+     }
+    }
+   },
+   "entity": {}
+  },
+  "translations": {
+   "entity_component": {},
+   "entity": {}
+  }
+ }
+}

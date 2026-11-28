@@ -1,0 +1,29 @@
+{
+ "title": "Tile, vertical, inside a vertical stack: not a sections grid cell, so no fixed info height (10 px gap, info sized to its lines)",
+ "card": {
+  "type": "vertical-stack",
+  "cards": [
+   {
+    "type": "tile",
+    "entity": "light.reading_lamp",
+    "vertical": true
+   }
+  ]
+ },
+ "fixture": {
+  "states": {
+   "light.reading_lamp": {
+    "state": "on",
+    "last_changed": "-12m",
+    "attributes": {
+     "supported_color_modes": [
+      "brightness"
+     ],
+     "color_mode": "brightness",
+     "brightness": 128,
+     "friendly_name": "Reading lamp"
+    }
+   }
+  }
+ }
+}
