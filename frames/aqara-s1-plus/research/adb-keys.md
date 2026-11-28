@@ -85,6 +85,20 @@ remove it like any other key. The agent records that removal and doesn't undo it
    installer's key back after Android drops it, keeping it out once it's removed on Manage, and stale or malformed
    requests.
 
+3. **Looked at the dev panel's adb files** (2026-11-28, verified, read-only, from METIS's run 20 step 0). The panel runs
+   app 0.9.0 (900) on a frame-loader boot image, with the agent source `boot`.
+   ```
+   $ getprop ro.adb.secure             -> 1
+   $ ls -la /data/misc/adb/            -> drwxr-s--- system shell, empty (only . and ..)
+   $ ls /data/misc/adb/adb_keys        -> No such file or directory
+   $ settings get global adb_allowed_connection_time -> null (Android's 7 days)
+   ```
+   Both `adb_keys` and `adb_temp_keys.xml` were gone, yet METIS's adb session still worked. Android deletes both files
+   when every key in its keystore has expired: `persistKeyStore` (`AdbDebuggingManager.java:971`–`977`) calls
+   `deleteKeyStore`, which calls `deleteKeyFile` and deletes the XML too (`:1059`–`1066`). adbd doesn't re-check a
+   connection it has already let in, so METIS's open session survives. The next adbd restart or replug would ask on the
+   screen. This fits the 7-day expiry, but it doesn't prove it: we never saw the files before they went.
+
 ## Result
 
 | Question | Answer | Evidence |
@@ -116,8 +130,8 @@ All of these need a real panel:
 - Does Aqara's Android 10 log `Received public key:` the way AOSP does, in the system buffer, from system_server?
 - Does the S1's `logcat` take `-T <epoch>.000`? The agent falls back to `-T 1` when logcat ends at once.
 - Does `service call adb 1 i32 1 s16 <key>` as root let a waiting computer in without a replug?
-- Is `adb_temp_keys.xml` on the panel, with the installer's key and a `lastConnection` time? That would confirm that
-  panels have been forgetting the installer's key after a week.
+- Is `adb_temp_keys.xml` on a panel that still has keys, with the installer's key and a `lastConnection` time? The dev
+  panel had neither file (attempt 3), which is what Android leaves once every key has expired.
 - Does Android's own dialog stay on the screen after Manage answers it? On Android 6 it stays until the computer is
   unplugged (`UsbDebugging.cover` in the core).
 - After Remove, Android's keystore still holds the key in memory until the next reboot. With the timeout off that
