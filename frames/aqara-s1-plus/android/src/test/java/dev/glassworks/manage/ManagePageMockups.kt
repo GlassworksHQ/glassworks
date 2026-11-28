@@ -162,9 +162,16 @@ class ManagePageMockups {
         val asking = key(10, "alex@laptop")
         File(pub, "adb-asking").writeText("${t / 1000} ${asking.fingerprint} ${asking.base64} ${asking.name}\n")
         File(pub, "adb-keys").writeText(line("installer", key(11, "kiln@glassworks")) + line("added", key(12, "sam@desktop")))
-        val s1 = dev.glassworks.s1.manage.S1AdbComputers(pub, File(f.dir, "s1-adb/request"), File(f.dir, "s1-adb/notes.json"), {}, clock = { t })
+        // The agent's adbd key check: on (the list decides), then still off (until the next restart, or not loaded).
+        var auth = "on"
+        val s1 = dev.glassworks.s1.manage.S1AdbComputers(pub, File(f.dir, "s1-adb/request"), File(f.dir, "s1-adb/notes.json"), {}, clock = { t }, authStatus = { auth })
         val s = ManageFixture(usb = dev.glassworks.manage.ManageUsbDebugging(s1, dev.glassworks.manage.ManagePages(clock = { t })::time, {}))
         s.now = t
-        save("13g-security-s1-allow-computer", s.Browser().apply { signInWithHa() }.get("/security"))
+        val sb = s.Browser().apply { signInWithHa() }
+        save("13g-security-s1-allow-computer", sb.get("/security"))
+        auth = "on after a restart"
+        save("13h-security-s1-check-after-restart", sb.get("/security"))
+        auth = "off: Magisk loads no modules here"
+        save("13i-security-s1-check-off", sb.get("/security"))
     }
 }
