@@ -942,7 +942,7 @@ class VitroEngine(
             // A path (`/history`) is one on Home Assistant: no engine loads a bare path, and the legacy one's lockdown
             // refuses it for its missing origin. The core sends URLs; a path that reaches here goes on HA's origin too.
             if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                val resolved = FrontendUrls.resolve(url, currentOrigin ?: configuredOrigin())
+                val resolved = FrontendUrls.resolve(url, currentOrigin ?: settings(activity.applicationContext).dashboard)
                 if (resolved == null) {
                     Log.w(logTag, "Not a URL, nor a path on a known Home Assistant: nothing loads")
                     return

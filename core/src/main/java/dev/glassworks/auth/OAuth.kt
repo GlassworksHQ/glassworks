@@ -78,6 +78,13 @@ object OAuth {
         null
     }
 
+    /**
+     * `scheme://authority` as Android's Uri reads it, for URLs [origin] reads no host from: java.net.URI refuses a
+     * non-ASCII host, and reads none from a name with an underscore (`home_assistant`). Written as given.
+     */
+    fun authority(url: String): String? =
+        android.net.Uri.parse(url.trim()).let { u -> if (u.scheme.isNullOrEmpty() || u.authority.isNullOrEmpty()) null else "${u.scheme}://${u.authority}" }
+
     fun trimBase(url: String): String = url.trim().trimEnd('/')
 
     fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")
@@ -417,11 +424,31 @@ object FrontendUrls {
      * address), with a `/` before it if it has none. Home Assistant serves its frontend at the root, so a path in
      * [base] (the dashboard's own) is no prefix. Null when [base] has no http(s) origin, for a scheme-relative `//host`
      * (it names a host, not a path) and for a control character.
+     *
+     * The result is the origin's text, then `/`, then [path]: nothing in [path] can end the authority early or name
+     * another host, whatever a browser reads a `\`, `@` or `%2F` as. Keep it a string join: an RFC 3986 or WHATWG
+     * resolver (`URI.resolve`, `Uri.withAppendedPath`) reads `//evil.example` or `\\evil.example` as a host
+     * (FrontendUrlsResolveTest's hostile table, LockdownPolicyTest).
      */
     fun pathOn(base: String?, path: String): String? {
         if (path.startsWith("//") || path.any { it.code < 0x20 || it.code == 0x7f }) return null
-        val origin = base?.let(OAuth::origin) ?: return null
+        val origin = base?.let { OAuth.origin(it) ?: authorityOrigin(it) } ?: return null
         return origin + if (path.startsWith("/")) path else "/$path"
+    }
+
+    /**
+     * [base]'s origin from [OAuth.authority], for a host java.net.URI reads none from (`home_assistant`, an IDN), as
+     * the engines start with it ([dev.glassworks.KioskPrefs.engineStart]): http(s) only, lower case, the default port
+     * dropped. Null for an authority with user info or a character that could end it or name another host.
+     */
+    private fun authorityOrigin(base: String): String? {
+        val a = OAuth.authority(base) ?: return null
+        val scheme = a.substringBefore("://").lowercase(Locale.ROOT)
+        if (scheme != "http" && scheme != "https") return null
+        val authority = a.substringAfter("://").lowercase(Locale.ROOT)
+        if (authority.isEmpty() || authority.any { it in "@\\/?#%" || it.isWhitespace() || it.code < 0x20 || it.code == 0x7f }) return null
+        val defaultPort = if (scheme == "http") ":80" else ":443"
+        return "$scheme://" + authority.removeSuffix(defaultPort)
     }
 
     /** A URL's scheme (RFC 3986): `http:`, `about:`. `homeassistant.local:8123/x` reads as one too, and stays as it is. */

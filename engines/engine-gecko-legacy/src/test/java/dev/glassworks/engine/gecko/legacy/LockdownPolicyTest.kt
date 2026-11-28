@@ -62,6 +62,51 @@ class LockdownPolicyTest {
         }
     }
 
+    /**
+     * What a browser-style resolver could read as another host (FrontendUrlsResolveTest's table): what the app makes of
+     * each loads only on Home Assistant's origin, or not at all. A later switch to `URI.resolve` fails here too.
+     */
+    @Test fun `no hostile path the app resolves leaves the lockdown's origin`() {
+        val dashboard = "$ha/lovelace/0?external_auth=1"
+        val fresh = LockdownPolicy().also { it.start(dashboard) }
+        for (ref in listOf(
+            "/\\evil.example", "\\\\evil.example", "\\/evil.example", "/\\/evil.example", "@evil.example", "/@evil.example",
+            "%2F%2Fevil.example", "%5C%5Cevil.example", "\uFF0F\uFF0Fevil.example", "\u200B//evil.example",
+            "\uFEFF//evil.example", "\t//evil.example", "\u3000//evil.example", "/\t/evil.example", "//evil.example",
+            "\u0000http://evil.example", "?//evil.example", "#//evil.example", "../../evil.example", "/history@evil.example",
+        )) {
+            val url = dev.glassworks.auth.FrontendUrls.resolve(ref, dashboard) ?: continue
+            assertEquals("$ref -> $url", ha, Origin.of(url))
+            assertTrue("$ref -> $url", fresh.allows(Load.PAGE, url))
+        }
+    }
+
+    /** A ref with a scheme reaches the engine as it is (FrontendUrls.resolve): the lockdown refuses each of these. */
+    @Test fun `the lockdown refuses what a ref with a scheme names`() {
+        val dashboard = "$ha/lovelace/0"
+        val fresh = LockdownPolicy().also { it.start(dashboard) }
+        for (ref in listOf(
+            "JAVASCRIPT:alert(1)", "javascript:alert(1)", "HTTP://evil.example/", "http://ha@evil.example/",
+            "http://192.0.2.10:8123@evil.example/", "data:text/html,<p>x</p>", "intent://x#Intent;scheme=http;end",
+            "file:///sdcard/x.html", "http:\\\\evil.example", "blob:http://evil.example/x",
+        )) {
+            assertEquals(ref, dev.glassworks.auth.FrontendUrls.resolve(ref, dashboard))
+            for (kind in Load.values()) assertFalse("$kind $ref", fresh.allows(kind, ref))
+        }
+    }
+
+    /** Hosts java.net.URI reads none from: the URL the app resolves `/history` to (FrontendUrlsResolveTest) loads. */
+    @Test fun `a path resolved on a host java net URI reads none from loads`() {
+        for ((dashboard, url) in listOf(
+            "http://home_assistant:8123/lovelace/0" to "http://home_assistant:8123/history",
+            "http://Home_Assistant:80/" to "http://home_assistant/history?x=1#y",
+            "http://ält.example:8123/lovelace/0" to "http://ält.example:8123/history",
+        )) {
+            val fresh = LockdownPolicy().also { it.start(dashboard) }
+            assertTrue("$dashboard: $url", fresh.allows(Load.PAGE, url))
+        }
+    }
+
     @Test fun `before the engine starts nothing from the network loads`() {
         val fresh = LockdownPolicy()
         assertNull(fresh.origin)
