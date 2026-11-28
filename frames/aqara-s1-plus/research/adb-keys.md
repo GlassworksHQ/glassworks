@@ -7,8 +7,9 @@ evidence: verified
 
 **Status (2026-11-28): the S1's adbd doesn't check keys (verified).** On a panel, adbd let in a key it had never seen,
 over TCP, with a working shell. It sent no request to Android, and no dialog appeared. That happened with
-`ro.adb.secure=1` and `ro.debuggable=0`. So "Allow a new computer" has nothing to answer on the S1 until adbd checks
-keys. The rest of this note, Android 10's key handling and the agent's side, still holds, and is read from AOSP
+`ro.adb.secure=1` and `ro.debuggable=0`. The reason is one store Aqara's adbd makes right after reading
+`ro.adb.secure`. The frame agent now patches that store out through a Magisk module ([the fix](#the-fix)); that's
+untested on a panel. Until it runs, "Allow a new computer" has nothing to answer. The rest of this note, Android 10's key handling and the agent's side, still holds, and is read from AOSP
 `android10-release` or tested off-device in `frames/aqara-s1-plus/tools/radio/test/`.
 
 Device: Aqara Panel Hub S1 Plus, Android 10 (Aqara firmware 4.5.80). Source: AOSP `platform/frameworks/base`,
@@ -124,10 +125,48 @@ remove it like any other key. The agent records that removal and doesn't undo it
      computers above. Why adbd skips the check is open too: an Aqara build of adbd without authentication is the
      likeliest reason.
 
+## The fix
+
+**Why adbd doesn't check** (2026-11-28, read). This is Aqara's 4.5.80 `/system/bin/adbd`, from the OTA's
+`system.new.dat.br`, rebuilt with a small sdat2img script and dumped with `debugfs`. It's kept outside the repo, under
+`/tmp`. It's 30,336 bytes, sha256 `f122608055852e0b5a809703b7cafb4d04e4aab225680b414d502486766fe2ee`, from the build
+`peony_evb2-user 10 QP1A.191105.004 test-keys`.
+```
+$ llvm-objdump -d --start-address=0x20b4 --stop-address=0x20d6 adbd      (adbd_main)
+20b4: blx GetBoolProperty("ro.adb.secure", false)
+20c2: strb r0, [r4]          ; auth_required = ro.adb.secure   (r4 = &auth_required, GOT at 0x23a8)
+20ce: movs r0, #0x0
+20d0: strb r0, [r4]          ; auth_required = false           <- the extra store
+20d2: blx adbd_auth_init
+```
+`auth_required` lives in `libadbd.so` (`.data` 0x3609c, initial value 1). Its only other use is a read in
+`handle_packet`, at 0x12710–0x12716: on a connection, `if (auth_required) send_auth_request else handle_online`.
+`libadbd.so` still reads keys from `/adb_keys` and `/data/misc/adb/adb_keys`. So it's one store, and only that store
+turns the check off. AOSP 10's `adbd_main` sets `auth_required` from `ro.adb.secure` only under `ALLOW_ADBD_NO_AUTH`,
+and never writes `false` after.
+
+**The patch.** At file offset `0x20d0` (the text segment maps file offset to address one to one), `20 70`
+(`strb r0, [r4]`) becomes `00 bf` (`nop`). `auth_required` then keeps the value read from `ro.adb.secure`, which is 1.
+The patched file's sha256 is `a5648f6c772ca074d84b8b1fab332f58faf652dab30bcd47fc120fbb8657d16d`. Patching the first
+instruction (`movs`) instead doesn't work: `r0` holds whatever the `itt ne` branch left there.
+
+**How it reaches panels.** It can't ship as a file: it's Aqara's binary (hard rule 3). So the frame agent makes it on
+the panel, from the panel's own adbd:
+1. It checks that the live adbd's hash is 4.5.80's and that the 4 bytes at `0x20ce` are `00 20 20 70`.
+2. It writes the 2 bytes and checks the result's hash.
+3. It puts the copy into the Magisk module `glassworks_adbd_auth` (`system/bin/adbd`, 0755 root:shell, `adbd_exec`).
+
+Magisk mounts it over `/system/bin/adbd` at the next boot, before init starts adbd. The undo, the watch that takes the
+module out if adbd doesn't run, and the status are described in [radio.md](../docs/radio.md#computers-over-usb-adb).
+Tested off-device in `shell-tests.sh` ("adbd checks keys"), with a made-up file. **Untested on a panel.** That needs
+a restart, or a bind mount over `/system/bin/adbd` plus an adbd restart for a test that doesn't persist.
+
+## Result
 
 | Question | Answer | Evidence |
 |---|---|---|
 | Does the S1 let in any key? | **Yes.** adbd let in a key it had never seen, with no request to Android and no dialog, although `ro.adb.secure=1` | Attempt 4 (run 20b, 2026-11-28) |
+| Why? | Aqara's adbd stores `false` over `auth_required` right after reading `ro.adb.secure` | adbd_main 0x20ce–0x20d0 ([the fix](#the-fix)) |
 | Can root answer "Allow USB debugging?" | Yes, through `service call adb 1 i32 1 s16 <key>`, only for the computer asking | `IAdbManager.aidl`, `AdbService.java:238`, `AdbDebuggingManager.java:358` |
 | Does Android 10 forget keys? | Yes, 7 days after the last connection, and the installer's key with them | `AdbDebuggingManager.java:943`–`1028`, `Settings.java:12393` |
 | Does a dropped installer key come back? | Not by itself: first boot runs once. The agent puts it back at every start, unless it was removed on Manage | `glassworks_firstboot.sh` (its marker), `glassworks_agent.sh` (`adb_restore`) |
@@ -149,9 +188,8 @@ out of `adb_keys`.
 
 ## Open questions
 
-- **Why doesn't adbd check keys?** The next step is to read `/system/bin/adbd` from Aqara's 4.5.80 firmware (kept
-  outside the repo) and see whether its authentication is compiled out, or tied to something other than
-  `ro.adb.secure`.
+- **Does the patched adbd check keys on a panel?** Expected: a fresh key shows `unauthorized`, the agent sees it asking,
+  and Allow lets it in. The installer's key (restored by the agent) and any key in `adb_keys` get in.
 - **USB:** is it the same as TCP? Plug in a computer with a fresh key over USB. The expected answer is yes.
 - **Stock firmware:** stock ships with adb off (`persist.sys.usb.config=none`), so only panels where adb is on are open.
   Glassworks' first boot turns it on.

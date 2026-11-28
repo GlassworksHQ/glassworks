@@ -26,6 +26,7 @@ class ManageUsbDebugging(
     fun cards(v: ManagePages.Viewer, shown: String?): String {
         val result = Result.entries.firstOrNull { it.key == shown }
         val status = result?.let { """<div class="st${if (it.ok) "" else " bad"}"><i class="dot ${if (it.ok) "ok" else "bad"}"></i><span>${esc(it.text)}</span></div>""" }.orEmpty()
+        val notice = computers.notice()?.let { """<div class="st bad"><i class="dot bad"></i><span>${esc(it)}</span></div>""" }.orEmpty()
         val asking = computers.asking()
         val ask = when {
             asking == null -> """<div class="row static note"><span>${esc(NONE_ASKING)}</span></div>"""
@@ -46,7 +47,7 @@ class ManageUsbDebugging(
             val title = if (l.installer && l.key.name == KILN_KEY) "Kiln" else l.key.name ?: "A computer"
             """<div class="row static usb"><div><b>${esc(title)}</b>${about(l.key, added)}</div>$remove</div>"""
         }
-        return """<section class="card list"><div class="lh"><b>Allow a new computer</b><span>USB debugging</span></div>$status$ask</section>""" +
+        return """<section class="card list"><div class="lh"><b>Allow a new computer</b><span>USB debugging</span></div>$notice$status$ask</section>""" +
             """<section class="card list"><div class="lh"><b>Allowed computers</b><span>${list.size}</span></div>$rows</section>$CSS"""
     }
 

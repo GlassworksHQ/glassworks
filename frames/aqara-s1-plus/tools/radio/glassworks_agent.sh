@@ -927,6 +927,89 @@ hn_apply() {
   elif [ -n "$noenv_" ]; then hn_say "android: Magisk loads no modules here (no $HN_MAGISK_BB)"
   else hn_say "$want_"; fi
 }
+# --- adbd checks keys (#981) -----------------------------------------------------------------------
+# Aqara's adbd lets every computer in. adbd_main reads ro.adb.secure into auth_required (0x20c2: strb r0,[r4]), then
+# stores false over it (0x20ce: movs r0,#0; 0x20d0: strb r0,[r4]); handle_packet in libadbd.so only reads the flag (read
+# from 4.5.80's /system/bin/adbd, 2026-11-28: frames/aqara-s1-plus/research/adb-keys.md). A Magisk module mounts a copy
+# where that second store is a nop (file offset 0x20d0: 20 70 -> 00 bf), so auth_required is ro.adb.secure again (1) and
+# adbd checks adb_keys. The copy is made here from the panel's own adbd and checked by hash before and after: no Aqara
+# bytes ship in a bundle. An adbd of another firmware (another hash) is left alone.
+#   $AA_MOD/module.prop
+#   $AA_MOD/$AA_PATH     the patched adbd (0755 root:shell, adbd_exec)
+# Once per agent start, taking effect at the next restart, when Magisk mounts it. persist.glassworks.adb_auth=off (the
+# undo; any app may set it, which can only turn the check off) removes the module. Safety: with the module mounted and
+# adb on, if adbd isn't running within $AA_WAIT s the module goes and $AA_FAILED (root 0600) keeps it from coming back,
+# so the next restart has Aqara's adbd again. Status: sys.glassworks.adb.auth = on | off | "on after a restart" |
+# "off after a restart" | "off: ..." (why it can't be on) | "error: ..."
+AA_MOD=$HN_MODS/glassworks_adbd_auth
+AA_PATH=system/bin/adbd
+AA_LIVE=${GWA_AA_LIVE:-/system/bin/adbd}
+AA_STOCK=${GWA_AA_STOCK:-f122608055852e0b5a809703b7cafb4d04e4aab225680b414d502486766fe2ee}   # 4.5.80
+AA_FIXED=${GWA_AA_FIXED:-a5648f6c772ca074d84b8b1fab332f58faf652dab30bcd47fc120fbb8657d16d}   # the same, 0x20d0 nop
+AA_AT=8400                           # 0x20d0: the second strb, after "movs r0,#0" at 0x20ce
+AA_STAGE=$DIR/adbd-auth-module.new
+AA_FAILED=$DIR/adbd-auth-failed
+AA_PROP=persist.glassworks.adb_auth
+AA_STATUS=sys.glassworks.adb.auth
+AA_WAIT=${GWA_AA_WAIT:-120}
+aa_say() { [ "$1" = "$(getprop $AA_STATUS)" ] || { setp $AA_STATUS "$1"; say "adbd key check: $1"; }; }
+aa_bytes() { dd if="$1" bs=1 skip=$((AA_AT - 2)) count=4 2>/dev/null | od -An -tx1 | tr -d ' \n'; }   # 4 bytes at 0x20ce
+aa_remove() { # the module goes; 0 when it's gone
+  [ -e "$AA_MOD" ] || return 0
+  rm -rf "$AA_MOD" && [ ! -e "$AA_MOD" ]
+}
+aa_apply() {
+  rm -rf "$AA_STAGE"
+  live_=$(sha256 "$AA_LIVE")
+  if [ "$(getprop $AA_PROP)" = off ] || [ -e "$AA_FAILED" ]; then
+    aa_remove || { aa_say "error: could not remove the module"; return 0; }
+    why_=off; [ -e "$AA_FAILED" ] && [ "$(getprop $AA_PROP)" != off ] && why_="off: the patched adbd didn't run, so it was taken out"
+    if [ "$live_" = "$AA_FIXED" ]; then aa_say "off after a restart"; else aa_say "$why_"; fi
+    return 0
+  fi
+  if [ ! -f "$AA_MOD/$AA_PATH" ] || [ "$(sha256 "$AA_MOD/$AA_PATH")" != "$AA_FIXED" ]; then
+    if [ "$live_" != "$AA_STOCK" ]; then
+      aa_remove
+      if [ "$live_" = "$AA_FIXED" ]; then aa_say "off after a restart"
+      else aa_say "off: not the adbd this patch knows ($(printf '%.12s' "$live_"))"; fi
+      return 0
+    fi
+    [ -d "$HN_MODS" ] || { aa_say "error: no Magisk modules dir"; return 0; }
+    t_=$AA_STAGE
+    # Patched in the stage, checked twice: the 4 bytes are what 4.5.80 has there, and the result has the known hash.
+    if mkdir -p "$t_/${AA_PATH%/*}" && cp "$AA_LIVE" "$t_/$AA_PATH" && [ "$(aa_bytes "$t_/$AA_PATH")" = 00202070 ] &&
+       printf '\000\277' | dd of="$t_/$AA_PATH" bs=1 seek=$AA_AT conv=notrunc 2>/dev/null &&
+       [ "$(sha256 "$t_/$AA_PATH")" = "$AA_FIXED" ] &&
+       printf '%s\n' "id=glassworks_adbd_auth" "name=Glassworks adb key check" "version=1" "versionCode=1" \
+         "author=Glassworks" "description=Makes adbd check adb keys again (installed by the frame agent)" > "$t_/module.prop" &&
+       { [ ! -e "$AA_MOD/disable" ] || : > "$t_/disable"; } &&   # the operator's off switch in Magisk stays
+       chown -R root:root "$t_" && chmod 755 "$t_" "$t_/system" "$t_/${AA_PATH%/*}" && chmod 644 "$t_/module.prop" &&
+       chown root:2000 "$t_/$AA_PATH" && chmod 755 "$t_/$AA_PATH"; then
+      chcon u:object_r:adbd_exec:s0 "$t_/$AA_PATH" 2>/dev/null
+      if ! aa_remove || ! mv "$t_" "$AA_MOD"; then rm -rf "$t_"; aa_say "error: could not put the module in place"; return 0; fi
+      say "adbd key check: module in place (from the next restart)"
+    else
+      rm -rf "$t_"; aa_say "error: could not make the patched adbd"; return 0
+    fi
+  fi
+  if [ "$live_" = "$AA_FIXED" ]; then aa_say on; aa_watch
+  elif [ -e "$AA_MOD/disable" ]; then aa_say "off: the module is disabled in Magisk"
+  elif [ ! -f "$HN_MAGISK_BB" ]; then aa_say "off: Magisk loads no modules here (no $HN_MAGISK_BB)"
+  else aa_say "on after a restart"; fi
+}
+aa_watch() { # the patched adbd is mounted: if adb is on and adbd doesn't run, take the module out for the next restart
+  ( i_=0
+    while [ $i_ -lt "$AA_WAIT" ]; do
+      # adb on: over USB (sys.usb.config lists adb) or TCP (a port set). Off, adbd isn't meant to run.
+      case ",$(getprop sys.usb.config)," in *,adb,*) ;; *) case "$(getprop service.adb.tcp.port)" in [1-9]*) ;; *) exit 0 ;; esac ;; esac
+      [ "$(getprop init.svc.adbd)" = running ] && exit 0
+      sleep ${GWA_AA_EVERY:-5}; i_=$((i_ + ${GWA_AA_EVERY:-5}))
+    done
+    ( umask 077; : > "$AA_FAILED" ); aa_remove
+    aa_say "error: the patched adbd didn't run; Aqara's adbd is back from the next restart"
+  ) &
+}
+
 loops_stop() { tz_stop; portal_stop; adb_stop; }
 
 # --- our processes ---------------------------------------------------------------------------
@@ -1849,6 +1932,7 @@ zstate
 fw_init
 portal_start
 hn_apply
+aa_apply     # adbd checks keys again (a Magisk module, from the next restart)
 adb_restore  # the installer's key, if Android dropped it and nobody removed it on Manage
 adb_start    # the computers allowed over USB adb: the follower, and Android's key timeout off
 bw_check     # once, on the first boot after the boot writer's restart

@@ -9,6 +9,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **USB debugging now checks which computer is connecting.** The S1's adb used to let any computer in, whatever its
+  key. From the panel's next restart after this update, only allowed computers get in. Kiln, or the computer that
+  installed Glassworks, stays allowed. Any other computer can be let in on the panel's screen or from the Manage page.
 - **Allow a new computer over USB from the Manage page.** When a computer you haven't used before asks for USB
   debugging, the **Security** page shows its fingerprint with **Allow this computer**, and lists the computers
   already allowed with **Remove**. You need to be signed in with a Home Assistant administrator account. Allowed

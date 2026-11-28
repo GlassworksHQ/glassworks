@@ -34,4 +34,7 @@ interface UsbComputers {
 
     /** True when [list] holds the computer that installed Glassworks, which Remove can take off like any other. */
     val listsInstaller: Boolean get() = false
+
+    /** Why the list doesn't decide who gets in right now (the panel's adb lets every computer in), or null when it does. */
+    fun notice(): String? = null
 }

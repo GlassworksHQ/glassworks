@@ -124,6 +124,19 @@ class S1AdbComputersTest {
         assertEquals(Removed.NOT_SAVED, computers.remove(desk.fingerprint, "Alex"))
     }
 
+    @Test fun `the card says when the panel's adb doesn't check keys yet`() {
+        var auth = "off: not the adbd this patch knows (0123456789ab)"
+        val c = S1AdbComputers(pub, request, File(root, "notes.json"), {}, clock = { now }, authStatus = { auth })
+        val f = ManageFixture(usb = ManageUsbDebugging(c, { "09:41" }, {}))
+        fun page() = f.Browser().apply { signInWithHa() }.get("/security").text()
+        assertTrue(page().contains(S1AdbComputers.AUTH_OFF))
+        auth = "on after a restart"
+        assertTrue(page().contains(S1AdbComputers.AUTH_AFTER_RESTART))
+        auth = "on"
+        val on = page()
+        assertFalse(on.contains(S1AdbComputers.AUTH_OFF) || on.contains(S1AdbComputers.AUTH_AFTER_RESTART))
+    }
+
     @Test fun `the card on the S1 has no each-time switch, since every computer allowed stays`() {
         val f = ManageFixture(usb = ManageUsbDebugging(computers, { "09:41" }, { events += it }))
         asks(laptop)

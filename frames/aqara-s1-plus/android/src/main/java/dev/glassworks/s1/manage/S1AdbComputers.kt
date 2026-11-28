@@ -33,9 +33,17 @@ class S1AdbComputers(
     /** How long Allow or Remove waits for the agent: a loop, Android's answer (2 s) and some room. */
     private val answerMs: Long = 15_000L,
     private val pollMs: Long = 200L,
+    /** The agent's adbd key check ([AUTH]): "on" when adbd checks keys, so the list decides who gets in. */
+    private val authStatus: () -> String = { dev.glassworks.manage.AppManage.prop(AUTH) },
 ) : UsbComputers {
     override val alwaysRemembers get() = true
     override val listsInstaller get() = true
+
+    override fun notice(): String? = when (authStatus().trim()) {
+        "on" -> null
+        "on after a restart" -> AUTH_AFTER_RESTART
+        else -> AUTH_OFF
+    }
 
     override fun asking(): AdbKey? {
         val line = read("adb-asking")?.lineSequence()?.firstOrNull()?.trim().orEmpty()
@@ -169,6 +177,11 @@ class S1AdbComputers(
 
         /** The agent's status: set once it keeps the computers (S1Names: the loader's agent only). */
         const val STATUS = "sys.glassworks.adb.status"
+
+        /** The agent's adbd key check (glassworks_agent.sh, "adbd checks keys"). */
+        const val AUTH = "sys.glassworks.adb.auth"
+        const val AUTH_AFTER_RESTART = "The panel checks computers against this list from its next restart. Until then, any computer can connect over USB."
+        const val AUTH_OFF = "Right now any computer can connect over USB: this panel's key check is off. The list below takes effect once it's on."
 
         private const val ID = "0123456789abcdefghijklmnopqrstuvwxyz"
         private val RANDOM = SecureRandom()

@@ -1688,6 +1688,49 @@ case "$*" in *"rule del"*) exit 1 ;; esac; exit 0
 EOF
 rm -rf "$T/net" "$T/ipt" "$T/ip-addr4"; rm -f /data/s1kiosk/radio/radio.conf
 
+# ------------------------------------------------------------------------------ adbd checks keys
+# Aqara's adbd stores false over auth_required (0x20d0); a Magisk module mounts a copy with that store a nop. A made-up
+# file stands in for adbd: random bytes, with 4.5.80's four bytes at 0x20ce (movs r0,#0; strb r0,[r4]).
+echo "--- adbd checks keys"
+reset_radio; echo off > "$T/props/persist.glassworks.radio_mode"
+AA=$T/aa; rm -rf "$AA"; mkdir -p "$AA/modules" "$AA/magisk"; : > "$AA/magisk/busybox"
+python3 -c 'import os,sys; b=bytearray(os.urandom(30336)); b[0x20ce:0x20d2]=bytes([0,0x20,0x20,0x70]); open(sys.argv[1],"wb").write(b); b[0x20d0:0x20d2]=bytes([0,0xbf]); open(sys.argv[2],"wb").write(b)' "$AA/adbd" "$AA/adbd.fixed"
+AS=$(sha256sum "$AA/adbd" | cut -d' ' -f1); AF=$(sha256sum "$AA/adbd.fixed" | cut -d' ' -f1)
+rm -f "$T/props/persist.glassworks.adb_auth" "$T/props/sys.glassworks.adb.auth"
+aa() { LOOPS=1 helper GWA_MODULES="$AA/modules" GWA_MAGISK_BB="$AA/magisk/busybox" GWA_AA_STOCK="$AS" GWA_AA_FIXED="$AF" GWA_AA_WAIT=2 GWA_AA_EVERY=1 "$@"; prop sys.glassworks.adb.auth; }
+AM=$AA/modules/glassworks_adbd_auth
+st=$(aa GWA_AA_LIVE="$AA/adbd")
+check "Aqara's adbd: the module is made, from the next restart" test "$st" = "on after a restart"
+check "...its adbd is the panel's with the one store a nop, byte for byte" cmp -s "$AM/system/bin/adbd" "$AA/adbd.fixed"
+check "...0755 root:shell, module.prop with its id" test "$(stat -c %a:%u:%g "$AM/system/bin/adbd")" = 755:0:2000 -a "$(grep -c '^id=glassworks_adbd_auth$' "$AM/module.prop")" = 1
+check "...the panel's own adbd untouched" test "$(sha256sum "$AA/adbd" | cut -d' ' -f1)" = "$AS"
+check "...no stage left in the agent's dir" test ! -e /data/s1kiosk/radio/adbd-auth-module.new
+echo adb > "$T/props/sys.usb.config"; echo running > "$T/props/init.svc.adbd"
+st=$(aa GWA_AA_LIVE="$AA/adbd.fixed")
+check "mounted (the live adbd is the patched one) and running: on" test "$st" = on
+sleep 3; check "...and the watch leaves it" test -f "$AM/system/bin/adbd" -a ! -e /data/s1kiosk/radio/adbd-auth-failed
+touch "$AM/disable"; st=$(aa GWA_AA_LIVE="$AA/adbd")
+check "disabled in Magisk: said so" test "$st" = "off: the module is disabled in Magisk"
+rm -f "$AM/disable"; st=$(aa GWA_AA_LIVE="$AA/adbd" GWA_MAGISK_BB="$AA/magisk/none")
+check "Magisk loads no modules here: said so" has "$st" "off: Magisk loads no modules here"
+echo stopped > "$T/props/init.svc.adbd"
+aa GWA_AA_LIVE="$AA/adbd.fixed" >/dev/null; sleep 4
+check "the patched adbd mounted but not running: the module goes" test ! -e "$AM"
+check "...remembered, root 0600" test "$(stat -c %a:%u /data/s1kiosk/radio/adbd-auth-failed)" = 600:0
+check "...and said" has "$(prop sys.glassworks.adb.auth)" "error: the patched adbd didn't run"
+st=$(aa GWA_AA_LIVE="$AA/adbd")
+check "...not made again at the next start" test ! -e "$AM" -a "$st" = "off: the patched adbd didn't run, so it was taken out"
+rm -f /data/s1kiosk/radio/adbd-auth-failed; echo running > "$T/props/init.svc.adbd"
+aa GWA_AA_LIVE="$AA/adbd" >/dev/null
+echo off > "$T/props/persist.glassworks.adb_auth"; st=$(aa GWA_AA_LIVE="$AA/adbd.fixed")
+check "the undo (persist.glassworks.adb_auth=off): the module goes, from the next restart" test ! -e "$AM" -a "$st" = "off after a restart"
+st=$(aa GWA_AA_LIVE="$AA/adbd"); check "...then off" test "$st" = off
+rm -f "$T/props/persist.glassworks.adb_auth"; head -c 30336 /dev/urandom > "$AA/other"
+st=$(aa GWA_AA_LIVE="$AA/other")
+check "another firmware's adbd: left alone" test ! -e "$AM"
+check "...said so" has "$st" "off: not the adbd this patch knows"
+rm -rf "$AA" "$T/props/sys.usb.config" "$T/props/init.svc.adbd" "$T/props/sys.glassworks.adb.auth" /data/s1kiosk/radio/adbd-auth-failed
+
 # ------------------------------------------------------------------------------ setup hotspot name
 # #197: with hotspot-name.apk in the running frame bundle, the agent puts it on /product through a Magisk module
 # (Android applies it from the next restart); without it, or with persist.glassworks.hotspot_name=android, it removes

@@ -477,6 +477,14 @@ this way is in [adb-keys.md](../research/adb-keys.md).
   removed too. Its fingerprint then goes to `$DIR/adb-revoked` (root 0600), so it stays out.
 - At every start the agent puts back any boot image key that's missing from `adb_keys` (Android dropped it, see
   below), unless it's in `$DIR/adb-revoked`. Allowing that computer again takes it off `adb-revoked`.
+- **adbd checks keys again.** Aqara's adbd reads `ro.adb.secure`, then overwrites it with "no check", so it lets every
+  computer in ([adb-keys.md](../research/adb-keys.md#the-fix)). At every start the agent makes a Magisk module,
+  `glassworks_adbd_auth`. The module holds a copy of the panel's own `/system/bin/adbd` with that one store turned into
+  a no-op (2 bytes at offset `0x20d0`). The agent checks the copy by hash before and after the patch, and leaves any
+  other firmware's adbd alone. Magisk mounts it at the next restart. If adb is on and the patched adbd doesn't run
+  within 2 minutes, the agent takes the module out and records `$DIR/adbd-auth-failed`, so the restart after that has
+  Aqara's adbd. `persist.glassworks.adb_auth=off` turns the check off: the module goes at the next restart. Status:
+  `sys.glassworks.adb.auth` = `on`, `on after a restart`, `off`, `off after a restart`, `off: …` or `error: …`.
 - At every start the agent sets `adb_allowed_connection_time` to `0`. Android 10 would otherwise drop a key from
   `adb_keys` 7 days after its computer last connected, the installer's key included. `tools/install.sh --undo`
   deletes the setting again.
