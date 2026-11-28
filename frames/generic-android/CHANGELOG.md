@@ -12,6 +12,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Fixed
+- **Listen and connect works on Android 6, the Mirror included.** In *Listen and connect*, Home Assistant could
+  connect to a Bluetooth device through the panel but then saw only one of its services, so a lock, a heart-rate
+  strap or anything else it has to connect to never worked. It now sees every service the device has. Legacy
+  build only.
 - **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
   saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing
   the panel to refuse dashboard authentication tokens, dashboard lists, theme updates, and permissions. Default ports

@@ -119,6 +119,7 @@ Read from Android 10 (`android10-release`); the details and sources are in the S
 | Apps can't see a device's address type | Connects to the `BluetoothDevice` from a scan result. A device not heard recently is taken as a public address |
 | One GATT operation at a time per link | A queue per link. An operation with no callback in 10 s drops the link: Android starts no other until it answers |
 | A service's and a characteristic's instance id is its ATT handle | Sends them as handles, as ESP-IDF does |
+| Below Android 7 an instance id isn't a handle: it only tells attributes with the same UUID apart, so it is 0 for nearly all of them (seen on the Mirror, Android 6.0.1: Home Assistant got one service with one characteristic) | Numbers the attributes itself, in the ATT table's order: a service, then each characteristic's declaration, value and descriptors. Unique and stable for the link, not the device's real handles |
 | A descriptor's instance id is hidden | The ATT layout: a characteristic's descriptors are the attributes right after its value handle, in order. No private API |
 | `BluetoothGatt.refresh()` is hidden | Not used, so no `CACHE_CLEARING` |
 | A device that asks for encryption can make Android pair on its own | Nothing to stop it; the proxy never asks to pair |
