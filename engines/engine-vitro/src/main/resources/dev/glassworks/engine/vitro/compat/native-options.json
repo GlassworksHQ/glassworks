@@ -932,7 +932,7 @@
         "fill_container": {"values": [false]},
         "show_buttons_control": {"values": [true, false]},
         "show_position_control": {"values": [true, false]},
-        "show_tilt_position_control": {"values": [false]},
+        "show_tilt_position_control": {"values": [true, false]},
         "collapsible_controls": {"values": [true, false]},
         "tap_action": "@action",
         "hold_action": "@action",

@@ -21,41 +21,14 @@ interface AudioOutput {
     fun cancel()
 }
 
-/** Plays a short three-beep chime (used when a timer finishes). */
-fun AudioOutput.chime(onDone: () -> Unit = {}) {
-    val rate = 16_000
-    val beep = 0.15
-    val gap = 0.10
-    val samples = ((beep + gap) * 3 * rate).toInt()
-    val pcm = ByteArray(samples * 2)
-    for (i in 0 until samples) {
-        val t = i.toDouble() / rate
-        val inBeep = (t % (beep + gap)) < beep
-        val v = if (inBeep) (Math.sin(2 * Math.PI * 880.0 * t) * 0.4 * 32767).toInt() else 0
-        pcm[2 * i] = v.toByte()
-        pcm[2 * i + 1] = (v shr 8).toByte()
-    }
-    begin(rate, 2, 1)
-    write(pcm)
-    end(onDone)
-}
+/** Plays the timer chime ([Chimes.timer]): the timers pane plays it when a timer finishes. */
+fun AudioOutput.chime(onDone: () -> Unit = {}) = play(Chimes.timer, onDone)
 
-/** Short rising two-tone "I'm listening" sound for wake word detection (~0.2 s, quiet). */
-fun AudioOutput.wakeChime(onDone: () -> Unit = {}) {
-    val rate = 16_000
-    val tones = listOf(660.0 to 0.09, 990.0 to 0.11)
-    val total = tones.sumOf { (it.second * rate).toInt() }
-    val pcm = ByteArray(total * 2)
-    var i = 0
-    for ((f, d) in tones) {
-        val n = (d * rate).toInt()
-        for (k in 0 until n) {
-            val env = minOf(1.0, k / 80.0, (n - k) / 160.0)   // click-free attack/release
-            val v = (Math.sin(2 * Math.PI * f * k / rate) * 0.25 * env * 32767).toInt()
-            pcm[2 * i] = v.toByte(); pcm[2 * i + 1] = (v shr 8).toByte(); i++
-        }
-    }
-    begin(rate, 2, 1)
+/** Plays the wake chime ([Chimes.wake]), "I'm listening", when the wake word is heard. */
+fun AudioOutput.wakeChime(onDone: () -> Unit = {}) = play(Chimes.wake, onDone)
+
+private fun AudioOutput.play(pcm: ByteArray, onDone: () -> Unit) {
+    begin(Chimes.RATE, 2, 1)
     write(pcm)
     end(onDone)
 }

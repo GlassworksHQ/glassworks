@@ -53,6 +53,8 @@ Vitro follows the whole dashboard from the moment it opens, starting with the vi
 
 To see how your own dashboard will do, paste it into the [Vitro compatibility check](https://www.glassworks.dev/blueprints#vitro-check). It runs in your browser and lists every card that won't be drawn natively, and why. The full list of cards, and what each one leaves out, is in [Vitro's README](../engines/engine-vitro/README.md#what-works).
 
+If you use an AI coding agent, it can do the same audit for you and go further. The repo includes an agent skill, [vitro-native-dashboard](../.agents/skills/vitro-native-dashboard/SKILL.md), that checks a dashboard against the same card list and helps rewrite it so its cards draw natively wherever a native card can stand in, keeping your entities, actions and layout. Point your agent at the skill and your dashboard's YAML, and keep a copy of the original before it changes anything.
+
 ## Report a card that looks wrong
 
 Home Assistant's own look is the goal, so any difference is worth a report. [Open a bug report](https://github.com/GlassworksHQ/glassworks/issues/new?template=bug.yml) with:

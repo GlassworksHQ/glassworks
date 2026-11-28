@@ -60,7 +60,12 @@ class HaDashboardClientTest {
         override fun onThemes(catalog: ThemeCatalog) { themes += catalog }
         override fun onDashboardConfig(urlPath: String?, config: DashboardConfig) { configs += urlPath to config }
         override fun onDashboardConfigFailed(urlPath: String?, code: String) { failedConfigs += urlPath to code }
-        override fun onDisconnected(reason: String) { disconnected += reason }
+        /** Runs inside onDisconnected, on the reader thread, before the lost connection's state ends (failOutstanding). */
+        @Volatile var duringDisconnect: (() -> Unit)? = null
+        override fun onDisconnected(reason: String) {
+            disconnected += reason
+            duringDisconnect?.also { duringDisconnect = null }?.invoke()
+        }
         override fun onUserTheme(themeName: String?, dark: Boolean?) { userThemes += themeName to dark }
         val localeChanges = AtomicInteger(0)
         override fun onLocaleChanged() { localeChanges.incrementAndGet() }
@@ -1917,9 +1922,40 @@ class HaDashboardClientTest {
         assertTrue(errors.isEmpty())
         server.refuseConnections = false
         awaitCondition("reconnected", timeoutMs = 15_000) { listener.connected.size == 2 }
+        // The held template goes out at the end of the new connection's start-up (resendHeld), after onConnected: wait
+        // for it on the wire, on the connection it went out on, before reading what it rendered.
+        val socket = server.sockets.last()
+        fun sent() = socket.received.count { it.optString("type") == "render_template" }
+        awaitCondition("the held template sent", timeoutMs = 15_000) { sent() > 0 }
         assertEquals("21.5 °C", rendered.poll(10, TimeUnit.SECONDS))
-        assertEquals(1, server.sockets.last().received.count { it.optString("type") == "render_template" })
+        // Once: nothing else on this connection (the start-up's last steps, the todo list going out) sends it again.
+        awaitCondition("the held todo list sent", timeoutMs = 15_000) {
+            socket.received.any { it.optString("type") == "todo/item/subscribe" }
+        }
+        Thread.sleep(200)
+        assertEquals(1, sent())
+        assertNull("rendered once", rendered.poll(200, TimeUnit.MILLISECONDS))
         assertTrue(errors.isEmpty())
+    }
+
+    @Test
+    fun aSubscriptionAskedForAsTheConnectionDropsGoesOutOnceOnTheNextOne() {
+        // The listener hears of the loss before the connection's state ends: a card asking in that moment still finds
+        // it authenticated, and its send goes to the closed socket. It goes out again, once, on the next connection.
+        val c = connected()
+        val rendered = LinkedBlockingQueue<String>()
+        listener.duringDisconnect = { c.subscribeTemplate("{{ 1 + 1 }}") { rendered.put(it) } }
+        server.dropConnection()
+        awaitCondition("reconnected", timeoutMs = 15_000) { listener.connected.size == 2 }
+        val socket = server.sockets.last()
+        fun sent() = socket.received.count { it.optString("type") == "render_template" }
+        awaitCondition("the held template sent", timeoutMs = 15_000) { sent() > 0 }
+        assertEquals("21.5 °C", rendered.poll(10, TimeUnit.SECONDS))
+        Thread.sleep(200)
+        assertEquals("sent once on the new connection", 1, sent())
+        assertEquals("and nowhere else", 1, server.commands("render_template").size)
+        assertNull("rendered once", rendered.poll(200, TimeUnit.MILLISECONDS))
+        assertEquals(1, c.heldCount())
     }
 
     @Test

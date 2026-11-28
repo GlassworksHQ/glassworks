@@ -1,0 +1,35 @@
+{
+ "title": "Mushroom cover card: an open blind's tilt slider",
+ "frames": [
+  "s1"
+ ],
+ "expect": {
+  "cover.living_room_slats": "open"
+ },
+ "card": {
+  "type": "custom:mushroom-cover-card",
+  "entity": "cover.living_room_slats",
+  "show_tilt_position_control": true
+ },
+ "fixture": {
+  "states": {
+   "cover.living_room_slats": {
+    "state": "open",
+    "last_changed": "-40m",
+    "attributes": {
+     "current_tilt_position": 30,
+     "device_class": "blind",
+     "friendly_name": "Living Room Slats",
+     "supported_features": 240
+    }
+   }
+  },
+  "entities": [
+   {
+    "ei": "cover.living_room_slats",
+    "pl": "template",
+    "en": "Living Room Slats"
+   }
+  ]
+ }
+}

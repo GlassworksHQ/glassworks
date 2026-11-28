@@ -109,6 +109,99 @@ class IslandParityTest {
         assertEquals(4, vv.masonryColumns())
     }
 
+    // ---- The sizes islands gave, kept on disk for the next start ----
+
+    private val home = "http://192.0.2.10:8123"
+
+    @Test fun theSizesIslandsGaveAreThereAtTheNextStartForTheSameHomeAssistantOnly() {
+        val cache = java.nio.file.Files.createTempDirectory("vitro-card-sizes").toFile()
+        try {
+            IslandCardSizes.useStore(cache, home)
+            for (c in islandsView.drop(1)) IslandCardSizes.record(c.raw, 2.0)
+            // A built-in card never goes to an island: nothing is kept for it.
+            IslandCardSizes.record(islandsView[0].raw, 4.0)
+            IslandCardSizes.awaitIo()
+            val file = java.io.File(cache, "vitro-card-sizes/sizes.json")
+            val text = file.readText()
+            assertFalse("digests only, never a config", text.contains("sensor.island") || text.contains("vitro-test-plain-card"))
+            assertFalse("nor the Home Assistant's address", text.contains("192.0.2.10"))
+
+            // The next start: nothing in memory, the same Home Assistant.
+            IslandCardSizes.clear()
+            assertEquals(1.0, HaCardSize.of(islandsView[1]), 0.0)
+            IslandCardSizes.useStore(cache, home)
+            IslandCardSizes.awaitIo()
+            assertEquals(2.0, HaCardSize.of(islandsView[1]), 0.0)
+            assertEquals("placed as HA places them, before any island answers", 4, HaMasonry.place(islandsView, 1280).second)
+            assertFalse("the same answer again changes nothing", IslandCardSizes.record(islandsView[1].raw, 2.0))
+            assertTrue("another answer does", IslandCardSizes.record(islandsView[1].raw, 3.0))
+            // The built-in card wasn't kept (its size is its own getCardSize, 1 for this Markdown).
+            assertEquals(HaCardSize.of(card("""{"type": "markdown", "content": "x"}""")), HaCardSize.of(islandsView[0]), 0.0)
+
+            // Another Home Assistant: the same configs are other cards there.
+            IslandCardSizes.clear()
+            IslandCardSizes.useStore(cache, "http://192.0.2.20:8123")
+            IslandCardSizes.awaitIo()
+            assertEquals(1.0, HaCardSize.of(islandsView[2]), 0.0)
+
+            // An unreadable file is no size at all.
+            IslandCardSizes.clear()
+            file.writeText("{not json")
+            IslandCardSizes.useStore(cache, home)
+            IslandCardSizes.awaitIo()
+            assertEquals(1.0, HaCardSize.of(islandsView[2]), 0.0)
+        } finally {
+            IslandCardSizes.clear()
+            cache.deleteRecursively()
+        }
+    }
+
+    @Test @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun aViewWhoseIslandsGaveTheirSizesBeforeIsPlacedOnce() {
+        val cache = java.nio.file.Files.createTempDirectory("vitro-card-sizes").toFile()
+        try {
+            // An earlier start: every island answered 2.
+            IslandCardSizes.useStore(cache, home)
+            for (c in islandsView.drop(1)) IslandCardSizes.record(c.raw, 2.0)
+            IslandCardSizes.awaitIo()
+            IslandCardSizes.clear()
+            IslandCardSizes.useStore(cache, home)
+            IslandCardSizes.awaitIo()
+
+            val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+            val store = EntityStore().apply {
+                for (i in 1..12) putLocal(EntityState("sensor.island_%02d".format(i), "${17 + i * 0.5}", emptyMap()))
+            }
+            val vv = VitroView(activity, store, 0xFF000000.toInt())
+            vv.holdFirstBuildForStatesMs = 0
+            vv.resourcesList = LovelaceResourceList(listOf(LovelaceResource("/local/test-cards.js", "module")), bubbleModules = false)
+            var builds = 0
+            vv.onMetrics = { builds++ }
+            vv.contextFactory = { theme ->
+                VitroCardContext(
+                    context = activity, haBase = FakeHaServer.BASE, store = store, theme = theme, resources = vv.resourcesList,
+                    accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+                    fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
+                )
+            }
+            activity.setContentView(vv)
+            val view = JSONObject().put("cards", org.json.JSONArray(islandsView.map { it.raw }))
+            vv.setDashboard(LovelaceParser.parseDashboard(JSONObject().put("views", org.json.JSONArray().put(view))), null)
+            ShadowLooper.idleMainLooper()
+            assertEquals(1, builds)
+            assertEquals("HA's four columns from the first build", 4, vv.masonryColumns())
+            val root = vv.currentRoot()
+            // The islands answer as last time: nothing is placed again.
+            for (c in islandsView.drop(1)) vv.islandCardSize(c, 2.0)
+            ShadowLooper.idleMainLooper()
+            assertEquals(1, builds)
+            assertSame(root, vv.currentRoot())
+        } finally {
+            IslandCardSizes.clear()
+            cache.deleteRecursively()
+        }
+    }
+
     /** The columns of the masonry view on screen (its row of `MasonryColumnsLayout`). */
     private fun VitroView.masonryColumns(): Int {
         fun find(v: View): dev.glassworks.engine.vitro.ui.MasonryColumnsLayout? =
