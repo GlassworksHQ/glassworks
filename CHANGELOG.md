@@ -33,6 +33,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   authentication without revoking the panel's token (for example during a temporary error or IP ban), the panel now
   stops bouncing between the dashboard and the login page and hides the connecting screen right away so the error
   or sign-in screen is visible.
+- **Manage sign-in clarifies how to show a panel code and keeps the screen awake while it is displayed.** On the
+  Manage sign-in page, the fallback link now reads *Show a code on the panel* so it is clear you need to click it to
+  display a code, and the panel keeps its screen awake for the full 5 minutes while a code is on screen instead of
+  dimming on its idle timeout.
 - **Another device on your network can no longer replace the panel's Home Assistant sign-in.** Once the panel is
   signed in, its sign-in page only lets you sign in again from a browser signed in to the panel's Manage page. To use
   another account, sign the panel out first. The panel's web pages also answer only to the panel's own address now,

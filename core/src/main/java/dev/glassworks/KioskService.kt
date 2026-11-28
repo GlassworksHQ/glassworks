@@ -100,6 +100,8 @@ open class KioskService : Service() {
         glassworks.panelCode.canDisplay = { android.provider.Settings.canDrawOverlays(this) }
         glassworks.panelCode.display = { shown ->
             main.post {
+                if (codeOverlay == null) return@post
+                glassworks.screen.stayOn(PANEL_CODE_STAY_ON, shown != null)
                 if (shown != null) glassworks.screen.wake("panel code")
                 codeOverlay?.show(shown)
                 // Off the screen when it runs out (expire() leaves a newer code alone), so it doesn't keep the screen on.
@@ -230,6 +232,7 @@ open class KioskService : Service() {
         glassworks.lanSetup = null
         glassworks.panelCode.display = {}
         glassworks.panelCode.canDisplay = { false }
+        glassworks.screen.stayOn(PANEL_CODE_STAY_ON, false)
         codeOverlay?.show(null)
         codeOverlay = null
         frameWork?.stop()
@@ -310,6 +313,7 @@ open class KioskService : Service() {
     companion object {
         private const val HOTSPOT_TAG = "Glassworks.Hotspot"
         private const val WIFI_TAG = "Glassworks.Wifi"
+        private const val PANEL_CODE_STAY_ON = "panel_code"
         private const val CHANNEL = "kiosk"
         private const val NOTIFICATION_ID = 1
         private const val REQ_KIOSK_SETTINGS = 10  // distinct PendingIntent request codes

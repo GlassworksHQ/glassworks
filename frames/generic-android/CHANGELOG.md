@@ -23,6 +23,13 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **Lockdown messages are no longer hidden behind the connecting screen.** When the legacy browser engine blocks a
   page or waits on its lockdown, the connecting screen now steps aside so you can read the message. In the legacy
   build.
+- **Manage sign-in clarifies how to show a panel code and keeps the screen awake while it is displayed.** On the
+  Manage sign-in page, the fallback link now reads *Show a code on the panel* so it is clear you need to click it to
+  display a code, and the panel keeps its screen awake for the full 5 minutes while a code is on screen instead of
+  dimming on its idle timeout.
+- **Manage's Log page now captures app logs on Android 6.** Older Android builds do not support `logcat -v epoch`,
+  which left Manage's Log showing only Manage events; Glassworks now falls back to `threadtime` format on Android 6
+  so app, sign-in, and screen logs appear as expected. In the legacy build.
 
 ## [0.9.1] - 2026-11-27
 
