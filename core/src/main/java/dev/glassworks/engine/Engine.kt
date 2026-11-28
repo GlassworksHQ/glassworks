@@ -112,9 +112,11 @@ interface Page {
     fun setActive(active: Boolean) {}
 
     /**
-     * Ends the page for good: its content (scripts, timers, sockets) stops and the engine frees what it held. The
-     * [view] stays where it is, empty. Every call after it does nothing, a second [close] included. The kiosk's own
-     * page lives as long as its activity; a page that leaves before that (a Vitro island whose card is gone) closes.
+     * Ends the page for good: its content (scripts, timers, sockets) stops and the engine frees what it held. Its
+     * view lets go of the engine's session and the session closes, so an activity that is destroyed (a recreate for a
+     * new locale or font scale) leaves no live session holding it. The [view] stays where it is, empty. Every call
+     * after it does nothing, a second [close] included. A page that leaves before its activity (a Vitro island whose
+     * card is gone) closes too.
      */
     fun close() {}
 }

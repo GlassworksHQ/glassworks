@@ -4,6 +4,7 @@
 
 package dev.glassworks.manage
 
+import dev.glassworks.web.HttpResponse
 import dev.glassworks.web.HttpServer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -111,6 +112,46 @@ class ManageServerTest {
         assertFalse(ManageServer.hostAllowed("192.0.2.40:80x", own))
         assertFalse(ManageServer.hostAllowed("192.0.2.40:8099:1", own))
         assertFalse(ManageServer.hostAllowed(null, own))
+    }
+
+    @Test fun aHostHeaderIsTheNameAndAPortWithNothingAfterIt() {
+        // LanSetup puts the Host header into its Content-Security-Policy, so nothing may ride along after the name.
+        val own = setOf("192.0.2.40", "fd00::40", "glassworks-panel.local")
+        for (h in listOf("[fd00::40]", "[fd00::40]:8099", "[fd00::40]:1", "[fd00::40]:65535", "192.0.2.40:8099", "192.0.2.40",
+                "GLASSWORKS-PANEL.local:8099")) {
+            assertTrue(h, ManageServer.hostAllowed(h, own))
+        }
+        for (h in listOf(
+            "[fd00::40]evil", "[fd00::40]; connect-src *", "[fd00::40]:8099;x", "[fd00::40]:", "[fd00::40]:0", "[fd00::40]:65536",
+            "[fd00::40]:123456", "[fd00::40]:80x", "[fd00::40]]:80", "[fd00::40]:8099 ws://evil.example", "[]", "[fd00::40",
+            "192.0.2.40:", "192.0.2.40:0", "192.0.2.40:65536", "192.0.2.40:080808", "192.0.2.40:８０", ":8099",
+        )) {
+            assertFalse(h, ManageServer.hostAllowed(h, own))
+        }
+    }
+
+    @Test fun theQrPagesLearnWhetherTheBrowserIsSignedInToManage() {
+        // AppManage hands this to the sign-in pages: only a Manage session may replace the panel's Home Assistant sign-in.
+        val seen = ArrayList<Boolean>()
+        lateinit var g: ManageFixture
+        g = ManageFixture(qrPages = { req -> seen += g.server.signedIn(req); HttpResponse.html(200, "<header>QR<!--gw-header-right--></header>") })
+        val b = g.Browser()
+        b.get("/signin")
+        b.signInWithHa()
+        b.get("/signin")
+        g.Browser().get("/signin")
+        assertEquals(listOf(false, true, false), seen)
+    }
+
+    @Test fun theQrPagesAnswerOnlyToThePanelsOwnNamesToo() {
+        // DNS rebinding reaches /signin, /signin/continue and /callback as well: refused before the QR pages see them.
+        for (p in listOf("/signin", "/signin/continue", "/callback", "/thread")) {
+            assertEquals(p, 400, f.Browser(host = "attacker.example:8099").get(p).status)
+        }
+        f.setUp = false
+        assertEquals(400, f.Browser(host = "attacker.example:8099").get("/").status)
+        assertTrue("the QR code's own address still works", f.Browser(host = "192.0.2.40:8099").get("/signin").text().contains("QR /signin"))
+        assertEquals(1, f.qrSeen.size)
     }
 
     @Test fun afterSignInOnlyPathsOnThisPanel() {

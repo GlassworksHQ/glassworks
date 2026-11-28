@@ -208,8 +208,12 @@ class HttpServer(
             val input = BufferedInputStream(deadline)
             val req = try { read(input, maxBody, sock.inetAddress?.hostAddress) } catch (e: TooLarge) {
                 write(sock.getOutputStream(), HttpResponse.text(413, "Too large"), head = false); return false
+            } catch (e: BadRequest) {
+                log("[$id] refused: ${e.message}")
+                write(sock.getOutputStream(), HttpResponse.text(400, "Bad request"), head = false); return false
             } ?: return false
-            var res = try { front?.invoke(req) ?: handler(req) } catch (t: Throwable) {
+            // A header value with a line break would split the answer (response splitting): checked before it is written.
+            var res = try { (front?.invoke(req) ?: handler(req)).also(::checkHeaders) } catch (t: Throwable) {
                 log("[$id] ${req.method} ${req.path} failed: $t")
                 HttpResponse.text(500, "Something went wrong on the panel.")
             }
@@ -320,6 +324,9 @@ class HttpServer(
 
     private class TooLarge : IOException("request too large")
 
+    /** A request line or header with a bare CR or LF, or a header line that isn't `name: value`. */
+    class BadRequest(why: String) : IOException(why)
+
     companion object {
         /** How long the refusal thread reads a refused connection's request, in all. */
         private const val BUSY_DRAIN_MS = 300L
@@ -350,13 +357,22 @@ class HttpServer(
                 matched = if (b.toByte() == end[matched]) matched + 1 else if (b.toByte() == end[0]) 1 else 0
                 if (head.size() > 16 * 1024) throw TooLarge()
             }
-            val lines = head.toString("ISO-8859-1").split("\r\n")
+            // The head ends in CRLF CRLF, so the last two pieces are empty. A CR or LF left inside a line is a bare one:
+            // other parsers (a proxy, the browser) may split there and read another header than this server does.
+            val lines = head.toString("ISO-8859-1").removeSuffix("\r\n\r\n").split("\r\n")
+            if (lines.any { l -> l.any { it == '\r' || it == '\n' } }) throw BadRequest("a bare CR or LF in the request head")
             val parts = lines.first().split(' ')
             if (parts.size < 2) return null
             val headers = HashMap<String, String>()
             for (l in lines.drop(1)) {
                 val i = l.indexOf(':')
-                if (i > 0) headers[l.substring(0, i).trim().lowercase()] = l.substring(i + 1).trim()
+                // An obsolete folded line (starts with a space or tab) or a name with a space: refused (RFC 9112 5.1, 5.2).
+                if (l.startsWith(" ") || l.startsWith("\t")) throw BadRequest("a folded header line")
+                if (i > 0) {
+                    val name = l.substring(0, i)
+                    if (name.any { it == ' ' || it == '\t' }) throw BadRequest("whitespace in a header name")
+                    headers[name.lowercase()] = l.substring(i + 1).trim()
+                }
             }
             val length = headers["content-length"]?.toIntOrNull() ?: 0
             if (length < 0 || length > maxBody) throw TooLarge()
@@ -371,7 +387,21 @@ class HttpServer(
             return HttpRequest(parts[0], target.rawPath ?: "/", parseQuery(target.rawQuery), headers, body, remote)
         }
 
+        /**
+         * Throws when a header of [r] could split the answer: a CR or LF in a name or a value (Set-Cookie's values are
+         * joined by LF on purpose, each of them is checked), or a name with a colon. [write] checks too; the server
+         * checks before it writes, so such an answer becomes a 500 instead.
+         */
+        fun checkHeaders(r: HttpResponse) {
+            for ((k, v) in r.headers) {
+                require(k.isNotEmpty() && k.none { it == '\r' || it == '\n' || it == ':' || it == ' ' }) { "bad response header name" }
+                val values = if (k.equals("Set-Cookie", ignoreCase = true)) v.split('\n') else listOf(v)
+                for (one in values) require(one.none { it == '\r' || it == '\n' }) { "line break in response header $k" }
+            }
+        }
+
         fun write(out: OutputStream, r: HttpResponse, head: Boolean = false) {
+            checkHeaders(r)
             val sb = StringBuilder("HTTP/1.1 ${r.status} ${reason(r.status)}\r\n")
             for ((k, v) in r.headers) {
                 // Set-Cookie can repeat: the value holds them joined by "\n".

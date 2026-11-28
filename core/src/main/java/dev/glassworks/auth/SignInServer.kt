@@ -48,6 +48,13 @@ object AuthLog {
  * the browser back to the setup page ([SETUP_RETURN]) instead of showing the done page. A callback for it
  * without that cookie is refused before the code is used. The QR code's own sign-in is not bound, as before.
  *
+ * Once the panel is signed in ([signedIn]), `/signin`, [CONTINUE] and `/callback` no longer replace that sign-in for
+ * anyone on the network: only a browser signed in to the Manage page ([Request.manage]) may. (The panel's screen shows
+ * its sign-in QR code only while it isn't signed in.) Otherwise a phone on the LAN, or a page that sends a browser to
+ * `/signin/continue` (login CSRF), could swap the panel's Home Assistant account for its own. A sign-in started before
+ * the panel signed in another way doesn't replace it either. After a sign-out, a revoked token or a move of Home
+ * Assistant ([HaAuth.movedAway]) the panel isn't signed in, and these pages work for anyone again.
+ *
  * `/thread` and `/thread/callback` are the same flow for [ThreadJoin]: an administrator signs in once
  * so the panel can read HA's Thread dataset; the tokens are revoked right after. `/thread` only works
  * while the panel shows its QR code ([ThreadJoin.armed]).
@@ -79,11 +86,21 @@ class SignInServer(
     private val reach: (String) -> LocalRoute = { LocalRoute.AsSet(it) },
     /** How long a code exchange waits for discovery to find a `.local` Home Assistant's address ([LocalRoute.NoAddressYet]). */
     private val addressWaitMs: Long = 5_000,
+    /** The panel is signed in to the dashboard's Home Assistant ([HaAuth.signedIn]): a new sign-in would replace it. */
+    private val signedIn: () -> Boolean = { false },
 ) {
     private var serverSocket: ServerSocket? = null
     @Volatile private var running = false
     private val pool = Executors.newFixedThreadPool(4) { r -> Thread(r, "signin-http").apply { isDaemon = true } }
     private val ids = AtomicInteger()
+    /**
+     * Saving a sign-in is one step with deciding it may be saved: [callback] checks before it trades the code and the
+     * trade takes a while, so two callbacks can both pass while the panel isn't signed in (first setup, two phones).
+     * [stores] counts the sign-ins saved here; a callback that sees it moved during its trade saved over nothing yet,
+     * and doesn't.
+     */
+    private val saveLock = Any()
+    private var stores = 0
 
     val localPort: Int get() = serverSocket?.localPort ?: -1
 
@@ -110,7 +127,11 @@ class SignInServer(
         pool.shutdownNow()
     }
 
-    class Request(val method: String, val path: String, val query: Map<String, String>, val headers: Map<String, String>)
+    class Request(
+        val method: String, val path: String, val query: Map<String, String>, val headers: Map<String, String>,
+        /** The browser holds a Manage session (ManageServer's own cookie, checked there): it may replace the sign-in. */
+        val manage: Boolean = false,
+    )
 
     class Response(val status: Int, val reason: String, val headers: Map<String, String>, val body: ByteArray)
 
@@ -133,8 +154,10 @@ class SignInServer(
     fun handle(req: Request): Response {
         if (req.method != "GET" && req.method != "HEAD") return page(405, "Method Not Allowed", "Not allowed", "Only GET is supported.")
         return when (req.path) {
-            "/", "", "/signin" -> landing()
-            CONTINUE -> signin(req)
+            "/", "", "/signin" -> if (mayReplace(req)) landing() else alreadySignedIn()
+            // Whether this sign-in may replace a stored one is decided here, once: a sign-in saved by another
+            // connection between this check and the pending state doesn't lend it that right.
+            CONTINUE -> if (mayReplace(req)) signin(req, replaces = req.manage) else alreadySignedIn()
             "/callback" -> callback(req)
             ThreadJoin.PATH -> threadLanding()
             THREAD_CONTINUE -> threadStart(req)
@@ -143,6 +166,18 @@ class SignInServer(
             else -> page(404, "Not Found", "Not found", "This panel only serves the sign-in pages.")
         }
     }
+
+    /** Not signed in, or someone allowed to replace the panel's sign-in: a browser signed in to Manage. */
+    private fun mayReplace(req: Request): Boolean = !signedIn() || req.manage
+
+    /** The panel isn't signed in, or this sign-in was started from Manage, which may replace it. */
+    private fun mayStore(pending: PendingSignIn): Boolean = !signedIn() || pending.replaces
+
+    private fun alreadySignedIn() = page(
+        409, "Conflict", "Already signed in",
+        "This panel is already signed in to Home Assistant. To use another account, sign the panel out first, then scan the code it shows.",
+        footHtml = MANAGE_FOOT,
+    )
 
     /** What the QR code opens (#63): what signing in is for, and the one way on. */
     private fun landing(): Response {
@@ -159,14 +194,14 @@ class SignInServer(
         "Enter its address on the panel, like <b>homeassistant.local</b>, then scan the code again.",
     )
 
-    private fun signin(req: Request): Response {
+    private fun signin(req: Request, replaces: Boolean): Response {
         val ha = haBase()?.let(OAuth::trimBase) ?: return notFoundHa()
         val host = OAuth.sanitizeHost(req.headers["host"])
             ?: return page(400, "Bad Request", "Can't sign in", "Open this page with the panel's address (scan the QR code).")
         val clientId = OAuth.clientId(host)
         val redirect = OAuth.redirectUri(host)
         val then = Then.of(req.query["then"])
-        val sign = states.create(clientId, redirect, ha, then = then)
+        val sign = states.create(clientId, redirect, ha, then = then, replaces = replaces)
         val location = OAuth.authorizeUrl(ha, clientId, redirect, sign.state, sign.codeChallenge)
         // Lax: HA's redirect back is a top-level GET from another site, and it must carry this cookie. Its slot is
         // one no other pending sign-in holds, so starting another (or a cross-site GET starting one) never replaces
@@ -208,6 +243,9 @@ class SignInServer(
             return page(400, "Bad Request", "Sign-in canceled", "Home Assistant answered: ${esc(err)}. $again", button = back)
         }
         pending ?: return expired(then)
+        // Signed in since this sign-in started, or started by no one allowed to replace it: the code is not used.
+        if (!mayStore(pending)) return alreadySignedIn()
+        val seen = synchronized(saveLock) { stores }
         // Another browser finishing the setup page's sign-in (login CSRF): refused, the code is not used. Usually an
         // in-app browser that handed HA's login to the default one: the way back starts it again there.
         if (then == Then.SETUP && !bound) return page(403, "Forbidden", "Can't sign in",
@@ -219,12 +257,26 @@ class SignInServer(
             is TokenResult.Ok -> {
                 val rt = r.refreshToken
                     ?: return page(502, "Bad Gateway", "Can't sign in", "Home Assistant didn't finish creating the sign-in session.", button = back)
-                try {
-                    onSignedIn(StoredAuth(base.url, pending.clientId, rt), r)
-                } catch (t: Throwable) {
-                    AuthLog.w("storing the token failed", t)
-                    val why = (t as? SignInNotStored)?.let { "${it.message}: its key store isn't available. Try again in a minute." }
-                    return page(500, "Internal Server Error", "Can't sign in", why ?: "The panel couldn't store the sign-in.", button = back)
+                val auth = StoredAuth(base.url, pending.clientId, rt)
+                val late = synchronized(saveLock) {
+                    // Another sign-in was saved while this one traded its code, or the panel was signed in another way
+                    // (or the code on its screen went): this one doesn't replace it.
+                    if (stores != seen || !mayStore(pending)) true else {
+                        try {
+                            onSignedIn(auth, r)
+                        } catch (t: Throwable) {
+                            AuthLog.w("storing the token failed", t)
+                            val why = (t as? SignInNotStored)?.let { "${it.message}: its key store isn't available. Try again in a minute." }
+                            return page(500, "Internal Server Error", "Can't sign in", why ?: "The panel couldn't store the sign-in.", button = back)
+                        }
+                        stores++
+                        false
+                    }
+                }
+                if (late) {
+                    AuthLog.i("A sign-in finished after another one was saved: not stored")
+                    tokens.revoke(auth) // best effort: the session it made in Home Assistant isn't used
+                    return alreadySignedIn()
                 }
                 AuthLog.i("Signed in to ${base.url} (refresh token stored)")
                 if (then == Then.SETUP) return backToSetup()
