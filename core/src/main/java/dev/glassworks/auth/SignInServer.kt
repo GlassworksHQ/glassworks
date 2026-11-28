@@ -49,8 +49,8 @@ object AuthLog {
  * without that cookie is refused before the code is used. The QR code's own sign-in is not bound, as before.
  *
  * Once the panel is signed in ([signedIn]), `/signin`, [CONTINUE] and `/callback` no longer replace that sign-in for
- * anyone on the network: only a browser signed in to the Manage page ([Request.manage]), or while the panel's own screen
- * asks for a sign-in ([armed], its QR code showing). Otherwise a phone on the LAN, or a page that sends a browser to
+ * anyone on the network: only a browser signed in to the Manage page ([Request.manage]) may. (The panel's screen shows
+ * its sign-in QR code only while it isn't signed in.) Otherwise a phone on the LAN, or a page that sends a browser to
  * `/signin/continue` (login CSRF), could swap the panel's Home Assistant account for its own. A sign-in started before
  * the panel signed in another way doesn't replace it either. After a sign-out, a revoked token or a move of Home
  * Assistant ([HaAuth.movedAway]) the panel isn't signed in, and these pages work for anyone again.
@@ -88,8 +88,6 @@ class SignInServer(
     private val addressWaitMs: Long = 5_000,
     /** The panel is signed in to the dashboard's Home Assistant ([HaAuth.signedIn]): a new sign-in would replace it. */
     private val signedIn: () -> Boolean = { false },
-    /** The panel's screen shows its sign-in QR code ([SignInArm]): a sign-in from it may replace the stored one. */
-    private val armed: () -> Boolean = { false },
 ) {
     private var serverSocket: ServerSocket? = null
     @Volatile private var running = false
@@ -157,7 +155,9 @@ class SignInServer(
         if (req.method != "GET" && req.method != "HEAD") return page(405, "Method Not Allowed", "Not allowed", "Only GET is supported.")
         return when (req.path) {
             "/", "", "/signin" -> if (mayReplace(req)) landing() else alreadySignedIn()
-            CONTINUE -> if (mayReplace(req)) signin(req) else alreadySignedIn()
+            // Whether this sign-in may replace a stored one is decided here, once: a sign-in saved by another
+            // connection between this check and the pending state doesn't lend it that right.
+            CONTINUE -> if (mayReplace(req)) signin(req, replaces = req.manage) else alreadySignedIn()
             "/callback" -> callback(req)
             ThreadJoin.PATH -> threadLanding()
             THREAD_CONTINUE -> threadStart(req)
@@ -167,11 +167,11 @@ class SignInServer(
         }
     }
 
-    /** Not signed in, or someone allowed to replace the panel's sign-in: a browser signed in to Manage, or the panel's screen asking. */
-    private fun mayReplace(req: Request): Boolean = !signedIn() || req.manage || armed()
+    /** Not signed in, or someone allowed to replace the panel's sign-in: a browser signed in to Manage. */
+    private fun mayReplace(req: Request): Boolean = !signedIn() || req.manage
 
-    /** The panel isn't signed in, or this sign-in was started by someone allowed to replace it, or its screen shows the code. */
-    private fun mayStore(pending: PendingSignIn): Boolean = !signedIn() || pending.replaces || armed()
+    /** The panel isn't signed in, or this sign-in was started from Manage, which may replace it. */
+    private fun mayStore(pending: PendingSignIn): Boolean = !signedIn() || pending.replaces
 
     private fun alreadySignedIn() = page(
         409, "Conflict", "Already signed in",
@@ -194,15 +194,14 @@ class SignInServer(
         "Enter its address on the panel, like <b>homeassistant.local</b>, then scan the code again.",
     )
 
-    private fun signin(req: Request): Response {
+    private fun signin(req: Request, replaces: Boolean): Response {
         val ha = haBase()?.let(OAuth::trimBase) ?: return notFoundHa()
         val host = OAuth.sanitizeHost(req.headers["host"])
             ?: return page(400, "Bad Request", "Can't sign in", "Open this page with the panel's address (scan the QR code).")
         val clientId = OAuth.clientId(host)
         val redirect = OAuth.redirectUri(host)
         val then = Then.of(req.query["then"])
-        // Past mayReplace: started while signed in, so by someone allowed to replace it, and its callback may.
-        val sign = states.create(clientId, redirect, ha, then = then, replaces = signedIn())
+        val sign = states.create(clientId, redirect, ha, then = then, replaces = replaces)
         val location = OAuth.authorizeUrl(ha, clientId, redirect, sign.state, sign.codeChallenge)
         // Lax: HA's redirect back is a top-level GET from another site, and it must carry this cookie. Its slot is
         // one no other pending sign-in holds, so starting another (or a cross-site GET starting one) never replaces

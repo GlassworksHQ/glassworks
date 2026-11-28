@@ -68,9 +68,6 @@ object HaAuth {
         exec = exec,
     )
 
-    /** The panel's screen shows the sign-in QR code: a sign-in from it may replace the stored one ([SignInServer]). */
-    val signInArm = SignInArm()
-
     @Synchronized
     fun init(context: Context) {
         if (!::prefs.isInitialized) prefs = KioskPrefs(context.applicationContext)
@@ -128,9 +125,9 @@ object HaAuth {
         // One store for the process: a bind retry keeps the Manage page, and the sign-in server inside it, built with it.
         val states = signInStates ?: signInStates(prefs).also { signInStates = it }
         // A sign-in started while a .local Home Assistant had no address yet trades its code through the one found since.
-        // Once signed in, only a Manage session or the panel's own screen may replace the sign-in (signedIn, signInArm).
+        // Once signed in, only a Manage session may replace the sign-in (signedIn).
         val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, states, thread = threadJoin,
-            reach = prefs::route, signedIn = { signedIn }, armed = signInArm::armed)
+            reach = prefs::route, signedIn = { signedIn })
         // A Manage page that can't load (a class Android 6 refuses, #435) leaves the QR pages up, and the app with them.
         val m = manage ?: orWithout("The Manage page", { AuthLog.w(it) }) {
             val page = context.glassworks.managePage(context, signIn, tokens, prefs)
@@ -232,7 +229,6 @@ object HaAuth {
 
     private fun onSignedIn(auth: StoredAuth, first: TokenResult.Ok) {
         prefs.auth = auth
-        signInArm.disarm() // one sign-in per code on the screen: a second phone that scanned it doesn't replace this one
         cache.put(first.accessToken, first.expiresIn)
         AuthLog.i("Refresh token stored for ${auth.haBase}")
         notifyChanged()
@@ -245,7 +241,6 @@ object HaAuth {
      */
     fun signInStored(how: String) {
         cache.clear()
-        signInArm.disarm() // signed in another way: the code that was on the screen no longer replaces it
         AuthLog.i("$how${signedInBase?.let { " for $it" } ?: ""}")
         notifyChanged()
     }

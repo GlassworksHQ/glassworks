@@ -468,7 +468,8 @@ public class ImprovBleServer(
             }
             if (preparedWrite) {
                 // Long write: queue the pieces until onExecuteWrite. Response echoes the value. One longer than any
-                // Improv command is dropped whole, so a client can't grow it without end.
+                // Improv command is dropped whole, and the rest of it is refused until it's executed or canceled, so a
+                // client can't grow it without end or run its tail as a command.
                 if (!prepared.append(device.address, v)) {
                     Log.w(logTag, "${device.address} long write over ${PreparedWrites.MAX_BYTES} bytes: dropped")
                     if (responseNeeded) s.sendResponse(device, requestId, BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH, offset, null)

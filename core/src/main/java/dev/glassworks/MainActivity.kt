@@ -258,7 +258,6 @@ open class MainActivity : Activity() {
         overlays = runtime.app.overlays(runtime, overlayHost)
         setupOverlay = SetupOverlay(this, glassworks.frame, setupPanes, deviceSteps, glassworks.panesStep(this)).apply {
             onUsePanel = ::onUsePanelLogin
-            onSignInShown = HaAuth.signInArm::arm
             onManualUrl = ::onManualHaUrl
             onChooseNetwork = { if (!setupPreview) glassworks.setupHotspot?.configured(); openWifiSettings() }
             onSkipHa = ::onSkipHaSetup

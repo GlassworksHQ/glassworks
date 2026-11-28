@@ -16,7 +16,7 @@ import org.junit.Test
 
 /**
  * Once the panel is signed in, its QR sign-in pages no longer replace that sign-in for anyone on the network: only a
- * browser signed in to Manage, or while the panel's own screen shows the sign-in code ([SignInArm]). Before, a phone on
+ * browser signed in to Manage. Before, a phone on
  * the LAN (or a page that sent a browser to `/signin/continue`, login CSRF) could swap the panel's Home Assistant
  * account for its own. Not signed in (first setup, after a sign-out or a revoked token, Home Assistant moved), anyone may.
  */
@@ -36,13 +36,11 @@ class SignInReplaceTest {
 
     /** The panel's stored sign-in: what the callback replaces. */
     private var stored: StoredAuth? = null
-    private var monoMs = 1_000L
-    private val arm = SignInArm(ttlMs = 60_000, monoMs = { monoMs })
     private val states = StateStore()
 
     private val server = SignInServer(
-        0, { "$ha/" }, HaTokenClient(haApi), { auth, _ -> stored = auth; arm.disarm() }, states,
-        signedIn = { stored != null }, armed = arm::armed,
+        0, { "$ha/" }, HaTokenClient(haApi), { auth, _ -> stored = auth }, states,
+        signedIn = { stored != null },
     )
 
     private fun get(path: String, manage: Boolean = false): SignInServer.Response {
@@ -114,25 +112,22 @@ class SignInReplaceTest {
         assertEquals("RT2", stored!!.refreshToken)
     }
 
-    @Test fun whileThePanelsScreenShowsTheCodeItsSignInMayReplaceIt() {
-        signedInAlready()
-        arm.arm()
-        assertEquals(200, get("/signin").status)
-        val state = start()!!
-        assertEquals(200, callback(state).status)
-        assertEquals("RT2", stored!!.refreshToken)
-        assertFalse("one sign-in per code on the screen", arm.armed())
-        assertNull("a second phone that scanned the same code doesn't replace it", start())
-    }
-
-    @Test fun theArmRunsOut() {
-        signedInAlready()
-        arm.arm()
-        monoMs += 59_999
-        assertTrue(arm.armed())
-        monoMs += 1
-        assertFalse(arm.armed())
-        assertEquals(409, get("/signin").status)
+    @Test fun theRightToReplaceIsDecidedWhenTheSignInIsAdmitted() {
+        // CodeRabbit on #974: a sign-in admitted for first setup must not gain the right to replace one that another
+        // connection saved between the admission check and the pending state. Here the panel signs in right after the
+        // check: the pending sign-in doesn't replace, and its callback is refused.
+        var checks = 0
+        val s = SignInServer(
+            0, { "$ha/" }, HaTokenClient(haApi), { auth, _ -> stored = auth }, states,
+            signedIn = { if (checks++ == 0) false else { if (stored == null) signedInAlready(); true } },
+        )
+        val r = s.handle(SignInServer.Request("GET", SignInServer.CONTINUE, emptyMap(), mapOf("host" to panelHost)))
+        assertEquals(302, r.status)
+        val state = OAuth.parseQuery(URI(r.headers["Location"]!!).rawQuery)["state"]!!
+        val cb = s.handle(SignInServer.Request("GET", "/callback", mapOf("code" to "c0de", "state" to state), mapOf("host" to panelHost)))
+        assertEquals(409, cb.status)
+        assertTrue("the code isn't traded", haApi.exchanges.isEmpty())
+        assertEquals("RT1", stored!!.refreshToken)
     }
 
     @Test fun aReplacingSignInIsRememberedAcrossARestart() {

@@ -32,6 +32,30 @@ class PreparedWritesTest {
         assertFalse(w.append(phone, ByteArray(1)))
     }
 
+    @Test fun aRefusedWritesTailNeverRunsAsACommand() {
+        // CodeRabbit on #974: after the cap, the next pieces of the same write would have started a new one, and
+        // Execute Write would have run that tail. They're refused until the write is executed or canceled.
+        val w = PreparedWrites(max = 64)
+        repeat(3) { assertTrue(w.append(phone, ByteArray(20))) }
+        assertFalse(w.append(phone, ByteArray(20)))
+        assertFalse("the rest of the write is refused", w.append(phone, byteArrayOf(1, 2)))
+        assertNull("execute runs nothing", w.take(phone))
+        assertTrue("after it, a new write works", w.append(phone, byteArrayOf(3)))
+        assertArrayEquals(byteArrayOf(3), w.take(phone))
+    }
+
+    @Test fun appendAndTakeAtOnceLoseNoPiece() {
+        // One lock for the map and the buffers: every piece an append accepted is in exactly one take.
+        val w = PreparedWrites(max = Int.MAX_VALUE)
+        var taken = 0
+        val writer = Thread { repeat(20_000) { assertTrue(w.append(phone, byteArrayOf(1))) } }
+        writer.start()
+        while (writer.isAlive) taken += w.take(phone)?.size ?: 0
+        writer.join()
+        taken += w.take(phone)?.size ?: 0
+        org.junit.Assert.assertEquals(20_000, taken)
+    }
+
     @Test fun eachDeviceHasItsOwn() {
         val w = PreparedWrites(max = 10)
         val other = "02:00:00:00:00:02"

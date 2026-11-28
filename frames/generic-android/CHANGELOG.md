@@ -35,9 +35,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to lululemon's software. It now only offers the restore. *Install Glassworks instead* on a community image
   also opens the recommended install, on the stock software, as the first screen does. Comes with Kiln, not the app.
 - **Another device on your network can no longer replace the panel's Home Assistant sign-in.** Once the panel is
-  signed in, its sign-in page only lets you sign in again from a browser signed in to the panel's Manage page, or
-  while the panel's own screen shows the sign-in code. To use another account, sign the panel out first. The panel's
-  web pages also answer only to the panel's own address now, which blocks pages on other sites from reaching them.
+  signed in, its sign-in page only lets you sign in again from a browser signed in to the panel's Manage page. To use
+  another account, sign the panel out first. The panel's web pages also answer only to the panel's own address now,
+  which blocks pages on other sites from reaching them.
 - **Changing the language from Kiln no longer leaves the old dashboard running.** When Kiln sets the panel's
   language, or the system font size changes, the panel now closes the old dashboard page before it opens the new
   one, so the two don't both hold memory.

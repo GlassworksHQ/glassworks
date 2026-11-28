@@ -121,8 +121,6 @@ class SetupOverlay(
     var onSkipHa: (() -> Unit)? = null
     /** "Sign in on this panel instead". */
     var onUsePanel: (() -> Unit)? = null
-    /** The sign-in QR code is on the screen (each time it is drawn): a sign-in from it may replace a stored one. */
-    var onSignInShown: (() -> Unit)? = null
     /** Manual URL submitted; call [manualResult] with the outcome. */
     var onManualUrl: ((String) -> Unit)? = null
     var onClosePreview: (() -> Unit)? = null
@@ -1151,7 +1149,6 @@ class SetupOverlay(
             qrFor = url
         }
         qrGlow.visibility = View.VISIBLE
-        onSignInShown?.invoke()
         cardTitle.text = "Scan to sign in"
         cardBody.text = if (m.signinMoved) "Home Assistant moved to a new address. Scan to sign in again."
             else "Scan with your phone to sign in to Home Assistant — nothing to type here."
