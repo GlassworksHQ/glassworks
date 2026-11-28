@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 # The streams in page/tiers.json (CAMERAS): main stream 1280x720 and sub-streams 640x360, 15 fps.
 PROFILES = {
@@ -71,7 +72,14 @@ def root():
     another one instead (the off-device tests use a stub: no ffmpeg there)."""
     if os.environ.get("GW_PERF_CAMERA"):
         return os.environ["GW_PERF_CAMERA"]
-    return _made()
+    # One maker at a time: lru_cache doesn't hold a second caller while the first makes them, and a
+    # cold _made() empties the folder before it writes. The fake's request threads and its WebRTC
+    # warm-up (webrtc.py) can both ask first.
+    with _MADE_LOCK:
+        return _made()
+
+
+_MADE_LOCK = threading.Lock()
 
 
 @functools.lru_cache(maxsize=None)

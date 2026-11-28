@@ -1,3 +1,13 @@
+/* SPDX-License-Identifier: MIT AND BSD-3-Clause
+ *
+ * TextureFrameDrawer.drawFrame and toGlMatrix reproduce the steps of libwebrtc M150's VideoFrameDrawer
+ * (drawFrame, calculateTransformedRenderSize, drawTexture) and RendererCommon
+ * (convertMatrixFromAndroidGraphicsMatrix), sdk/android/api/org/webrtc in https://webrtc.googlesource.com/src
+ * (branch-heads/7871), Copyright (c) 2011, The WebRTC project authors, BSD-3-Clause, with WebRTC's additional IP
+ * rights grant. Changes: rewritten in Kotlin to work into matrices and arrays kept across frames instead of new ones
+ * per frame. The rest of the file is MIT. The texts are in libs/ha-webrtc/NOTICE, THIRD-PARTY-NOTICES.md and
+ * LICENSES/. */
+
 package dev.glassworks.hawebrtc
 
 import android.graphics.Matrix

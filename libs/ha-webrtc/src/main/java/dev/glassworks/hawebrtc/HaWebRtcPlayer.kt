@@ -142,7 +142,8 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
             // The stream starts first: its first step is HA's client configuration, a round trip over the network,
             // and libwebrtc's parts and the renderer are made on this thread meanwhile. The answer is taken on this
             // thread too, after this task, so the peer it makes finds both ready ([runtime]). Either failing closes
-            // the stream before anything else is sent.
+            // the stream before anything else is sent. The stream's wait for video ([HaWebRtcStream.Options.connectTimeoutMs])
+            // counts from here, that setup included, as its KDoc says.
             val s = HaWebRtcStream(channel, entityId, { config, audio, events ->
                 val made = checkNotNull(runtime) { "libwebrtc isn't ready" }
                 LibWebRtcPeer(made.factory, config, audio, video, events)

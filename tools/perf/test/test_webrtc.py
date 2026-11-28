@@ -442,13 +442,17 @@ class Warm(unittest.TestCase):
     view's first offers took 6.6 to 7.2 s): the streams are read as the service starts, once each,
     and offers that come together share one read."""
 
-    def test_the_streams_are_read_at_start_once_and_offers_share_them(self):
+    @classmethod
+    def setUpClass(cls):
         need()
-        from aiortc import RTCPeerConnection
+        # Each test reads the stub's streams, whichever runs first or alone.
         for prof, size in (("720p", "1280x720"), ("360p", "640x360")):
             if not os.path.exists(os.path.join(STUB_CAMERA, prof, "stream.h264")):
                 make_stream(os.path.join(STUB_CAMERA, prof, "x"), size)
                 os.replace(os.path.join(STUB_CAMERA, prof, "x", "stream.h264"), os.path.join(STUB_CAMERA, prof, "stream.h264"))
+
+    def test_the_streams_are_read_at_start_once_and_offers_share_them(self):
+        from aiortc import RTCPeerConnection
         reads, real = [], camera.access_units
 
         def counted(path):
@@ -490,7 +494,6 @@ class Warm(unittest.TestCase):
                 loop.run_until_complete(pc.close())
 
     def test_a_read_that_failed_is_tried_again_by_the_next_offer(self):
-        need()
         log, calls = [], []
 
         def streams(prof):
