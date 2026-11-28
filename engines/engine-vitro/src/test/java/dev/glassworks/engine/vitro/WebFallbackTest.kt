@@ -1177,5 +1177,5 @@ class WebFallbackTest {
     }
 
     private fun hasText(v: View, text: String): Boolean =
-        (v is TextView && v.text.toString() == text) || (v is ViewGroup && (0 until v.childCount).any { hasText(v.getChildAt(it), text) })
+        text in drawnWords(v) || (v is ViewGroup && (0 until v.childCount).any { hasText(v.getChildAt(it), text) })
 }

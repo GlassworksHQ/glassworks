@@ -100,7 +100,7 @@ class ActionDefaultsAndNamesTest {
     private fun all(v: View): List<View> =
         listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
 
-    private fun texts(v: View): List<String> = all(v).filterIsInstance<TextView>().map { it.text.toString() }
+    private fun texts(v: View): List<String> = all(v).flatMap(::drawnWords)
 
     private fun clear() { calls.clear(); moreInfo.clear(); navigated.clear() }
 

@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import dev.glassworks.engine.vitro.cards.EntitiesCardView
+import dev.glassworks.engine.vitro.cards.EntityRowView
 import dev.glassworks.engine.vitro.cards.IframeCardView
 import dev.glassworks.engine.vitro.cards.MarkdownCardView
 import dev.glassworks.engine.vitro.cards.MoreInfoSheet
@@ -73,9 +74,15 @@ class VitroPerfLeversTest {
     private fun put(store: EntityStore, id: String, state: String, vararg attrs: Pair<String, Any?>) =
         store.putLocal(EntityState(id, state, mapOf("friendly_name" to "Kitchen", *attrs)))
 
-    /** Counts every text set on [v]'s TextViews (a TextWatcher hears each setText, the same words included). */
+    /**
+     * Counts every text set on [v]'s TextViews (a TextWatcher hears each setText, the same words included) and on its
+     * entities rows that draw their own ([EntityRowView.textSets]), from now.
+     */
     private fun countTextSets(v: View): IntArray {
         val n = IntArray(1)
+        val rows = all(v).filterIsInstance<EntityRowView>()
+        val before = rows.sumOf { it.textSets }
+        textSetRows[n] = { rows.sumOf { it.textSets } - before }
         all(v).filterIsInstance<TextView>().forEach { tv ->
             tv.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -86,7 +93,12 @@ class VitroPerfLeversTest {
         return n
     }
 
-    private fun texts(v: View) = all(v).filterIsInstance<TextView>().map { it.text.toString() }
+    private fun texts(v: View) = all(v).flatMap(::drawnWords)
+
+    private val textSetRows = java.util.IdentityHashMap<IntArray, () -> Int>()
+
+    /** The text sets [countTextSets] has counted so far. */
+    private val IntArray.sets: Int get() = this[0] + (textSetRows[this]?.invoke() ?: 0)
 
     // ---- L10: one render per card per pass, and setText only for a new text
 
@@ -100,7 +112,7 @@ class VitroPerfLeversTest {
         for (v in listOf("20.1", "20.2", "20.3", "20.4", "20.5")) put(store, "sensor.kitchen", v)
         idle()
         assertTrue(texts(card).toString(), "20.5" in texts(card))
-        assertEquals("one text set for five changes", 1, sets[0])
+        assertEquals("one text set for five changes", 1, sets.sets)
     }
 
     @Test
@@ -116,13 +128,13 @@ class VitroPerfLeversTest {
         put(store, "sensor.kitchen", "20.0", "icon_color" to "red")
         put(store, "switch.fan", "off", "icon_color" to "red")
         idle()
-        assertEquals("no text set when the words are the same", 0, sets[0])
+        assertEquals("no text set when the words are the same", 0, sets.sets)
         put(store, "sensor.kitchen", "21.0")
         idle()
         assertTrue("21.0" in texts(card))
         // The two values, and the secondary line: with no last_changed to show it shows the state, as HA's
         // state-display does (#926), so it changes with it.
-        assertEquals("only the two values and the secondary line that changed", 3, sets[0])
+        assertEquals("only the two values and the secondary line that changed", 3, sets.sets)
     }
 
     // ---- L8: a hidden cached view stops rendering, and is current the moment it shows
@@ -193,7 +205,7 @@ class VitroPerfLeversTest {
         }
         assertEquals("the hidden view renders nothing", hiddenRenders, hidden.rendersRun)
         assertEquals("the view on screen doesn't name it", shownRenders, shown.rendersRun)
-        assertEquals("no text set anywhere", 0, sets[0])
+        assertEquals("no text set anywhere", 0, sets.sets)
         // Shown again, it has the newest state at once.
         vv.navigateToView("one")
         assertTrue(texts(hidden).toString(), "20.3" in texts(hidden))

@@ -105,7 +105,7 @@ class NativeCardsAndRowsTest {
         }
         return true
     }
-    private fun texts(v: View) = all(v).filterIsInstance<TextView>().filter { it.isShownIn(v) && it.text.isNotEmpty() }.map { it.text.toString() }
+    private fun texts(v: View) = all(v).filter { it.isShownIn(v) }.flatMap(::drawnWords).filter { it.isNotEmpty() }
     private fun icons(v: View) = all(v).filterIsInstance<MdiIconView>().filter { it.isShownIn(v) }.map { it.icon }
     private fun put(id: String, state: String, vararg attrs: Pair<String, Any?>) =
         store.putLocal(EntityState(id, state, mapOf(*attrs), lastChanged = (NOW - 5 * 60_000) / 1000.0))

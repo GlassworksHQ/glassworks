@@ -124,6 +124,12 @@ open class PlatformApi(
     /** `TextView.setFallbackLineSpacing` exists, so text can keep CSS line boxes exact (Android 9). */
     val hasFallbackLineSpacing: Boolean get() = apiLevel >= 28
 
+    /**
+     * A TextView lays out even its "boring" one-line text with fallback fonts' line heights (`BoringLayout.isBoring`
+     * and `make` with `useFallbackLineSpacing`, Android 13): text a view draws itself the same way does too.
+     */
+    val hasBoringFallbackLineSpacing: Boolean get() = apiLevel >= 33
+
     /** `Font.Builder` can load a variable font from memory (Android 10). */
     val hasFontBuilder: Boolean get() = apiLevel >= 29
 

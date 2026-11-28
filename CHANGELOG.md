@@ -43,6 +43,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   cards with less work, history graphs and sensor graphs read their history in the background, and a value that keeps
   changing, such as a power sensor or a clock with seconds, no longer makes the whole dashboard lay itself out again.
   Nothing looks different.
+- **Vitro dashboards with many entities cards are ready sooner after they open.** With Vitro on, each plain row of an
+  entities card, a light or switch with its toggle or a sensor with its value, is now built from one view instead of
+  four, so a long dashboard spends less time building its cards once its first screen is up. Rows look, read aloud
+  and respond to taps exactly as before.
 - **Kiln is easier to move around in.** Every installer screen has a Back button in the same place when going back is
   safe, and says why when it isn't. Done steps on the side rail are links back to them. Reopening Kiln partway through
   an install shows where you stopped and what's already on the device, with Continue and a way out. Start over asks

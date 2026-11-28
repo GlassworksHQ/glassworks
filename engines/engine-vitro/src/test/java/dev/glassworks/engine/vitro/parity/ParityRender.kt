@@ -15,7 +15,10 @@ import android.text.style.RelativeSizeSpan
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
+import android.text.Layout
+import android.text.TextPaint
 import android.widget.TextView
+import dev.glassworks.engine.vitro.cards.EntityRowView
 import com.sun.net.httpserver.HttpServer
 import dev.glassworks.engine.vitro.cards.ClockCardView
 import dev.glassworks.engine.vitro.cards.GraphWork
@@ -39,8 +42,21 @@ import java.util.Date
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.max
 
-/** A text Vitro shows: the TextView, and its text with whitespace collapsed (with a map back to the original offsets). */
-class VitroText(val view: TextView, val normalized: String, val offsets: IntArray)
+/**
+ * A text Vitro shows: the view that draws it (a TextView, or an entities row that draws its own, [EntityRowView]), its
+ * words and layout, where that layout sits in the view (px), and its text with whitespace collapsed (with a map back to
+ * the original offsets).
+ */
+class VitroText(
+    val view: View,
+    val text: CharSequence,
+    val layout: Layout?,
+    val originX: Float,
+    val originY: Float,
+    val paint: TextPaint,
+    val normalized: String,
+    val offsets: IntArray,
+)
 
 /** One Vitro render of a case on a frame. Rectangles are CSS px in the page (the scrolled content). */
 class VitroRender(
@@ -62,9 +78,12 @@ class VitroRender(
     fun describedTexts(i: Int): List<String> = ParityViews.describedViews(slotViews[i])
         .map { it.contentDescription.toString().replace(Regex("\\s+"), " ").trim() }
 
-    /** The texts under slot [i]: every visible TextView with text. Canvas-drawn text is in [describedTexts]. */
-    fun texts(i: Int): List<VitroText> = ParityViews.textViews(slotViews[i]).map { tv ->
-        val raw = tv.text.toString()
+    /**
+     * The texts under slot [i]: every visible TextView with text, and the name and state of each entities row that draws
+     * its own ([EntityRowView]). Other canvas-drawn text is in [describedTexts].
+     */
+    fun texts(i: Int): List<VitroText> = ParityViews.drawnTexts(slotViews[i]).map { (view, d) ->
+        val raw = d.text.toString()
         val sb = StringBuilder()
         val map = ArrayList<Int>()
         var lastSpace = true
@@ -77,31 +96,36 @@ class VitroRender(
             }
             lastSpace = space
         }
-        VitroText(tv, sb.toString().trimEnd(), map.toIntArray())
+        VitroText(view, d.text, d.layout, d.originX, d.originY, d.paint, sb.toString().trimEnd(), map.toIntArray())
     }
 
-    /** Where offset [o] of [tv]'s text sits (left, vertical center, CSS px, in the page) and its font size (CSS px). */
-    fun textMetrics(tv: TextView, o: Int): Triple<Double, Double, Double> {
-        val (vx, vy) = ParityViews.offsetIn(root, tv)
-        var size = tv.textSize / density
-        (tv.text as? Spanned)?.let { sp ->
+    /** Where offset [o] of [vt]'s text sits (left, vertical center, CSS px, in the page) and its font size (CSS px). */
+    fun textMetrics(vt: VitroText, o: Int): Triple<Double, Double, Double> {
+        val (vx, vy) = ParityViews.offsetIn(root, vt.view)
+        var size = vt.paint.textSize / density
+        (vt.text as? Spanned)?.let { sp ->
             for (s in sp.getSpans(o, o + 1, AbsoluteSizeSpan::class.java)) size = if (s.dip) s.size.toFloat() else s.size / density
             for (s in sp.getSpans(o, o + 1, RelativeSizeSpan::class.java)) size *= s.sizeChange
         }
-        val layout = tv.layout ?: return Triple(vx / density.toDouble(), vy / density.toDouble(), size.toDouble())
+        val layout = vt.layout ?: return Triple(vx / density.toDouble(), vy / density.toDouble(), size.toDouble())
         val line = layout.getLineForOffset(o)
-        val x = vx + tv.totalPaddingLeft + layout.getPrimaryHorizontal(o)
-        val fm = tv.paint.fontMetrics
-        val ratio = size * density / tv.textSize
-        val center = vy + tv.totalPaddingTop + layout.getLineBaseline(line) + (fm.ascent + fm.descent) / 2f * ratio
+        val x = vx + vt.originX + layout.getPrimaryHorizontal(o)
+        val fm = vt.paint.fontMetrics
+        val ratio = size * density / vt.paint.textSize
+        val center = vy + vt.originY + layout.getLineBaseline(line) + (fm.ascent + fm.descent) / 2f * ratio
         return Triple(x / density.toDouble(), center / density.toDouble(), size.toDouble())
     }
 }
 
 object ParityViews {
-    /** Whether any char of [tv]'s text in [start, end) falls in a range its layout replaces with an ellipsis. */
-    fun elided(tv: TextView, start: Int, end: Int): Boolean {
-        val layout = tv.layout ?: return false
+    /** Whether any char of [vt]'s text in [start, end) falls in a range its layout replaces with an ellipsis. */
+    fun elided(vt: VitroText, start: Int, end: Int): Boolean = elided(vt.layout, start, end)
+
+    /** [elided] for a TextView's own text. */
+    fun elided(tv: TextView, start: Int, end: Int): Boolean = elided(tv.layout, start, end)
+
+    private fun elided(layout: Layout?, start: Int, end: Int): Boolean {
+        layout ?: return false
         for (line in 0 until layout.lineCount) {
             val count = layout.getEllipsisCount(line)
             if (count <= 0) continue
@@ -146,6 +170,24 @@ object ParityViews {
 
     fun textViews(slot: View): List<TextView> = all(slot).filterIsInstance<TextView>()
         .filter { it.text.isNotBlank() && it.width > 0 && it.height > 0 && shown(it, slot) }.toList()
+
+    /** One text a view draws, for [VitroRender.texts]: its words, layout, paint and the layout's origin in the view. */
+    data class Drawn(val text: CharSequence, val layout: Layout?, val originX: Float, val originY: Float, val paint: TextPaint)
+
+    /**
+     * The texts shown under [slot], in tree order: each visible TextView's ([textViews]), and the name and state of each
+     * visible entities row that draws its own ([EntityRowView]).
+     */
+    fun drawnTexts(slot: View): List<Pair<View, Drawn>> = all(slot)
+        .filter { (it is TextView || it is EntityRowView) && it.width > 0 && it.height > 0 && shown(it, slot) }
+        .flatMap { v ->
+            when (v) {
+                is TextView -> if (v.text.isBlank()) emptyList() else listOf(v to Drawn(v.text, v.layout, v.totalPaddingLeft.toFloat(), v.totalPaddingTop.toFloat(), v.paint))
+                is EntityRowView -> v.drawnTexts().filter { it.text.isNotBlank() }
+                    .map { v to Drawn(it.text, it.layout, it.left.toFloat(), it.top.toFloat(), it.paint) }
+                else -> emptyList()
+            }
+        }.toList()
 
     /** The views that draw their own text, described for screen readers: shown leaves that aren't TextViews. */
     fun describedViews(slot: View): List<View> = all(slot)

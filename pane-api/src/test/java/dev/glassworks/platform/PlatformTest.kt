@@ -42,6 +42,7 @@ class PlatformTest {
         Triple("hasForegroundServiceTypes", 29) { it.hasForegroundServiceTypes },
         Triple("hasSettingsPanel", 29) { it.hasSettingsPanel },
         Triple("hasFontBuilder", 29) { it.hasFontBuilder },
+        Triple("hasBoringFallbackLineSpacing", 33) { it.hasBoringFallbackLineSpacing },
         Triple("hasTypefaceBuilder", 26) { it.hasTypefaceBuilder },
         Triple("hasFocusableAuto", 26) { it.hasFocusableAuto },
         Triple("hasDescendantInvalidated", 26) { it.hasDescendantInvalidated },

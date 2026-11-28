@@ -162,7 +162,7 @@ object ParityCompare {
             for (vt in candidates) {
                 val idx = indexOfFolded(vt.normalized, needle, used[vt] ?: 0, whole = standalone(needle))
                 if (idx < 0) continue
-                val cut = ParityViews.elided(vt.view, vt.offsets[idx], vt.offsets[idx + needle.length - 1] + 1) && !haCut
+                val cut = ParityViews.elided(vt, vt.offsets[idx], vt.offsets[idx + needle.length - 1] + 1) && !haCut
                 if (!cut) { hit = vt to idx; break }
                 if (elidedHit == null) elidedHit = vt to idx
             }
@@ -179,7 +179,7 @@ object ParityCompare {
             val (vt, idx) = hit
             used[vt] = idx + needle.length
             val start = vt.offsets[idx]
-            val (x, center, size) = render.textMetrics(vt.view, start)
+            val (x, center, size) = render.textMetrics(vt, start)
             val slotV = render.slots[t.slot]
             texts += TextCheck(t.text, t.size, size, (x - slotV.x) - t.box.x, (center - slotV.y) - (t.box.y + t.box.h / 2))
         }
