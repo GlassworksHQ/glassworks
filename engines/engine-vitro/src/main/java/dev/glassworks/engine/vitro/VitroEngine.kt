@@ -30,6 +30,7 @@ import dev.glassworks.engine.PagePort
 import dev.glassworks.engine.vitro.clarity.ClarityHttp
 import dev.glassworks.engine.vitro.clarity.VitroClarity
 import dev.glassworks.engine.vitro.compat.CompatWarmup
+import dev.glassworks.engine.vitro.compat.IslandCardSizes
 import dev.glassworks.engine.vitro.compat.WebFallback
 import dev.glassworks.engine.vitro.data.HaFrontend
 import dev.glassworks.engine.vitro.data.HaText
@@ -1004,6 +1005,8 @@ class VitroEngine(
                 failedDashboards.clear()
             }
             currentOrigin = origin
+            // The sizes this Home Assistant's island cards gave before: the first masonry build places them once.
+            IslandCardSizes.useStore(vitroView.context.applicationContext.cacheDir, origin)
             displayedDashboard = null
             firstPaintReported = false
             vitroView.showStatus("Connecting to Home Assistant…")

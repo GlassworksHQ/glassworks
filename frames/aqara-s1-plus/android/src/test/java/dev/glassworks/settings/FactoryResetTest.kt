@@ -88,6 +88,8 @@ class FactoryResetTest {
         java.io.File(frontend, "en.json").writeText("{}")
         val fonts = java.io.File(app.cacheDir, "vitro-fonts").apply { mkdirs() }
         java.io.File(fonts, "0123abcd.font").writeBytes(byteArrayOf(0, 1, 0, 0))
+        val sizes = java.io.File(app.cacheDir, "vitro-card-sizes").apply { mkdirs() }
+        java.io.File(sizes, "sizes.json").writeText("{}")
 
         assertTrue(S1Settings.clearSettings(prefs, app))
 
@@ -96,6 +98,7 @@ class FactoryResetTest {
         assertTrue("the islands get a new origin, with empty storage", island.all.isEmpty())
         assertFalse("HA's cached frontend strings go", java.io.File(app.cacheDir, "vitro-frontend").exists())
         assertFalse("the fonts fetched from that Home Assistant go", fonts.exists())
+        assertFalse("the sizes its island cards gave go", sizes.exists())
         assertTrue("the rest of the settings step still ran", prefs.isAutoUrl)
         dev.glassworks.web.HaPageStorage.closed = false // closed until the process ends: the next test starts open
     }
