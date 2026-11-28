@@ -1,10 +1,11 @@
 // Development, preview and tests only: one line's releases (Kiln's /api/release/<line>/latest) and its files on Refract
 // (<refract>/glassworks/<tag>/<name>, with Range as Refract answers it), answered in the page with a stand-in release,
 // so the ?apk=release screens can be seen without a real one.
-//   out: <line>-v0.2.0 with its APKs and .sha256   none: no release yet
-//   bad: a .sha256 that isn't the APK's                          stuck: the APK download stops part way
+//   out: <line>-v0.2.0 with its APKs, GitHub's SHA-256 of each, and .sha256   none: no release yet
+//   bad: a SHA-256 (GitHub's and the .sha256) that isn't the APK's            stuck: the APK download stops part way
+//   undigested: as out, but GitHub's list gives no SHA-256 of its own (only the .sha256 beside the file on Refract)
 
-export type FakeRelease = 'out' | 'none' | 'bad' | 'stuck';
+export type FakeRelease = 'out' | 'none' | 'bad' | 'stuck' | 'undigested';
 
 /** The stand-in release of `line`: its tag and its arm64-v8a APK. */
 export const demoRelease = (line: string) => ({ tag: `${line}-v0.2.0`, apk: `glassworks-${line}-arm64-v8a-0.2.0.apk` });
@@ -24,7 +25,9 @@ export function fakeReleaseRoute(kind: FakeRelease, apk: Uint8Array | Readonly<R
     const url = new URL(String(input), 'https://kiln.invalid');
     if (url.pathname === `/api/release/${line}/latest`) {
       const assets = Object.keys(named);
-      return Response.json({ release: kind === 'none' ? null : { tag: DEMO_TAG, version: '0.2.0', assets } });
+      // GitHub's own SHA-256 of each file, as the real route lists it (its `digest`): what Kiln checks the APK against
+      const digests = Object.fromEntries(await Promise.all(Object.entries(named).map(async ([n, b]) => [n, kind === 'bad' ? 'ab'.repeat(32) : await sha256(b)] as const)));
+      return Response.json({ release: kind === 'none' ? null : { tag: DEMO_TAG, version: '0.2.0', assets, ...(kind === 'undigested' ? {} : { digests }) } });
     }
     const [, prefix, tag, name, ...more] = url.pathname.split('/').map(decodeURIComponent);
     if (prefix !== 'glassworks' || tag !== DEMO_TAG || !name || more.length) return new Response('not on the allowlist', { status: 404 });

@@ -29,6 +29,7 @@ export const kilnFrame: DeviceFrame = {
   app: GLASSWORKS,
   connect: { ...d.connect, pick: d.listed.as },
   listed: d.listed.as,
+  drivers: { win: d.drivers.win, linux: d.drivers.linux, guide: d.drivers.guide },
   // the image's copy in /system/priv-app holds INSTALL_PACKAGES, or Android asks before each update (updates.ts)
   updates: async (p, signal) => { const u = await readMirrorUpdates(p, GLASSWORKS, signal); return { state: u.state, log: describeMirrorUpdates(u) }; },
   board: d.board,

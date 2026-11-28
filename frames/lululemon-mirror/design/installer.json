@@ -44,6 +44,12 @@
       "as": "Android",
       "why": "The name Chrome's USB list shows the Mirror by, over adb and in fastboot alike: nobody finds \"the Mirror\" there (maintainer, 2026-11-21). Kiln's screens say it wherever they ask for a pick, and set-up's sheet names it"
     },
+    "drivers": {
+      "win": "Windows needs a driver once: with the Mirror in fastboot mode, install the Google USB Driver, or in Zadig give the device with USB ID 18d1:d00d the WinUSB driver.",
+      "linux": "Linux needs a udev rule once for 18d1:d00d, the Mirror in fastboot mode.",
+      "guide": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/lululemon-mirror/README.md#one-time-setup-for-your-computer",
+      "why": "Chrome on Windows opens a USB device only through WinUSB, and the Mirror's LK in fastboot (18d1:d00d, flash.ts MIRROR_FASTBOOT) gets no driver by itself; on Linux a device needs a udev rule before the browser may open it (SecurityError, Access denied). Untested on a Mirror from Windows or Linux: the Mirror installs so far ran from macOS, which needs neither"
+    },
     "board": "msm8916",
     "apk": {
       "line": "generic-android-legacy",
