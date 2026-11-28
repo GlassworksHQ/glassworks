@@ -26,7 +26,6 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -83,9 +82,13 @@ class EntityRowViewTest {
         val card = EntitiesCardView(ctx(), LovelaceParser.parseCard(JSONObject(json)))
         root.addView(card, FrameLayout.LayoutParams(widthPx, ViewGroup.LayoutParams.WRAP_CONTENT))
         repeat(3) { idle() }
-        val bmp = Bitmap.createBitmap(card.width, card.height, Bitmap.Config.ARGB_8888)
-        card.draw(Canvas(bmp))
-        return card to IntArray(card.width * card.height).also { bmp.getPixels(it, 0, card.width, 0, 0, card.width, card.height) }
+        return card to pixels(card)
+    }
+
+    private fun pixels(v: View): IntArray {
+        val bmp = Bitmap.createBitmap(v.width, v.height, Bitmap.Config.ARGB_8888)
+        v.draw(Canvas(bmp))
+        return IntArray(v.width * v.height).also { bmp.getPixels(it, 0, v.width, 0, 0, v.width, v.height) }
     }
 
     /** [json] drawn with the one-view rows and with the row of views they replace: the same size and the same pixels. */
@@ -246,14 +249,10 @@ class EntityRowViewTest {
         assertEquals("1,234.5 °C", rows[1].stateText.toString())
         assertFalse("the card isn't laid out again for a new width", card.isLayoutRequested)
         assertFalse(rows[1].isLayoutRequested)
-        assertNotEquals("the light's icon went to its off color", 0xFFFFFFFF.toInt(), rows[0].iconColor)
+        assertEquals("the light's icon in the inactive color", ctx().theme.stateIconColor, rows[0].iconColor)
         assertEquals("mdi:lightbulb-off", rows[0].icon)
         // And it draws what a card built for the new states draws.
-        val (_, now) = card to IntArray(card.width * card.height).also {
-            val bmp = Bitmap.createBitmap(card.width, card.height, Bitmap.Config.ARGB_8888)
-            card.draw(Canvas(bmp))
-            bmp.getPixels(it, 0, card.width, 0, 0, card.width, card.height)
-        }
+        val now = pixels(card)
         val (_, fresh) = render("""{"type": "entities", "entities": ["light.desk", "sensor.temp"]}""")
         assertTrue("updated in place = built fresh", now.contentEquals(fresh))
     }
