@@ -249,6 +249,27 @@ class SettingsMenuTest {
     }
 
     @Test
+    fun settingScreenToAlwaysOnOrNeverWakesASleepingScreen() {
+        val prefs = KioskPrefs(app)
+        var wakes = 0
+        val items = screen(live = CoreSettings.Live(screenAwake = { wakes++ }))
+        val wake = items.filterIsInstance<SettingsItem.Switch>().first { it.title == CoreSettings.WAKE_TITLE }
+        val idle = items.filterIsInstance<SettingsItem.Duration>().first { it.title == "Turn off when idle" }
+
+        wake.save(true) {}
+        assertEquals("turning presence wake on does not force a wake", 0, wakes)
+        wake.save(false) {}
+        assertEquals("switching to always-on wakes a sleeping screen", 1, wakes)
+        assertEquals("always", prefs.screenMode)
+
+        idle.save(300) {}
+        assertEquals("picking a finite timeout does not wake", 1, wakes)
+        idle.save(0) {}
+        assertEquals("setting idle timeout to Never wakes a sleeping screen", 2, wakes)
+        assertEquals(0, prefs.idleOffSec)
+    }
+
+    @Test
     fun rangeZeroPromisesNoDistance() {
         // CodeRabbit on #163: 0 leaves the sensor's threshold alone, which may not be 1.5 m.
         val prefs = KioskPrefs(app)

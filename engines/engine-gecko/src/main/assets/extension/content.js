@@ -175,7 +175,7 @@
       if (!p || !AUTH_CALLBACKS.includes(p.callback)) return;
       request("getExternalAuth", { force: !!p.force }).then((r) => {
         if (r && r.success) callPage(p.callback, true, { access_token: r.access_token, expires_in: r.expires_in });
-        else callPage(p.callback, false);
+        else { dropLaunchStyle(); callPage(p.callback, false); }
       });
     }, ext, { defineAs: "getExternalAuth" });
 
@@ -234,6 +234,7 @@
   portListeners.push((m) => {
     if (m && m.type === "state") publishState(m.state);
     if (m && m.type === "config") { cfg = Object.assign(cfg, m.config); apply(); }
+    if (m && m.type === "revealLaunch") dropLaunchStyle();
   });
 
   // ---- Notifications (#118): open a Home Assistant view in place ---------------------------------

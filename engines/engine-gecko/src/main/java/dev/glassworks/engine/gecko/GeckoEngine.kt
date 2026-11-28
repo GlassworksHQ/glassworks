@@ -280,6 +280,11 @@ class GeckoEngine(
                 stuck = it
             }
             t.text = message
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                if (!closed) host.onBlocked(message)
+            } else {
+                main.post { if (!closed) host.onBlocked(message) }
+            }
         }
         override fun reload() { session?.reload() }
         override fun goBack() { if (canGoBack) session?.goBack() }

@@ -25,6 +25,25 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   steps, and the main button stays at the bottom of the screen.
 
 ### Fixed
+- **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
+  saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing
+  the panel to refuse dashboard authentication tokens, dashboard lists, theme updates, and permissions. Default ports
+  are now stripped from origins and omitted for port 80 discovery.
+- **Home Assistant addresses entered without `http://` or a port now work.** Typing a bare address such as
+  `192.0.2.10` or `homeassistant.local` in Settings or manual setup now fills in `http://` and port `8123`
+  automatically, while explicit `http://` and `https://` addresses keep their scheme and port. Invalid addresses
+  are rejected with an inline error instead of being saved.
+- **Sign-in errors and loading timeouts no longer trap the panel on the connecting screen or leave a blank dark screen.**
+  If Home Assistant rejects authentication without revoking the panel's token (for example during a temporary error or
+  IP ban), the panel now stops bouncing between the dashboard and the login page, hides the connecting screen right
+  away, and reveals Home Assistant's launch screen on auth failure or fallback timeout so any error is visible.
+- **Changing Screen settings to stay on wakes a sleeping panel right away.** Setting *Turn off when idle* to *Never*
+  or turning *Wake when someone's near* off from Manage or Settings now wakes the display immediately instead of
+  leaving a sleeping screen dark until restart.
+- **Manage sign-in clarifies how to show a panel code and keeps the screen awake while it is displayed.** On the
+  Manage sign-in page, the fallback link now reads *Show a code on the panel* so it is clear you need to click it to
+  display a code, and the panel keeps its screen awake for the full 5 minutes while a code is on screen instead of
+  dimming on its idle timeout.
 - **Another device on your network can no longer replace the panel's Home Assistant sign-in.** Once the panel is
   signed in, its sign-in page only lets you sign in again from a browser signed in to the panel's Manage page. To use
   another account, sign the panel out first. The panel's web pages also answer only to the panel's own address now,

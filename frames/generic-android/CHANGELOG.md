@@ -11,6 +11,33 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Fixed
+- **Home Assistant on standard HTTP (port 80) or HTTPS (port 443) now signs in and loads cleanly.** Discovering or
+  saving an address with an explicit `:80` or `:443` used to mismatch the browser's normalized page origin, causing
+  the panel to refuse dashboard authentication tokens, dashboard lists, theme updates, and permissions. Default ports
+  are now stripped from origins and omitted for port 80 discovery.
+- **Home Assistant addresses entered without `http://` or a port now work.** Typing a bare address such as
+  `192.0.2.10` or `homeassistant.local` in Settings or manual setup now fills in `http://` and port `8123`
+  automatically, while explicit `http://` and `https://` addresses keep their scheme and port. Invalid addresses
+  are rejected with an inline error instead of being saved.
+- **Sign-in errors and loading timeouts no longer trap the panel on the connecting screen or leave a blank dark screen.**
+  If Home Assistant rejects authentication without revoking the panel's token (for example during a temporary error or
+  IP ban), the panel now stops bouncing between the dashboard and the login page, hides the connecting screen right
+  away, and reveals Home Assistant's launch screen on auth failure or fallback timeout so any error is visible.
+- **Changing Screen settings to stay on wakes a sleeping panel right away.** Setting *Turn off when idle* to *Never*
+  or turning *Wake when someone's near* off from Manage or Settings now wakes a sleeping or blacked-out display
+  immediately instead of leaving it dark until restart.
+- **Lockdown messages are no longer hidden behind the connecting screen.** When the legacy browser engine blocks a
+  page or waits on its lockdown, the connecting screen now steps aside so you can read the message. In the legacy
+  build.
+- **Manage sign-in clarifies how to show a panel code and keeps the screen awake while it is displayed.** On the
+  Manage sign-in page, the fallback link now reads *Show a code on the panel* so it is clear you need to click it to
+  display a code, and the panel keeps its screen awake for the full 5 minutes while a code is on screen instead of
+  dimming on its idle timeout.
+- **Manage's Log page now captures app logs on Android 6.** Older Android builds do not support `logcat -v epoch`,
+  which left Manage's Log showing only Manage events; Glassworks now falls back to `threadtime` format on Android 6
+  so app, sign-in, and screen logs appear as expected. In the legacy build.
+
 ## [0.9.1] - 2026-11-27
 
 **One volume for everything the panel plays, and a round of fixes for the lululemon Mirror: a real camera picture, Wi-Fi that stays on, and a screen that wakes without lines.**

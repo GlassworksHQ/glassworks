@@ -55,7 +55,7 @@ class ManagePages(private val zone: TimeZone = TimeZone.getDefault(), private va
         val remember = """<div class="rem"><label class="sw"><input type="checkbox" name="remember" value="1" checked> Remember this browser for 30 days</label></div>"""
         val form = """<form method="post" action="/manage/ha"><input type="hidden" name="next" value="${esc(next)}">""" +
             (if (haOk) """<button class="btn" type="submit">Continue with Home Assistant <span aria-hidden="true">↗</span></button>$remember
-<div class="rule"></div><p class="alt">Home Assistant down? <button class="lk" type="submit" formaction="/manage/code">Use the code on the panel</button></p>"""
+<div class="rule"></div><p class="alt">Home Assistant down? <button class="lk" type="submit" formaction="/manage/code">Show a code on the panel</button></p>"""
             else """<button class="btn" type="submit" formaction="/manage/code">Show a code on the panel</button>$remember""") + "</form>"
         val text = when {
             problem != null -> esc(problem)

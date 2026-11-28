@@ -69,10 +69,19 @@ class OAuthTest {
     fun origin() {
         assertEquals("http://192.168.1.100:8123", OAuth.origin("http://192.168.1.100:8123/s1-panel/home"))
         assertEquals("https://ha.example.com", OAuth.origin("https://HA.example.com/"))
+        assertEquals("default http port is stripped", "http://192.0.2.10", OAuth.origin("http://192.0.2.10:80/"))
+        assertEquals("default https port is stripped", "https://ha.example.com", OAuth.origin("https://ha.example.com:443/lovelace"))
+        assertEquals("IPv6 default http port is stripped", "http://[fd00::5]", OAuth.origin("http://[fd00::5]:80/"))
+        assertEquals("IPv6 default https port is stripped", "https://[fd00::5]", OAuth.origin("https://[FD00::5]:443/"))
+        assertEquals("non-default port for http stays", "http://192.0.2.10:443", OAuth.origin("http://192.0.2.10:443/"))
+        assertEquals("non-default port for https stays", "https://192.0.2.10:80", OAuth.origin("https://192.0.2.10:80/"))
         assertEquals("a user and password aren't part of it", "http://192.0.2.10:8123", OAuth.origin("http://user:secret@192.0.2.10:8123/"))
+        assertEquals("userinfo and default port are both stripped", "http://192.0.2.10", OAuth.origin("http://user:pass@192.0.2.10:80/"))
         // The dashboard-loaded check: a page loaded with them is on the base, which has none (#449).
         assertTrue(FrontendUrls.sameOrigin("http://user:secret@192.0.2.10:8123/lovelace/0", "http://192.0.2.10:8123"))
         assertTrue(FrontendUrls.sameOrigin("http://192.0.2.10:8123/lovelace/0", "http://user:secret@192.0.2.10:8123"))
+        assertTrue(FrontendUrls.sameOrigin("http://192.0.2.10/?external_auth=1", "http://192.0.2.10:80"))
+        assertTrue(FrontendUrls.sameOrigin("https://ha.example.com/?external_auth=1", "https://ha.example.com:443"))
         assertFalse(FrontendUrls.sameOrigin("http://user:secret@192.0.2.11:8123/", "http://192.0.2.10:8123"))
         assertNull(OAuth.origin("ftp://x/"))
         assertNull(OAuth.origin("auto"))
@@ -225,6 +234,8 @@ class OAuthTest {
         assertFalse(auth.isFor("https://192.0.2.20:8123")) // https turned on at the same host
         assertFalse(auth.isFor("http://192.0.2.20:8124"))
         assertFalse(auth.isFor("http://homeassistant.local:8123"))
+        assertTrue(StoredAuth("http://192.0.2.10:80", "cid", "rt").isFor("http://192.0.2.10"))
+        assertTrue(StoredAuth("https://ha.example.com:443", "cid", "rt").isFor("https://ha.example.com/lovelace/0"))
     }
 
     @Test
