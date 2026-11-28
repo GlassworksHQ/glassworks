@@ -9,7 +9,7 @@ dev/glassworks/hawebrtc/TextureFrameDrawer.kt reproduces the steps of
 from libwebrtc M150 (https://webrtc.googlesource.com/src, branch-heads/7871,
 sdk/android/api/org/webrtc), as built by webrtc-sdk/android 150.7871.04.
 Copyright (c) 2011, The WebRTC project authors. All rights reserved.
-BSD 3-Clause licence (META-INF/LICENSE-BSD-3-CLAUSE), with WebRTC's additional IP rights grant
+BSD 3-Clause licence (META-INF/dev.glassworks/ha-webrtc/LICENSE-BSD-3-CLAUSE), with WebRTC's additional IP rights grant
 (https://webrtc.googlesource.com/src/+/refs/heads/main/PATENTS).
 
 Changes: rewritten in Kotlin to draw a texture frame into matrices and arrays kept across frames,

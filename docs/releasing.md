@@ -733,7 +733,9 @@ Ported code keeps its own licence. `voice`'s `MicroFrontend.kt` is a port of Ten
 audio frontend (Apache-2.0) and kissfft (BSD-3-Clause). A library lists such licences in its
 `gradle.properties` as `extraLicenses=<SPDX id>|<upstream copyright line>;…`, and explains the port in
 `libs/<name>/NOTICE`. The build then adds each licence to the POM, and ships it in the jar as
-`META-INF/LICENSE-<ID>` (from `LICENSES/<id>.txt`, under the copyright line), with `META-INF/NOTICE`.
+`META-INF/dev.glassworks/<name>/LICENSE-<ID>` (from `LICENSES/<id>.txt`, under the copyright line), with the NOTICE
+beside it. Each library has a folder of its own there, so an app that uses two libraries with the same licence (`voice`
+and `ha-webrtc` both carry BSD-3-Clause) gets both files instead of a duplicate-file error.
 `check-lib-artifact.sh` checks both. They're built for Kotlin 2.1 with kotlin-stdlib 2.1, so apps on Kotlin 2.0 or newer can
 use them.
 

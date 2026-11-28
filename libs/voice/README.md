@@ -45,8 +45,8 @@ response, announcements, continued conversations and voice timers.
 It has no Pane API and no S1 classes (#152). The Glassworks `assist` pane wraps it with settings,
 entities, the overlay and the speaker. Package `dev.glassworks.voice`, MIT licensed, except
 `MicroFrontend.kt`, a port under Apache-2.0 and BSD-3-Clause ([NOTICE](NOTICE)). The AAR carries all
-three texts (`META-INF/LICENSE`, `LICENSE-APACHE-2.0`, `LICENSE-BSD-3-CLAUSE`) and the NOTICE, and the
-POM lists all three. minSdk 23.
+three texts (`META-INF/LICENSE`, and `LICENSE-APACHE-2.0`, `LICENSE-BSD-3-CLAUSE` and the NOTICE in
+`META-INF/dev.glassworks/voice/`), and the POM lists all three. minSdk 23.
 
 ## Use it in your own app
 
