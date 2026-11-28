@@ -22,6 +22,12 @@ class CompatTest {
         )
     }
 
+    @Test fun instanceIdsAreHandlesFromAndroid7() {
+        assertEquals("Android 6: an instance id only tells same-UUID attributes apart", false, CompatApi(23).gattInstanceIdsAreHandles)
+        assertEquals(true, CompatApi(24).gattInstanceIdsAreHandles)
+        assertEquals(true, CompatApi(29).gattInstanceIdsAreHandles)
+    }
+
     @Test fun connectingNeedsBluetoothConnectOnlyFromAndroid12() {
         assertEquals(emptyList<String>(), CompatApi(29).connectPermissions)
         assertEquals(listOf("android.permission.BLUETOOTH_CONNECT"), CompatApi(31).connectPermissions)

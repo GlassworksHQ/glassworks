@@ -24,6 +24,14 @@ internal class CompatApi(private val level: Int) {
     @get:ChecksSdkIntAtLeast(api = 28)
     val hasIsLocationEnabled: Boolean get() = level >= 28
 
+    /**
+     * A GATT service's and a characteristic's instance id is its ATT handle (Android 7). Below it an instance
+     * id only tells attributes with the same UUID apart, so it is 0 for nearly all of them (the Mirror,
+     * Android 6.0.1: frames/lululemon-mirror/research/gatt-handles-android6.md).
+     */
+    @get:ChecksSdkIntAtLeast(api = 24)
+    val gattInstanceIdsAreHandles: Boolean get() = level >= 24
+
     /** An app may turn Bluetooth on with `BluetoothAdapter.enable()`. From Android 13 the call does nothing. */
     val appsCanEnableBluetooth: Boolean get() = level < 33
 
