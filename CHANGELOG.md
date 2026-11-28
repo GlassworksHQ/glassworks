@@ -9,6 +9,15 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **USB debugging now checks which computer is connecting.** The S1's adb used to let any computer in, whatever its
+  key. From the panel's next restart after this update, only allowed computers get in. Kiln, or the computer that
+  installed Glassworks, stays allowed. Any other computer can be let in on the panel's screen or from the Manage page.
+- **Allow a new computer over USB from the Manage page.** When a computer you haven't used before asks for USB
+  debugging, the **Security** page shows its fingerprint with **Allow this computer**, for this connection or each
+  time it connects, and lists the computers already allowed with **Remove**. You need to be signed in with a Home Assistant administrator account. Allowed
+  computers now stay allowed until you remove them, instead of Android forgetting them after a week without a
+  connection. Kiln is on the list too, and comes back if Android had already forgotten it, unless you remove it.
+  Needs the next S1 frame update.
 - **One volume for everything the panel plays.** The new **Sound** page in the panel's settings and on the Manage
   page sets the volume of voice replies, timers, notifications, Music Assistant, and the dashboard's own sound,
   with a mute switch. Home Assistant's *Speaker* volume and mute now control the same thing, so turning the panel

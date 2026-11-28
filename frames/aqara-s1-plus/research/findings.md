@@ -64,7 +64,7 @@ U-Boot 2018.05 (Dec 02 2025 ...) Allwinner Technology
 ## USB / ADB
 
 - `sys.usb.config = mtp`, `persist.sys.usb.config = none` by default (why plain `adb` isn't exposed on USB out of the box).
-- `ro.adb.secure = 1` — adbd requires an authorized key. With root you can drop your host key into `/data/misc/adb/adb_keys` and enable TCP adb (`service.adb.tcp.port`), then `adb connect`.
+- `ro.adb.secure = 1`, but adbd doesn't enforce it: on 2026-11-28 it let a key it had never seen in over TCP, with no request to Android and no dialog ([adb-keys.md](adb-keys.md)). Turning adb on, over USB or TCP (`service.adb.tcp.port`), opens a shell to anyone who can reach it.
 
 ## Implications for the project
 

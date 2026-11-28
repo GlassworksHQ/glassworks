@@ -91,9 +91,12 @@ class AdbComputers(
     private val listening: () -> Boolean = { true },
     /** A computer was let in, from the page or from the list: the screen can put Android's own question away. */
     private val letIn: () -> Unit = {},
-) {
-    /** A computer on the list: its key, who added it and when. */
-    data class Listed(val key: AdbKey, val addedMs: Long, val by: String)
+) : UsbComputers {
+    /**
+     * A computer on the list: its key, who added it ([by], may be empty) and when ([addedMs], 0 when nobody recorded it).
+     * [installer]: the computer that installed Glassworks (Kiln, or the command-line installer), where a frame lists it.
+     */
+    data class Listed(val key: AdbKey, val addedMs: Long, val by: String, val installer: Boolean = false)
 
     /** The last computer that asked, and how it was answered, if it was. [retried]: its automatic approval was sent twice. */
     private data class Request(val key: AdbKey, val atMs: Long, val answered: Boolean, val retried: Boolean = false)
@@ -114,11 +117,11 @@ class AdbComputers(
     init { load() }
 
     @Synchronized
-    fun list(): List<Listed> = listed.values.toList()
+    override fun list(): List<Listed> = listed.values.toList()
 
     /** The computer asking now, unanswered, or null. */
     @Synchronized
-    fun asking(): AdbKey? = last?.takeIf { !it.answered && clock() - it.atMs <= askingMs }?.key
+    override fun asking(): AdbKey? = last?.takeIf { !it.answered && clock() - it.atMs <= askingMs }?.key
 
     /** A computer asked (Android's log said so). A listed one is let in straight away. */
     @Synchronized
@@ -166,13 +169,13 @@ class AdbComputers(
     }
 
     /** What [allowAsking] did. */
-    enum class Allowed { ONCE, FROM_NOW_ON, CHANGED, NONE, FULL, FAILED, REFUSED, REFUSED_NONE_WAITING, UNCONFIRMED, NOT_REMEMBERED }
+    enum class Allowed { ONCE, FROM_NOW_ON, CHANGED, NONE, FULL, FAILED, REFUSED, REFUSED_NONE_WAITING, UNCONFIRMED, NOT_REMEMBERED, NO_ANSWER }
 
     /**
      * Lets in the computer asking now, if it is still the one the page showed ([shown], its fingerprint). With
      * [remember] it goes on the list too, so it gets in each time it connects. Blocks up to [confirmMs].
      */
-    fun allowAsking(shown: String, remember: Boolean, who: String): Allowed = synchronized(attempt) { attempt(shown, remember, who) }
+    override fun allowAsking(shown: String, remember: Boolean, who: String): Allowed = synchronized(attempt) { attempt(shown, remember, who) }
 
     private fun attempt(shown: String, remember: Boolean, who: String): Allowed {
         val key: AdbKey
@@ -254,11 +257,11 @@ class AdbComputers(
         if (waiting != null && FINGERPRINT.matches(waiting)) "adb key $waiting is the one waiting" else "no computer is waiting"
 
     /** What [remove] did. */
-    enum class Removed { DONE, NOT_LISTED, NOT_SAVED }
+    enum class Removed { DONE, NOT_LISTED, NOT_SAVED, NO_ANSWER }
 
     /** Takes the computer with [fingerprint] off the list. When the list can't be saved, it stays on it. */
     @Synchronized
-    fun remove(fingerprint: String, who: String): Removed {
+    override fun remove(fingerprint: String, who: String): Removed {
         val gone = listed.remove(fingerprint) ?: return Removed.NOT_LISTED
         if (!save()) {
             listed[fingerprint] = gone

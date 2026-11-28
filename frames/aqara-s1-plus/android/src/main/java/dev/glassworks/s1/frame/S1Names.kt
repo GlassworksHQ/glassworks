@@ -115,7 +115,7 @@ class S1Names(
             diagnostics = listOf(
                 "sys.glassworks.radio.status", "sys.glassworks.agent.version", "sys.glassworks.radio.fw", "sys.glassworks.net.status",
                 "sys.glassworks.update.version", "sys.glassworks.timezone.status", "sys.glassworks.portal.status", "persist.glassworks.radio_mode",
-                "persist.glassworks.radio_zigbee", "ro.glassworks.frame.version", "sys.glassworks.bundle.state",
+                "persist.glassworks.radio_zigbee", "ro.glassworks.frame.version", "sys.glassworks.bundle.state", "sys.glassworks.adb.status", "sys.glassworks.adb.auth",
             ),
         )
     }

@@ -455,6 +455,43 @@ settings under it) compiled in. Everything else in the v4 table holds. The app r
 for one release; `s1kiosk_radio.sh` and `s1kiosk_bundle.sh` stay in the repo for that release, for the
 old radio bundle that 0.4.3 boot images install.
 
+### Computers over USB adb
+
+Manage's Security page answers Android's "Allow USB debugging?" on the S1, as it does on the Mirror. Here the
+agent does the work, because the app can't hold `MANAGE_DEBUGGING` and can't read the system log. Why it goes
+this way is in [adb-keys.md](../research/adb-keys.md).
+
+| What | Where | Who writes it |
+|---|---|---|
+| The computer asking: `<epoch> <fingerprint> <key line>` | `/data/glassworks-pub/adb-asking` (root 0644) | the agent, from `Received public key:` lines that system_server's pid logged under `AdbDebuggingManager` in the last 10 minutes |
+| The allowed keys: `<installer\|added> <fingerprint> <key line>` per line of `/data/misc/adb/adb_keys` | `/data/glassworks-pub/adb-keys` | the agent; `installer` = a key in the boot image's `glassworks_adb_keys` |
+| A request: `<id> allow\|once\|remove <fingerprint>` | the app's `files/adb/request` (taken with `--move`, at most 2 minutes old) | the app |
+| The answer: `<id> <ok\|error> <detail>` | `/data/glassworks-pub/adb-result` | the agent |
+| Status: `starting`, `ok`, `error <detail>` | `sys.glassworks.adb.status` | the agent |
+
+- `allow` takes only the computer asking now, by its fingerprint, so the app can never name a key of its own. The
+  agent answers Android with `IAdbManager.allowDebugging(true, key)` (`service call adb 1 i32 1 s16 <key>`, as root),
+  which lets the computer in at once, and then makes sure the key is in `adb_keys`.
+- `once` is the same with `allowDebugging(false, key)`, Android's plain "Allow": the computer gets in for this
+  connection only, nothing is written, and it asks again the next time it connects. The agent keeps the question it
+  answered in `$DIR/adb-once` (root 0600), so reading the same log line again doesn't show it as asking.
+- `remove` takes a key out of `adb_keys`, keeping the file's owner, mode and label. A computer that is connected stays
+  connected until it disconnects. The installer's key (Kiln's, or the command-line installer's computer) can be
+  removed too. Its fingerprint then goes to `$DIR/adb-revoked` (root 0600), so it stays out.
+- At every start the agent puts back any boot image key that's missing from `adb_keys` (Android dropped it, see
+  below), unless it's in `$DIR/adb-revoked`. Allowing that computer again takes it off `adb-revoked`.
+- **adbd checks keys again.** Aqara's adbd reads `ro.adb.secure`, then overwrites it with "no check", so it lets every
+  computer in ([adb-keys.md](../research/adb-keys.md#the-fix)). At every start the agent makes a Magisk module,
+  `glassworks_adbd_auth`. The module holds a copy of the panel's own `/system/bin/adbd` with that one store turned into
+  a no-op (2 bytes at offset `0x20d0`). The agent checks the copy by hash before and after the patch, and leaves any
+  other firmware's adbd alone. Magisk mounts it at the next restart. If adb is on and the patched adbd doesn't run
+  within 2 minutes, the agent takes the module out and records `$DIR/adbd-auth-failed`, so the restart after that has
+  Aqara's adbd. `persist.glassworks.adb_auth=off` turns the check off: the module goes at the next restart. Status:
+  `sys.glassworks.adb.auth` = `on`, `on after a restart`, `off`, `off after a restart`, `off: …` or `error: …`.
+- At every start the agent sets `adb_allowed_connection_time` to `0`. Android 10 would otherwise drop a key from
+  `adb_keys` 7 days after its computer last connected, the installer's key included. `tools/install.sh --undo`
+  deletes the setting again.
+
 ## Root helper contract (v4)
 
 The root half of the modes lives in a helper. The Magisk boot patch installs it as an init service

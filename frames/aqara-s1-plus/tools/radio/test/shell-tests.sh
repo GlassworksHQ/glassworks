@@ -77,6 +77,16 @@ EOF
 # back to GMT for anything else (zones listed in /t/tz-unknown).
 w "$T/bin/service" <<'EOF'
 #!/bin/sh
+# IAdbManager.allowDebugging(true, key) as `service call adb 1 i32 1 s16 <key>`: recorded in /t/adb-calls; with
+# /t/adb-android-writes (naming an adb_keys file) Android writes the key there itself, as it does for a new key.
+if [ "$1 $2 $3 $4 $5 $6" = "call adb 1 i32 1 s16" ]; then
+  echo "$7" >> /t/adb-calls; [ -s /t/adb-android-writes ] && echo "$7" >> "$(cat /t/adb-android-writes)"
+  echo "Result: Parcel(00000000    '....')"; exit 0
+fi
+# allowDebugging(false, key), Android's plain "Allow" (this connection only): recorded in /t/adb-once-calls.
+if [ "$1 $2 $3 $4 $5 $6" = "call adb 1 i32 0 s16" ]; then
+  echo "$7" >> /t/adb-once-calls; echo "Result: Parcel(00000000    '....')"; exit 0
+fi
 [ "$1 $2 $3 $4" = "call alarm 3 s16" ] || exit 1
 echo "$5" >> /t/tz-calls
 if grep -qx -- "$5" /t/tz-unknown 2>/dev/null; then printf GMT > /t/props/persist.sys.timezone
@@ -1061,7 +1071,8 @@ for f in backup_nvm router_bridge children_ok num_in take_app_dataset thread_lea
   b=$(fnbody "$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh" $f)
   check "old helper's $f is the agent's, names aside" test -n "$a" -a "$a" = "$b"
 done
-a=$(sed -n '/^while true; do/,$p' "$R/frames/aqara-s1-plus/tools/radio/glassworks_agent.sh" | sed 's/glassworks/s1kiosk/g; s/GWA_/S1R_/g; s/the agent/the helper/g')
+# Less the computers over USB adb (adb_*): the agent's alone, the old helper never had them.
+a=$(sed -n '/^while true; do/,$p' "$R/frames/aqara-s1-plus/tools/radio/glassworks_agent.sh" | grep -v '^  adb_' | sed 's/glassworks/s1kiosk/g; s/GWA_/S1R_/g; s/the agent/the helper/g')
 check "...and its main loop is the agent's" test -n "$a" -a "$a" = "$(sed -n '/^while true; do/,$p' "$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh")"
 
 # ------------------------------------------------------------------------------- app updates
@@ -1339,6 +1350,108 @@ check "a lookup that prints an address and then fails: nothing written" test ! -
 rm -f "$T/settings-fail"
 rm -rf "$BTP" "$T/not-ours" "$T/settings.secure.bluetooth_address"
 
+# ------------------------------------------------------------------------- computers over USB adb
+# Manage's "Allow a new computer" on the S1: the agent follows Android's log for the computer asking (from
+# system_server only), answers it with allowDebugging, keeps adb_keys, and turns Android's 7-day key timeout off.
+# Every key here is made up (random bytes in adb's key layout).
+echo "--- computers over USB adb"
+reset_radio; echo off > "$T/props/persist.glassworks.radio_mode"
+AP=$T/adbpub; AK=$T/adb/adb_keys; rm -rf "$AP" "$T/adb" /t/adb-calls /t/adb-once-calls /t/adb-android-writes /t/logcat.args; mkdir -p "$T/adb"
+rm -f "$T/settings.global.adb_allowed_connection_time"; : > "$T/settings.calls"
+w "$T/bin/logcat" <<'EOF'
+#!/bin/sh
+echo "$*" >> /t/logcat.args; cat /t/logcat.out 2>/dev/null; exit 0
+EOF
+mkkey() { python3 -c 'import base64, os, struct, sys; print(base64.b64encode(struct.pack("<I", 64) + os.urandom(520)).decode() + " " + sys.argv[1])' "$1"; }
+kfp() { printf '%s' "${1%% *}" | base64 -d | md5sum | cut -c1-32 | tr a-f A-F | sed 's/../&:/g; s/:$//'; }
+K1=$(mkkey installer@example); K2=$(mkkey me@laptop); K3=$(mkkey old@desk); K4=$(mkkey forged@app); K5=$(mkkey new@desk)
+F1=$(kfp "$K1"); F2=$(kfp "$K2"); F3=$(kfp "$K3"); F4=$(kfp "$K4"); F5=$(kfp "$K5")
+cp "$TB/glassworks_adb_keys" "$T/boot-adb-keys.bak"; echo "$K1" > "$TB/glassworks_adb_keys"
+# Android dropped the installer's key (7 days without a connection): only K3 is left.
+printf '%s\n' "$K3" > "$AK"; chown 1000:2000 "$AK"; chmod 640 "$AK"
+pkill -x system_server 2>/dev/null; sleep 0.2; system_server 1000 & SSP=$!
+now=$(date +%s)
+{ echo "$((now - 2000)).100  $SSP  900 D AdbDebuggingManager: Received public key: $K5"
+  echo "$((now - 9)).100  4242  4243 D AdbDebuggingManager: Received public key: $K4"
+  echo "$((now - 5)).100  $SSP   900 D AdbDebuggingManager: Received public key: $K2"
+  echo "$((now - 4)).100  4242  4243 D AdbDebuggingManager: Received public key: $K4"
+  echo "$((now - 3)).100  $SSP   900 D AdbDebuggingManager: Received public key: not-a-key me@laptop"; } > /t/logcat.out
+adbrun() { LOOPS=${1:-3} helper GWA_PUB="$AP" GWA_ADB_KEYS="$AK" GWA_SLEEP=1 GWA_ADB_RETRY=1 GWA_ADB_SETTLE=0; }
+adbreq() { # content [age-seconds]
+  mkdir -p "$APP/files/adb"; printf '%s\n' "$1" > "$APP/files/adb/request"; chown -R 10050:10050 "$APP/files/adb"
+  [ -n "${2:-}" ] && touch -d "@$(( $(date +%s) - $2 ))" "$APP/files/adb/request"
+}
+asking() { cut -d' ' -f2 "$AP/adb-asking" 2>/dev/null; }
+result() { cat "$AP/adb-result" 2>/dev/null; }
+adbrun
+check "the installer's key Android dropped is back in adb_keys" test "$(grep -cxF "$K1" "$AK")/$(grep -cxF "$K3" "$AK")" = 1/1
+check "...owner and mode kept" test "$(stat -c %u:%g:%a "$AK")" = 1000:2000:640
+check "Android's 7-day key timeout is turned off" test "$(cat "$T/settings.global.adb_allowed_connection_time" 2>/dev/null)" = 0
+check "...and the card's status is ok" test "$(prop sys.glassworks.adb.status)" = ok
+check "the computer asking is the one system_server logged: not a line any app could write, not one too old" test "$(asking)" = "$F2"
+check "...its key published with it, for the page" has "$(cat "$AP/adb-asking")" "$K2"
+check "...root 0644" test "$(stat -c %a:%u "$AP/adb-asking")" = 644:0
+check "the list: the installer's key marked, the other one added" \
+  sh -c "grep -qxF 'installer $F1 $K1' '$AP/adb-keys' && grep -qxF 'added $F3 $K3' '$AP/adb-keys' && [ \$(wc -l < '$AP/adb-keys') = 2 ]"
+check "the log is read from 10 minutes back first" sh -c "head -1 /t/logcat.args | grep -q -- '-b system -v epoch -T [0-9]*\.000 -s AdbDebuggingManager:D'"
+check "...and from its newest line once that logcat ends at once" grep -q -- '-T 1 ' /t/logcat.args
+: > "$T/settings.calls"; adbrun 1
+check "the timeout already off: only read again" sh -c "! grep -q 'put global adb_allowed_connection_time' '$T/settings.calls'"
+
+adbreq "r1 allow $F4"; adbrun
+check "allow names a computer other than the one asking: refused" test "$(result)" = "r1 error changed"
+check "...the request taken" test ! -e "$APP/files/adb/request"
+check "...nothing asked of Android, nothing written" test ! -e /t/adb-calls -a "$(grep -c . "$AK")" = 2
+echo "$AK" > /t/adb-android-writes; adbreq "r2 allow $F2"; adbrun
+check "allow the computer asking: Android answers it (allowDebugging, always)" test "$(cat /t/adb-calls)" = "$K2"
+check "...ok" test "$(result)" = "r2 ok allowed"
+check "...its key in adb_keys once (Android wrote it)" test "$(grep -cxF "$K2" "$AK")" = 1
+check "...on the list" grep -qxF "added $F2 $K2" "$AP/adb-keys"
+check "...no longer asking, also with its old log line read again" test -z "$(asking)"
+rm -f /t/adb-android-writes /t/adb-calls
+echo "$((now - 2)).100  $SSP   900 D AdbDebuggingManager: Received public key: $K5" >> /t/logcat.out; adbrun
+check "a new computer asks" test "$(asking)" = "$F5"
+adbreq "r3 allow $F5"; adbrun
+check "allowed where Android writes nothing (it knew the key): the agent writes it" test "$(result)/$(grep -cxF "$K5" "$AK")" = "r3 ok allowed/1"
+check "...adb_keys keeps its owner and mode" test "$(stat -c %u:%g:%a "$AK")" = 1000:2000:640
+check "...and the keys it had" sh -c "grep -qxF '$K1' '$AK' && grep -qxF '$K2' '$AK' && grep -qxF '$K3' '$AK'"
+echo "$(($(date +%s) - 1)).100  $SSP   900 D AdbDebuggingManager: Received public key: $K4" >> /t/logcat.out; adbrun
+adbreq "r3b once $F4"; adbrun
+check "once: Android answers it for this connection only (allowDebugging, not always)" test "$(cat /t/adb-once-calls 2>/dev/null)" = "$K4"
+check "...ok once, nothing written, no longer asking" test "$(result)/$(grep -cxF "$K4" "$AK")/$(asking)" = "r3b ok once/0/"
+echo "$(date +%s).200  $SSP   900 D AdbDebuggingManager: Received public key: $K4" >> /t/logcat.out; sleep 1; adbrun
+check "...and when it connects again (a new log line), it asks again" test "$(asking)" = "$F4"
+adbreq "r3c once $F4"; adbrun
+check "...once again: answered, nothing written" test "$(result)/$(grep -cxF "$K4" "$AK")/$(asking)" = "r3c ok once/0/"
+adbreq "r4 allow $F5" 200; adbrun 1
+check "a request over 2 minutes old: ignored" has "$(result)" "r4 error too old ("
+adbreq "r5 allow $F3"; adbrun 1
+check "allow with no computer asking: refused" test "$(result)" = "r5 error none-asking"
+adbreq "r6 remove $F1"; adbrun 1
+check "remove the installer's key on Manage: removed" test "$(result)/$(grep -cxF "$K1" "$AK")" = "r6 ok removed/0"
+check "...recorded, root 0600" test "$(cat /data/s1kiosk/radio/adb-revoked)/$(stat -c %a:%u /data/s1kiosk/radio/adb-revoked)" = "$F1/600:0"
+adbrun 1
+check "...and not put back at the next start" test "$(grep -cxF "$K1" "$AK")" = 0
+adbreq "r7 remove $F3"; adbrun 1
+check "remove an added key: gone from adb_keys" test "$(result)/$(grep -cxF "$K3" "$AK")" = "r7 ok removed/0"
+check "...the others kept, owner and mode too" test "$(grep -c . "$AK")/$(stat -c %u:%g:%a "$AK")" = "2/1000:2000:640"
+check "...and off the list" sh -c "! grep -q '$F3' '$AP/adb-keys'"
+adbreq "r8 remove $F3"; adbrun 1
+check "remove one that isn't there: says so" test "$(result)" = "r8 error not-listed"
+for bad in "R9 allow $F5" "r9; allow $F5" "r10 allow ${F5%:*}" "r11 allow $(echo "$F5" | tr A-F a-f)" "r12 open $F5"; do
+  adbreq "$bad"; adbrun 1
+  check "a bad request '${bad%% *} ...': nothing done" sh -c "test \"\$(cut -d' ' -f1-2 '$AP/adb-result')\" != 'r9 ok' && test \$(grep -c . '$AK') = 2"
+done
+check "...a bad fingerprint is answered, a bad id isn't" test "$(result)" = "r12 error unknown request"
+echo "$(($(date +%s) - 1)).100  $SSP   900 D AdbDebuggingManager: Received public key: $K1" >> /t/logcat.out; adbrun
+adbreq "r13 allow $F1"; adbrun
+check "the installer's computer allowed again: in, and no longer recorded as removed" \
+  test "$(result)/$(grep -cxF "$K1" "$AK")/$(grep -c . /data/s1kiosk/radio/adb-revoked)" = "r13 ok allowed/1/0"
+grep -vxF "$K1" "$AK" > "$AK.t"; cat "$AK.t" > "$AK"; rm -f "$AK.t"; adbrun 1
+check "...so it comes back the next time Android drops it" test "$(grep -cxF "$K1" "$AK")" = 1
+pkill -x system_server 2>/dev/null; mv "$T/boot-adb-keys.bak" "$TB/glassworks_adb_keys"
+rm -rf "$AP" "$T/adb" "$APP/files/adb" /t/logcat.out /t/logcat.args /t/adb-calls /t/adb-once-calls "$T/bin/logcat" /data/s1kiosk/radio/adb-once "$T/settings.global.adb_allowed_connection_time"
+
 # ------------------------------------------------------------------------- setup hotspot portal
 # #197: while hostapd runs and the kiosk (uid 10050) has its DNS (udp:8053) and redirect (tcp:8098)
 # sockets on one address of a Wi-Fi interface, the helper sends the hotspot's udp:53 and tcp:80 there
@@ -1586,6 +1699,49 @@ w "$T/bin/ip" <<'EOF'
 case "$*" in *"rule del"*) exit 1 ;; esac; exit 0
 EOF
 rm -rf "$T/net" "$T/ipt" "$T/ip-addr4"; rm -f /data/s1kiosk/radio/radio.conf
+
+# ------------------------------------------------------------------------------ adbd checks keys
+# Aqara's adbd stores false over auth_required (0x20d0); a Magisk module mounts a copy with that store a nop. A made-up
+# file stands in for adbd: random bytes, with 4.5.80's four bytes at 0x20ce (movs r0,#0; strb r0,[r4]).
+echo "--- adbd checks keys"
+reset_radio; echo off > "$T/props/persist.glassworks.radio_mode"
+AA=$T/aa; rm -rf "$AA"; mkdir -p "$AA/modules" "$AA/magisk"; : > "$AA/magisk/busybox"
+python3 -c 'import os,sys; b=bytearray(os.urandom(30336)); b[0x20ce:0x20d2]=bytes([0,0x20,0x20,0x70]); open(sys.argv[1],"wb").write(b); b[0x20d0:0x20d2]=bytes([0,0xbf]); open(sys.argv[2],"wb").write(b)' "$AA/adbd" "$AA/adbd.fixed"
+AS=$(sha256sum "$AA/adbd" | cut -d' ' -f1); AF=$(sha256sum "$AA/adbd.fixed" | cut -d' ' -f1)
+rm -f "$T/props/persist.glassworks.adb_auth" "$T/props/sys.glassworks.adb.auth"
+aa() { LOOPS=1 helper GWA_MODULES="$AA/modules" GWA_MAGISK_BB="$AA/magisk/busybox" GWA_AA_STOCK="$AS" GWA_AA_FIXED="$AF" GWA_AA_WAIT=3 GWA_AA_EVERY=1 GWA_AA_STEADY=2 "$@"; prop sys.glassworks.adb.auth; }
+AM=$AA/modules/glassworks_adbd_auth
+st=$(aa GWA_AA_LIVE="$AA/adbd")
+check "Aqara's adbd: the module is made, from the next restart" test "$st" = "on after a restart"
+check "...its adbd is the panel's with the one store a nop, byte for byte" cmp -s "$AM/system/bin/adbd" "$AA/adbd.fixed"
+check "...0755 root:shell, module.prop with its id" test "$(stat -c %a:%u:%g "$AM/system/bin/adbd")" = 755:0:2000 -a "$(grep -c '^id=glassworks_adbd_auth$' "$AM/module.prop")" = 1
+check "...the panel's own adbd untouched" test "$(sha256sum "$AA/adbd" | cut -d' ' -f1)" = "$AS"
+check "...no stage left in the agent's dir" test ! -e /data/s1kiosk/radio/adbd-auth-module.new
+echo adb > "$T/props/sys.usb.config"; echo running > "$T/props/init.svc.adbd"
+st=$(aa GWA_AA_LIVE="$AA/adbd.fixed")
+check "mounted (the live adbd is the patched one) and running: on" test "$st" = on
+sleep 3; check "...and the watch leaves it" test -f "$AM/system/bin/adbd" -a ! -e /data/s1kiosk/radio/adbd-auth-failed
+touch "$AM/disable"; st=$(aa GWA_AA_LIVE="$AA/adbd")
+check "disabled in Magisk: said so" test "$st" = "off: the module is disabled in Magisk"
+rm -f "$AM/disable"; st=$(aa GWA_AA_LIVE="$AA/adbd" GWA_MAGISK_BB="$AA/magisk/none")
+check "Magisk loads no modules here: said so" has "$st" "off: Magisk loads no modules here"
+echo stopped > "$T/props/init.svc.adbd"
+aa GWA_AA_LIVE="$AA/adbd.fixed" >/dev/null; sleep 5
+check "the patched adbd mounted but not running: the module goes" test ! -e "$AM"
+check "...remembered, root 0600" test "$(stat -c %a:%u /data/s1kiosk/radio/adbd-auth-failed)" = 600:0
+check "...and said" has "$(prop sys.glassworks.adb.auth)" "error: the patched adbd didn't run"
+st=$(aa GWA_AA_LIVE="$AA/adbd")
+check "...not made again at the next start" test ! -e "$AM" -a "$st" = "off: the patched adbd didn't run, so it was taken out"
+rm -f /data/s1kiosk/radio/adbd-auth-failed; echo running > "$T/props/init.svc.adbd"
+aa GWA_AA_LIVE="$AA/adbd" >/dev/null
+echo off > "$T/props/persist.glassworks.adb_auth"; st=$(aa GWA_AA_LIVE="$AA/adbd.fixed")
+check "the undo (persist.glassworks.adb_auth=off): the module goes, from the next restart" test ! -e "$AM" -a "$st" = "off after a restart"
+st=$(aa GWA_AA_LIVE="$AA/adbd"); check "...then off" test "$st" = off
+rm -f "$T/props/persist.glassworks.adb_auth"; head -c 30336 /dev/urandom > "$AA/other"
+st=$(aa GWA_AA_LIVE="$AA/other")
+check "another firmware's adbd: left alone" test ! -e "$AM"
+check "...said so" has "$st" "off: not the adbd this patch knows"
+rm -rf "$AA" "$T/props/sys.usb.config" "$T/props/init.svc.adbd" "$T/props/sys.glassworks.adb.auth" /data/s1kiosk/radio/adbd-auth-failed
 
 # ------------------------------------------------------------------------------ setup hotspot name
 # #197: with hotspot-name.apk in the running frame bundle, the agent puts it on /product through a Magisk module
