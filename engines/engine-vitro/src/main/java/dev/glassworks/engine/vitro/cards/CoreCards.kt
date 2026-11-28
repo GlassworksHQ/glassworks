@@ -121,7 +121,7 @@ internal fun applyHaRipple(view: View, cornerRadiusPx: Float, isDark: Boolean) {
  * (its hotspot set, or a state the ripple shows), so a dashboard's hundreds of tiles and rows don't each build one
  * they may never show. At rest neither draws anything; once made, it's the ripple itself that draws and animates.
  */
-internal class HaRipple(private val cornerRadiusPx: Float, private val isDark: Boolean) : android.graphics.drawable.DrawableWrapper(null) {
+internal class HaRipple(internal val cornerRadiusPx: Float, private val isDark: Boolean) : android.graphics.drawable.DrawableWrapper(null) {
     /** The ripple, made now if it isn't yet ([DrawableWrapper.setDrawable] hands it this drawable's bounds and state). */
     internal fun ripple(): android.graphics.drawable.Drawable = drawable ?: RippleDrawable(
         ColorStateList.valueOf(if (isDark) 0x22FFFFFF else 0x1A000000),
@@ -3070,7 +3070,9 @@ class GlanceCardView(ctx: VitroCardContext, config: CardConfig) : CardSurface(ct
                 observe(e.entity) { s ->
                     // HA's <state-badge> with the glance card's `color: "state"`.
                     icon.setIcon(MdiIcons.resolveIconName(e.icon, s), stateColorBrightness(s, HaStateColor.icon(ctx, s, hvacOverRgb = true)))
-                    name.text = e.nameFor(s) ?: s?.displayName ?: e.entity
+                    val label = e.nameFor(s) ?: s?.displayName ?: e.entity
+                    // A fixed-height line: new text never lays the card out, but setting the same one builds its layout again.
+                    name.setTextIfChanged(label)
                     // hui-glance-card: a timestamp state through hui-timestamp-display ("In 3 hours").
                     ctx.showTimestampOr(state, s, s?.plainState() ?: "…")
                 }

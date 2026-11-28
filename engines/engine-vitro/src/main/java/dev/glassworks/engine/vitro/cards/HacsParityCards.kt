@@ -1982,6 +1982,8 @@ class AutoEntitiesCardView(
         val inner = build(innerConfig)
         onInnerBuilt?.invoke(inner)
         addView(inner, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // A new inner card may be one a culled masonry view must always draw (a camera, an island).
+        dev.glassworks.engine.vitro.ui.ViewportCull.contentChanged(this)
     }
 
     override fun onDetachedFromWindow() {

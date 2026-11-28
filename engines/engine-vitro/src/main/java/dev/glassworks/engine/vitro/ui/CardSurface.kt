@@ -827,6 +827,22 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     private var baseBorderWidth = 0
     private var baseBorderWidthF = 0f
 
+    /**
+     * Whether the card's surface asks to clip its content to its rounded outline (a fill or a border). The view clips
+     * only while some of its content reaches the corners: [updateOutlineClip] decides as the card records
+     * ([ScrollPath.contentClip]).
+     */
+    // Declared before init, which sets it (applyTheme): an initializer after it would reset the field.
+    private var outlineClip: Boolean = false
+        set(v) {
+            field = v
+            // Decided now ([OutlineClip.needsClip]: a surface painted past its rounded fill, a card_mod gradient's, always
+            // clips) and again as the card records, when its content is laid out. Only a real change is passed on:
+            // setClipToOutline damages the parent every time.
+            val clip = v && (!ScrollPath.contentClip || OutlineClip.needsClip(this) != null)
+            if (clipToOutline != clip) clipToOutline = clip
+        }
+
     init {
         applyTheme(ctx.theme)
         // Every card's draw goes through [draw], where a throw is caught: a ViewGroup that draws nothing of its own
@@ -955,6 +971,17 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         super.onLayout(changed, left, top, right, bottom)
     }
 
+    /**
+     * Keeps clipToOutline only while the content reaches the rounded corners ([OutlineClip]): most cards keep theirs
+     * inside the padding, and a card that clips has every draw inside it clipped to an anti-aliased rounded rect, on
+     * every frame it's drawn without a layer. Run as the card records, which every change inside it (a state, a layout,
+     * a background) leads to, so the test sees what draws.
+     */
+    private fun updateOutlineClip() {
+        val clip = OutlineClip.needsClip(this) != null
+        if (clipToOutline != clip) clipToOutline = clip
+    }
+
     /** The card's whole draw, its children's included ([setWillNotDraw] false sends every draw here). */
     override fun draw(canvas: Canvas) {
         if (failure != null) {
@@ -965,6 +992,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         }
         val saved = canvas.saveCount
         try {
+            if (outlineClip && ScrollPath.contentClip) updateOutlineClip()
             super.draw(canvas)
         } catch (e: Exception) {
             canvas.restoreToCount(saved)
@@ -1059,7 +1087,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     protected fun dropSurface() {
         surfaceDropped = true
         background = null
-        clipToOutline = false
+        outlineClip = false
         setBorderInset(0)
     }
 
@@ -1090,11 +1118,11 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
                 setColor(theme.cardBackgroundColor)
                 if (strokePx > 0) setStroke(strokePx, theme.cardBorderColor)
             }
-            clipToOutline = true
+            outlineClip = true
             setBorderInset(strokePx, strokeF)
         } else {
             background = null
-            clipToOutline = false
+            outlineClip = false
             setBorderInset(0)
         }
         theme.cardMod.opacity?.let { alpha = it }
@@ -1136,7 +1164,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         val strokePx = if (surfaceDropped) 0 else ((mod.borderWidthDp ?: ctx.theme.cardBorderWidthDp) * ctx.dp).toInt()
         val strokeF = if (surfaceDropped) 0f else (mod.borderWidthDp ?: ctx.theme.cardBorderWidthDp) * ctx.dp
         val strokeColor = mod.borderColor ?: ctx.theme.cardBorderColor
-        clipToOutline = false
+        outlineClip = false
         background = if (strokePx > 0 && Color.alpha(strokeColor) > 0) {
             GradientDrawable().apply {
                 setColor(Color.TRANSPARENT)
@@ -1200,7 +1228,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             mod.borderWidthDp != null || mod.borderRadiusDp != null
         if (restyle && !seamless && !restyled) {
             baseBackground = background
-            baseClip = clipToOutline
+            baseClip = outlineClip
             // The drawn width, not the inset: a card laid out from its outer edge has a border but no inset.
             baseBorderWidth = drawnBorderPx
             baseBorderWidthF = drawnBorderF
@@ -1209,7 +1237,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             // A template that no longer styles the surface: back to the card's own, border inset included (the
             // content sits inside the theme border again).
             background = baseBackground
-            clipToOutline = baseClip
+            outlineClip = baseClip
             setBorderInset(baseBorderWidth, baseBorderWidthF)
             restyled = false
         }
@@ -1220,7 +1248,7 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
                 // Transparent, borderless card (`background: transparent; border: none;`): drop the rounded
                 // outline so Android's clipToOutline never clips text at the card's corners.
                 background = null
-                clipToOutline = false
+                outlineClip = false
                 setBorderInset(0)
             } else if (layers != null) {
                 // Gradients paint like the browser (angle, stop positions, layers), under the card's border.
@@ -1234,14 +1262,14 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
                         if (strokePx > 0) setStroke(strokePx, strokeColor)
                     },
                 ))
-                clipToOutline = true
+                outlineClip = true
             } else {
                 background = (if (gradient != null) GradientDrawable(orientationFor(gradient.angleDeg), gradient.colors) else GradientDrawable()).apply {
                     if (gradient == null) setColor(fillColor)
                     cornerRadius = radiusPx
                     if (strokePx > 0) setStroke(strokePx, strokeColor)
                 }
-                clipToOutline = true
+                outlineClip = true
             }
             if (!invisibleSurface) setBorderInset(strokePx, strokeF)
         }
@@ -1369,6 +1397,33 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
      * view shows, before it draws. The subscriptions stay, so nothing is asked of HA again. Main thread.
      */
     internal fun setViewHidden(hidden: Boolean) {
+        hiddenByView = hidden
+        applyHidden()
+    }
+
+    /** [setViewHidden]'s own state, apart from [culled]. Main thread. */
+    private var hiddenByView = false
+
+    /**
+     * True while the card is outside the band of the view its column draws ([ViewportCull]):
+     * attached and shown as far as Android knows, but not drawn. Its live changes wait, as a hidden view's do, and
+     * catch up before it's drawn again. Main thread.
+     */
+    internal var culled = false
+        private set
+
+    internal fun setCulled(culled: Boolean) {
+        if (this.culled == culled) return
+        this.culled = culled
+        applyHidden()
+        onCulledChanged(culled)
+    }
+
+    /** The card stopped being drawn ([culled]) or is drawn again: a card with a timer of its own pauses it. */
+    protected open fun onCulledChanged(culled: Boolean) {}
+
+    private fun applyHidden() {
+        val hidden = hiddenByView || culled
         if (viewHidden == hidden) return
         val due = synchronized(renderLock) {
             viewHidden = hidden

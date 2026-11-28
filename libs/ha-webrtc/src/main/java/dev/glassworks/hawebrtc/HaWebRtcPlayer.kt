@@ -56,6 +56,18 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         public fun onError(error: HaError)
     }
 
+    /**
+     * Optional for a [Listener]: whether it wants [Listener.onFrameRendered] for each frame now. While [wantsFrames] is
+     * false, the player skips the report of a frame that changes nothing (same run, same size), and the main-thread
+     * task that would bring it; the first frame, a new size and errors are still reported. A listener that doesn't
+     * implement it hears of every frame. Its own interface, not a member of [Listener], so a listener compiled before
+     * it existed keeps working. Read on the main thread.
+     */
+    public interface FrameDemand {
+        /** True while the listener wants a report of every rendered frame; false lets the player skip unchanged ones. */
+        public val wantsFrames: Boolean
+    }
+
     private val appContext: Context = context.applicationContext ?: context
     private val main = Handler(Looper.getMainLooper())
     private val video: VideoOutput = when (options.view.resolved()) {
@@ -279,7 +291,8 @@ public class HaWebRtcPlayer @JvmOverloads public constructor(
         if (closed || Looper.myLooper() !== main.looper || deliveredRun != viewRun || width != videoWidth || height != videoHeight) {
             false
         } else {
-            if (steadyPending++ == 0) main.post(steadyReport)
+            // Nobody listens for each frame ([FrameDemand]): the frame is drawn, and taken, with nothing posted.
+            if ((listener as? FrameDemand)?.wantsFrames != false && steadyPending++ == 0) main.post(steadyReport)
             true
         }
     }

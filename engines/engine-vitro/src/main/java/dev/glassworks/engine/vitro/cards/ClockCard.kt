@@ -11,6 +11,7 @@ import dev.glassworks.engine.vitro.data.HaFormat
 import android.content.Context
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -95,7 +96,7 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     private val tick = object : Runnable {
         override fun run() {
             // Attached but hidden (a cached tab behind another): no ticking; showing it again resumes.
-            if (!running || !isShown) return
+            if (!running || !isShown || culled) return
             // Only the digits and the date change here.
             val l = local
             if (l != null) l.run { render(Date()) } else render(Date())
@@ -261,6 +262,8 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
     }
 
     private fun TextView.setLine(t: String) {
+        // Most ticks change only the seconds: the other lines keep their text and spans, with nothing allocated.
+        if (TextUtils.equals(text, t)) return
         val old = text as? Spanned
         val span = old?.getSpans(0, old.length, CssLineBoxSpan::class.java)?.firstOrNull()
         val sb = SpannableStringBuilder(t)
@@ -337,6 +340,13 @@ class ClockCardView(ctx: VitroCardContext, private val config: CardConfig) : Car
         if (!running) return
         ctx.main.removeCallbacks(tick)
         if (isShown) tick.run()
+    }
+
+    /** Not drawn (scrolled far away, [dev.glassworks.engine.vitro.ui.ViewportCull]): the timer stops; drawn again, it catches up at once. */
+    override fun onCulledChanged(culled: Boolean) {
+        if (!running) return
+        ctx.main.removeCallbacks(tick)
+        if (!culled && isShown) tick.run()
     }
 
     internal val renderedTime: String get() = "${hourView.text}:${minuteView.text}"

@@ -182,6 +182,55 @@ class HaWebRtcPlayerTest {
     }
 
     @Test
+    fun `a listener that wants no frames gets no steady reports, but still the first frame and a new size`() {
+        val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
+        val got = ArrayList<String>()
+        var wants = false
+        player.listener = object : HaWebRtcPlayer.Listener, HaWebRtcPlayer.FrameDemand {
+            override val wantsFrames: Boolean get() = wants
+            override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) { got += "first ${width}x$height" }
+            override fun onFrameRendered() { got += "frame ${player.videoWidth}x${player.videoHeight}" }
+            override fun onError(error: HaError) {}
+        }
+        val events = player.Events()
+        events.onFirstFrame(120, 1280, 720)
+        shadowOf(Looper.getMainLooper()).idle()
+        // Steady frames at the delivered size: taken (drawn), with nothing posted.
+        assertTrue(player.steady.onSteadyFrame(1280, 720))
+        assertTrue(player.steady.onSteadyFrame(1280, 720))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("first 1280x720"), got)
+        // A new size still goes the usual way, and is reported.
+        assertFalse(player.steady.onSteadyFrame(640, 480))
+        events.onFrame(640, 480)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("first 1280x720", "frame 640x480"), got)
+        // Wanted again: steady frames are reported.
+        wants = true
+        assertTrue(player.steady.onSteadyFrame(640, 480))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("first 1280x720", "frame 640x480", "frame 640x480"), got)
+        player.close()
+    }
+
+    @Test
+    fun `a listener without FrameDemand hears of every steady frame`() {
+        val player = HaWebRtcPlayer(context, FakeChannel(), "camera.front_door")
+        var frames = 0
+        player.listener = object : HaWebRtcPlayer.Listener {
+            override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) {}
+            override fun onFrameRendered() { frames++ }
+            override fun onError(error: HaError) {}
+        }
+        player.Events().onFirstFrame(120, 1280, 720)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(player.steady.onSteadyFrame(1280, 720))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, frames)
+        player.close()
+    }
+
+    @Test
     fun `a destroyed surface is released off the main thread, after the renderer let go of it`() {
         val jobs = ArrayList<Runnable>()
         val view = VideoTextureView(context, VideoScaling.FIT) { jobs += it }

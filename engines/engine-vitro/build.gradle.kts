@@ -81,6 +81,8 @@ tasks.withType<Test>().configureEach {
         "vitroIslandCase" to "vitro.islandCase",
         // The entity store's size for a whole dashboard (DashboardStoreMeasure): its input files and report directory.
         "vitroStoreMeasure" to "vitro.storeMeasure",
+        // HeavyViewMeasure: Clarity's heavy view, its views per card and what culling leaves drawn.
+        "vitroHeavyMeasure" to "vitro.heavyMeasure",
     )
     for ((prop, sys) in options) {
         (project.findProperty(prop) as String?)?.let {

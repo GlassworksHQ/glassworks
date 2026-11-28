@@ -189,4 +189,42 @@ class VitroWebRtcTest {
         assertNull(stream.listener)
         assertNotNull(stream.view)
     }
+
+    @Test
+    fun `a new picture size reaches the card as onVideoSize, whether or not it wants each frame`() {
+        var w = 1280
+        var h = 720
+        val player = dev.glassworks.hawebrtc.HaWebRtcPlayer(context, object : dev.glassworks.hawebrtc.HaCommandChannel {
+            override fun call(command: JSONObject, onResult: (Any?) -> Unit, onError: (HaError) -> Unit) {}
+            override fun subscribe(command: JSONObject, onEvent: (JSONObject) -> Unit, onError: (HaError) -> Unit) =
+                dev.glassworks.hawebrtc.HaCommandChannel.Subscription {}
+        }, "camera.front_door")
+        val stream = WebRtcCameraStream(player) { w to h }
+        val got = ArrayList<String>()
+        var wants = false
+        stream.listener = object : CameraStream.Listener {
+            override fun onFirstFrame(sinceStartMs: Long) { got += "first" }
+            override fun onFrameRendered() { got += "frame" }
+            override fun onError(reason: String) {}
+            override fun onEnded() {}
+            override val wantsFrames: Boolean get() = wants
+            override fun onVideoSize() { got += "size ${w}x$h" }
+        }
+        val events = player.listener!!
+        // The player asks the stream whether to report steady frames: as the card does.
+        assertEquals(false, (events as dev.glassworks.hawebrtc.HaWebRtcPlayer.FrameDemand).wantsFrames)
+        wants = true
+        assertEquals(true, events.wantsFrames)
+        wants = false
+        events.onFirstFrame(100, 1280, 720)
+        // A frame at the same size: no size change.
+        events.onFrameRendered()
+        // The camera turns its picture (a new size, which the player always reports): the card hears of it.
+        w = 720
+        h = 1280
+        events.onFrameRendered()
+        events.onFrameRendered()
+        assertEquals(listOf("first", "frame", "size 720x1280", "frame", "frame"), got)
+        stream.close()
+    }
 }

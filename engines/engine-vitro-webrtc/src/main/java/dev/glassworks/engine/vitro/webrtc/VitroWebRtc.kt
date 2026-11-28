@@ -88,7 +88,11 @@ internal class HostChannel(private val host: CameraStreamHost) : HaCommandChanne
  * surface: so it's [closeWhenHidden], and the card opens a new one when it shows again (libwebrtc's shared parts
  * linger meanwhile, so that costs a new session, as a resume does).
  */
-internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraStream, CameraStreamVideoSize {
+internal class WebRtcCameraStream(
+    private val player: HaWebRtcPlayer,
+    /** The picture's size now, (width, height): the player's, as it reports a frame (tests give their own). */
+    private val size: () -> Pair<Int, Int> = { player.videoWidth to player.videoHeight },
+) : CameraStream, CameraStreamVideoSize {
     override val view: View get() = player.view
     override var listener: CameraStream.Listener? = null
     override val videoWidth: Int get() = player.videoWidth
@@ -96,16 +100,37 @@ internal class WebRtcCameraStream(private val player: HaWebRtcPlayer) : CameraSt
 
     private var closed = false
 
+    /** The size the listener last heard of (the first frame's, then each [CameraStream.Listener.onVideoSize]'s). */
+    private var heardWidth = 0
+    private var heardHeight = 0
+
     init {
         player.onSurface = { ready -> if (!closed) { if (ready) listener?.onSurfaceReady() else listener?.onSurfaceLost() } }
-        player.listener = object : HaWebRtcPlayer.Listener {
+        player.listener = object : HaWebRtcPlayer.Listener, HaWebRtcPlayer.FrameDemand {
             override fun onFirstFrame(sinceStartMs: Long, width: Int, height: Int) {
-                if (!closed) listener?.onFirstFrame(sinceStartMs)
+                if (closed) return
+                heardWidth = width
+                heardHeight = height
+                listener?.onFirstFrame(sinceStartMs)
             }
 
             override fun onFrameRendered() {
-                if (!closed) listener?.onFrameRendered()
+                if (closed) return
+                // A stream that may skip frame reports says when the size changes ([CameraStream.Listener.onVideoSize]):
+                // a new size always comes this way, steady reports or not.
+                val (w, h) = size()
+                if (w != heardWidth || h != heardHeight) {
+                    heardWidth = w
+                    heardHeight = h
+                    listener?.onVideoSize()
+                }
+                listener?.onFrameRendered()
             }
+
+            // A steady frame posts its report only while the card or Clarity wants it, as HLS does
+            // ([CameraStream.Listener.wantsFrames]): not 15 main-thread tasks a second per camera for nobody.
+            override val wantsFrames: Boolean
+                get() = !closed && listener?.wantsFrames == true
 
             override fun onError(error: HaError) {
                 if (!closed) listener?.onError(listOf(error.code, error.message).filter { it.isNotEmpty() }.joinToString(": "))
