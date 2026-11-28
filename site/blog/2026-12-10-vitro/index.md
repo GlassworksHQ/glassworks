@@ -1,8 +1,8 @@
 ---
-title: "Introducing Vitro: how dropping the browser took a $140 wall switch from D to A+"
+title: "We broke our benchmark… Introducing Vitro"
 date: 2026-12-10
 author: "Eduardo"
-summary: "When we graded our own flagship wall panel with Clarity, it scored a D. Instead of buying faster hardware, we built Vitro—a native Android renderer for the Home Assistant dashboard you already have—and maxed out our own benchmark on the exact same wall switch."
+summary: "We built Clarity to grade wall panels honestly, and our own flagship light switch scored a D. Then we deleted the browser—and maxed out our own benchmark on the exact same hardware."
 cover_alt: "Drop the browser. Keep your dashboard. The Vitro mark and four native Home Assistant cards, above a bar showing 954 MB total app RAM (all processes) on the Aqara S1 Plus web engine against 0 browser processes with Vitro."
 draft: true
 ---
