@@ -47,6 +47,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   steps, and the main button stays at the bottom of the screen.
 
 ### Fixed
+- **Another device on your network can no longer replace the panel's Home Assistant sign-in.** Once the panel is
+  signed in, its sign-in page only lets you sign in again from a browser signed in to the panel's Manage page. To use
+  another account, sign the panel out first. The panel's web pages also answer only to the panel's own address now,
+  which blocks pages on other sites from reaching them.
+- **Changing the language from Kiln no longer leaves the old dashboard running.** When Kiln sets the panel's
+  language, or the system font size changes, the panel now closes the old dashboard page before it opens the new
+  one, so the two don't both hold memory.
 - **App updates fail fast when Android blocks unknown-source installs, and S1 Plus setup allows them for fallback updates.** On a panel without the root update service, starting an update when "Install unknown apps" is off used to open a dead-end Android dialog and wait 10 minutes to time out. Glassworks now reports the missing permission right away, and both Kiln and `install.sh` allow "Install unknown apps" on the S1 Plus so fallback updates can show Android's confirmation screen.
 - **Radio firmware sensor says `none` instead of `v1` when no root helper is installed.** Panels without a root helper previously showed `(installed: v1)` in the Radio firmware sensor alongside the Radio helper sensor saying no helper was installed.
 - **The first Home Assistant sign-in after an install works on the first try.** Entering Home Assistant's address
